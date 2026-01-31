@@ -40,7 +40,7 @@ const data = {
     },
     {
       title: "Requests",
-      url: route("requests"),
+      url: "/bruh",
       icon: FileText
     },
     {

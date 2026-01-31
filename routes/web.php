@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Models\Facility;
+
 
 Route::middleware("auth")->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware("auth")->name("logout");
@@ -18,9 +20,20 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/create-request", function () {
         return Inertia::render("request/create", [
-    'facilities' => Facility::all()
-]);
+            'facilities' => Facility::all()
+        ]);
     })->name("request.create");
+
+
+    Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
+    Route::post('/requests', [RequestController::class, 'store'])->name('requests.store');
+
+    // Admin only routes
+    Route::middleware(['permission:approve requests'])->group(function () {
+        Route::get('/requests/pending', [RequestController::class, 'pending'])->name('requests.pending');
+        Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
+        Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
+    });
 });
 
 Route::prefix("/login")->group(function () {

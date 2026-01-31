@@ -8,6 +8,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Carbon;
+use Database\Seeders\RolePermissionSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -23,7 +24,6 @@ class DatabaseSeeder extends Seeder
             'email' => 'test@example.com',
             'password' => '123',
         ]);
-
 
         // Create Users
         $users = [
@@ -252,5 +252,9 @@ class DatabaseSeeder extends Seeder
         foreach ($requestDates as $rd) {
             DB::table('requested_dates')->insert($rd);
         }
+
+        $this->call([
+            RolePermissionSeeder::class,
+        ]);
     }
 }
