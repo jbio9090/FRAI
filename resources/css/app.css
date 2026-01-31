@@ -53,7 +53,6 @@
     font-style: normal;
 }
 
-
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
@@ -420,5 +419,14 @@
         @apply bg-background text-foreground font-sans;
         letter-spacing:
             var(--tracking-normal);
+    }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
     }
 }

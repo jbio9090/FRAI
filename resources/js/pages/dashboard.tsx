@@ -1,7 +1,12 @@
 import { useForm } from '@inertiajs/react';
+import DefaultLayout from '@/layout.tsx/default.';
 
-export default function Dashboard() {
-    const {post} = useForm({});
+interface DashboardProps {
+    children: React.ReactNode;
+}
+
+export default function Dashboard({ children }: DashboardProps) {
+    const { post } = useForm({});
 
     function submit(e) {
         e.preventDefault();
@@ -9,15 +14,8 @@ export default function Dashboard() {
     }
 
     return (
-        <>
-            <h1>
-                Dashboard
-            </h1>
-
-            <form onSubmit={submit} method="post">
-                <button type="submit">Logout</button>
-            </form>
-        </>
-
+        <DefaultLayout>
+            <h1>HEllo</h1>
+        </DefaultLayout>
     );
 }
