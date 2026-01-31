@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('requests', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->enum("status", ["pending", "approved", "denied"])->default("pending");
+            $table->string("status")->default("pending");
             $table->string("description", 512)->nullable();
             $table->foreignId("user_id")->references("id")->on("users");
         });

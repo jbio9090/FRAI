@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create("requested_facilities", function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->foreignId("requested_id")->references("id")->on("requests");
+            $table->foreignId("request_id")->references("id")->on("requests");
             $table->foreignId("facility_id")->references("id")->on("facilities");
             $table->integer("capacity")->nullable();
         });
@@ -22,7 +22,7 @@ return new class extends Migration
         Schema::create("requested_dates", function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->foreignId("requested_id")->references("id")->on("requests");
+            $table->foreignId("request_id")->references("id")->on("requests");
             $table->date("date_requested");
             $table->time("time_start");
             $table->time("time_end");
