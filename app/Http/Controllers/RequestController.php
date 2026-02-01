@@ -58,10 +58,10 @@ class RequestController extends Controller
 
         // Admins see all requests, users see only their own
         $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "denied")->latest()->get()
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "rejected")->latest()->get()
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
-            ->where("status", "denied")
+            ->where("status", "rejected")
             ->latest()
             ->get();
 

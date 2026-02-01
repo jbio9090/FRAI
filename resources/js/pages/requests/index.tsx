@@ -41,7 +41,7 @@ export default function PendingRequests({ requests, page_title }: PendingRequest
                                 </div>
 
                                 {/* Only show approve/reject buttons to admins */}
-                                {hasPermission('approve requests') && (
+                                {(hasPermission('approve requests') && page_title == "Pending") && (
                                     <div className="flex gap-2">
                                         <Button
                                             onClick={() => {

@@ -33,4 +33,4 @@ Route::middleware("auth")->group(function () {
 Route::prefix("/login")->group(function () {
     Route::get('/', [LoginController::class, 'show'])->name('login.show');
     Route::post('/', [LoginController::class, 'authenticate'])->name('login');
-});
+})->middleware(["throttle:10,1", "guest"]);
