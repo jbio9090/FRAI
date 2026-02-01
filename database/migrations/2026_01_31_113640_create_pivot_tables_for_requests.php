@@ -11,21 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create("requested_facilities", function (Blueprint $table) {
+        Schema::create("request_facilities", function (Blueprint $table) {
             $table->id();
-            $table->timestamps();
-            $table->foreignId("request_id")->references("id")->on("requests");
-            $table->foreignId("facility_id")->references("id")->on("facilities");
-            $table->integer("capacity")->nullable();
-        });
-
-        Schema::create("requested_dates", function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
-            $table->foreignId("request_id")->references("id")->on("requests");
+            $table->foreignId("request_id")->constrained("requests")->onDelete("cascade");
+            $table->foreignId("facility_id")->constrained("facilities")->onDelete("cascade");
             $table->date("date_requested");
             $table->time("time_start");
             $table->time("time_end");
+            $table->timestamps();
         });
     }
 

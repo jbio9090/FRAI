@@ -14,15 +14,7 @@ Route::middleware("auth")->group(function () {
         return Inertia::render("dashboard");
     })->name('dashboard');
 
-    Route::get("/requests", function () {
-        return Inertia::render("requests");
-    })->name("requests");
-
-    Route::get("/create-request", function () {
-        return Inertia::render("request/create", [
-            'facilities' => Facility::all()
-        ]);
-    })->name("request.create");
+    Route::get("/create-request", [RequestController::class, "createPage"])->name("request.create");
 
 
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');

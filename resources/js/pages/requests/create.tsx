@@ -1,23 +1,9 @@
 import { useForm } from '@inertiajs/react';
 import DefaultLayout from '@/layout.tsx/default.';
 import { Button } from "@/components/ui/button";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -25,6 +11,13 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { CalendarIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -37,7 +30,9 @@ interface Facility {
     capacity?: number;
 }
 
-interface RequestDate {
+interface FacilityBooking {
+    facility_id: number;
+    facility_name: string;
     date: Date;
     time_start: string;
     time_end: string;
@@ -48,8 +43,8 @@ interface CreateRequestProps {
 }
 
 export default function CreateRequest({ facilities }: CreateRequestProps) {
-    const [selectedFacilities, setSelectedFacilities] = useState<number[]>([]);
-    const [requestDates, setRequestDates] = useState<RequestDate[]>([]);
+    const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>([]);
+    const [selectedFacility, setSelectedFacility] = useState<number | null>(null);
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
@@ -57,58 +52,55 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const { data, setData, post, processing, errors } = useForm({
         title: '',
         description: '',
-        facility_ids: [] as number[],
-        dates: [] as RequestDate[],
+        facility_bookings: [] as FacilityBooking[],
     });
 
-    function handleFacilityToggle(facilityId: number) {
-        const updatedFacilities = selectedFacilities.includes(facilityId)
-            ? selectedFacilities.filter(id => id !== facilityId)
-            : [...selectedFacilities, facilityId];
-
-        setSelectedFacilities(updatedFacilities);
-        setData('facility_ids', updatedFacilities);
-    }
-
-    function addDateTimeSlot() {
-        if (!currentDate || !currentTimeStart || !currentTimeEnd) {
+    function addFacilityBooking() {
+        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) {
             return;
         }
 
-        const newDate: RequestDate = {
+        const facility = facilities.find(f => f.id === selectedFacility);
+        if (!facility) return;
+
+        const newBooking: FacilityBooking = {
+            facility_id: selectedFacility,
+            facility_name: facility.name,
             date: currentDate,
             time_start: currentTimeStart,
             time_end: currentTimeEnd,
         };
 
-        const updatedDates = [...requestDates, newDate];
-        setRequestDates(updatedDates);
-        setData('dates', updatedDates);
+        const updatedBookings = [...facilityBookings, newBooking];
+        setFacilityBookings(updatedBookings);
+        setData('facility_bookings', updatedBookings);
 
         // Reset current inputs
+        setSelectedFacility(null);
         setCurrentDate(undefined);
         setCurrentTimeStart('');
         setCurrentTimeEnd('');
     }
 
-    function removeDateTimeSlot(index: number) {
-        const updatedDates = requestDates.filter((_, i) => i !== index);
-        setRequestDates(updatedDates);
-        setData('dates', updatedDates);
+    function removeBooking(index: number) {
+        const updatedBookings = facilityBookings.filter((_, i) => i !== index);
+        setFacilityBookings(updatedBookings);
+        setData('facility_bookings', updatedBookings);
     }
 
     function submit(e: React.FormEvent) {
         e.preventDefault();
-        // post(route('requests.store'));
+        post(route('requests.store'));
         console.log('Form data:', data);
     }
 
     return (
         <DefaultLayout>
-            <div className="w-4xl max-w-2xl mx-auto">
+            <div className="w-full md:w-4xl max-w-3xl mx-auto">
                 <form onSubmit={submit} className="space-y-6 flex flex-col gap-2">
-                    {/* Title Field */}
                     <h1 className='w-full font-extrabold text-muted-foreground'>Create Request</h1>
+
+                    {/* Title Field */}
                     <div className="space-y-2">
                         <Label htmlFor="title">Request Title</Label>
                         <Input
@@ -138,47 +130,43 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                         )}
                     </div>
 
-                    {/* Facilities Selection */}
-                    <div className="space-y-2">
-                        <Label>Select Facilities</Label>
-                        <div className="border rounded-md space-y-3 max-h-64 overflow-y-scroll">
-                            {facilities.map((facility) => (
-                                <div key={facility.id} className="flex items-center space-x-4 hover:bg-gray-100 py-2 px-4">
-                                    <Checkbox
-                                        id={`facility-${facility.id}`}
-                                        checked={selectedFacilities.includes(facility.id)}
-                                        onCheckedChange={() => handleFacilityToggle(facility.id)}
-                                    />
-                                    <div className="flex-1">
-                                        <label
-                                            htmlFor={`facility-${facility.id}`}
-                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                        >
-                                            {facility.name}
-                                        </label>
-                                        {facility.description && (
-                                            <p className="text-sm text-muted-foreground mt-1">
-                                                {facility.description}
-                                            </p>
-                                        )}
-                                        {facility.capacity && (
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                Capacity: {facility.capacity} people
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        {errors.facility_ids && (
-                            <p className="text-sm text-red-500">{errors.facility_ids}</p>
-                        )}
-                    </div>
-
-                    {/* Date and Time Selection */}
+                    {/* Add Facility Booking */}
                     <div className="space-y-4">
-                        <Label>Add Date & Time Slots</Label>
+                        <Label>Add Facility Bookings</Label>
                         <div className="border rounded-md p-4 space-y-4">
+                            {/* Facility Selection */}
+                            <div className="space-y-2">
+                                <Label>Select Facility</Label>
+                                {/* <select
+                                    value={selectedFacility || ''}
+                                    onChange={(e) => setSelectedFacility(Number(e.target.value))}
+                                    className="w-full border rounded-md p-2 text-sm"
+                                >
+                                    <option value="" className='text-sm'>Choose a facility...</option>
+                                    {facilities.map((facility) => (
+                                        <option key={facility.id} value={facility.id}>
+                                            {facility.name} {facility.capacity && `(Capacity: ${facility.capacity})`}
+                                        </option>
+                                    ))}
+                                </select> */}
+
+                                <Select
+                                    value={selectedFacility?.toString() || ''}
+                                    onValueChange={(value) => setSelectedFacility(Number(value))}
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Choose a Facility" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {facilities.map((facility) => (
+                                            <SelectItem key={facility.id} value={facility.id.toString()}>
+                                                {facility.name} {facility.capacity && `(Capacity: ${facility.capacity})`}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Date Picker */}
                                 <div className="space-y-2">
@@ -186,6 +174,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     <Popover>
                                         <PopoverTrigger asChild>
                                             <Button
+                                                type="button"
                                                 variant="outline"
                                                 className={cn(
                                                     "w-full justify-start text-left font-normal",
@@ -233,35 +222,33 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                             <Button
                                 type="button"
                                 variant="secondary"
-                                onClick={addDateTimeSlot}
-                                disabled={!currentDate || !currentTimeStart || !currentTimeEnd}
+                                onClick={addFacilityBooking}
+                                disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
                                 className="w-full"
                             >
-                                Add Time Slot
+                                Add Facility Booking
                             </Button>
                         </div>
 
-                        {/* Display Added Date/Time Slots */}
-                        {requestDates.length > 0 && (
+                        {/* Display Added Bookings */}
+                        {facilityBookings.length > 0 && (
                             <div className="space-y-2">
-                                <Label>Selected Time Slots</Label>
+                                <Label>Added Facility Bookings</Label>
                                 <div className="border rounded-md divide-y">
-                                    {requestDates.map((slot, index) => (
+                                    {facilityBookings.map((booking, index) => (
                                         <div key={index} className="p-3 flex items-center justify-between">
                                             <div className="text-sm">
-                                                <span className="font-medium">
-                                                    {format(slot.date, "PPP")}
-                                                </span>
-                                                <span className="text-muted-foreground ml-2">
-                                                    {slot.time_start} - {slot.time_end}
-                                                </span>
+                                                <div className="font-bold">{booking.facility_name}</div>
+                                                <div className="text-muted-foreground">
+                                                    {format(booking.date, "PPP")} • {booking.time_start} - {booking.time_end}
+                                                </div>
                                             </div>
                                             <Button
                                                 type="button"
                                                 variant="ghost"
                                                 size="sm"
                                                 className='cursor-pointer'
-                                                onClick={() => removeDateTimeSlot(index)}
+                                                onClick={() => removeBooking(index)}
                                             >
                                                 <X className="h-4 w-4" />
                                             </Button>
@@ -270,8 +257,8 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 </div>
                             </div>
                         )}
-                        {errors.dates && (
-                            <p className="text-sm text-red-500">{errors.dates}</p>
+                        {errors.facility_bookings && (
+                            <p className="text-sm text-red-500">{errors.facility_bookings}</p>
                         )}
                     </div>
 
@@ -289,7 +276,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                         </Button>
                     </div>
                 </form>
-            </div>
-        </DefaultLayout>
+            </div >
+        </DefaultLayout >
     );
 }

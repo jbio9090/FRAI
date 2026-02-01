@@ -1,12 +1,14 @@
 import { useForm } from '@inertiajs/react';
 import DefaultLayout from '@/layout.tsx/default.';
+import { usePermission } from '@/hooks/use-permission';
 
 interface DashboardProps {
     children: React.ReactNode;
 }
 
 export default function Dashboard({ children }: DashboardProps) {
-    const { post } = useForm({});
+    const { post } = useForm({})
+    const { hasPermission, hasRole } = usePermission();
 
     function submit(e) {
         e.preventDefault();
@@ -15,7 +17,7 @@ export default function Dashboard({ children }: DashboardProps) {
 
     return (
         <DefaultLayout>
-            <h1>HEllo</h1>
+            <h1>{hasRole("admin") ? "Hello endmin": "Hello"}</h1>
         </DefaultLayout>
     );
 }

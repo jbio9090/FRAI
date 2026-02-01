@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->timestamps();
             $table->string("status")->default("pending");
+            $table->string("title", 256)->nullable();
             $table->string("description", 512)->nullable();
             $table->foreignId("user_id")->references("id")->on("users");
         });

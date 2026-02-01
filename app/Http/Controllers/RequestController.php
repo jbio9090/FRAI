@@ -2,36 +2,44 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Request;
-use Illuminate\Http\Request as HttpRequest;
+use App\Models\Request as FacilityRequest;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 
+use App\Models\Facility;
+
 class RequestController extends Controller
 {
+    // List requests - shows different data based on role
     public function index()
     {
         $user = Auth::user();
 
-        // Admin sees all pending requests, users see only their own
+        // Admins see all requests, users see only their own
         $requests = $user->hasRole('admin')
-            ? Request::with(['user', 'facilities', 'dates'])->get()
-            : Request::with(['facilities', 'dates'])->where('user_id', $user->id)->get();
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->latest()->get()
+            : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
+            ->where('user_id', $user->id)
+            ->latest()
+            ->get();
 
-        return Inertia::render('Requests/Index', [
+        return Inertia::render('requests/index', [
             'requests' => $requests,
         ]);
     }
 
+    // Admin-only: View pending requests
     public function pending()
     {
-        // Only admins can access this
+        // Check permission
         if (!Auth::user()->hasPermissionTo('approve requests')) {
-            abort(403);
+            abort(403, 'Unauthorized');
         }
 
-        $requests = Request::with(['user', 'facilities', 'dates'])
+        $requests = FacilityRequest::with(['user', 'facilities', 'requestFacilities'])
             ->where('status', 'pending')
+            ->latest()
             ->get();
 
         return Inertia::render('Requests/Pending', [
@@ -39,29 +47,71 @@ class RequestController extends Controller
         ]);
     }
 
-    public function approve(HttpRequest $request, $id)
+    // Admin-only: Approve request
+    public function approve(Request $request, $id)
     {
-        // Check permission
         if (!Auth::user()->hasPermissionTo('approve requests')) {
-            abort(403);
+            abort(403, 'Unauthorized');
         }
 
-        $facilityRequest = Request::findOrFail($id);
+        $facilityRequest = FacilityRequest::findOrFail($id);
         $facilityRequest->update(['status' => 'approved']);
 
         return redirect()->back()->with('success', 'Request approved successfully');
     }
 
-    public function reject(HttpRequest $request, $id)
+    // Admin-only: Reject request
+    public function reject(Request $request, $id)
     {
-        // Check permission
         if (!Auth::user()->hasPermissionTo('reject requests')) {
-            abort(403);
+            abort(403, 'Unauthorized');
         }
 
-        $facilityRequest = Request::findOrFail($id);
+        $facilityRequest = FacilityRequest::findOrFail($id);
         $facilityRequest->update(['status' => 'rejected']);
 
         return redirect()->back()->with('success', 'Request rejected successfully');
+    }
+
+
+    public function createPage()
+    {
+        return Inertia::render("requests/create", [
+            'facilities' => Facility::all()
+        ]);
+    }
+
+    // POST - actually sotring the fuckening data
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'string',
+            'facility_bookings' => 'required|array|min:1',
+            'facility_bookings.*.facility_id' => 'required|exists:facilities,id',
+            'facility_bookings.*.date' => 'required|date',
+            'facility_bookings.*.time_start' => 'required',
+            'facility_bookings.*.time_end' => 'required',
+        ]);
+
+        // Create the request
+        $facilityRequest = FacilityRequest::create([
+            'user_id' => Auth::id(),
+            'title' => $validated['title'],
+            'description' => $validated['description'],
+            'status' => 'pending',
+        ]);
+
+        // Add facility bookings
+        foreach ($validated['facility_bookings'] as $booking) {
+            $facilityRequest->requestFacilities()->create([
+                'facility_id' => $booking['facility_id'],
+                'date_requested' => $booking['date'],
+                'time_start' => $booking['time_start'],
+                'time_end' => $booking['time_end'],
+            ]);
+        }
+
+        return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }
 }

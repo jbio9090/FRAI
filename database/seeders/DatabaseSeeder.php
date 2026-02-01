@@ -3,12 +3,10 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Carbon;
-use Database\Seeders\RolePermissionSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -17,83 +15,87 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-            'password' => '123',
+        // Call RolePermissionSeeder FIRST to create roles and permissions
+        $this->call([
+            RolePermissionSeeder::class,
         ]);
 
-        // Create Users
-        $users = [
-            [
-                'name' => 'John Doe',
-                'email' => 'john@example.com',
-                'password' => Hash::make('password'),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Jane Smith',
-                'email' => 'jane@example.com',
-                'password' => Hash::make('password'),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Mike Johnson',
-                'email' => 'mike@example.com',
-                'password' => Hash::make('password'),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ];
+        // Create additional users with roles
+        $testUser = User::create([
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+            'password' => Hash::make('123'),
+        ]);
+        $testUser->assignRole('user');
 
-        foreach ($users as $user) {
-            DB::table('users')->insert($user);
-        }
+        $johnDoe = User::create([
+            'name' => 'John Doe',
+            'email' => 'john@example.com',
+            'password' => Hash::make('password'),
+        ]);
+        $johnDoe->assignRole('user');
+
+        $janeSmith = User::create([
+            'name' => 'Jane Smith',
+            'email' => 'jane@example.com',
+            'password' => Hash::make('password'),
+        ]);
+        $janeSmith->assignRole('admin'); // Make Jane an admin
+
+        $mikeJohnson = User::create([
+            'name' => 'Mike Johnson',
+            'email' => 'mike@example.com',
+            'password' => Hash::make('password'),
+        ]);
+        $mikeJohnson->assignRole('user');
+
+        // Get user IDs for requests (accounting for the 2 users created in RolePermissionSeeder)
+        $adminUserId = User::where('email', 'admin@example.com')->first()->id;
+        $regularUserId = User::where('email', 'user@example.com')->first()->id;
+        $johnDoeId = $johnDoe->id;
+        $janeSmithId = $janeSmith->id;
+        $mikeJohnsonId = $mikeJohnson->id;
 
         // Create Facilities
         $facilities = [
             [
                 'name' => 'Conference Room A',
-                'room_number' => 'Large conference room with projector and whiteboard',
+                'room_number' => 'A101',
                 'capacity' => 50,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
                 'name' => 'Conference Room B',
-                'room_number' => 'Medium-sized meeting room with video conferencing',
+                'room_number' => 'B202',
                 'capacity' => 20,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
                 'name' => 'Auditorium',
-                'room_number' => 'Main auditorium with stage and sound system',
+                'room_number' => 'AUD-1',
                 'capacity' => 200,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
                 'name' => 'Training Room',
-                'room_number' => 'Training room with computers and projector',
+                'room_number' => 'TR-303',
                 'capacity' => 30,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
                 'name' => 'Gymnasium',
-                'room_number' => 'Indoor sports facility with basketball court',
+                'room_number' => 'GYM-1',
                 'capacity' => 100,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
                 'name' => 'Cafeteria',
-                'room_number' => 'Large dining area for events and gatherings',
+                'room_number' => 'CAF-1',
                 'capacity' => 150,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -107,35 +109,40 @@ class DatabaseSeeder extends Seeder
         // Create Requests
         $requests = [
             [
-                'user_id' => 1,
+                'user_id' => $johnDoeId,
+                'title' => 'Annual Company Meeting',
                 'description' => 'Quarterly all-hands meeting to discuss company performance and goals',
                 'status' => 'approved',
                 'created_at' => now()->subDays(10),
                 'updated_at' => now()->subDays(8),
             ],
             [
-                'user_id' => 2,
+                'user_id' => $janeSmithId,
+                'title' => 'Product Launch Event',
                 'description' => 'Product demonstration and launch event for new software release',
                 'status' => 'pending',
                 'created_at' => now()->subDays(5),
                 'updated_at' => now()->subDays(5),
             ],
             [
-                'user_id' => 1,
+                'user_id' => $johnDoeId,
+                'title' => 'Team Building Activity',
                 'description' => 'Sports day and team building exercises for the sales department',
                 'status' => 'approved',
                 'created_at' => now()->subDays(3),
                 'updated_at' => now()->subDays(2),
             ],
             [
-                'user_id' => 3,
+                'user_id' => $mikeJohnsonId,
+                'title' => 'Training Workshop',
                 'description' => 'Technical training workshop for new software tools',
                 'status' => 'rejected',
                 'created_at' => now()->subDays(7),
                 'updated_at' => now()->subDays(6),
             ],
             [
-                'user_id' => 2,
+                'user_id' => $regularUserId,
+                'title' => 'Holiday Party',
                 'description' => 'End of year celebration and awards ceremony',
                 'status' => 'pending',
                 'created_at' => now()->subDays(1),
@@ -150,33 +157,9 @@ class DatabaseSeeder extends Seeder
         // Create Request Facilities (Junction Table)
         $requestFacilities = [
             // Request 1: Annual Company Meeting - Auditorium + Cafeteria
-            ['request_id' => 1, 'facility_id' => 3, 'created_at' => now(), 'updated_at' => now()],
-            ['request_id' => 1, 'facility_id' => 6, 'created_at' => now(), 'updated_at' => now()],
-
-            // Request 2: Product Launch - Conference Room A
-            ['request_id' => 2, 'facility_id' => 1, 'created_at' => now(), 'updated_at' => now()],
-
-            // Request 3: Team Building - Gymnasium + Cafeteria
-            ['request_id' => 3, 'facility_id' => 5, 'created_at' => now(), 'updated_at' => now()],
-            ['request_id' => 3, 'facility_id' => 6, 'created_at' => now(), 'updated_at' => now()],
-
-            // Request 4: Training Workshop - Training Room
-            ['request_id' => 4, 'facility_id' => 4, 'created_at' => now(), 'updated_at' => now()],
-
-            // Request 5: Holiday Party - Auditorium + Cafeteria
-            ['request_id' => 5, 'facility_id' => 3, 'created_at' => now(), 'updated_at' => now()],
-            ['request_id' => 5, 'facility_id' => 6, 'created_at' => now(), 'updated_at' => now()],
-        ];
-
-        foreach ($requestFacilities as $rf) {
-            DB::table('requested_facilities')->insert($rf);
-        }
-
-        // Create Request Dates
-        $requestDates = [
-            // Request 1: Annual Company Meeting - 2 days
             [
                 'request_id' => 1,
+                'facility_id' => 3,
                 'date_requested' => Carbon::now()->addDays(15)->toDateString(),
                 'time_start' => '09:00:00',
                 'time_end' => '17:00:00',
@@ -185,6 +168,16 @@ class DatabaseSeeder extends Seeder
             ],
             [
                 'request_id' => 1,
+                'facility_id' => 6,
+                'date_requested' => Carbon::now()->addDays(15)->toDateString(),
+                'time_start' => '12:00:00',
+                'time_end' => '14:00:00',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'request_id' => 1,
+                'facility_id' => 3,
                 'date_requested' => Carbon::now()->addDays(16)->toDateString(),
                 'time_start' => '09:00:00',
                 'time_end' => '15:00:00',
@@ -192,9 +185,10 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
 
-            // Request 2: Product Launch - 1 day
+            // Request 2: Product Launch - Conference Room A
             [
                 'request_id' => 2,
+                'facility_id' => 1,
                 'date_requested' => Carbon::now()->addDays(20)->toDateString(),
                 'time_start' => '14:00:00',
                 'time_end' => '18:00:00',
@@ -202,19 +196,30 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
 
-            // Request 3: Team Building - 1 day
+            // Request 3: Team Building - Gymnasium + Cafeteria
             [
                 'request_id' => 3,
+                'facility_id' => 5,
                 'date_requested' => Carbon::now()->addDays(25)->toDateString(),
                 'time_start' => '08:00:00',
                 'time_end' => '16:00:00',
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+            [
+                'request_id' => 3,
+                'facility_id' => 6,
+                'date_requested' => Carbon::now()->addDays(25)->toDateString(),
+                'time_start' => '12:00:00',
+                'time_end' => '14:00:00',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
 
-            // Request 4: Training Workshop - 3 days
+            // Request 4: Training Workshop - Training Room (3 days)
             [
                 'request_id' => 4,
+                'facility_id' => 4,
                 'date_requested' => Carbon::now()->addDays(30)->toDateString(),
                 'time_start' => '10:00:00',
                 'time_end' => '16:00:00',
@@ -223,6 +228,7 @@ class DatabaseSeeder extends Seeder
             ],
             [
                 'request_id' => 4,
+                'facility_id' => 4,
                 'date_requested' => Carbon::now()->addDays(31)->toDateString(),
                 'time_start' => '10:00:00',
                 'time_end' => '16:00:00',
@@ -231,6 +237,7 @@ class DatabaseSeeder extends Seeder
             ],
             [
                 'request_id' => 4,
+                'facility_id' => 4,
                 'date_requested' => Carbon::now()->addDays(32)->toDateString(),
                 'time_start' => '10:00:00',
                 'time_end' => '16:00:00',
@@ -238,9 +245,19 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
 
-            // Request 5: Holiday Party - 1 day
+            // Request 5: Holiday Party - Auditorium + Cafeteria
             [
                 'request_id' => 5,
+                'facility_id' => 3,
+                'date_requested' => Carbon::now()->addDays(45)->toDateString(),
+                'time_start' => '18:00:00',
+                'time_end' => '23:00:00',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'request_id' => 5,
+                'facility_id' => 6,
                 'date_requested' => Carbon::now()->addDays(45)->toDateString(),
                 'time_start' => '18:00:00',
                 'time_end' => '23:00:00',
@@ -249,12 +266,8 @@ class DatabaseSeeder extends Seeder
             ],
         ];
 
-        foreach ($requestDates as $rd) {
-            DB::table('requested_dates')->insert($rd);
+        foreach ($requestFacilities as $rf) {
+            DB::table('request_facilities')->insert($rf);
         }
-
-        $this->call([
-            RolePermissionSeeder::class,
-        ]);
     }
 }
