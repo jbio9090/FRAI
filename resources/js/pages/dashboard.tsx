@@ -17,7 +17,7 @@ export default function Dashboard({ children }: DashboardProps) {
 
     return (
         <DefaultLayout>
-            <h1>{hasRole("admin") ? "Hello endmin": "Hello"}</h1>
+            <h1>{hasRole("admin") ? "Hello Admin!": "Hello"}</h1>
         </DefaultLayout>
     );
 }

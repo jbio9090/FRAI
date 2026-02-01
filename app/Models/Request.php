@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\Models\User;
+use App\RequestStatus;
 
 class Request extends Model
 {
@@ -14,6 +15,10 @@ class Request extends Model
         'title',
         'description',
         'status',
+    ];
+
+    protected $casts = [
+        'status' => RequestStatus::class
     ];
 
     public function user()

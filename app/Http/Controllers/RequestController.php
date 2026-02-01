@@ -8,6 +8,7 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 
 use App\Models\Facility;
+use App\RequestStatus;
 
 class RequestController extends Controller
 {
@@ -18,10 +19,10 @@ class RequestController extends Controller
 
         // Admins see all requests, users see only their own
         $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "pending")->latest()->get()
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", RequestStatus::PENDING)->latest()->get()
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
-            ->where("status", "pending")
+            ->where("status", RequestStatus::PENDING)
             ->latest()
             ->get();
 
@@ -38,10 +39,10 @@ class RequestController extends Controller
 
         // Admins see all requests, users see only their own
         $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "approved")->latest()->get()
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", RequestStatus::APPROVED)->latest()->get()
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
-            ->where("status", "approved")
+            ->where("status", RequestStatus::APPROVED)
             ->latest()
             ->get();
 
@@ -58,10 +59,10 @@ class RequestController extends Controller
 
         // Admins see all requests, users see only their own
         $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "rejected")->latest()->get()
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", RequestStatus::DENIED)->latest()->get()
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
-            ->where("status", "rejected")
+            ->where("status", RequestStatus::DENIED)
             ->latest()
             ->get();
 
@@ -79,7 +80,7 @@ class RequestController extends Controller
         }
 
         $requests = FacilityRequest::with(['user', 'facilities', 'requestFacilities'])
-            ->where('status', 'pending')
+            ->where('status', RequestStatus::PENDING)
             ->latest()
             ->get();
 
@@ -96,7 +97,7 @@ class RequestController extends Controller
         }
 
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => 'approved']);
+        $facilityRequest->update(['status' => RequestStatus::APPROVED]);
 
         return redirect()->back()->with('success', 'Request approved successfully');
     }
@@ -109,7 +110,7 @@ class RequestController extends Controller
         }
 
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => 'rejected']);
+        $facilityRequest->update(['status' => RequestStatus::DENIED]);
 
         return redirect()->back()->with('success', 'Request rejected successfully');
     }
