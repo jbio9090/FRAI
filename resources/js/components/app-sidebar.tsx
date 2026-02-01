@@ -25,6 +25,8 @@ import {
   Settings,
   LogOut,
   CirclePlus,
+  FileCheck,
+  FileX,
 } from "lucide-react"
 
 import { Link, router } from "@inertiajs/react"
@@ -34,24 +36,19 @@ const data = {
   versions: ["1.0.1", "1.1.0-alpha", "2.0.0-beta1"],
   navMenu: [
     {
-      title: "Dashboard",
-      url: route("dashboard"),
-      icon: Home
-    },
-    {
-      title: "Requests",
+      title: "Pending",
       url: route("requests.index"),
       icon: FileText
     },
     {
-      title: "Users",
-      url: "/users",
-      icon: Users
+      title: "Approved",
+      url: route("requests.approved"),
+      icon: FileCheck
     },
     {
-      title: "Settings",
-      url: "/settings",
-      icon: Settings
+      title: "Denied",
+      url: route("requests.denied"),
+      icon: FileX
     }
   ]
 }
@@ -82,6 +79,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <span>Create Request</span>
               </Link>
             </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem key="Dashboard" className="px-4">
+            <SidebarMenuButton asChild>
+              <Link href={route("dashboard")}>
+                <Home className="h-4 w-4" />
+                <span>Dashboard</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem className="px-4 mt-4">
+            <SidebarGroupLabel>
+              Requests
+            </SidebarGroupLabel>
           </SidebarMenuItem>
 
           {data.navMenu.map((item) => (

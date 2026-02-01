@@ -17,18 +17,16 @@ interface Request {
 
 interface PendingRequestsProps {
     requests: Request[];
+    page_title: string;
 }
 
-export default function PendingRequests({ requests }: PendingRequestsProps) {
+export default function PendingRequests({ requests, page_title }: PendingRequestsProps) {
     const { hasPermission } = usePermission();
     
-    console.log(requests);
-    
-
     return (
         <DefaultLayout>
             <div className="max-w-6xl mx-auto">
-                <h1 className="text-2xl font-bold mb-6">Pending Requests</h1>
+                <h1 className="text-2xl font-bold mb-6">{page_title} Requests</h1>
 
                 <div className="space-y-4">
                     {requests.map((request) => (

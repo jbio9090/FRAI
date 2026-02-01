@@ -18,17 +18,58 @@ class RequestController extends Controller
 
         // Admins see all requests, users see only their own
         $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->latest()->get()
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "pending")->latest()->get()
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
+            ->where("status", "pending")
             ->latest()
             ->get();
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
+            'page_title' => "Pending",
         ]);
     }
 
+
+    public function approvedPage()
+    {
+        $user = Auth::user();
+
+        // Admins see all requests, users see only their own
+        $requests = $user->hasRole('admin')
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "approved")->latest()->get()
+            : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
+            ->where('user_id', $user->id)
+            ->where("status", "approved")
+            ->latest()
+            ->get();
+
+        return Inertia::render('requests/index', [
+            'requests' => $requests,
+            'page_title' => "Approved",
+        ]);
+    }
+
+
+    public function deniedPage()
+    {
+        $user = Auth::user();
+
+        // Admins see all requests, users see only their own
+        $requests = $user->hasRole('admin')
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", "denied")->latest()->get()
+            : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
+            ->where('user_id', $user->id)
+            ->where("status", "denied")
+            ->latest()
+            ->get();
+
+        return Inertia::render('requests/index', [
+            'requests' => $requests,
+            'page_title' => "Denied",
+        ]);
+    }
     // Admin-only: View pending requests
     public function pending()
     {
@@ -114,4 +155,7 @@ class RequestController extends Controller
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }
+
+
+
 }
