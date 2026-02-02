@@ -19,11 +19,9 @@ interface DashboardProps {
     request: Request;
 }
 
-export default function Dashboard({ children, request }: DashboardProps) {
+export default function RequestDetail({ children, request }: DashboardProps) {
     const { post } = useForm({})
     const { hasPermission, hasRole } = usePermission();
-
-    console.log(request);
 
     function submit(e) {
         e.preventDefault();
@@ -32,10 +30,16 @@ export default function Dashboard({ children, request }: DashboardProps) {
 
     return (
         <DefaultLayout>
-            <h1>{request.id}</h1>
-            <h1>{request.description}</h1>
+            <div className="flex flex-col w-ful *:text-sm">
+                <h1 className='font-bold text-md'> {request.title}</h1>
+                <div className="p-1 text-sm border border-1 border-border max-w-24 text-center rounded-full">
+                    {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                    </div>
+                <h1>{request.description}</h1>
 
-            <h1>Requested by: {request.user.name}</h1>
+                <h1>Requested by: {request.user.name}</h1>
+            </div>
+
         </DefaultLayout>
     );
 }

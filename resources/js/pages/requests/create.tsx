@@ -153,7 +153,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
     return (
         <DefaultLayout>
-            <div className="w-full md:w-4xl max-w-3xl mx-auto">
+            <div className="max-w-3xl w-full mx-auto">
                 <form onSubmit={submit} className="space-y-6 flex flex-col gap-2">
                     <h1 className='w-full font-extrabold text-muted-foreground'>Create Request</h1>
 

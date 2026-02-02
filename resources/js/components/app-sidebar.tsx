@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import {
-  Home,
+  LayoutDashboard,
   FileText,
   Users,
   Settings,
@@ -27,6 +27,7 @@ import {
   CirclePlus,
   FileCheck,
   FileX,
+  ListCheck,
 } from "lucide-react"
 
 import { Link, router } from "@inertiajs/react"
@@ -84,8 +85,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem key="Dashboard" className="px-4">
             <SidebarMenuButton asChild>
               <Link href={route("dashboard")}>
-                <Home className="h-4 w-4" />
+                <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem key="Dashboard" className="px-4">
+            <SidebarMenuButton asChild>
+              <Link href={route("rules")}>
+                <ListCheck className="h-4 w-4" />
+                <span>Rules</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

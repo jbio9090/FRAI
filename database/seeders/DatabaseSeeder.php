@@ -316,5 +316,18 @@ class DatabaseSeeder extends Seeder
         foreach ($equipments as $e) {
             DB::table('equipments')->insert($e);
         }
+
+        //RULES
+        $rules = [
+            [
+                "rule" => "No running in the bathroom",
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        ];
+
+        foreach ($rules as $rule) {
+            DB::table("rules")->insert($rule);
+        }
     }
 }

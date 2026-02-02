@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\RulesController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Models\Facility;
@@ -29,6 +30,9 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
     });
+
+
+    Route::get('/rules', [RulesController::class, "index"])->name("rules");
 });
 
 Route::prefix("/login")->group(function () {

@@ -1,7 +1,8 @@
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { Button } from '@/components/ui/button';
-import { router } from '@inertiajs/react';
+import { router, Link } from '@inertiajs/react';
+import { ArrowUpRight } from 'lucide-react';
 
 interface Request {
     id: number;
@@ -22,10 +23,10 @@ interface PendingRequestsProps {
 
 export default function PendingRequests({ requests, page_title }: PendingRequestsProps) {
     const { hasPermission } = usePermission();
-    
+
     return (
         <DefaultLayout>
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-2xl font-bold mb-6">{page_title} Requests</h1>
 
                 <div className="space-y-4">
@@ -39,6 +40,16 @@ export default function PendingRequests({ requests, page_title }: PendingRequest
                                     </p>
                                     <p className="mt-2 text-sm">{request.description}</p>
                                 </div>
+
+
+                                <Link href={route("requests.detail", request.id)}>
+                                    <Button
+                                        size="xs"
+                                        variant="outline"
+                                    >
+                                        <ArrowUpRight />
+                                    </Button>
+                                </Link>
 
                                 {/* Only show approve/reject buttons to admins */}
                                 {(hasPermission('approve requests') && page_title == "Pending") && (
