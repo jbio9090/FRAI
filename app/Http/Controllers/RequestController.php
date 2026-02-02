@@ -147,7 +147,7 @@ class RequestController extends Controller
             'facility_bookings.*.time_start' => 'required',
             'facility_bookings.*.time_end' => 'required',
             'facility_bookings.*.equipment' => 'array',
-            'facility_bookings.*.equipment.*.equipment_id' => 'required|exists:equipment,id',
+            'facility_bookings.*.equipment.*.equipment_id' => 'required|exists:equipments,id',
             'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
         ]);
 

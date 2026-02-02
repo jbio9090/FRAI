@@ -147,9 +147,9 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         console.log('Form data:', data);
     }
 
-    console.log('All facilities:', facilities);
-    console.log('Selected facility ID:', selectedFacility);
-    console.log('Available equipment:', availableEquipment);
+    // console.log('All facilities:', facilities);
+    // console.log('Selected facility ID:', selectedFacility);
+    // console.log('Available equipment:', availableEquipment);
 
     return (
         <DefaultLayout>

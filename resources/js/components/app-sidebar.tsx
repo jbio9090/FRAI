@@ -91,7 +91,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          <SidebarMenuItem key="Dashboard" className="px-4">
+          <SidebarMenuItem key="Rules" className="px-4">
             <SidebarMenuButton asChild>
               <Link href={route("rules")}>
                 <ListCheck className="h-4 w-4" />
