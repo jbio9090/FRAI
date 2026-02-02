@@ -118,8 +118,10 @@ class RequestController extends Controller
 
     public function createPage()
     {
+        // dd(Facility::with('equipments')->get());
+
         return Inertia::render("requests/create", [
-            'facilities' => Facility::all()
+            'facilities' => Facility::with('equipments')->get(),
         ]);
     }
 
@@ -134,6 +136,9 @@ class RequestController extends Controller
             'facility_bookings.*.date' => 'required|date',
             'facility_bookings.*.time_start' => 'required',
             'facility_bookings.*.time_end' => 'required',
+            'facility_bookings.*.equipment' => 'array',
+            'facility_bookings.*.equipment.*.equipment_id' => 'required|exists:equipment,id',
+            'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
         ]);
 
         // Create the request
@@ -141,7 +146,7 @@ class RequestController extends Controller
             'user_id' => Auth::id(),
             'title' => $validated['title'],
             'description' => $validated['description'],
-            'status' => 'pending',
+            'status' => RequestStatus::PENDING,
         ]);
 
         // Add facility bookings
@@ -152,11 +157,17 @@ class RequestController extends Controller
                 'time_start' => $booking['time_start'],
                 'time_end' => $booking['time_end'],
             ]);
+
+            // Add equipment if any
+            if (!empty($booking['equipment'])) {
+                foreach ($booking['equipment'] as $equipment) {
+                    $facilityRequest->equipment()->attach($equipment['equipment_id'], [
+                        'quantity_needed' => $equipment['quantity_needed']
+                    ]);
+                }
+            }
         }
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }
-
-
-
 }

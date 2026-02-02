@@ -64,7 +64,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <div className="w-full flex flex-col items-center px-4 my-2">
-            <h1 className="text-left w-full font-bold">PLV - GSO</h1>
+            <h1 className="text-left w-full font-black">PLV - GSO</h1>
             <h2 className="text-left w-full text-sm">Facility Request System</h2>
           </div>
         </SidebarMenu>

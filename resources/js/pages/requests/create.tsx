@@ -23,11 +23,20 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
+interface Equipment {
+    id: number;
+    name: string;
+    description?: string;
+    quantity: number;
+    facility_id: number;
+}
+
 interface Facility {
     id: number;
     name: string;
     description?: string;
     capacity?: number;
+    equipments?: Equipment[];
 }
 
 interface FacilityBooking {
@@ -36,6 +45,14 @@ interface FacilityBooking {
     date: Date;
     time_start: string;
     time_end: string;
+    equipment: EquipmentRequest[];
+}
+
+interface EquipmentRequest {
+    equipment_id: number;
+    equipment_name: string;
+    quantity_needed: number;
+    max_quantity: number;
 }
 
 interface CreateRequestProps {
@@ -48,12 +65,46 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
+    const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
 
     const { data, setData, post, processing, errors } = useForm({
         title: '',
         description: '',
         facility_bookings: [] as FacilityBooking[],
     });
+
+
+    const availableEquipment = selectedFacility
+        ? facilities.find(f => f.id === selectedFacility)?.equipments || []
+        : [];
+
+    function handleEquipmentToggle(equipment: Equipment) {
+        const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
+
+        if (exists) {
+            setSelectedEquipment(selectedEquipment.filter(e => e.equipment_id !== equipment.id));
+        } else {
+            setSelectedEquipment([
+                ...selectedEquipment,
+                {
+                    equipment_id: equipment.id,
+                    equipment_name: equipment.name,
+                    quantity_needed: 1,
+                    max_quantity: equipment.quantity,
+                }
+            ]);
+        }
+    }
+
+    function updateEquipmentQuantity(equipmentId: number, quantity: number) {
+        setSelectedEquipment(
+            selectedEquipment.map(e =>
+                e.equipment_id === equipmentId
+                    ? { ...e, quantity_needed: quantity }
+                    : e
+            )
+        );
+    }
 
     function addFacilityBooking() {
         if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) {
@@ -69,6 +120,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             date: currentDate,
             time_start: currentTimeStart,
             time_end: currentTimeEnd,
+            equipment: selectedEquipment,
         };
 
         const updatedBookings = [...facilityBookings, newBooking];
@@ -80,6 +132,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         setCurrentDate(undefined);
         setCurrentTimeStart('');
         setCurrentTimeEnd('');
+        setSelectedEquipment([]);
     }
 
     function removeBooking(index: number) {
@@ -93,6 +146,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         post(route('requests.store'));
         console.log('Form data:', data);
     }
+
+    console.log('All facilities:', facilities);
+    console.log('Selected facility ID:', selectedFacility);
+    console.log('Available equipment:', availableEquipment);
 
     return (
         <DefaultLayout>
@@ -137,22 +194,12 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                             {/* Facility Selection */}
                             <div className="space-y-2">
                                 <Label>Select Facility</Label>
-                                {/* <select
-                                    value={selectedFacility || ''}
-                                    onChange={(e) => setSelectedFacility(Number(e.target.value))}
-                                    className="w-full border rounded-md p-2 text-sm"
-                                >
-                                    <option value="" className='text-sm'>Choose a facility...</option>
-                                    {facilities.map((facility) => (
-                                        <option key={facility.id} value={facility.id}>
-                                            {facility.name} {facility.capacity && `(Capacity: ${facility.capacity})`}
-                                        </option>
-                                    ))}
-                                </select> */}
-
                                 <Select
                                     value={selectedFacility?.toString() || ''}
-                                    onValueChange={(value) => setSelectedFacility(Number(value))}
+                                    onValueChange={(value) => {
+                                        setSelectedFacility(Number(value));
+                                        setSelectedEquipment([]); // Reset equipment when facility changes
+                                    }}
                                 >
                                     <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Choose a Facility" />
@@ -166,6 +213,57 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {/* Equipment Selection - Only show if facility is selected */}
+                            {selectedFacility && availableEquipment.length > 0 && (
+                                <div className="space-y-2">
+                                    <Label>Select Equipment <i>(Optional)</i></Label>
+                                    <div className="border rounded-md p-3 space-y-3 max-h-48 overflow-y-auto">
+                                        {availableEquipment.map((equipment) => {
+                                            const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
+                                            return (
+                                                <div key={equipment.id} className="flex items-center justify-between gap-4">
+                                                    <div className="flex items-center space-x-3 flex-1">
+                                                        <Checkbox
+                                                            id={`equipment-${equipment.id}`}
+                                                            checked={!!selected}
+                                                            onCheckedChange={() => handleEquipmentToggle(equipment)}
+                                                        />
+                                                        <div className="flex-1">
+                                                            <label
+                                                                htmlFor={`equipment-${equipment.id}`}
+                                                                className="text-sm font-medium cursor-pointer"
+                                                            >
+                                                                {equipment.name}
+                                                            </label>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Available: {equipment.quantity}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {selected && (
+                                                        <div className="flex items-center gap-2">
+                                                            <Label className="text-xs">Qty:</Label>
+                                                            <Input
+                                                                type="number"
+                                                                min="1"
+                                                                max={equipment.quantity}
+                                                                value={selected.quantity_needed}
+                                                                onChange={(e) => updateEquipmentQuantity(
+                                                                    equipment.id,
+                                                                    Math.min(Number(e.target.value), equipment.quantity)
+                                                                )}
+                                                                className="w-20"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Date Picker */}
@@ -236,22 +334,36 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 <Label>Added Facility Bookings</Label>
                                 <div className="border rounded-md divide-y">
                                     {facilityBookings.map((booking, index) => (
-                                        <div key={index} className="p-3 flex items-center justify-between">
-                                            <div className="text-sm">
-                                                <div className="font-bold">{booking.facility_name}</div>
-                                                <div className="text-muted-foreground">
-                                                    {format(booking.date, "PPP")} • {booking.time_start} - {booking.time_end}
+                                        <div key={index} className="p-3">
+                                            <div className="flex items-start justify-between">
+                                                <div className="text-sm flex-1">
+                                                    <div className="font-bold">{booking.facility_name}</div>
+                                                    <div className="text-muted-foreground">
+                                                        {format(booking.date, "PPP")} • {booking.time_start} - {booking.time_end}
+                                                    </div>
+
+                                                    {/* Show selected equipment */}
+                                                    {booking.equipment.length > 0 && (
+                                                        <div className="mt-2 space-y-1">
+                                                            <div className="text-xs font-semibold">Equipment:</div>
+                                                            {booking.equipment.map((eq, eqIndex) => (
+                                                                <div key={eqIndex} className="text-xs text-muted-foreground">
+                                                                    • {eq.equipment_name} (Qty: {eq.quantity_needed})
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className='cursor-pointer'
+                                                    onClick={() => removeBooking(index)}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
                                             </div>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className='cursor-pointer'
-                                                onClick={() => removeBooking(index)}
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </Button>
                                         </div>
                                     ))}
                                 </div>
@@ -276,7 +388,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                         </Button>
                     </div>
                 </form>
-            </div >
-        </DefaultLayout >
+            </div>
+        </DefaultLayout>
     );
 }

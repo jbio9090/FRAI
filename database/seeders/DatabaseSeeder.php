@@ -59,44 +59,65 @@ class DatabaseSeeder extends Seeder
         // Create Facilities
         $facilities = [
             [
-                'name' => 'Conference Room A',
+                'name' => 'Main Auditorium',
                 'room_number' => 'A101',
-                'capacity' => 50,
+                'capacity' => 500,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'name' => 'Conference Room B',
+                'name' => 'Assembly Hall',
                 'room_number' => 'B202',
-                'capacity' => 20,
+                'capacity' => 800,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'name' => 'Auditorium',
+                'name' => 'COED AVR',
                 'room_number' => 'AUD-1',
-                'capacity' => 200,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Training Room',
-                'room_number' => 'TR-303',
-                'capacity' => 30,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Gymnasium',
-                'room_number' => 'GYM-1',
                 'capacity' => 100,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'name' => 'Cafeteria',
+                'name' => 'CEIT Lecture Hall',
+                'room_number' => 'TR-303',
+                'capacity' => 160,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'MPH 6C (CEIT Big room)',
+                'room_number' => 'GYM-1',
+                'capacity' => 300,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'MPH 6D (CEIT Small room)',
                 'room_number' => 'CAF-1',
-                'capacity' => 150,
+                'capacity' => 50,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'CABA Lecture Hall',
+                'room_number' => 'CAF-1',
+                'capacity' => 100,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'MPH 6A (CABA Big room)',
+                'room_number' => 'CAF-1',
+                'capacity' => 300,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'MPH 6B (CABA Small room)',
+                'room_number' => 'CAF-1',
+                'capacity' => 50,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
@@ -268,6 +289,32 @@ class DatabaseSeeder extends Seeder
 
         foreach ($requestFacilities as $rf) {
             DB::table('request_facilities')->insert($rf);
+        }
+
+        // Equipment
+        $equipments = [
+            [
+                "name" => "Gun",
+                "quantity" => 2,
+                'created_at' => now(),
+                'updated_at' => now(),
+                "facility_id" => 2,
+            ],
+            [
+                "name" => "Microphone",
+                "quantity" => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+                "facility_id" => 4,
+            ],
+            ['name' => "Projector", 'quantity' => 3, 'facility_id' => 1, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => "Gun", 'quantity' => 2, 'facility_id' => 1, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => "Sound System", 'quantity' => 1, 'facility_id' => 3, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => "Microphone", 'quantity' => 5, 'facility_id' => 4, 'created_at' => now(), 'updated_at' => now()],
+        ];
+
+        foreach ($equipments as $e) {
+            DB::table('equipments')->insert($e);
         }
     }
 }

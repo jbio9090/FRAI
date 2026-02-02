@@ -37,4 +37,11 @@ class Request extends Model
             ->withPivot('date_requested', 'time_start', 'time_end')
             ->withTimestamps();
     }
+
+    public function equipment()
+    {
+        return $this->belongsToMany(Equipment::class, 'request_equipment')
+            ->withPivot('quantity_needed')
+            ->withTimestamps();
+    }
 }
