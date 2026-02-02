@@ -1,4 +1,4 @@
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
 import { AppSidebar } from "@/components/app-sidebar"
 import {
     Breadcrumb,
@@ -19,8 +19,15 @@ interface DashboardProps {
     children: React.ReactNode;
 }
 
+interface PageProps {
+    breadcrumbs: string[];
+}
+
 export default function DefaultLayout({ children }: DashboardProps) {
     const { post } = useForm({});
+    const { breadcrumbs } = usePage<PageProps>().props;
+
+    console.log(breadcrumbs);
 
     function submit(e) {
         e.preventDefault();
@@ -38,17 +45,17 @@ export default function DefaultLayout({ children }: DashboardProps) {
                         className="mr-2 data-[orientation=vertical]:h-4"
                     />
                     <Breadcrumb>
-                        {/* <BreadcrumbList>
-                            <BreadcrumbItem className="hidden md:block">
-                                <BreadcrumbLink href="#">
-                                    Building Your Application
-                                </BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator className="hidden md:block" />
-                            <BreadcrumbItem>
-                                <BreadcrumbPage>Data Fetching</BreadcrumbPage>
-                            </BreadcrumbItem>
-                        </BreadcrumbList> */}
+                        <BreadcrumbList>
+                            {breadcrumbs.map((breadcrumb) => ( 
+                                <>
+                                    <BreadcrumbItem className="hidden md:block">
+                                        {breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1)}
+                                    </BreadcrumbItem>
+
+                                    <BreadcrumbSeparator className="hidden md:block" />
+                                </>
+                            ))}
+                        </BreadcrumbList>
                     </Breadcrumb>
                 </header>
 
