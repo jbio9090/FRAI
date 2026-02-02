@@ -125,6 +125,16 @@ class RequestController extends Controller
         ]);
     }
 
+
+    public function detail(Request $request, int $request_id)
+    {
+        $r = FacilityRequest::with("user")->where("id", $request_id)->firstOrFail();
+
+        return Inertia::render("requests/detail", [
+            'request' => $r,
+        ]);
+    }
+
     // POST - actually sotring the fuckening data
     public function store(Request $request)
     {

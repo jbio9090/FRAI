@@ -20,6 +20,7 @@ Route::middleware("auth")->group(function () {
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
+    Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store');
 
     // Admin only routes
