@@ -26,7 +26,7 @@ export default function PendingRequests({ requests, page_title }: PendingRequest
 
     return (
         <DefaultLayout>
-            <div className="max-w-6xl mx-auto w-full">
+            <div className="max-w-6xl w-full">
                 <h1 className="text-2xl font-bold mb-6">{page_title} Requests</h1>
 
                 <div className="space-y-4">
@@ -42,36 +42,39 @@ export default function PendingRequests({ requests, page_title }: PendingRequest
                                 </div>
 
 
-                                <Link href={route("requests.detail", request.id)}>
-                                    <Button
-                                        size="xs"
-                                        variant="outline"
-                                    >
-                                        <ArrowUpRight />
-                                    </Button>
-                                </Link>
+                                <div className="flex gap-2">
+                                    <Link href={route("requests.detail", request.id)}>
+                                        <Button
+                                            size="xs"
+                                            variant="outline"
+                                        >
+                                            <ArrowUpRight />
+                                        </Button>
+                                    </Link>
 
-                                {/* Only show approve/reject buttons to admins */}
-                                {(hasPermission('approve requests') && page_title == "Pending") && (
-                                    <div className="flex gap-2">
-                                        <Button
-                                            onClick={() => {
-                                                router.post(route('requests.approve', request.id));
-                                            }}
-                                            variant="default"
-                                        >
-                                            Approve
-                                        </Button>
-                                        <Button
-                                            onClick={() => {
-                                                router.post(route('requests.reject', request.id));
-                                            }}
-                                            variant="destructive"
-                                        >
-                                            Reject
-                                        </Button>
-                                    </div>
-                                )}
+
+                                    {/* Only show approve/reject buttons to admins */}
+                                    {(hasPermission('approve requests') && page_title == "Pending") && (
+                                        <>
+                                            <Button
+                                                onClick={() => {
+                                                    router.post(route('requests.approve', request.id));
+                                                }}
+                                                variant="default"
+                                            >
+                                                Approve
+                                            </Button>
+                                            <Button
+                                                onClick={() => {
+                                                    router.post(route('requests.reject', request.id));
+                                                }}
+                                                variant="destructive"
+                                            >
+                                                Reject
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ))}

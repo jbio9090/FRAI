@@ -118,8 +118,6 @@ class RequestController extends Controller
 
     public function createPage()
     {
-        // dd(Facility::with('equipments')->get());
-
         return Inertia::render("requests/create", [
             'facilities' => Facility::with('equipments')->get(),
         ]);
@@ -128,7 +126,7 @@ class RequestController extends Controller
 
     public function detail(Request $request, int $request_id)
     {
-        $r = FacilityRequest::with("user")->where("id", $request_id)->firstOrFail();
+        $r = FacilityRequest::with(["user", "facilities", "equipment", "requestFacilities"])->where("id", $request_id)->firstOrFail();
 
         return Inertia::render("requests/detail", [
             'request' => $r,
