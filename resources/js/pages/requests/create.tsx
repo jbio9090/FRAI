@@ -18,7 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { CalendarIcon, X } from "lucide-react";
+import { CalendarIcon, X, User, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -77,6 +77,19 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const availableEquipment = selectedFacility
         ? facilities.find(f => f.id === selectedFacility)?.equipments || []
         : [];
+
+    function formatTime(time: string): string {
+        return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+    }
+
+    function clearEquipmentSelection(e: React.MouseEvent<HTMLButtonElement>) {
+        e.preventDefault();
+        setSelectedEquipment([]);
+    }
 
     function handleEquipmentToggle(equipment: Equipment) {
         const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
@@ -192,7 +205,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                         <Label>Add Facility Bookings</Label>
                         <div className="border rounded-md p-4 space-y-4">
                             {/* Facility Selection */}
-                            <div className="space-y-2">
+                            <div className="space-y-4">
                                 <Label>Select Facility</Label>
                                 <Select
                                     value={selectedFacility?.toString() || ''}
@@ -207,7 +220,15 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     <SelectContent>
                                         {facilities.map((facility) => (
                                             <SelectItem key={facility.id} value={facility.id.toString()}>
-                                                {facility.name} {facility.capacity && `(Capacity: ${facility.capacity})`}
+                                                <b>
+                                                    {facility.name}
+                                                </b>
+                                                <div className="flex items-center gap-1 font-semibold text-muted-foreground">
+                                                    <User />
+                                                    <span className='text-xs '>
+                                                        {facility.capacity && facility.capacity}
+                                                    </span>
+                                                </div>
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -217,7 +238,18 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                             {/* Equipment Selection - Only show if facility is selected */}
                             {selectedFacility && availableEquipment.length > 0 && (
                                 <div className="space-y-2">
-                                    <Label>Select Equipment <i>(Optional)</i></Label>
+                                    <div className="flex justify-around items-end">
+                                        <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
+                                        {(selectedEquipment.length > 0) && (
+                                            <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection}>
+                                                <X />
+                                                <span>
+                                                    Clear Selection
+                                                </span>
+                                            </Button>
+                                        )}
+                                    </div>
+
                                     <div className="border rounded-md p-3 space-y-3 max-h-48 overflow-y-auto">
                                         {availableEquipment.map((equipment) => {
                                             const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
@@ -230,31 +262,31 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                             onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                         />
                                                         <div className="flex-1">
-                                                            <label
+                                                            <Label
                                                                 htmlFor={`equipment-${equipment.id}`}
-                                                                className="text-sm font-medium cursor-pointer"
+                                                                className="text-sm text-foreground font-medium cursor-pointer"
                                                             >
                                                                 {equipment.name}
-                                                            </label>
-                                                            <p className="text-xs text-muted-foreground">
+                                                            </Label>
+                                                            <Label className="text-xs text-muted-foreground">
                                                                 Available: {equipment.quantity}
-                                                            </p>
+                                                            </Label>
                                                         </div>
                                                     </div>
 
                                                     {selected && (
                                                         <div className="flex items-center gap-2">
-                                                            <Label className="text-xs">Qty:</Label>
+                                                            <Label className="text-sm">Qty:</Label>
                                                             <Input
                                                                 type="number"
                                                                 min="1"
                                                                 max={equipment.quantity}
-                                                                value={selected.quantity_needed}
+                                                                value={equipment.quantity}
                                                                 onChange={(e) => updateEquipmentQuantity(
                                                                     equipment.id,
                                                                     Math.min(Number(e.target.value), equipment.quantity)
                                                                 )}
-                                                                className="w-20"
+                                                                className="w-20 text-sm p-2"
                                                             />
                                                         </div>
                                                     )}
@@ -265,7 +297,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
                                 {/* Date Picker */}
                                 <div className="space-y-2">
                                     <Label>Date</Label>
@@ -301,7 +333,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         id="time_start"
                                         type="time"
                                         value={currentTimeStart}
-                                        onChange={(e) => setCurrentTimeStart(e.target.value)}
+                                        onChange={(e) => {
+                                            // console.log(e.target.value);
+                                            setCurrentTimeStart(e.target.value)
+                                        }}
                                     />
                                 </div>
 
@@ -338,16 +373,23 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             <div className="flex items-start justify-between">
                                                 <div className="text-sm flex-1">
                                                     <div className="font-bold">{booking.facility_name}</div>
-                                                    <div className="text-muted-foreground">
-                                                        {format(booking.date, "PPP")} • {booking.time_start} - {booking.time_end}
+                                                    <div className="text-muted-foreground flex gap-2 items-center">
+                                                        <CalendarIcon size={16} />
+                                                        <span className='mr-4'>
+                                                            {format(booking.date, "PPP")}
+                                                        </span>
+                                                        <Clock size={16} />
+                                                        <span>
+                                                            {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
+                                                        </span>
                                                     </div>
 
                                                     {/* Show selected equipment */}
                                                     {booking.equipment.length > 0 && (
                                                         <div className="mt-2 space-y-1">
-                                                            <div className="text-xs font-semibold">Equipment:</div>
+                                                            <div className="font-semibold">Equipment:</div>
                                                             {booking.equipment.map((eq, eqIndex) => (
-                                                                <div key={eqIndex} className="text-xs text-muted-foreground">
+                                                                <div key={eqIndex} className="text-muted-foreground">
                                                                     • {eq.equipment_name} (Qty: {eq.quantity_needed})
                                                                 </div>
                                                             ))}
