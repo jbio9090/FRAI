@@ -22,6 +22,7 @@ class RolePermissionSeeder extends Seeder
         Permission::create(['name' => 'reject requests']);
         Permission::create(['name' => 'manage facilities']);
         Permission::create(['name' => 'manage users']);
+        Permission::create(['name' => 'modify rules']);
 
         // Create roles and assign permissions
         $userRole = Role::create(['name' => 'user']);

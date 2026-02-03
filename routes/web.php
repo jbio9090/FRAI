@@ -33,6 +33,12 @@ Route::middleware("auth")->group(function () {
 
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
+
+    // Admin lang po
+    Route::middleware(['permission:modify rules'])->group(function () {
+        Route::post('/rules/add', [RulesController::class, 'store'])->name('rules.add');
+        Route::delete('/rules/remove/', [RulesController::class, 'remove'])->name('rules.remove');
+    });
 });
 
 Route::prefix("/login")->group(function () {

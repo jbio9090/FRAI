@@ -24,10 +24,10 @@ interface PageProps {
 }
 
 export default function DefaultLayout({ children }: DashboardProps) {
-    const { post } = useForm({});
+    const { post } = useForm({
+        rule: "",
+    });
     const { breadcrumbs } = usePage<PageProps>().props;
-
-    console.log(breadcrumbs);
 
     function submit(e) {
         e.preventDefault();
