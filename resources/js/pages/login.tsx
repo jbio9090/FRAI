@@ -5,14 +5,12 @@ import { LoginForm } from "@/components/login-form"
 export default function LoginPage() {
     return (
         <div className="grid min-h-svh">
-            <div className="flex flex-col p-6 md:p-10">
-                <div className="flex justify-center gap-2 md:justify-start">
-                    <a href="#" className="flex items-center gap-2 font-medium">
-                        <div className="bg-primary text-primary-foreground flex size-6 items-center justify-center rounded-md">
-                            <GalleryVerticalEnd className="size-4" />
-                        </div>
-                        PLV GSO
-                    </a>
+            <div className="flex flex-col p-6 md:p-10 relative">
+                <div className="flex justify-center gap-2 md:justify-start absolute w-auto max-w-full">
+                    <div className="w-full flex flex-col items-center px-4 my-2">
+                        <h1 className="text-left w-full text-lg font-black">PLV - GSO</h1>
+                        <h2 className="text-left w-full text-sm">Facility Request System</h2>
+                    </div>
                 </div>
                 <div className="flex flex-1 items-center justify-center">
                     <div className="w-full max-w-xs">
