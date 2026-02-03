@@ -105,20 +105,20 @@ export default function RequestDetail({ children, request }: DetailProps) {
                                 <CardHeader>
                                     <CardTitle>{facility.name}</CardTitle>
                                     <CardDescription className='flex items-center text-sm gap-2'>
-                                        <Calendar />
-                                        <span>{date}</span>
-                                        <Clock className='ml-4' />
-                                        <span>
+                                        <Calendar size={16}/>
+                                        <span className='font-medium'>{date}</span>
+                                        <Clock className='ml-4' size={16}/>
+                                        <span className='font-medium'>
                                             {formatTime(facility.pivot.time_start)} to {formatTime(facility.pivot.time_end)}
                                         </span>
                                     </CardDescription>
                                 </CardHeader>
 
                                 <CardContent>
-                                    {(facilityEquipment.length > 0) && (<span className="font-semibold text-muted-foreground">Equipment</span>)}
-                                    <CardDescription>
+                                    {(facilityEquipment.length > 0) && (<span className="font-semibold text-muted-foreground">Equipments</span>)}
+                                    <CardDescription className='space-y-2'>
                                         {facilityEquipment.map((eq) => (
-                                            <div key={eq.id} className="flex justify-between">
+                                            <div key={eq.id} className="flex justify-between text-foreground">
                                                 <span>{eq.name}</span>
                                                 <span className="">x{eq.pivot.quantity_needed}</span>
                                             </div>

@@ -102,7 +102,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                 {
                     equipment_id: equipment.id,
                     equipment_name: equipment.name,
-                    quantity_needed: 1,
+                    quantity_needed: equipment.quantity,
                     max_quantity: equipment.quantity,
                 }
             ]);
@@ -281,7 +281,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                                 type="number"
                                                                 min="1"
                                                                 max={equipment.quantity}
-                                                                value={equipment.quantity}
+                                                                value={selected.quantity_needed}
                                                                 onChange={(e) => updateEquipmentQuantity(
                                                                     equipment.id,
                                                                     Math.min(Number(e.target.value), equipment.quantity)
