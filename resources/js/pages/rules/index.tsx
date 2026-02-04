@@ -2,11 +2,12 @@ import { router, useForm } from '@inertiajs/react';
 import DefaultLayout from '@/layout.tsx/default.';
 import { usePermission } from '@/hooks/use-permission';
 import { Button } from '@/components/ui/button';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Pencil, Check } from 'lucide-react';
 import { useState } from 'react';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Item, ItemContent, ItemActions, ItemDescription } from '@/components/ui/item';
+
 
 interface Rule {
     id: number;
@@ -84,6 +85,10 @@ interface RuleItemProps {
 }
 
 function RuleItem({ children, id }: RuleItemProps) {
+    const { hasPermission } = usePermission();
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedRule, setEditedRule] = useState(children as string);
+
     function remove(e) {
         e.preventDefault();
 
@@ -98,19 +103,74 @@ function RuleItem({ children, id }: RuleItemProps) {
         });
     }
 
+    function startEdit(e) {
+        e.preventDefault();
+        setIsEditing(true);
+    }
+
+function saveEdit(e) {
+        e.preventDefault();
+        console.log("Saving edit for rule:", id, "with value:", editedRule);
+
+        router.put(route('rules.update'), { 
+            id, 
+            rule: editedRule 
+        }, {
+            onSuccess: () => {
+                console.log("Update success!");
+                setIsEditing(false);
+            },
+            onError: (errors) => {
+                console.log("Update errors:", errors);
+            },
+        });
+    }
+
+    function cancelEdit(e) {
+        e.preventDefault();
+        setEditedRule(children as string);
+        setIsEditing(false);
+    }
+
     return (
         <Item id={id.toString()} key={id.toString() + children}>
             <ItemContent>
-                <ItemDescription>
-                    {children}
-                </ItemDescription>
+                {isEditing ? (
+                    <Input
+                        value={editedRule}
+                        onChange={(e) => setEditedRule(e.target.value)}
+                        className="text-sm"
+                    />
+                ) : (
+                    <ItemDescription>
+                        {children}
+                    </ItemDescription>
+                )}
             </ItemContent>
 
-            <ItemActions>
-                <Button size={"icon-xs"} variant={"outline"} onClick={remove}>
-                    <X />
-                </Button>
-            </ItemActions>
+            {hasPermission("modify rules") && (
+                <ItemActions>
+                    {isEditing ? (
+                        <>
+                            <Button size={"icon-xs"} variant={"outline"} onClick={saveEdit}>
+                                <Check />
+                            </Button>
+                            <Button size={"icon-xs"} variant={"outline"} onClick={cancelEdit}>
+                                <X />
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button size={"icon-xs"} variant={"outline"} onClick={startEdit}>
+                                <Pencil />
+                            </Button>
+                            <Button size={"icon-xs"} variant={"outline"} onClick={remove}>
+                                <X />
+                            </Button>
+                        </>
+                    )}
+                </ItemActions>
+            )}
         </Item>
     );
 }

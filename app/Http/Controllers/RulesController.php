@@ -37,4 +37,19 @@ class RulesController extends Controller
 
         return redirect()->to("rules");
     }
+
+    public function update(Request $request)
+    {
+        $validated = $request->validate([
+            "id" => "integer|required",
+            "rule" => "string|required",
+        ]);
+
+        $rule = Rule::findOrFail($validated["id"]);
+        $rule->update([
+            "rule" => $validated["rule"],
+        ]);
+
+        return redirect()->route("rules");
+    }
 }

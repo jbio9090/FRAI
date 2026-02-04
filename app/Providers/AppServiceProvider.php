@@ -24,6 +24,30 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+
+        if (config('database.default') !== 'sqlite') {
+            return;
+        }
+
+        $path = config('database.connections.sqlite.database');
+
+        // Ignore in-memory databases (used in tests)
+        if ($path === ':memory:') {
+            return;
+        }
+
+        // Ensure directory exists
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        // Create DB file if missing
+        if (! file_exists($path)) {
+            touch($path);
+        }
     }
 
     protected function configureDefaults(): void
@@ -34,14 +58,15 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
+        Password::defaults(
+            fn(): ?Password => app()->isProduction()
+                ? Password::min(12)
                 ->mixedCase()
                 ->letters()
                 ->numbers()
                 ->symbols()
                 ->uncompromised()
-            : null
+                : null
         );
     }
 }

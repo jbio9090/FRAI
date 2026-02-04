@@ -37,8 +37,9 @@ Route::middleware("auth")->group(function () {
     // Admin lang po
     Route::middleware(['permission:modify rules'])->group(function () {
         Route::post('/rules/add', [RulesController::class, 'store'])->name('rules.add');
+        Route::put('/rules/update', [RulesController::class, 'update'])->name('rules.update');
         Route::delete('/rules/remove/', [RulesController::class, 'remove'])->name('rules.remove');
-    });
+    })->middleware(["throttle:60,1"]);
 });
 
 Route::prefix("/login")->group(function () {
