@@ -3,6 +3,7 @@
 use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RulesController;
+use App\Http\Controllers\FacilityController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Models\Facility;
@@ -17,12 +18,11 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/create-request", [RequestController::class, "createPage"])->name("request.create");
 
-
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
-    Route::post('/requests', [RequestController::class, 'store'])->name('requests.store');
+    Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
 
     // Admin only routes
     Route::middleware(['permission:approve requests'])->group(function () {
@@ -40,6 +40,9 @@ Route::middleware("auth")->group(function () {
         Route::put('/rules/update', [RulesController::class, 'update'])->name('rules.update');
         Route::delete('/rules/remove/', [RulesController::class, 'remove'])->name('rules.remove');
     })->middleware(["throttle:60,1"]);
+
+
+    Route::get("/facilities", [FacilityController::class, "index"])->name("facilities");
 });
 
 Route::prefix("/login")->group(function () {

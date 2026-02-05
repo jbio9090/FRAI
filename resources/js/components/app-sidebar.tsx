@@ -12,18 +12,36 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import {
-  LayoutDashboard,
+  LayoutGrid,
   FileText,
   LogOut,
   CirclePlus,
   FileCheck,
   FileX,
   ListCheck,
+  Box,
 } from "lucide-react"
 import { Link, router, usePage } from "@inertiajs/react"
 
 
 const data = {
+  topNav: [
+    {
+      title: "Dashboard",
+      url: route("dashboard"),
+      icon: LayoutGrid,
+    },
+    {
+      title: "Rules",
+      url: route("rules"),
+      icon: FileText,
+    },
+    {
+      title: "Facilities",
+      url: route("facilities"),
+      icon: Box,
+    },
+  ],
   navMenu: [
     {
       title: "Pending",
@@ -76,23 +94,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          <SidebarMenuItem key="Dashboard" className="px-4">
-            <SidebarMenuButton asChild isActive={checkRoute(route("dashboard"))}>
-              <Link href={route("dashboard")}>
-                <LayoutDashboard className="h-4 w-4" />
-                <span>Dashboard</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem key="Rules" className="px-4">
-            <SidebarMenuButton asChild isActive={checkRoute(route("rules"))}>
-              <Link href={route("rules")}>
-                <ListCheck className="h-4 w-4" />
-                <span>Rules</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {data.topNav.map((item) => (
+            <SidebarMenuItem key={item.title} className="px-4">
+              <SidebarMenuButton asChild isActive={checkRoute(item.url)}>
+                <Link href={item.url}>
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
 
           <SidebarMenuItem className="px-4 mt-4">
             <SidebarGroupLabel>
