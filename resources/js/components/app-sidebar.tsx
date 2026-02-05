@@ -1,13 +1,7 @@
 import * as React from "react"
-
-import { Button } from "./ui/button"
-import { SearchForm } from "@/components/search-form"
-import { VersionSwitcher } from "@/components/version-switcher"
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
@@ -17,24 +11,19 @@ import {
   SidebarFooter,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
-
 import {
   LayoutDashboard,
   FileText,
-  Users,
-  Settings,
   LogOut,
   CirclePlus,
   FileCheck,
   FileX,
   ListCheck,
 } from "lucide-react"
+import { Link, router, usePage } from "@inertiajs/react"
 
-import { Link, router } from "@inertiajs/react"
 
-// This is sample data.
 const data = {
-  versions: ["1.0.1", "1.1.0-alpha", "2.0.0-beta1"],
   navMenu: [
     {
       title: "Pending",
@@ -55,10 +44,15 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { url } = usePage();
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     router.post(route("logout"));
   };
+
+  const checkRoute = (path: string) => {
+    return url === path || url.startsWith(path)
+  }
 
   return (
     <Sidebar {...props}>
@@ -83,7 +77,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
 
           <SidebarMenuItem key="Dashboard" className="px-4">
-            <SidebarMenuButton asChild>
+            <SidebarMenuButton asChild isActive={checkRoute(route("dashboard"))}>
               <Link href={route("dashboard")}>
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
@@ -92,7 +86,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
 
           <SidebarMenuItem key="Rules" className="px-4">
-            <SidebarMenuButton asChild>
+            <SidebarMenuButton asChild isActive={checkRoute(route("rules"))}>
               <Link href={route("rules")}>
                 <ListCheck className="h-4 w-4" />
                 <span>Rules</span>
@@ -108,7 +102,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           {data.navMenu.map((item) => (
             <SidebarMenuItem key={item.title} className="px-4">
-              <SidebarMenuButton asChild>
+              <SidebarMenuButton asChild isActive={checkRoute(item.url)}>
                 <Link href={item.url}>
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
