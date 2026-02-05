@@ -1,3 +1,4 @@
+import React from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import { AppSidebar } from "@/components/app-sidebar"
 import {
@@ -20,14 +21,15 @@ interface DashboardProps {
 }
 
 interface PageProps {
-    breadcrumbs: string[];
+    breadcrumbs: string[]
 }
 
 export default function DefaultLayout({ children }: DashboardProps) {
     const { post } = useForm({
         rule: "",
     });
-    const { breadcrumbs } = usePage<PageProps>().props;
+    const page = usePage<PageProps>();
+    const breadcrumbs = page.props.breadcrumbs;
 
     function submit(e) {
         e.preventDefault();
@@ -44,16 +46,18 @@ export default function DefaultLayout({ children }: DashboardProps) {
                         orientation="vertical"
                         className="mr-2 data-[orientation=vertical]:h-4"
                     />
+
                     <Breadcrumb>
                         <BreadcrumbList>
-                            {breadcrumbs.map((breadcrumb) => ( 
-                                <>
-                                    <BreadcrumbItem className="hidden md:block">
+                            {breadcrumbs && breadcrumbs.map((breadcrumb, index) => (
+                                <React.Fragment key={breadcrumb + index}>
+                                    <BreadcrumbItem>
                                         {breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1)}
                                     </BreadcrumbItem>
-
-                                    <BreadcrumbSeparator className="hidden md:block" />
-                                </>
+                                    {index < breadcrumbs.length - 1 && (
+                                        <BreadcrumbSeparator />
+                                    )}
+                                </React.Fragment>
                             ))}
                         </BreadcrumbList>
                     </Breadcrumb>

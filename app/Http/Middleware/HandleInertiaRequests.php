@@ -35,6 +35,8 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $breadcrumbs = $this->getBreadcrumbs($request);
+
         return array_merge(parent::share($request), [
             'auth' => [
                 'user' => $request->user() ? [
@@ -43,8 +45,26 @@ class HandleInertiaRequests extends Middleware
                     'email' => $request->user()->email,
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+
                 ] : null,
             ],
+            'breadcrumbs' => $breadcrumbs,
         ]);
+    }
+
+
+    private function getBreadcrumbs(Request $request): array
+    {
+        $path = $request->path();
+
+        // Remove leading/trailing slashes and split
+        $segments = array_filter(explode('/', trim($path, '/')));
+
+        // Filter out numeric IDs
+        $breadcrumbs = array_filter($segments, function ($segment) {
+            return !is_numeric($segment);
+        });
+
+        return array_values($breadcrumbs);
     }
 }
