@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->timestamps();
             $table->string("name");
-            $table->string("room_number");
+            $table->string("building");
             $table->integer("capacity")->nullable();
         });
     }
