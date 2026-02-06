@@ -16,7 +16,7 @@ Route::middleware("auth")->group(function () {
         return Inertia::render("dashboard");
     })->name('dashboard');
 
-    Route::get("/create-request", [RequestController::class, "createPage"])->name("request.create");
+    Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');

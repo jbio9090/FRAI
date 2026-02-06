@@ -124,7 +124,7 @@ class RequestController extends Controller
     }
 
 
-    public function detail(Request $request, int $request_id)
+    public function detail(int $request_id)
     {
         $r = FacilityRequest::with(["user", "facilities", "equipment", "requestFacilities"])->where("id", $request_id)->firstOrFail();
 
