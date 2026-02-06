@@ -1,5 +1,6 @@
 import DefaultLayout from "@/layout.tsx/default.";
 import { useState } from "react";
+import { Link } from "@inertiajs/react";
 import {
     Table,
     TableBody,
@@ -38,8 +39,8 @@ export default function Facilities({ children, facilities }: FacilityProps) {
 
                     {facilities.map((facility) => (
                         <TableRow>
-                            <TableCell className="">{facility.name}</TableCell>
-                            <TableCell className="">{facility.building}</TableCell>
+                            <TableCell className=""><Link href={route("facility.detail", [facility.id])}>{facility.name}</Link></TableCell>
+                            <TableCell className=""><Link href={route("facility.detail", [facility.id])}>{facility.building}</Link></TableCell>
                         </TableRow>
                     ))}
 

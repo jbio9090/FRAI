@@ -12,4 +12,11 @@ class FacilityController extends Controller
     {
         return Inertia::render("facilities/index", ["facilities" => Facility::all()]);
     }
+
+    public function detail(int $facility_id) {
+        $facility = Facility::where("id", $facility_id)->firstOrFail();
+
+
+        return Inertia::render("facilities/detail", ["facility" => $facility]);
+    }
 }

@@ -43,6 +43,7 @@ Route::middleware("auth")->group(function () {
 
 
     Route::get("/facilities", [FacilityController::class, "index"])->name("facilities");
+    Route::get("/facilities/{facility_id}", [FacilityController::class, "detail"])->name("facility.detail");
 });
 
 Route::prefix("/login")->group(function () {
