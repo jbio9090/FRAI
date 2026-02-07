@@ -18,10 +18,12 @@ import {
 
 interface DashboardProps {
     children: React.ReactNode;
+    labeledBreadcrumb: string | null;
 }
 
 interface PageProps {
-    breadcrumbs: string[]
+    breadcrumbs: string[];
+    labeledBreadcrumb: string;
 }
 
 export default function DefaultLayout({ children }: DashboardProps) {
@@ -30,6 +32,7 @@ export default function DefaultLayout({ children }: DashboardProps) {
     });
     const page = usePage<PageProps>();
     const breadcrumbs = page.props.breadcrumbs;
+    const labeledBreadcrumb = page.props.labeledBreadcrumb;
 
     function submit(e) {
         e.preventDefault();
@@ -49,16 +52,42 @@ export default function DefaultLayout({ children }: DashboardProps) {
 
                     <Breadcrumb>
                         <BreadcrumbList>
-                            {breadcrumbs && breadcrumbs.map((breadcrumb, index) => (
-                                <React.Fragment key={breadcrumb + index}>
+                            {breadcrumbs && breadcrumbs.map((breadcrumb, index) => {
+                                // Build the path up to this breadcrumb
+                                const path = '/' + breadcrumbs.slice(0, index + 1).join('/');
+                                const isLast = index === breadcrumbs.length - 1;
+
+                                return (
+                                    <React.Fragment key={breadcrumb + index}>
+                                        <BreadcrumbItem>
+                                            {(isLast && labeledBreadcrumb == null) ? (
+                                                <BreadcrumbPage>
+                                                    {breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1)}
+                                                </BreadcrumbPage>
+                                            ) : (
+                                                <BreadcrumbLink href={path}>
+                                                    {breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1)}
+                                                </BreadcrumbLink>
+                                            )}
+                                        </BreadcrumbItem>
+                                        {index < breadcrumbs.length - 1 && (
+                                            <BreadcrumbSeparator />
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+
+                            {(labeledBreadcrumb) && (
+                                <React.Fragment key={labeledBreadcrumb}>
+                                    <BreadcrumbSeparator />
+
                                     <BreadcrumbItem>
-                                        {breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1)}
+                                        <BreadcrumbPage>
+                                            {labeledBreadcrumb}
+                                        </BreadcrumbPage>
                                     </BreadcrumbItem>
-                                    {index < breadcrumbs.length - 1 && (
-                                        <BreadcrumbSeparator />
-                                    )}
                                 </React.Fragment>
-                            ))}
+                            )}
                         </BreadcrumbList>
                     </Breadcrumb>
                 </header>

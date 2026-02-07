@@ -16,7 +16,6 @@ class FacilityController extends Controller
     public function detail(int $facility_id) {
         $facility = Facility::where("id", $facility_id)->firstOrFail();
 
-
-        return Inertia::render("facilities/detail", ["facility" => $facility]);
+        return Inertia::render("facilities/detail", ["facility" => $facility, "labeledBreadcrumb" => $facility->name]);
     }
 }

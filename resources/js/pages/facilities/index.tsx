@@ -39,8 +39,8 @@ export default function Facilities({ children, facilities }: FacilityProps) {
 
                     {facilities.map((facility) => (
                         <TableRow>
-                            <TableCell className=""><Link href={route("facility.detail", [facility.id])}>{facility.name}</Link></TableCell>
-                            <TableCell className=""><Link href={route("facility.detail", [facility.id])}>{facility.building}</Link></TableCell>
+                            <TableCell><Link href={route("facility.detail", [facility.id])}>{facility.name}</Link></TableCell>
+                            <TableCell><Link href={route("facility.detail", [facility.id])}>{facility.building}</Link></TableCell>
                         </TableRow>
                     ))}
 

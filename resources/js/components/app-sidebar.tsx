@@ -18,7 +18,7 @@ import {
   CirclePlus,
   FileCheck,
   FileX,
-  ListCheck,
+  BookOpen,
   Box,
 } from "lucide-react"
 import { Link, router, usePage } from "@inertiajs/react"
@@ -34,7 +34,7 @@ const data = {
     {
       title: "Rules",
       url: route("rules"),
-      icon: FileText,
+      icon: BookOpen,
     },
     {
       title: "Facilities",
