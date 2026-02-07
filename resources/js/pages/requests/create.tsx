@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Card, CardHeader } from '@/components/ui/card';
 
+
 interface Equipment {
     id: number;
     name: string;
