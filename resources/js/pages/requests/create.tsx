@@ -82,6 +82,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
+    const [hasTimeConflict, setHasTimeConflict] = useState(false);
 
     const { data, setData, post, processing, errors } = useForm({
         title: '',
@@ -101,7 +102,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         });
     }
 
-    const loadSchedule = async (facilityId: number, date: Date) => {
+    async function loadSchedule(facilityId: number, date: Date) {
         setLoadingSchedule(true);
         try {
             const dateString = format(date, 'yyyy-MM-dd');
@@ -113,6 +114,11 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             );
             const data = await response.json();
             setFacilitySchedule(data);
+
+            // Check for conflicts after loading schedule
+            if (currentTimeStart && currentTimeEnd) {
+                setHasTimeConflict(checkTimeConflict(currentTimeStart, currentTimeEnd));
+            }
         } catch (error) {
             console.error('Failed to load schedule:', error);
             setFacilitySchedule(null);
@@ -121,7 +127,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         }
     };
 
-    const handleFacilityChange = (value: string) => {
+    function handleFacilityChange(value: string) {
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
         setSelectedEquipment([]); // Reset equipment when facility changes
@@ -201,8 +207,44 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         setCurrentTimeStart('');
         setCurrentTimeEnd('');
         setSelectedEquipment([]);
-        setFacilitySchedule(null); // Clear schedule when resetting
+        setFacilitySchedule(null);
+        setHasTimeConflict(false); // Reset conflict state
     }
+
+    function checkTimeConflict(startTime: string, endTime: string): boolean {
+        if (!facilitySchedule || !facilitySchedule.bookings.length) {
+            return false;
+        }
+
+        const start = new Date(`2000-01-01T${startTime}`);
+        const end = new Date(`2000-01-01T${endTime}`);
+
+        return facilitySchedule.bookings.some(booking => {
+            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
+            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+
+            // Check if times overlap
+            return (start < bookingEnd && end > bookingStart);
+        });
+    }
+
+    function handleTimeStartChange(e: React.ChangeEvent<HTMLInputElement>) {
+        const newStartTime = e.target.value;
+        setCurrentTimeStart(newStartTime);
+
+        if (newStartTime && currentTimeEnd) {
+            setHasTimeConflict(checkTimeConflict(newStartTime, currentTimeEnd));
+        }
+    };
+
+    function handleTimeEndChange(e: React.ChangeEvent<HTMLInputElement>) {
+        const newEndTime = e.target.value;
+        setCurrentTimeEnd(newEndTime);
+
+        if (currentTimeStart && newEndTime) {
+            setHasTimeConflict(checkTimeConflict(currentTimeStart, newEndTime));
+        }
+    };
 
     function removeBooking(index: number) {
         const updatedBookings = facilityBookings.filter((_, i) => i !== index);
@@ -250,6 +292,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 <p className="text-sm text-red-500">{errors.description}</p>
                             )}
                         </div>
+
 
                         {/* Add Facility Booking */}
                         <div className="space-y-4">
@@ -380,9 +423,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             id="time_start"
                                             type="time"
                                             value={currentTimeStart}
-                                            onChange={(e) => setCurrentTimeStart(e.target.value)}
+                                            onChange={handleTimeStartChange}
                                             min={"7:00"}
                                             max={"20:00"}
+                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500")}
                                         />
                                     </div>
 
@@ -393,12 +437,28 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             id="time_end"
                                             type="time"
                                             value={currentTimeEnd}
-                                            onChange={(e) => setCurrentTimeEnd(e.target.value)}
+                                            onChange={handleTimeEndChange}
                                             min={"7:00"}
                                             max={"20:00"}
+                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500")}
                                         />
                                     </div>
                                 </div>
+
+                                {/* Time Conflict Warning */}
+                                {hasTimeConflict && (
+                                    <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start gap-2">
+                                        <svg className="h-5 w-5 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-red-800">Time Conflict Detected</p>
+                                            <p className="text-xs text-red-700 mt-1">
+                                                Your selected time overlaps with an existing booking. Please choose a different time slot.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <Button
                                     type="button"
