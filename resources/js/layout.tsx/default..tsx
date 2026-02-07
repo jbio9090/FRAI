@@ -18,7 +18,7 @@ import {
 
 interface DashboardProps {
     children: React.ReactNode;
-    labeledBreadcrumb: string | null;
+    labeledBreadcrumb?: string | null;
 }
 
 interface PageProps {

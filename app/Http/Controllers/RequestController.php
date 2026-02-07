@@ -159,6 +159,8 @@ class RequestController extends Controller
 
         // Add facility bookings
         foreach ($validated['facility_bookings'] as $booking) {
+            $dateOnly = \Carbon\Carbon::parse($booking['date'])->format('Y-m-d');
+
             $facilityRequest->requestFacilities()->create([
                 'facility_id' => $booking['facility_id'],
                 'date_requested' => $booking['date'],

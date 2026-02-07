@@ -44,6 +44,9 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/facilities", [FacilityController::class, "index"])->name("facilities");
     Route::get("/facilities/{facility_id}", [FacilityController::class, "detail"])->name("facility.detail");
+
+    // API
+    Route::get("/facilities/getSchedule/{facility}/{date}", [FacilityController::class, "schedule"])->name("facility.schedule");
 });
 
 Route::prefix("/login")->group(function () {
