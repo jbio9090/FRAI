@@ -19,12 +19,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { CalendarIcon, X, User, Clock, ChevronDown } from "lucide-react";
+import { CalendarIcon, X, User, Clock, ChevronDown, Building } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { motion } from "motion/react"
 
-
+const MotionChevron = motion(ChevronDown);
 
 interface Equipment {
     id: number;
@@ -38,8 +39,8 @@ interface Facility {
     id: number;
     name: string;
     description?: string;
-    capacity?: number;
-    building?: string;
+    capacity: number;
+    building: string;
     equipments?: Equipment[];
 }
 
@@ -85,6 +86,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
     const [hasTimeConflict, setHasTimeConflict] = useState(false);
+    const [openCollapsible, setCollapsibleState] = useState(false);
 
     const { data, setData, post, processing, errors } = useForm({
         title: '',
@@ -327,9 +329,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </Select>
                                 </div>
 
-                                <Collapsible className='text-sm block lg:hidden'>
+
+                                <Collapsible className='text-sm block lg:hidden' open={openCollapsible} onOpenChange={setCollapsibleState}>
                                     <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-2'>
-                                        <ChevronDown size={16} />
+                                        <MotionChevron size={16} animate={ {rotate: openCollapsible ? 180 : 0} } />
                                         <span className='font-semibold'>
                                             Facility Info
                                         </span>
@@ -593,7 +596,7 @@ interface FacilityInfoProps {
 
 function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedule, facilitySchedule, formatTime, isForSidebar }: FacilityInfoProps) {
     return (
-        <div className={'space-y-4 ' + ((isForSidebar) ? 'hidden lg:block': 'block lg:hidden')}>
+        <div className={'space-y-4 ' + ((isForSidebar) ? 'hidden lg:block' : 'block lg:hidden')}>
             {(isForSidebar) && (<h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>)}
 
             {selectedFacility ? (
@@ -604,11 +607,12 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                             <>
                                 <div className='mb-4'>
                                     <h3 className='font-semibold text-xl mt-2'>{facility?.name}</h3>
-                                    {facility?.building && (
-                                        <p className='text-sm text-muted-foreground '>
+                                    <div className='flex text-muted-foreground font-semibold text-xl gap-1 mt-2'>
+                                        <span className='text-sm text-wrap'>
                                             {facility.building}
-                                        </p>
-                                    )}
+                                        </span>
+
+                                    </div>
                                     <div className='flex font-semibold text-xl items-center gap-1 mt-2'>
                                         <User size={16} />
                                         <span className='text-sm'>
@@ -647,11 +651,6 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                                             <Clock size={14} />
                                                             <span>
                                                                 {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
-                                                            </span>
-                                                        </div>
-                                                        <div className='mt-1'>
-                                                            <span className='text-xs px-2 py-1 bg-green-100 text-green-800 rounded'>
-                                                                {booking.status}
                                                             </span>
                                                         </div>
                                                     </div>
