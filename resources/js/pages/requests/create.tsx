@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
     Popover,
     PopoverContent,
@@ -18,11 +19,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { CalendarIcon, X, User, Clock } from "lucide-react";
+import { CalendarIcon, X, User, Clock, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { Card, CardHeader } from '@/components/ui/card';
+
 
 
 interface Equipment {
@@ -326,6 +327,27 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </Select>
                                 </div>
 
+                                <Collapsible className='text-sm block lg:hidden'>
+                                    <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-2'>
+                                        <ChevronDown size={16} />
+                                        <span className='font-semibold'>
+                                            Facility Info
+                                        </span>
+                                    </CollapsibleTrigger>
+
+                                    <CollapsibleContent>
+                                        <FacilityInfo
+                                            selectedFacility={selectedFacility}
+                                            facilities={facilities}
+                                            currentDate={currentDate}
+                                            loadingSchedule={loadingSchedule}
+                                            facilitySchedule={facilitySchedule}
+                                            formatTime={formatTime}
+                                            isForSidebar={false}
+                                        />
+                                    </CollapsibleContent>
+                                </Collapsible>
+
                                 {/* Equipment Selection - Only show if facility is selected */}
                                 {selectedFacility && availableEquipment.length > 0 && (
                                     <div className="space-y-2">
@@ -542,98 +564,120 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                 </div>
 
                 {/* Facility Info Sidebar */}
-                <div className='hidden lg:block space-y-4'>
+                <FacilityInfo
+                    selectedFacility={selectedFacility}
+                    facilities={facilities}
+                    currentDate={currentDate}
+                    loadingSchedule={loadingSchedule}
+                    facilitySchedule={facilitySchedule}
+                    formatTime={formatTime}
+                    isForSidebar={true}
+                />
 
 
-                    <h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>
-
-
-                    {selectedFacility ? (
-                        <div className=''>
-                            {(() => {
-                                const facility = facilities.find(f => f.id === selectedFacility);
-                                return (
-                                    <>
-                                        <div className='mb-4'>
-                                            <h3 className='font-semibold text-xl'>{facility?.name}</h3>
-                                            {facility?.building && (
-                                                <p className='text-sm text-muted-foreground'>
-                                                    {facility.building}
-                                                </p>
-                                            )}
-                                            <div className='flex items-center gap-2 mt-2'>
-                                                <User size={16} />
-                                                <span className='text-sm'>
-                                                    Capacity - {facility?.capacity || 'N/A'}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {currentDate && (
-                                            <div className='mt-6'>
-                                                <h4 className='text-sm font-semibold mb-3 flex flex-wrap items-center'>
-                                                    <CalendarIcon size={16} />
-                                                    <span className='text-muted-foreground ml-2 mr-1'>
-                                                        Schedule for
-                                                    </span>
-                                                    <span>
-                                                        {format(currentDate, 'PPP')}
-                                                    </span>
-                                                </h4>
-
-                                                {loadingSchedule ? (
-                                                    <div className='text-sm text-muted-foreground py-4 text-center'>
-                                                        Loading schedule...
-                                                    </div>
-                                                ) : facilitySchedule && facilitySchedule.bookings.length > 0 ? (
-                                                    <div className='space-y-3'>
-                                                        {facilitySchedule.bookings.map((booking, idx) => (
-                                                            <div
-                                                                key={idx}
-                                                                className='border rounded-md p-3 bg-muted/30'
-                                                            >
-                                                                <div className='font-medium text-sm'>
-                                                                    {booking.request_title}
-                                                                </div>
-                                                                <div className='flex items-center gap-2 text-xs text-muted-foreground mt-1'>
-                                                                    <Clock size={14} />
-                                                                    <span>
-                                                                        {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
-                                                                    </span>
-                                                                </div>
-                                                                <div className='mt-1'>
-                                                                    <span className='text-xs px-2 py-1 bg-green-100 text-green-800 rounded'>
-                                                                        {booking.status}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <div className='text-sm text-muted-foreground py-4 text-center border rounded-md bg-muted/10'>
-                                                        No bookings for this date
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {!currentDate && (
-                                            <div className='text-sm text-muted-foreground py-4 text-center'>
-                                                Select a date to view schedule
-                                            </div>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    ) : (
-                        <div className='px-6 pb-6 text-sm text-muted-foreground text-center py-8'>
-                            Select a facility to view details
-                        </div>
-                    )}
-
-                </div>
             </div>
         </DefaultLayout>
     );
+}
+
+
+interface FacilityInfoProps {
+    selectedFacility: number | null;
+    facilities: Facility[];
+    currentDate: Date | undefined;
+    loadingSchedule: boolean;
+    facilitySchedule: FacilityScheduleData | null;
+    formatTime(time: string): string;
+    isForSidebar: boolean;
+}
+
+function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedule, facilitySchedule, formatTime, isForSidebar }: FacilityInfoProps) {
+    return (
+        <div className={'space-y-4 ' + ((isForSidebar) ? 'hidden lg:block': 'block lg:hidden')}>
+            {(isForSidebar) && (<h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>)}
+
+            {selectedFacility ? (
+                <div className=''>
+                    {(() => {
+                        const facility = facilities.find(f => f.id === selectedFacility);
+                        return (
+                            <>
+                                <div className='mb-4'>
+                                    <h3 className='font-semibold text-xl mt-2'>{facility?.name}</h3>
+                                    {facility?.building && (
+                                        <p className='text-sm text-muted-foreground '>
+                                            {facility.building}
+                                        </p>
+                                    )}
+                                    <div className='flex font-semibold text-xl items-center gap-1 mt-2'>
+                                        <User size={16} />
+                                        <span className='text-sm'>
+                                            Capacity - {facility?.capacity || 'N/A'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {currentDate && (
+                                    <div className='mt-6'>
+                                        <h4 className='text-sm font-semibold mb-3 flex flex-wrap items-center'>
+                                            <CalendarIcon size={16} />
+                                            <span className='text-muted-foreground ml-2 mr-1'>
+                                                Schedule for
+                                            </span>
+                                            <span>
+                                                {format(currentDate, 'PPP')}
+                                            </span>
+                                        </h4>
+
+                                        {loadingSchedule ? (
+                                            <div className='text-sm text-muted-foreground py-4 text-center'>
+                                                Loading schedule...
+                                            </div>
+                                        ) : facilitySchedule && facilitySchedule.bookings.length > 0 ? (
+                                            <div className='space-y-3'>
+                                                {facilitySchedule.bookings.map((booking, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className='border rounded-md p-3 bg-muted/30'
+                                                    >
+                                                        <div className='font-medium text-sm'>
+                                                            {booking.request_title}
+                                                        </div>
+                                                        <div className='flex items-center gap-2 text-xs text-muted-foreground mt-1'>
+                                                            <Clock size={14} />
+                                                            <span>
+                                                                {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
+                                                            </span>
+                                                        </div>
+                                                        <div className='mt-1'>
+                                                            <span className='text-xs px-2 py-1 bg-green-100 text-green-800 rounded'>
+                                                                {booking.status}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className='text-sm text-muted-foreground py-4 text-center border rounded-md bg-muted/10'>
+                                                No bookings for this date
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {!currentDate && (
+                                    <div className='text-sm text-muted-foreground py-4 text-center'>
+                                        Select a date to view schedule
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
+                </div>
+            ) : (
+                <div className='px-6 pb-6 text-sm text-muted-foreground text-center py-8'>
+                    Select a facility to view details
+                </div>
+            )}
+        </div>);
 }
