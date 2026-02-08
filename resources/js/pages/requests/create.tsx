@@ -332,7 +332,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
                                 <Collapsible className='text-sm block lg:hidden' open={openCollapsible} onOpenChange={setCollapsibleState}>
                                     <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-2'>
-                                        <MotionChevron size={16} animate={ {rotate: openCollapsible ? 180 : 0} } />
+                                        <MotionChevron size={16} animate={{ rotate: openCollapsible ? 180 : 0 }} />
                                         <span className='font-semibold'>
                                             Facility Info
                                         </span>
@@ -640,9 +640,11 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                         ) : facilitySchedule && facilitySchedule.bookings.length > 0 ? (
                                             <div className='space-y-3'>
                                                 {facilitySchedule.bookings.map((booking, idx) => (
-                                                    <div
+                                                    <motion.div
                                                         key={idx}
                                                         className='border rounded-md p-3 bg-muted/30'
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
                                                     >
                                                         <div className='font-medium text-sm'>
                                                             {booking.request_title}
@@ -653,13 +655,16 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                                                 {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
                                                             </span>
                                                         </div>
-                                                    </div>
+                                                    </motion.div>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <div className='text-sm text-muted-foreground py-4 text-center border rounded-md bg-muted/10'>
+                                            <motion.div
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                className='text-sm text-muted-foreground py-4 text-center border rounded-md bg-muted/10'>
                                                 No bookings for this date
-                                            </div>
+                                            </motion.div>
                                         )}
                                     </div>
                                 )}
