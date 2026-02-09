@@ -92,7 +92,7 @@ export default function DefaultLayout({ children }: DashboardProps) {
                     </Breadcrumb>
                 </header>
 
-                <div className="flex flex-1 flex-col gap-4 p-8 justify-start overflow-visible">
+                <div className="flex flex-1 flex-col gap-4 p-4 md:p-8 justify-start overflow-visible">
                     {children}
                 </div>
             </SidebarInset>

@@ -59,33 +59,27 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
     };
 
     return (
-
-
-        <div className="w-full overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-            <div className="inline-block min-w-full md:min-w-0">
-                <div className="min-w-[48rem] md:min-w-0 h-[42rem]">
-                    {(loading) ? (
-                        <div className="min-w-[48rem] h-[42rem] bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
-                            <div className="space-y-4 w-full max-w-4xl p-4">
-                                <Skeleton className="h-12 w-full" />
-                                <div className="grid grid-cols-7 gap-2">
-                                    {Array.from({ length: 35 }).map((_, i) => (
-                                        <Skeleton key={i} className="h-24" />
-                                    ))}
-                                </div>
-                            </div>
+        <div className="h-[42rem]">
+            {(loading) ? (
+                <div className="min-w-[48rem] h-[42rem] bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
+                    <div className="space-y-4 w-full max-w-4xl p-4">
+                        <Skeleton className="h-12 w-full" />
+                        <div className="grid grid-cols-7 gap-2">
+                            {Array.from({ length: 35 }).map((_, i) => (
+                                <Skeleton key={i} className="h-24" />
+                            ))}
                         </div>
-                    ) : (<Calendar
-                        views={['month', 'week', 'day']}
-                        localizer={localizer}
-                        events={events}
-                        startAccessor="start"
-                        endAccessor="end"
-                        onRangeChange={handleRangeChange}
-                    />)
-                    }
+                    </div>
                 </div>
-            </div>
+            ) : (<Calendar
+                views={['month', 'week', 'day']}
+                localizer={localizer}
+                events={events}
+                startAccessor="start"
+                endAccessor="end"
+                onRangeChange={handleRangeChange}
+            />)
+            }
         </div>
     )
 }

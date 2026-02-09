@@ -450,3 +450,13 @@
     pointer-events: auto !important;
     touch-action: auto !important;
 }
+
+/* In your global CSS file */
+[data-sidebar="sidebar"][data-mobile="true"] {
+    z-index: 100 !important;
+}
+
+/* Also ensure the Sheet overlay is high enough */
+[data-radix-dialog-overlay] {
+    z-index: 99 !important;
+}

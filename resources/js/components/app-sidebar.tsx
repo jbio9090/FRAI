@@ -73,7 +73,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
 
   return (
-    <Sidebar {...props}>
+    <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100]">
       <SidebarHeader>
         <SidebarMenu>
           <div className="w-full flex flex-col items-center px-4 my-2">
