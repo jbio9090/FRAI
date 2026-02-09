@@ -33,14 +33,16 @@ export default function Facilities({ children, facilities }: FacilityProps) {
                     <TableRow>
                         <TableHead className="font-bold">Name</TableHead>
                         <TableHead className="font-bold">Building</TableHead>
+                        <TableHead className="font-bold">Capacity</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
 
                     {facilities.map((facility) => (
                         <TableRow>
-                            <TableCell><Link href={route("facility.detail", [facility.id])}>{facility.name}</Link></TableCell>
+                            <TableCell><Link className="w-full" href={route("facility.detail", [facility.id])}>{facility.name}</Link></TableCell>
                             <TableCell><Link href={route("facility.detail", [facility.id])}>{facility.building}</Link></TableCell>
+                            <TableCell><Link href={route("facility.detail", [facility.id])}>{facility.capacity}</Link></TableCell>
                         </TableRow>
                     ))}
 

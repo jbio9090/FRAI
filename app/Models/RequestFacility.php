@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Request as RequestModel;
 
 class RequestFacility extends Model
 {
@@ -16,7 +17,7 @@ class RequestFacility extends Model
 
     public function request()
     {
-        return $this->belongsTo(Request::class);
+        return $this->belongsTo(RequestModel::class);
     }
 
     public function facility()

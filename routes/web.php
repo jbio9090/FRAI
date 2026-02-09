@@ -18,7 +18,7 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
-    Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
+    Route::get('/requests/pending', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
@@ -26,7 +26,7 @@ Route::middleware("auth")->group(function () {
 
     // Admin only routes
     Route::middleware(['permission:approve requests'])->group(function () {
-        Route::get('/requests/pending', [RequestController::class, 'pending'])->name('requests.pending');
+        Route::get('/requests/pending/get', [RequestController::class, 'pending'])->name('requests.pending');
         Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
     });
@@ -47,6 +47,7 @@ Route::middleware("auth")->group(function () {
 
     // API
     Route::get("/facilities/getSchedule/{facility}/{date}", [FacilityController::class, "schedule"])->name("facility.schedule");
+    Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
 });
 
 Route::prefix("/login")->group(function () {

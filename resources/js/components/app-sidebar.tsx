@@ -28,34 +28,34 @@ const data = {
   topNav: [
     {
       title: "Dashboard",
-      url: route("dashboard"),
+      url: "dashboard",
       icon: LayoutGrid,
     },
     {
       title: "Rules",
-      url: route("rules"),
+      url: "rules",
       icon: BookOpen,
     },
     {
       title: "Facilities",
-      url: route("facilities"),
+      url: "facilities",
       icon: Box,
     },
   ],
   navMenu: [
     {
       title: "Pending",
-      url: route("requests.index"),
+      url: "requests.index",
       icon: FileText
     },
     {
       title: "Approved",
-      url: route("requests.approved"),
+      url: "requests.approved",
       icon: FileCheck
     },
     {
       title: "Denied",
-      url: route("requests.denied"),
+      url: "requests.denied",
       icon: FileX
     }
   ]
@@ -68,8 +68,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     router.post(route("logout"));
   };
 
-  const checkRoute = (path: string) => {
-    return url === path || url.startsWith(path)
+  const checkRoute = (routeName: string) => {
+    return route().current(routeName);
   }
 
   return (
@@ -97,7 +97,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           {data.topNav.map((item) => (
             <SidebarMenuItem key={item.title} className="px-4">
               <SidebarMenuButton asChild isActive={checkRoute(item.url)}>
-                <Link href={item.url}>
+                <Link href={route(item.url)}>
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
                 </Link>
@@ -114,7 +114,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           {data.navMenu.map((item) => (
             <SidebarMenuItem key={item.title} className="px-4">
               <SidebarMenuButton asChild isActive={checkRoute(item.url)}>
-                <Link href={item.url}>
+                <Link href={route(item.url)}>
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
                 </Link>
