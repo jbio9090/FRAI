@@ -18,6 +18,7 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
+    Route::get('/requests', function () { return redirect()->intended(route("requests.index"));})->name("requests");
     Route::get('/requests/pending', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');

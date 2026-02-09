@@ -433,3 +433,20 @@
         @apply bg-background text-foreground;
     }
 }
+
+/* Force the Sheet overlay to capture all pointer events on mobile */
+[data-radix-popper-content-wrapper] {
+    pointer-events: auto !important;
+}
+
+/* Ensure the backdrop blocks interaction */
+[role="dialog"][data-state="open"]~[data-radix-dialog-overlay] {
+    pointer-events: auto !important;
+    touch-action: none !important;
+}
+
+/* Ensure Sheet content is interactive */
+[data-sidebar="sidebar"][data-mobile="true"] {
+    pointer-events: auto !important;
+    touch-action: auto !important;
+}
