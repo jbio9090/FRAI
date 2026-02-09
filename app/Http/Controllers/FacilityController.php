@@ -8,6 +8,7 @@ use Inertia\Inertia;
 use App\Models\RequestFacility;
 use App\RequestStatus;
 
+
 class FacilityController extends Controller
 {
     public function index()
@@ -19,7 +20,32 @@ class FacilityController extends Controller
     {
         $facility = Facility::where("id", $facility_id)->firstOrFail();
 
-        return Inertia::render("facilities/detail", ["facility" => $facility, "labeledBreadcrumb" => $facility->name]);
+        // Load initial month of events
+        $start = now()->startOfMonth()->format('Y-m-d');
+        $end = now()->endOfMonth()->format('Y-m-d');
+
+        $initialEvents = RequestFacility::query()
+            ->whereBetween('date_requested', [$start, $end])
+            ->whereHas('request', function ($query) {
+                $query->where('status', RequestStatus::APPROVED);
+            })
+            ->where('facility_id', $facility_id)
+            ->with(['request:id,title', 'facility:id,name'])
+            ->get()
+            ->map(function ($booking) {
+                return [
+                    'id' => $booking->id,
+                    'title' => $booking->request->title . ' - ' . $booking->facility->name,
+                    'start' => $booking->date_requested . ' ' . $booking->time_start,
+                    'end' => $booking->date_requested . ' ' . $booking->time_end,
+                ];
+            });
+
+        return Inertia::render("facilities/detail", [
+            "facility" => $facility,
+            "initialEvents" => $initialEvents,
+            "labeledBreadcrumb" => $facility->name
+        ]);
     }
 
     public function schedule(Facility $facility, string $date)
@@ -48,4 +74,31 @@ class FacilityController extends Controller
     }
 
     public function calculateAvailability(Facility $facility) {}
+
+    public function getCalendarSchedule(Request $request, $facility_id)
+    {
+        $start = $request->input('start');
+        $end = $request->input('end');
+
+        $query = RequestFacility::query()
+            ->whereBetween('date_requested', [$start, $end])
+            ->whereHas('request', function ($query) {
+                $query->where('status', RequestStatus::APPROVED);
+            })
+            ->where('facility_id', $facility_id);
+
+
+        $events = $query->with(['request:id,title', 'facility:id,name'])
+            ->get()
+            ->map(function ($booking) {
+                return [
+                    'id' => $booking->id,
+                    'title' => $booking->request->title . ' - ' . $booking->facility->name,
+                    'start' => $booking->date_requested . 'T' . $booking->time_start,
+                    'end' => $booking->date_requested . 'T' . $booking->time_end,
+                ];
+            });
+
+        return response()->json($events);
+    }
 }
