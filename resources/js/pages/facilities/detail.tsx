@@ -1,4 +1,5 @@
 import DefaultLayout from "@/layout.tsx/default.";
+import FacilityCalendar from "@/components/FacilityCalendar";
 import { User, Building } from "lucide-react";
 
 
@@ -31,6 +32,8 @@ export default function FacilityDetail({ facility }: DetailProps) {
                 </div>
             </div>
 
+            <FacilityCalendar />
+        
         </DefaultLayout>
     );
 }
