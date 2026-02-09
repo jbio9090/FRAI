@@ -6,7 +6,7 @@ const localizer = momentLocalizer(moment);
 
 const events = [
     {
-        title: 'Meeting',
+        title: 'Fck party',
         start: moment("2026-2-9T11:00:00").toDate(), // Feb 10, 10:00 AM
         end: moment("2026-2-9T15:00:00").toDate(),   // Feb 10, 12:00 PM
     },
