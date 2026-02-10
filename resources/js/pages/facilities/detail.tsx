@@ -1,6 +1,6 @@
-import DefaultLayout from "@/layout.tsx/default.";
-import FacilityCalendar from "@/components/FacilityCalendar";
 import { User, Building } from "lucide-react";
+import FacilityCalendar from "@/components/FacilityCalendar";
+import DefaultLayout from "@/layout.tsx/default.";
 
 
 interface Facility {
@@ -24,8 +24,6 @@ interface DetailProps {
 
 export default function FacilityDetail({ facility, initialEvents }: DetailProps) {
 
-    console.log(initialEvents);
-    
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-4 md:p-8">

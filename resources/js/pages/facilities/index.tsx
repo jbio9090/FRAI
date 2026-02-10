@@ -1,15 +1,13 @@
-import DefaultLayout from "@/layout.tsx/default.";
-import { useState } from "react";
 import { Link } from "@inertiajs/react";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import DefaultLayout from "@/layout.tsx/default.";
 
 interface Facility {
     id: number;
@@ -23,7 +21,7 @@ interface FacilityProps {
     facilities: Facility[];
 }
 
-export default function Facilities({ children, facilities }: FacilityProps) {
+export default function Facilities({ facilities }: FacilityProps) {
     return (
         <DefaultLayout>
             <h1>Facilities</h1>

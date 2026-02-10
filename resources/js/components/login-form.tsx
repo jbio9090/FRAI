@@ -1,22 +1,19 @@
-import { cn } from "@/lib/utils"
+import { useForm } from '@inertiajs/react';
 import { Button } from "@/components/ui/button"
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { useForm } from '@inertiajs/react';
-import { Alert } from "./ui/alert";
+import { cn } from "@/lib/utils"
 
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
-  const { data, setData, post, errors, processing } = useForm({
+  const { data, setData, post, errors } = useForm({
     email: '',
     password: '',
   });
@@ -38,7 +35,7 @@ export function LoginForm({
             Enter your email below to login to your account
           </p>
         </div>
-        
+
         {/* Show field error */}
         {errors.email && (
           <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-md text-sm">

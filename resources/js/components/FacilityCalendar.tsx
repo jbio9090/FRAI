@@ -1,11 +1,11 @@
-import { Calendar, momentLocalizer, ToolbarProps, View } from 'react-big-calendar'
+import axios from 'axios'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import moment from 'moment'
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import type { ToolbarProps, View } from 'react-big-calendar';
+import { Calendar, momentLocalizer } from 'react-big-calendar'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
     Select,
     SelectContent,
@@ -13,6 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Skeleton } from '@/components/ui/skeleton'
 
 const localizer = momentLocalizer(moment);
 
@@ -92,7 +93,7 @@ const CustomToolbar = (toolbar: ToolbarProps) => {
                 {label()}
             </div>
 
-            {/* View Selector - Combobox */}
+            {/* View Selector ARFARFRAFRAF*/}
             <Select value={toolbar.view} onValueChange={handleViewChange}>
                 <SelectTrigger>
                     <SelectValue placeholder="Select view" />
@@ -112,7 +113,7 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const formattedInitialEvents = initialEvents.map((event: any) => ({
+        const formattedInitialEvents = initialEvents.map((event: Event) => ({
             ...event,
             start: moment(event.start).toDate(),
             end: moment(event.end).toDate(),
@@ -141,7 +142,7 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
                 }
             });
 
-            const formattedEvents = response.data.map((event: any) => ({
+            const formattedEvents = response.data.map((event: Event) => ({
                 ...event,
                 start: moment(event.start).toDate(),
                 end: moment(event.end).toDate(),

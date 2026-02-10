@@ -1,5 +1,5 @@
+import { usePage } from '@inertiajs/react';
 import React from 'react';
-import { useForm, usePage } from '@inertiajs/react';
 import { AppSidebar } from "@/components/app-sidebar"
 import {
     Breadcrumb,
@@ -28,17 +28,9 @@ interface PageProps {
 }
 
 export default function DefaultLayout({ children, hasPadding = true }: DashboardProps) {
-    const { post } = useForm({
-        rule: "",
-    });
     const page = usePage<PageProps>();
     const breadcrumbs = page.props.breadcrumbs;
     const labeledBreadcrumb = page.props.labeledBreadcrumb;
-
-    function submit(e) {
-        e.preventDefault();
-        post(route('logout'));
-    }
 
     return (
         <SidebarProvider>
@@ -93,7 +85,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                     </Breadcrumb>
                 </header>
 
-                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible" + ((hasPadding) ? " p-4 md:p-8": "")}>
+                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible" + ((hasPadding) ? " p-4 md:p-8" : "")}>
                     {children}
                 </div>
             </SidebarInset>

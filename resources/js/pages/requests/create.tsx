@@ -1,12 +1,15 @@
-import DefaultLayout from '@/layout.tsx/default.';
 import { useForm } from '@inertiajs/react';
+import { format } from "date-fns";
+import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
+import { motion } from "motion/react"
+import { useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar } from "@/components/ui/calendar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
     Popover,
     PopoverContent,
@@ -19,12 +22,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
-import { format } from "date-fns";
+import { Textarea } from "@/components/ui/textarea";
+import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
-import { useState } from "react";
-import { motion } from "motion/react"
 
 
 const MotionChevron = motion(ChevronDown);
@@ -160,7 +160,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
     function selectAllEquipment(e: React.MouseEvent<HTMLButtonElement>) {
         e.preventDefault();
-        let selectAllBruh = availableEquipment.map((equipment) => {
+        const selectAllBruh = availableEquipment.map((equipment) => {
             return {
                 equipment_id: equipment.id,
                 equipment_name: equipment.name,
@@ -646,6 +646,7 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                 <div className='mb-4'>
                                     <h3 className='font-semibold text-xl mt-2'>{facility?.name}</h3>
                                     <div className='flex text-muted-foreground font-semibold text-xl gap-1 mt-2'>
+                                        <Building size={16} className={cn(isForSidebar && "hidden")}/>
                                         <span className='text-sm text-wrap'>
                                             {facility?.building}
                                         </span>

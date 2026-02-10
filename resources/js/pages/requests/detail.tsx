@@ -1,16 +1,13 @@
-import DefaultLayout from '@/layout.tsx/default.';
+import { Calendar, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
-    CardAction,
     CardContent,
     CardDescription,
-    CardFooter,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { usePermission } from '@/hooks/use-permission';
-import { Calendar, Clock } from 'lucide-react';
+import DefaultLayout from '@/layout.tsx/default.';
 
 interface Facility {
     id: number;
@@ -52,8 +49,7 @@ interface DetailProps {
     request: Request;
 }
 
-export default function RequestDetail({ children, request }: DetailProps) {
-    const { hasPermission, hasRole } = usePermission();
+export default function RequestDetail({ request }: DetailProps) {
     let statusColor = "";
 
     function formatTime(time: string): string {

@@ -1,3 +1,14 @@
+import { Link, router } from "@inertiajs/react"
+import {
+  LayoutGrid,
+  FileText,
+  LogOut,
+  CirclePlus,
+  FileCheck,
+  FileX,
+  BookOpen,
+  Box,
+} from "lucide-react"
 import * as React from "react"
 import {
   Sidebar,
@@ -11,17 +22,6 @@ import {
   SidebarFooter,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
-import {
-  LayoutGrid,
-  FileText,
-  LogOut,
-  CirclePlus,
-  FileCheck,
-  FileX,
-  BookOpen,
-  Box,
-} from "lucide-react"
-import { Link, router, usePage } from "@inertiajs/react"
 
 
 const data = {
@@ -62,7 +62,6 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { url } = usePage();
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     router.post(route("logout"));

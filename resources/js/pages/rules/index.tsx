@@ -1,12 +1,12 @@
 import { router, useForm } from '@inertiajs/react';
-import DefaultLayout from '@/layout.tsx/default.';
-import { usePermission } from '@/hooks/use-permission';
-import { Button } from '@/components/ui/button';
 import { Plus, X, Pencil, Check } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Item, ItemContent, ItemActions, ItemDescription } from '@/components/ui/item';
+import { usePermission } from '@/hooks/use-permission';
+import DefaultLayout from '@/layout.tsx/default.';
 
 
 interface Rule {
@@ -20,9 +20,9 @@ interface DashboardProps {
     rules: Rule[];
 }
 
-export default function Rules({ children, rules }: DashboardProps) {
+export default function Rules({ rules }: DashboardProps) {
 
-    const { hasPermission, hasRole } = usePermission();
+    const { hasPermission } = usePermission();
     const [showInput, setInputState] = useState<boolean>(false);
     const { post, data, setData } = useForm({
         rule: "",
