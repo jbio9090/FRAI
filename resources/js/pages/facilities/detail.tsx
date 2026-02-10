@@ -23,9 +23,12 @@ interface DetailProps {
 }
 
 export default function FacilityDetail({ facility, initialEvents }: DetailProps) {
+
+    console.log(initialEvents);
+    
     return (
-        <DefaultLayout>
-            <div className="flex flex-col">
+        <DefaultLayout hasPadding={false}>
+            <div className="flex flex-col p-4 md:p-8">
                 <h3 className='font-semibold text-xl mb-2'>{facility.name}</h3>
                 <div className='flex text-muted-foreground font-semibold text-xl gap-1 mt-1'>
                     <Building size={16} />

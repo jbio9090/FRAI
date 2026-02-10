@@ -1,9 +1,18 @@
-import { Calendar, momentLocalizer } from 'react-big-calendar'
+import { Calendar, momentLocalizer, ToolbarProps, View } from 'react-big-calendar'
 import moment from 'moment'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 const localizer = momentLocalizer(moment);
 
@@ -19,9 +28,97 @@ interface CalendarProps {
     initialEvents?: Event[];
 }
 
+// Custom Toolbar Component
+const CustomToolbar = (toolbar: ToolbarProps) => {
+    const goToBack = () => {
+        toolbar.onNavigate('PREV');
+    };
+
+    const goToNext = () => {
+        toolbar.onNavigate('NEXT');
+    };
+
+    const goToToday = () => {
+        toolbar.onNavigate('TODAY');
+    };
+
+    const label = () => {
+        const date = moment(toolbar.date);
+        return (
+            <div className="flex flex-col wrap font-light text-sm">
+                <h4 className='block'>
+                    {date.format('YYYY')}
+                </h4>
+                <h3 className="font-bold text-lg">
+                    {date.format('MMMM')}
+                </h3>
+            </div>
+
+        );
+    };
+
+    const handleViewChange = (value: string) => {
+        toolbar.onView(value as View);
+    };
+
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 p-2 sticky left-0 z-10 w-full ">
+            {/* Navigation */}
+            <div className="flex items-center gap-1">
+                <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={goToBack}
+                >
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                    variant="outline"
+                    onClick={goToToday}
+                >
+                    Today
+                </Button>
+                <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={goToNext}
+                >
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+            </div>
+
+            {/* Label */}
+            <div className="flex-1 text-center">
+                {label()}
+            </div>
+
+            {/* View Selector - Combobox */}
+            <Select value={toolbar.view} onValueChange={handleViewChange}>
+                <SelectTrigger>
+                    <SelectValue placeholder="Select view" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="week">Week</SelectItem>
+                    <SelectItem value="day">Day</SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
+    );
+};
+
 export default function FacilityCalendar({ facilityId, initialEvents = [] }: CalendarProps) {
-    const [events, setEvents] = useState<Event[]>(initialEvents);
+    const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const formattedInitialEvents = initialEvents.map((event: any) => ({
+            ...event,
+            start: moment(event.start).toDate(),
+            end: moment(event.end).toDate(),
+        }));
+        setEvents(formattedInitialEvents);
+    }, [initialEvents]);
 
     const handleRangeChange = async (range: Date[] | { start: Date; end: Date }) => {
         let start: Date, end: Date;
@@ -59,9 +156,9 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
     };
 
     return (
-        <div className="h-[42rem]">
-            {(loading) ? (
-                <div className="min-w-[48rem] h-[42rem] bg-background/80 backdrop-blur-sm flex items-center justify-center z-10">
+        <div className="h-[42rem] relative overflow-scroll md:overflow-visible">
+            {loading && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center w-full justify-center z-10 rounded-lg">
                     <div className="space-y-4 w-full max-w-4xl p-4">
                         <Skeleton className="h-12 w-full" />
                         <div className="grid grid-cols-7 gap-2">
@@ -71,15 +168,19 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
                         </div>
                     </div>
                 </div>
-            ) : (<Calendar
+            )}
+            <Calendar
                 views={['month', 'week', 'day']}
                 localizer={localizer}
                 events={events}
                 startAccessor="start"
                 endAccessor="end"
                 onRangeChange={handleRangeChange}
-            />)
-            }
+                className='p-0 md:p-8'
+                components={{
+                    toolbar: CustomToolbar,
+                }}
+            />
         </div>
     )
 }

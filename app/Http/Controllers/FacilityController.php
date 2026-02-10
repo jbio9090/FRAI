@@ -35,7 +35,7 @@ class FacilityController extends Controller
             ->map(function ($booking) {
                 return [
                     'id' => $booking->id,
-                    'title' => $booking->request->title . ' - ' . $booking->facility->name,
+                    'title' => $booking->request->title,
                     'start' => $booking->date_requested . ' ' . $booking->time_start,
                     'end' => $booking->date_requested . ' ' . $booking->time_end,
                 ];

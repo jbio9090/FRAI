@@ -1,4 +1,27 @@
-/* .rbc-month-view {
+.rbc-calendar {
+    overflow-x: scroll;
+}
+
+.rbc-month-view,
+.rbc-time-view {
+    width: auto;
     min-width: 48rem;
-    overflow:  scroll !important;
-} */
+}
+
+.rbc-event {
+    background-color: var(--primary) !important;
+    font-size: 0.875rem;
+}
+
+.rbc-sticky-toolbar {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    width: 100%;
+}
+
+@media (width >=48rem) {
+    .rbc-calendar {
+        overflow-x: visible;
+    }
+}

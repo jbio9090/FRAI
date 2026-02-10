@@ -19,6 +19,7 @@ import {
 interface DashboardProps {
     children: React.ReactNode;
     labeledBreadcrumb?: string | null;
+    hasPadding?: boolean;
 }
 
 interface PageProps {
@@ -26,7 +27,7 @@ interface PageProps {
     labeledBreadcrumb: string;
 }
 
-export default function DefaultLayout({ children }: DashboardProps) {
+export default function DefaultLayout({ children, hasPadding = true }: DashboardProps) {
     const { post } = useForm({
         rule: "",
     });
@@ -92,7 +93,7 @@ export default function DefaultLayout({ children }: DashboardProps) {
                     </Breadcrumb>
                 </header>
 
-                <div className="flex flex-1 flex-col gap-4 p-4 md:p-8 justify-start overflow-visible">
+                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible" + ((hasPadding) ? " p-4 md:p-8": "")}>
                     {children}
                 </div>
             </SidebarInset>
