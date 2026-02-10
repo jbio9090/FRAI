@@ -156,7 +156,7 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
     };
 
     return (
-        <div className="h-[42rem] relative overflow-scroll md:overflow-visible">
+        <div className="h-[42rem] relative">
             {loading && (
                 <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center w-full justify-center z-10 rounded-lg">
                     <div className="space-y-4 w-full max-w-4xl p-4">

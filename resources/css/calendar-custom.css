@@ -20,6 +20,15 @@
     width: 100%;
 }
 
+.rbc-time-slot {
+    font-weight: 300 !important;
+    color: var(--foreground);
+}
+
+.rbc-off-range-bg {
+    background-color: var(--muted) !important;
+}
+
 @media (width >=48rem) {
     .rbc-calendar {
         overflow-x: visible;
