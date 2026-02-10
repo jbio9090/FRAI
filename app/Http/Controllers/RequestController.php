@@ -74,6 +74,7 @@ class RequestController extends Controller
             'page_title' => "Denied",
         ]);
     }
+    
     // Admin-only: View pending requests
     public function pending()
     {
