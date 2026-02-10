@@ -136,7 +136,12 @@ class RequestController extends Controller
         ]);
     }
 
-    // POST - actually sotring the fuckening data
+    /**
+     * Store the form request to database
+     * 
+     * @param Request
+     * @return RedirectResponse
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([

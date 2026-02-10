@@ -20,7 +20,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon } from "lucide-react";
+import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -156,6 +156,19 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     function clearEquipmentSelection(e: React.MouseEvent<HTMLButtonElement>) {
         e.preventDefault();
         setSelectedEquipment([]);
+    }
+
+    function selectAllEquipment(e: React.MouseEvent<HTMLButtonElement>) {
+        e.preventDefault();
+        let selectAllBruh = availableEquipment.map((equipment) => {
+            return {
+                equipment_id: equipment.id,
+                equipment_name: equipment.name,
+                quantity_needed: equipment.quantity,
+                max_quantity: equipment.quantity,
+            }
+        });
+        setSelectedEquipment([...selectedEquipment, ...selectAllBruh]);
     }
 
     function handleEquipmentToggle(equipment: Equipment) {
@@ -362,11 +375,19 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     <div className="space-y-2">
                                         <div className="flex justify-around items-end">
                                             <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
+                                            {(selectedEquipment.length < availableEquipment.length) && (
+                                                <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment}>
+                                                    <SquareMousePointer />
+                                                    <span className="text-sm">
+                                                        Select All
+                                                    </span>
+                                                </Button>
+                                            )}
                                             {(selectedEquipment.length > 0) && (
                                                 <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection}>
                                                     <X />
-                                                    <span>
-                                                        Clear Selection
+                                                    <span className="text-sm">
+                                                        Clear All
                                                     </span>
                                                 </Button>
                                             )}
@@ -419,9 +440,9 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr_2fr] gap-4 mt-8 w-full">
+                                <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-6 md:gap-4 mt-8 w-full">
                                     {/* Date Picker */}
-                                    <div className="space-y-2">
+                                    <div className="space-y-2 col-span-full md:col-span-1">
                                         <Label>Date</Label>
                                         <Popover>
                                             <PopoverTrigger asChild>
@@ -458,7 +479,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             onChange={handleTimeStartChange}
                                             min={"7:00"}
                                             max={"20:00"}
-                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500")}
+                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500", "text-sm")}
                                         />
                                     </div>
 
@@ -472,7 +493,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             onChange={handleTimeEndChange}
                                             min={"7:00"}
                                             max={"20:00"}
-                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500")}
+                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500", "text-sm")}
                                         />
                                     </div>
                                 </div>
@@ -567,7 +588,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                             )}
                         </div>
 
-                        {/* Submit Button */}
                         <div className="flex justify-end gap-4 mb-16">
                             <Button
                                 type="button"
