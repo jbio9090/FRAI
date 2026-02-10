@@ -19,11 +19,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { CalendarIcon, X, User, Clock, ChevronDown, Building } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { motion } from "motion/react"
+
 
 const MotionChevron = motion(ChevronDown);
 
@@ -266,7 +268,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         <DefaultLayout>
             <div className="w-full lg:grid lg:grid-cols-[5fr_3fr] gap-8">
                 <div className="max-w-3xl w-full mx-auto">
-                    <form onSubmit={submit} className="space-y-6 flex flex-col gap-2">
+                    <form onSubmit={submit} className="space-y-6 flex flex-col gap-4">
                         {/* Title Field */}
                         <div className="space-y-2">
                             <Label htmlFor="title">Request Title</Label>
@@ -278,7 +280,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 placeholder="e.g., Annual Company Meeting"
                             />
                             {errors.title && (
-                                <p className="text-sm text-red-500">{errors.title}</p>
+                                <p className="text-sm text-destructive">{errors.title}</p>
                             )}
                         </div>
 
@@ -293,7 +295,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 rows={4}
                             />
                             {errors.description && (
-                                <p className="text-sm text-red-500">{errors.description}</p>
+                                <p className="text-sm text-destructive">{errors.description}</p>
                             )}
                         </div>
 
@@ -331,14 +333,18 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
 
                                 <Collapsible className='text-sm block lg:hidden' open={openCollapsible} onOpenChange={setCollapsibleState}>
-                                    <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-2'>
+                                    <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-4'>
                                         <MotionChevron size={16} animate={{ rotate: openCollapsible ? 180 : 0 }} />
                                         <span className='font-semibold'>
                                             Facility Info
                                         </span>
                                     </CollapsibleTrigger>
 
-                                    <CollapsibleContent>
+
+                                    {/* // Nice animation from - https://stackoverflow.com/a/78828383
+                                    // Posted by Brandon, modified by community. See post 'Timeline' for change history
+                                    // Retrieved 2026-02-10, License - CC BY-SA 4.0 */}
+                                    <CollapsibleContent className={cn("text-popover-foreground outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2")}>
                                         <FacilityInfo
                                             selectedFacility={selectedFacility}
                                             facilities={facilities}
@@ -391,7 +397,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                         </div>
 
                                                         {selected && (
-                                                            <div className="flex items-center gap-2">
+                                                            <div className="flex items-center gap-4">
                                                                 <Label className="text-sm">Qty:</Label>
                                                                 <Input
                                                                     type="number"
@@ -413,7 +419,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr_2fr] gap-2 mt-8 w-full">
+                                <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr_2fr] gap-4 mt-8 w-full">
                                     {/* Date Picker */}
                                     <div className="space-y-2">
                                         <Label>Date</Label>
@@ -473,17 +479,13 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
                                 {/* Time Conflict Warning */}
                                 {hasTimeConflict && (
-                                    <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start gap-2">
-                                        <svg className="h-5 w-5 text-red-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                        </svg>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium text-red-800">Time Conflict Detected</p>
-                                            <p className="text-xs text-red-700 mt-1">
-                                                Your selected time overlaps with an existing booking. Please choose a different time slot.
-                                            </p>
-                                        </div>
-                                    </div>
+                                    <Alert variant="destructive" className="border-destructive bg-destructive/4">
+                                        <AlertCircleIcon />
+                                        <AlertTitle>Time Conflict Detected</AlertTitle>
+                                        <AlertDescription>
+                                            Your selected time overlaps with an existing event. Please choose a different time slot.
+                                        </AlertDescription>
+                                    </Alert>
                                 )}
 
                                 <Button
@@ -507,7 +509,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                 <div className="flex items-start justify-between">
                                                     <div className="text-sm flex-1">
                                                         <div className="font-bold text-lg">{booking.facility_name}</div>
-                                                        <div className="text-muted-foreground flex gap-2 items-center">
+                                                        <div className="text-muted-foreground flex gap-4 items-center">
                                                             <CalendarIcon size={16} />
                                                             <span className='mr-4'>
                                                                 {format(booking.date, "PPP")}
@@ -545,13 +547,28 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </div>
                                 </div>
                             )}
+
                             {errors.facility_bookings && (
-                                <p className="text-sm text-red-500">{errors.facility_bookings}</p>
+                                <Alert variant="destructive" className="border-destructive bg-destructive/4">
+                                    <AlertCircleIcon />
+                                    <AlertTitle>Booking Conflict</AlertTitle>
+                                    <AlertDescription>
+                                        {Array.isArray(errors.facility_bookings) ? (
+                                            <ul className="list-disc pl-5 space-y-1">
+                                                {errors.facility_bookings.map((error, idx) => (
+                                                    <li key={idx}>{error}</li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            errors.facility_bookings
+                                        )}
+                                    </AlertDescription>
+                                </Alert>
                             )}
                         </div>
 
                         {/* Submit Button */}
-                        <div className="flex justify-end gap-4">
+                        <div className="flex justify-end gap-4 mb-16">
                             <Button
                                 type="button"
                                 variant="outline"
@@ -600,7 +617,8 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
             {(isForSidebar) && (<h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>)}
 
             {selectedFacility ? (
-                <div className=''>
+                <motion.div
+                    className=''>
                     {(() => {
                         const facility = facilities.find(f => f.id === selectedFacility);
                         return (
@@ -609,7 +627,7 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                     <h3 className='font-semibold text-xl mt-2'>{facility?.name}</h3>
                                     <div className='flex text-muted-foreground font-semibold text-xl gap-1 mt-2'>
                                         <span className='text-sm text-wrap'>
-                                            {facility.building}
+                                            {facility?.building}
                                         </span>
 
                                     </div>
@@ -649,7 +667,7 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                                         <div className='font-medium text-sm'>
                                                             {booking.request_title}
                                                         </div>
-                                                        <div className='flex items-center gap-2 text-xs text-muted-foreground mt-1'>
+                                                        <div className='flex items-center gap-4 text-xs text-muted-foreground mt-1'>
                                                             <Clock size={14} />
                                                             <span>
                                                                 {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
@@ -677,7 +695,7 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                             </>
                         );
                     })()}
-                </div>
+                </motion.div>
             ) : (
                 <div className='px-6 pb-6 text-sm text-muted-foreground text-center py-8'>
                     Select a facility to view details

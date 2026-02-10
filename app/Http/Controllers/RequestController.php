@@ -6,9 +6,12 @@ use App\Models\Request as FacilityRequest;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
-
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
 use App\Models\Facility;
 use App\RequestStatus;
+use App\Models\RequestFacility;
+
 
 class RequestController extends Controller
 {
@@ -149,6 +152,15 @@ class RequestController extends Controller
             'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
         ]);
 
+        // Check for conflicts with existing approved bookings
+        $conflicts = $this->checkForConflicts($validated['facility_bookings']);
+
+        if (!empty($conflicts)) {
+            throw ValidationException::withMessages([
+                'facility_bookings' => $conflicts
+            ]);
+        }
+
         // Create the request
         $facilityRequest = FacilityRequest::create([
             'user_id' => Auth::id(),
@@ -159,11 +171,11 @@ class RequestController extends Controller
 
         // Add facility bookings
         foreach ($validated['facility_bookings'] as $booking) {
-            $dateOnly = \Carbon\Carbon::parse($booking['date'])->format('Y-m-d');
+            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
 
             $facilityRequest->requestFacilities()->create([
                 'facility_id' => $booking['facility_id'],
-                'date_requested' => $booking['date'],
+                'date_requested' => $dateOnly,
                 'time_start' => $booking['time_start'],
                 'time_end' => $booking['time_end'],
             ]);
@@ -179,5 +191,52 @@ class RequestController extends Controller
         }
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
+    }
+
+    /**
+     * Check for time conflicts with existing approved bookings
+     * 
+     * @param array $bookings
+     * @return array Array of conflict messages
+     */
+    private function checkForConflicts(array $bookings): array
+    {
+        $conflicts = [];
+
+        foreach ($bookings as $index => $booking) {
+            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+            $requestedStart = Carbon::parse($booking['time_start']);
+            $requestedEnd = Carbon::parse($booking['time_end']);
+
+            // Get all approved bookings for this facility on this date
+            $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
+                ->where('date_requested', $dateOnly)
+                ->whereHas('request', function ($query) {
+                    $query->where('status', RequestStatus::APPROVED);
+                })
+                ->get();
+
+            foreach ($existingBookings as $existing) {
+                $existingStart = Carbon::parse($existing->time_start);
+                $existingEnd = Carbon::parse($existing->time_end);
+
+                // Check if times overlap
+                if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
+                    $facility = Facility::find($booking['facility_id']);
+                    $conflicts[] = sprintf(
+                        'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing approved booking (%s - %s)',
+                        $facility->name ?? 'Unknown Facility',
+                        Carbon::parse($dateOnly)->format('F j, Y'),
+                        $requestedStart->format('g:i A'),
+                        $requestedEnd->format('g:i A'),
+                        $existingStart->format('g:i A'),
+                        $existingEnd->format('g:i A')
+                    );
+                    break; // One conflict per booking is enough
+                }
+            }
+        }
+
+        return $conflicts;
     }
 }
