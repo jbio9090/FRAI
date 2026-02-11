@@ -17,7 +17,9 @@ class FacilityFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'name' => fake()->name(),
+            'building' => fake()->buildingNumber(),
+            'capacity' => fake()->numberBetween(100, 500),
         ];
     }
 }
