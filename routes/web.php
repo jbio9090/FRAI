@@ -27,7 +27,6 @@ Route::middleware("auth")->group(function () {
 
     // Admin only routes
     Route::middleware(['permission:approve requests'])->group(function () {
-        Route::get('/requests/pending/get', [RequestController::class, 'pending'])->name('requests.pending');
         Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
     });
