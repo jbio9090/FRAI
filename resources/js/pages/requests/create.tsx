@@ -25,9 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
-
-
-const MotionChevron = motion(ChevronDown);
+import MotionChevron from '@/components/animated_icons/MotionChevron';
 
 interface Equipment {
     id: number;
@@ -347,7 +345,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
                                 <Collapsible className='text-sm block lg:hidden' open={openCollapsible} onOpenChange={setCollapsibleState}>
                                     <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-4'>
-                                        <MotionChevron size={16} animate={{ rotate: openCollapsible ? 180 : 0 }} />
+                                        <MotionChevron openCollapsible={openCollapsible} />
                                         <span className='font-semibold'>
                                             Facility Info
                                         </span>
@@ -646,7 +644,7 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                 <div className='mb-4'>
                                     <h3 className='font-semibold text-xl mt-2'>{facility?.name}</h3>
                                     <div className='flex text-muted-foreground font-semibold text-xl gap-1 mt-2'>
-                                        <Building size={16} className={cn(isForSidebar && "hidden")}/>
+                                        <Building size={16} className={cn(isForSidebar && "hidden")} />
                                         <span className='text-sm text-wrap'>
                                             {facility?.building}
                                         </span>

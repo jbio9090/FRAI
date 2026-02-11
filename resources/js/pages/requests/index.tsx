@@ -7,8 +7,7 @@ import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
 import { useState } from 'react';
 import { motion } from 'motion/react';
-
-const MotionChevron = motion(ChevronDown);
+import MotionChevron from '@/components/animated_icons/MotionChevron';
 
 interface Request {
     id: number;
@@ -138,7 +137,7 @@ function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
                 <Calendar size={16} />
                 <span>Facilities Requested</span>
                 <span className='text-xs font-bold bg-muted-foreground text-background rounded-full w-4 h-4 ml-1'>{request.facilities.length}</span>
-                <MotionChevron size={16} animate={{ rotate: openCollapsible ? 180 : 0 }} className='ml-auto mr-0' />
+                <MotionChevron openCollapsible={openCollapsible} className='mr-0 ml-auto' />
             </CollapsibleTrigger>
             <CollapsibleContent className='flex flex-col gap-2 md:grid grid-cols-[1fr_1fr]'>
                 {request.request_facilities.map((rf) => {
