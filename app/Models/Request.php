@@ -7,9 +7,12 @@ use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\Models\User;
 use App\RequestStatus;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Request extends Model
 {
+    use HasFactory;
+    
     protected $fillable = [
         'user_id',
         'title',
