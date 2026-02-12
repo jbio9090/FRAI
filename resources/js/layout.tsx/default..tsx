@@ -14,7 +14,8 @@ import {
     SidebarInset,
     SidebarProvider,
     SidebarTrigger,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
+import { Head } from '@inertiajs/react';
 
 interface DashboardProps {
     children: React.ReactNode;
@@ -34,6 +35,9 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
 
     return (
         <SidebarProvider>
+            <Head>
+                <meta name="csrf-token" content={document.querySelector('meta[name="csrf-token"]')?.content} />
+            </Head>
             <AppSidebar />
             <SidebarInset>
                 <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -46,7 +50,6 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                     <Breadcrumb>
                         <BreadcrumbList>
                             {breadcrumbs && breadcrumbs.map((breadcrumb, index) => {
-                                // Build the path up to this breadcrumb
                                 const path = '/' + breadcrumbs.slice(0, index + 1).join('/');
                                 const isLast = index === breadcrumbs.length - 1;
 

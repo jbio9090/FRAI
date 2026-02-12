@@ -13,6 +13,7 @@ use App\Models\Facility;
 use App\RequestStatus;
 use App\Models\RequestFacility;
 use App\Services\RequestService;
+use App\Notifications\RequestApproved;
 
 
 class RequestController extends Controller
@@ -58,6 +59,8 @@ class RequestController extends Controller
     {
         $facilityRequest = FacilityRequest::findOrFail($id);
         $facilityRequest->update(['status' => RequestStatus::APPROVED]);
+
+        $facilityRequest->user()->notify(new RequestApproved($facilityRequest));
 
         return redirect()->back()->with('success', 'Request approved successfully');
     }
