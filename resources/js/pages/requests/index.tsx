@@ -6,7 +6,6 @@ import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
 import { useState } from 'react';
-import { motion } from 'motion/react';
 import MotionChevron from '@/components/animated_icons/MotionChevron';
 
 interface Request {

@@ -23,7 +23,6 @@ class FacilityController extends Controller
     {
         $facility = Facility::where("id", $facility_id)->firstOrFail();
 
-        // Load initial month of events
         $start = now()->startOfMonth()->format('Y-m-d');
         $end = now()->endOfMonth()->format('Y-m-d');
 

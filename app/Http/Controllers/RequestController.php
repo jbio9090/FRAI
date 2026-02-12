@@ -38,7 +38,7 @@ class RequestController extends Controller
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
-            'page_title' => "Pending",
+            'page_title' => "Approved",
         ]);
     }
 
@@ -49,7 +49,7 @@ class RequestController extends Controller
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
-            'page_title' => "Pending",
+            'page_title' => "Denied",
         ]);
     }
 
