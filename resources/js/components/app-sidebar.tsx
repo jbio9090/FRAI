@@ -8,6 +8,7 @@ import {
   FileX,
   BookOpen,
   Box,
+  Settings
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -125,6 +126,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <SidebarSeparator />
         <SidebarMenu>
+          <SidebarMenuItem className="px-4">
+            <SidebarMenuButton asChild>
+              <Link href={route("settings")} className="w-full cursor-pointer">
+                <Settings className="h-4 w-4" />
+                <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
           <SidebarMenuItem className="px-4">
             <SidebarMenuButton asChild>
               <button onClick={handleLogout} className="w-full cursor-pointer">

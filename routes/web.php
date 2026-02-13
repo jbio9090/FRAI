@@ -4,9 +4,9 @@ use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\FacilityController;
+use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Models\Facility;
 
 
 Route::middleware("auth")->group(function () {
@@ -45,9 +45,11 @@ Route::middleware("auth")->group(function () {
     Route::get("/facilities", [FacilityController::class, "index"])->name("facilities");
     Route::get("/facilities/{facility_id}", [FacilityController::class, "detail"])->name("facility.detail");
 
-    // API
+    // JSon
     Route::get("/facilities/getSchedule/{facility}/{date}", [FacilityController::class, "getDaySchedule"])->name("facility.schedule");
     Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
+
+    Route::get("/settings", [SettingsController::class, "index"])->name("settings");
 });
 
 Route::prefix("/login")->group(function () {
