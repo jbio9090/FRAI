@@ -4,6 +4,7 @@ use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\FacilityController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -18,7 +19,9 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
-    Route::get('/requests', function () { return redirect()->intended(route("requests.index"));})->name("requests");
+    Route::get('/requests', function () {
+        return redirect()->intended(route("requests.index"));
+    })->name("requests");
     Route::get('/requests/pending', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
@@ -50,6 +53,12 @@ Route::middleware("auth")->group(function () {
     Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");
+
+    Route::prefix("/push")->group(function () {
+        Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
+        Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");
+        Route::post("/send", [NotificationController::class, "send"])->name("notification.subscribe");
+    });
 });
 
 Route::prefix("/login")->group(function () {
