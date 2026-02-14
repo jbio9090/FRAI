@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppSidebar } from "@/components/app-sidebar"
 import {
     Breadcrumb,
@@ -15,6 +15,7 @@ import {
     SidebarProvider,
     SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { registerServiceWorker } from '@/service_worker/registerServiceWorker';
 
 interface DashboardProps {
     children: React.ReactNode;
@@ -31,6 +32,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     const page = usePage<PageProps>();
     const breadcrumbs = page.props.breadcrumbs;
     const labeledBreadcrumb = page.props.labeledBreadcrumb;
+
 
     return (
         <SidebarProvider>
