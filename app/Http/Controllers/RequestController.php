@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\FacilityFormRequest;
 use App\Models\Request as FacilityRequest;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Validation\ValidationException;
 use App\Models\Facility;
+use App\Models\User;
 use App\RequestStatus;
 use App\Services\RequestService;
 use App\Notifications\NewPendingRequest;
@@ -107,11 +107,14 @@ class RequestController extends Controller
         $saved_request = $this->service->create($validated);
 
         try {
-            $request->user()->notify(new NewPendingRequest(
-                $saved_request->title,
-                $request->user()->name,
-                route("requests.detail", [$saved_request->id])
-            ));
+            foreach (User::role("admin")->get() as $user) {
+                $user->notify(new NewPendingRequest(
+                    $saved_request->title,
+                    $request->user()->name,
+                    route("requests.detail", [$saved_request->id])
+                ));
+            }
+            
         } catch (\Exception $e) {
             Log::error('Push notification failed: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());

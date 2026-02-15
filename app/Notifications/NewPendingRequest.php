@@ -25,9 +25,10 @@ class NewPendingRequest extends Notification
     {
         return (new WebPushMessage)
             ->title($this->request_title)
-            ->icon('/approved-icon.png')
-            ->body('New Pending Request from ' . $this->user_name)
-            ->action('View account', 'view_account')
+            ->icon('/app-icon.png')
+            ->body('Pending Request from ' . $this->user_name)
+            ->action('Approve', 'approve_request')
+            ->action('Deny', 'deny_request')
             ->options(['TTL' => 1000])
             ->data(["url" => $this->url])
             ->tag("pending");
