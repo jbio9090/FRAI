@@ -1,7 +1,8 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, ChevronDown, Clock } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
@@ -55,20 +56,28 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
 
                 <div className="gap-4 flex flex-col lg:grid grid-cols-[1fr_1fr]">
                     {requests.map((request) => (
-                        <div key={request.id} className="border rounded-lg p-4">
+                        <div key={request.id} className="border rounded-lg p-4 h-content min-h-0">
                             <div className="flex justify-between items-start flex-col gap-6">
                                 <div className="flex justify-around w-full">
                                     <div className='flex flex-col gap-1'>
                                         <h3 className="font-bold">{request.title}</h3>
-                                        <p className="text-sm">{request.description}</p>
-                                        <p className="text-sm">
-                                            from {request.user.name}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Submitted {moment(request.updated_at).fromNow()}
-                                        </p>
+                                        <p className="mt-2 text-sm">{request.description}</p>
 
+                                        <p className="text-sm mt-4 flex gap-2 items-center">
+                                            <Avatar size='sm'>
+                                                <AvatarImage
+                                                    src='/profile/default.png'
+                                                />
+                                            </Avatar>
+                                            <span className='text-sm'>
+                                                {request.user.name}
+                                            </span>
+                                            <p className="text-xs text-muted-foreground">
+                                                Submitted {moment(request.updated_at).fromNow()}
+                                            </p>
+                                        </p>
                                     </div>
+
                                     <Link href={route("requests.detail", request.id)} className='flex-0 ml-auto mr-0'>
                                         <Button
                                             size="xs"
@@ -83,8 +92,6 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                     request={request}
                                 />
 
-
-                                {/* Only show approve/reject buttons to admins */}
                                 {(hasPermission('approve requests') && page_title == "Pending") && (
                                     <div className="flex justify-end gap-2 w-content ml-auto">
                                         <Button
@@ -138,23 +145,23 @@ function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
                 <span className='text-xs font-bold bg-muted-foreground text-background rounded-full w-4 h-4 ml-1'>{request.facilities.length}</span>
                 <MotionChevron openCollapsible={openCollapsible} className='mr-0 ml-auto' />
             </CollapsibleTrigger>
-            <CollapsibleContent className='flex flex-col gap-2 md:grid grid-cols-[1fr_1fr]'>
+            <CollapsibleContent className='flex flex-wrap gap-2 md:grid grid-cols-[1fr_1fr] m-auto'>
                 {request.request_facilities.map((rf) => {
                     const facility = request.facilities.find(f => f.id === rf.facility_id);
-                    console.log(rf.date_requested)
+
                     return (
-                        <div className='flex flex-col items-center text-sm text-foreground mt-1' key={rf.date_requested + rf.time_start}>
-                            <span className='font-semibold'>{facility?.name}</span>
-                            <div className="flex gap-2 items-center text-muted-foreground font-medium">
+                        <div className='flex flex-col items-center text-sm max-w-40 text-foreground mt-4' key={rf.date_requested + rf.time_start}>
+                            <span className='font-semibold w-full'>{facility?.name}</span>
+                            <div className="flex items-center flex-wrap text-foreground/70 font-medium">
                                 <div className="flex gap-1 items-center">
                                     <Calendar size={12} />
-                                    <span className='text-xs'>
+                                    <span className='text-sm'>
                                         {moment(rf.date_requested).format("MMM D, YYYY")}
                                     </span>
                                 </div>
                                 <div className="flex gap-1 items-center">
                                     <Clock size={12} />
-                                    <span className='text-xs'>
+                                    <span className='text-sm'>
                                         {formatTime(rf.time_start)} - {formatTime(rf.time_end)}
                                     </span>
                                 </div>

@@ -125,7 +125,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarSeparator />
-        <SidebarMenu>
+        <SidebarMenu className="pb-4">
           <SidebarMenuItem className="px-4">
             <SidebarMenuButton asChild>
               <Link href={route("settings")} className="w-full cursor-pointer">
