@@ -79,7 +79,6 @@ class RequestService
 
     public function create(array $validated)
     {
-        // Create the request
         $facilityRequest = FacilityRequest::create([
             'user_id' => Auth::id(),
             'title' => $validated['title'],
@@ -87,7 +86,6 @@ class RequestService
             'status' => RequestStatus::PENDING,
         ]);
 
-        // Add facility bookings
         foreach ($validated['facility_bookings'] as $booking) {
             $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
 
@@ -98,7 +96,6 @@ class RequestService
                 'time_end' => $booking['time_end'],
             ]);
 
-            // Add equipment if any
             if (!empty($booking['equipment'])) {
                 foreach ($booking['equipment'] as $equipment) {
                     $facilityRequest->equipment()->attach($equipment['equipment_id'], [
@@ -107,5 +104,7 @@ class RequestService
                 }
             }
         }
+
+        return $facilityRequest;
     }
 }

@@ -6,13 +6,12 @@ use App\Http\Requests\FacilityFormRequest;
 use App\Models\Request as FacilityRequest;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use App\Models\Facility;
 use App\RequestStatus;
-use App\Models\RequestFacility;
 use App\Services\RequestService;
+use App\Notifications\NewPendingRequest;
+use Illuminate\Support\Facades\Log;
 
 
 class RequestController extends Controller
@@ -97,7 +96,6 @@ class RequestController extends Controller
     {
         $validated = $request->validated();
 
-        // Check for conflicts with existing approved bookings
         $conflicts = $this->service->checkForConflicts($validated['facility_bookings']);
 
         if (!empty($conflicts)) {
@@ -106,7 +104,18 @@ class RequestController extends Controller
             ]);
         }
 
-        $this->service->create($validated);
+        $saved_request = $this->service->create($validated);
+
+        try {
+            $request->user()->notify(new NewPendingRequest(
+                $saved_request->title,
+                $request->user()->name,
+                route("requests.detail", [$saved_request->id])
+            ));
+        } catch (\Exception $e) {
+            Log::error('Push notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+        }
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }

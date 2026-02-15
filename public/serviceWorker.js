@@ -26,18 +26,7 @@ self.addEventListener('notificationclick', function (event) {
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true })
             .then(function (clientList) {
-                // If there's already a window open, focus it
-                for (let i = 0; i < clientList.length; i++) {
-                    const client = clientList[i];
-                    if (client.url === '/' && 'focus' in client) {
-                        return client.focus();
-                    }
-                }
-
-                // Otherwise open a new window
-                if (clients.openWindow) {
-                    return clients.openWindow(event.notification.data.url || '/');
-                }
+                return clients.openWindow(event.notification.data.url || '/');
             })
     );
 });

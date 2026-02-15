@@ -23,7 +23,6 @@
 <body class="font-sans antialiased">
     @inertia
     <script>
-        // Register service worker once on initial page load
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/serviceWorker.js')

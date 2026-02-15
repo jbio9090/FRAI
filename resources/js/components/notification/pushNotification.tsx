@@ -46,16 +46,12 @@ export default function PushNotifications() {
 
         try {
             const registration = await navigator.serviceWorker.ready;
-
-            // You'll need to replace this with your actual VAPID public key
             const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-
             const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
             });
 
-            // Send subscription to backend
             await router.post('/push/subscribe', {
                 subscription: subscription.toJSON()
             }, {
@@ -82,16 +78,15 @@ export default function PushNotifications() {
 
         try {
             if (subscription) {
-                await subscription.unsubscribe();
-
-                // Notify backend
-                await router.post('/push/unsubscribe', {}, {
+                await router.post('/push/unsubscribe', {
+                    subscription: subscription.toJSON()
+                }, {
                     preserveState: true,
                     preserveScroll: true,
-                    onSuccess: () => {
-                        setSubscription(null);
-                    }
                 });
+
+                await subscription.unsubscribe();
+                setSubscription(null);
             }
         } catch (err) {
             setError('Failed to unsubscribe');
@@ -141,10 +136,10 @@ export default function PushNotifications() {
                 <div>
                     <p className="text-sm text-gray-600 mb-1">Permission Status:</p>
                     <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${permission === 'granted'
-                            ? 'bg-green-100 text-green-800'
-                            : permission === 'denied'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-gray-100 text-gray-800'
+                        ? 'bg-green-100 text-green-800'
+                        : permission === 'denied'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-800'
                         }`}>
                         {permission.charAt(0).toUpperCase() + permission.slice(1)}
                     </span>
@@ -153,8 +148,8 @@ export default function PushNotifications() {
                 <div>
                     <p className="text-sm text-gray-600 mb-1">Subscription Status:</p>
                     <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${subscription
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-gray-100 text-gray-800'
                         }`}>
                         {subscription ? 'Subscribed' : 'Not Subscribed'}
                     </span>
