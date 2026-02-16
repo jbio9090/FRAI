@@ -125,7 +125,7 @@
     --color-chart-5:
         var(--chart-5);
     --color-sidebar:
-        var(--sidebar);
+        var(--background);
     --color-sidebar-foreground:
         var(--sidebar-foreground);
     --color-sidebar-primary:
