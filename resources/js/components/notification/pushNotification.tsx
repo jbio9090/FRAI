@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
+import { Button } from '@/components/ui/button';
 
 export default function PushNotifications() {
     const [permission, setPermission] = useState(Notification.permission);
@@ -123,76 +124,57 @@ export default function PushNotifications() {
     }
 
     return (
-        <div className="bg-white rounded-lg shadow p-6 max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Push Notifications</h2>
+        <div className="flex gap-12 justify-between items-center">
+            <span className='text-sm font-semibold'>Notifications</span>
 
             {error && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                     <p className="text-red-800 text-sm">{error}</p>
                 </div>
             )}
-
-            <div className="space-y-4">
-                <div>
-                    <p className="text-sm text-gray-600 mb-1">Permission Status:</p>
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${permission === 'granted'
-                        ? 'bg-green-100 text-green-800'
-                        : permission === 'denied'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                        {permission.charAt(0).toUpperCase() + permission.slice(1)}
+            {permission === 'default' && (
+                <Button
+                    onClick={requestPermission}
+                    disabled={loading}
+                    size={"sm"}
+                    variant={"outline"}
+                >
+                    <span className='text-xs'>
+                        Enable Browser Notifications
                     </span>
-                </div>
+                </Button>
+            )}
 
-                <div>
-                    <p className="text-sm text-gray-600 mb-1">Subscription Status:</p>
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${subscription
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-gray-100 text-gray-800'
-                        }`}>
-                        {subscription ? 'Subscribed' : 'Not Subscribed'}
+            {permission === 'granted' && !subscription && (
+                <Button
+                    onClick={subscribeToPush}
+                    disabled={loading}
+                    size={"sm"}
+                    variant={"outline"}
+                >
+                    <span className='text-xs'>
+                        {loading ? 'Subscribing...' : 'Subscribe to Notifications'}
                     </span>
-                </div>
+                </Button>
+            )}
 
-                <div className="pt-4">
-                    {permission === 'default' && (
-                        <button
-                            onClick={requestPermission}
-                            disabled={loading}
-                            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                        >
-                            Enable Notifications
-                        </button>
-                    )}
+            {permission === 'granted' && subscription && (
+                <Button
+                    onClick={unsubscribe}
+                    disabled={loading}
+                    size={"sm"}
+                >
+                    <span className='text-xs'>
+                        {loading ? 'Unsubscribing...' : 'Unsubscribe'}
+                    </span>
+                </Button>
+            )}
 
-                    {permission === 'granted' && !subscription && (
-                        <button
-                            onClick={subscribeToPush}
-                            disabled={loading}
-                            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                        >
-                            {loading ? 'Subscribing...' : 'Subscribe to Push'}
-                        </button>
-                    )}
-
-                    {permission === 'granted' && subscription && (
-                        <button
-                            onClick={unsubscribe}
-                            disabled={loading}
-                            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                        >
-                            {loading ? 'Unsubscribing...' : 'Unsubscribe'}
-                        </button>
-                    )}
-
-                    {permission === 'denied' && (
-                        <p className="text-sm text-gray-600 text-center">
-                            Notifications are blocked. Please enable them in your browser settings.
-                        </p>
-                    )}
-                </div>
-            </div>
+            {permission === 'denied' && (
+                <p className="text-sm text-gray-600 text-center">
+                    Notifications are blocked. Please enable them in your browser settings.
+                </p>
+            )}
         </div>
     );
 }

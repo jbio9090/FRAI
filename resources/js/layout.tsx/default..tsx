@@ -33,6 +33,14 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     const breadcrumbs = page.props.breadcrumbs;
     const labeledBreadcrumb = page.props.labeledBreadcrumb;
 
+    useEffect(() => {
+        document.documentElement.classList.toggle(
+            "dark",
+            localStorage.getItem("theme") === "dark" ||
+            (!("theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches),
+        );
+    }, []);
+
 
     return (
         <SidebarProvider>

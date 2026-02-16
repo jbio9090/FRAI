@@ -46,8 +46,6 @@ interface RequestsPageProps {
 
 export default function PendingRequests({ requests, page_title }: RequestsPageProps) {
     const { hasPermission } = usePermission();
-    console.log(requests);
-
 
     return (
         <DefaultLayout>
