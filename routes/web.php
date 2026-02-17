@@ -49,7 +49,7 @@ Route::middleware("auth")->group(function () {
     Route::get("/facilities/{facility_id}", [FacilityController::class, "detail"])->name("facility.detail");
 
     // JSon
-    Route::get("/facilities/getSchedule/{facility}/{date}", [FacilityController::class, "getDaySchedule"])->name("facility.schedule");
+    Route::get("/facilities/getSchedule/{facility}/{date}", [FacilityController::class, "getDayScheduleJson"])->name("facility.schedule");
     Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");

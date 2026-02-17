@@ -7,6 +7,7 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
+use Illuminate\Support\Facades\Date;
 
 class NewPendingRequest extends Notification implements ShouldQueue
 {
@@ -33,7 +34,7 @@ class NewPendingRequest extends Notification implements ShouldQueue
             ->action('Deny', 'deny_request')
             ->options(['TTL' => 1000])
             ->data(["url" => $this->url])
-            ->tag("pending");
+            ->tag("pending-".$this->request_title . Date::now()->toString());
         // ->vibrate();
         // ->data(['id' => $notification->id])
         // ->badge()
