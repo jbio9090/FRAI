@@ -12,12 +12,14 @@ use App\RequestStatus;
 use App\Services\RequestService;
 use App\Notifications\NewPendingRequest;
 use Illuminate\Support\Facades\Log;
+use App\Services\NotificationService;
 
 
 class RequestController extends Controller
 {
     public function __construct(
-        protected RequestService $service
+        protected RequestService $service,
+        protected NotificationService $notification,
     ) {}
 
     public function index()
@@ -58,6 +60,8 @@ class RequestController extends Controller
         $facilityRequest = FacilityRequest::findOrFail($id);
         $facilityRequest->update(['status' => RequestStatus::APPROVED]);
 
+        $this->notification->notifyUser($facilityRequest);
+
         return redirect()->back()->with('success', 'Request approved successfully');
     }
 
@@ -66,6 +70,8 @@ class RequestController extends Controller
     {
         $facilityRequest = FacilityRequest::findOrFail($id);
         $facilityRequest->update(['status' => RequestStatus::DENIED]);
+
+        $this->notification->notifyUser($facilityRequest);
 
         return redirect()->back()->with('success', 'Request rejected successfully');
     }
@@ -106,19 +112,7 @@ class RequestController extends Controller
 
         $saved_request = $this->service->create($validated);
 
-        try {
-            foreach (User::role("admin")->get() as $user) {
-                $user->notify(new NewPendingRequest(
-                    $saved_request->title,
-                    $request->user()->name,
-                    route("requests.detail", [$saved_request->id])
-                ));
-            }
-            
-        } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
-        }
+        $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }
