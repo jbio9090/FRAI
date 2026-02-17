@@ -8,8 +8,10 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
 
-class NewPendingRequest extends Notification
+class NewPendingRequest extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(
         protected string $request_title,
         protected string $user_name,
