@@ -18,4 +18,8 @@ class PushSubscription extends Model
     {
         return $this->belongsTo(User::class);
     }
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes

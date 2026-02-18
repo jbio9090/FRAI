@@ -4,6 +4,10 @@ use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\FacilityController;
+<<<<<<< Updated upstream
+=======
+use App\Http\Controllers\ChatController;
+>>>>>>> Stashed changes
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
@@ -25,6 +29,7 @@ Route::middleware("auth")->group(function () {
     Route::get('/requests/pending', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
+    Route::get('/requests/on-hold', [RequestController::class, 'onHoldPage'])->name('requests.on-hold');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
 
@@ -54,6 +59,24 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");
 
+<<<<<<< Updated upstream
+=======
+    // Chatbot
+    Route::get("/chatbot", function () {
+        return Inertia::render("chatbot/chatbot");
+    })->name("chatbot");
+    Route::prefix("/chat")->group(function () {
+        Route::post("/", [ChatController::class, "chat"])->name("api.chat")->middleware(["throttle:60,1"]);
+        Route::get("/test", [ChatController::class, "testCsrf"])->name("chat.test");
+        Route::get("/models", [ChatController::class, "models"])->name("chat.models");
+        Route::get("/requests", [ChatController::class, "latestRequests"])->name("chat.requests");
+        Route::get("/rules", [ChatController::class, "rulesList"])->name("chat.rules");
+        Route::get("/facilities", [ChatController::class, "facilitiesList"])->name("chat.facilities");
+        Route::get("/equipment", [ChatController::class, "equipmentList"])->name("chat.equipment");
+        Route::post("/create-request", [ChatController::class, "createRequestApi"])->name("api.db.create.request")->middleware(["throttle:10,1"]);
+    });
+
+>>>>>>> Stashed changes
     Route::prefix("/push")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
         Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");

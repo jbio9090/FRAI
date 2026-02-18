@@ -93,7 +93,11 @@ const CustomToolbar = (toolbar: ToolbarProps) => {
                 {label()}
             </div>
 
+<<<<<<< Updated upstream
             {/* View Selector ARFARFRAFRAF*/}
+=======
+            {/* View Selector */}
+>>>>>>> Stashed changes
             <Select value={toolbar.view} onValueChange={handleViewChange}>
                 <SelectTrigger>
                     <SelectValue placeholder="Select view" />
@@ -184,4 +188,8 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
             />
         </div>
     )
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes

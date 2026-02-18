@@ -16,7 +16,11 @@
         "laravel/tinker": "^2.10.1",
         "laravel/wayfinder": "^0.1.11",
         "minishlink/web-push": "^10.0",
+<<<<<<< Updated upstream
         "spatie/laravel-permission": "^7.0",
+=======
+        "spatie/laravel-permission": "^7.1",
+>>>>>>> Stashed changes
         "tightenco/ziggy": "^2.6"
     },
     "require-dev": {

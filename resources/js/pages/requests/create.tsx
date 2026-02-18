@@ -1,6 +1,10 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
+<<<<<<< Updated upstream
 import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
+=======
+import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer, ShieldAlert, School } from "lucide-react";
+>>>>>>> Stashed changes
 import { motion } from "motion/react"
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -91,6 +95,8 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const { data, setData, post, processing, errors } = useForm({
         title: '',
         description: '',
+        priority_level: 0,
+        priority_reason: '',
         facility_bookings: [] as FacilityBooking[],
     });
 
@@ -310,6 +316,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                             )}
                         </div>
 
+<<<<<<< Updated upstream
 
                         {/* Add Facility Booking */}
                         <div className="space-y-4">
@@ -342,6 +349,89 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </Select>
                                 </div>
 
+=======
+                        {/* Priority Level Field */}
+                        <div className="space-y-2">
+                            <Label htmlFor="priority_level">Event Priority</Label>
+                            <Select
+                                value={data.priority_level.toString()}
+                                onValueChange={(val) => setData('priority_level', parseInt(val))}
+                            >
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select priority level" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="0">
+                                        <span className="flex items-center gap-2">Normal</span>
+                                    </SelectItem>
+                                    <SelectItem value="1">
+                                        <span className="flex items-center gap-2 text-blue-600">
+                                            <School size={14} /> School Event
+                                        </span>
+                                    </SelectItem>
+                                    <SelectItem value="2">
+                                        <span className="flex items-center gap-2 text-red-600">
+                                            <ShieldAlert size={14} /> Government / High Authority
+                                        </span>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            {data.priority_level > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    ⚠️ High-priority requests will automatically put conflicting lower-priority requests on hold.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Priority Reason - only show if priority > 0 */}
+                        {data.priority_level > 0 && (
+                            <div className="space-y-2">
+                                <Label htmlFor="priority_reason">Priority Reason</Label>
+                                <Input
+                                    id="priority_reason"
+                                    type="text"
+                                    value={data.priority_reason}
+                                    onChange={(e) => setData('priority_reason', e.target.value)}
+                                    placeholder="e.g., Official government visit, University accreditation event"
+                                />
+                                {errors.priority_reason && (
+                                    <p className="text-sm text-destructive">{errors.priority_reason}</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Add Facility Booking */}
+                        <div className="space-y-4">
+                            <div className="space-y-4">
+                                {/* Facility Selection */}
+                                <div className="space-y-4">
+                                    <Label>Select Facility</Label>
+                                    <Select
+                                        value={selectedFacility?.toString() || ''}
+                                        onValueChange={handleFacilityChange}
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Choose a Facility" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {facilities.map((facility) => (
+                                                <SelectItem key={facility.id} value={facility.id.toString()}>
+                                                    <b>
+                                                        {facility.name}
+                                                    </b>
+                                                    <div className="flex items-center gap-1 font-semibold text-muted-foreground">
+                                                        <User />
+                                                        <span className='text-xs '>
+                                                            {facility.capacity && facility.capacity}
+                                                        </span>
+                                                    </div>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+>>>>>>> Stashed changes
 
                                 <Collapsible className='text-sm block lg:hidden' open={openCollapsible} onOpenChange={setCollapsibleState}>
                                     <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-4'>
@@ -351,7 +441,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         </span>
                                     </CollapsibleTrigger>
 
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
                                     {/* // Nice animation from - https://stackoverflow.com/a/78828383
                                     // Posted by Brandon, modified by community. See post 'Timeline' for change history
                                     // Retrieved 2026-02-10, License - CC BY-SA 4.0 */}
@@ -721,4 +814,8 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                 </div>
             )}
         </div>);
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes

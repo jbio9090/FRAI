@@ -108,13 +108,13 @@ function RuleItem({ children, id }: RuleItemProps) {
         setIsEditing(true);
     }
 
-function saveEdit(e) {
+    function saveEdit(e) {
         e.preventDefault();
         console.log("Saving edit for rule:", id, "with value:", editedRule);
 
-        router.put(route('rules.update'), { 
-            id, 
-            rule: editedRule 
+        router.put(route('rules.update'), {
+            id,
+            rule: editedRule
         }, {
             onSuccess: () => {
                 console.log("Update success!");

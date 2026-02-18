@@ -1,6 +1,12 @@
 import { router, Link } from '@inertiajs/react';
+<<<<<<< Updated upstream
 import { ArrowUpRight, Calendar, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+=======
+import { ArrowUpRight, Calendar, Clock, PauseCircle, ShieldAlert, School } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+>>>>>>> Stashed changes
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { usePermission } from '@/hooks/use-permission';
@@ -14,6 +20,10 @@ interface Request {
     title: string;
     description: string;
     status: string;
+    on_hold: boolean;
+    priority_level: number;
+    priority_reason: string | null;
+    held_by_request: { id: number; title: string } | null;
     user: {
         name: string;
         email: string;
@@ -58,8 +68,39 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                             <div className="flex justify-between items-start flex-col gap-6">
                                 <div className="flex justify-around w-full">
                                     <div className='flex flex-col gap-1'>
+<<<<<<< Updated upstream
                                         <h3 className="font-bold">{request.title}</h3>
                                         <p className="mt-2 text-sm">{request.description}</p>
+=======
+                                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                                            <h3 className="font-bold">{request.title}</h3>
+                                            {request.on_hold && (
+                                                <Badge variant="outline" className="text-yellow-600 border-yellow-500 bg-yellow-50 flex items-center gap-1">
+                                                    <PauseCircle size={12} />
+                                                    On Hold
+                                                </Badge>
+                                            )}
+                                            {request.priority_level === 2 && (
+                                                <Badge variant="outline" className="text-red-600 border-red-500 bg-red-50 flex items-center gap-1">
+                                                    <ShieldAlert size={12} />
+                                                    Gov / High Authority
+                                                </Badge>
+                                            )}
+                                            {request.priority_level === 1 && (
+                                                <Badge variant="outline" className="text-blue-600 border-blue-500 bg-blue-50 flex items-center gap-1">
+                                                    <School size={12} />
+                                                    School Event
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <p className="mt-1 text-sm">{request.description}</p>
+                                        {request.on_hold && request.held_by_request && (
+                                            <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-1 mt-1">
+                                                ⏸ Put on hold by: <span className="font-semibold">"{request.held_by_request.title}"</span>
+                                                {request.priority_reason && <span> — {request.priority_reason}</span>}
+                                            </p>
+                                        )}
+>>>>>>> Stashed changes
 
                                         <p className="text-sm mt-4 flex gap-2 items-center">
                                             <Avatar size='sm'>
@@ -170,4 +211,8 @@ function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
             </CollapsibleContent>
         </Collapsible>
     );
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes

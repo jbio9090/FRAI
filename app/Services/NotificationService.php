@@ -6,6 +6,10 @@ use App\Models\Request;
 use App\Models\User;
 use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
+<<<<<<< Updated upstream
+=======
+use App\Notifications\RequestOnHold;
+>>>>>>> Stashed changes
 use Illuminate\Support\Facades\Log;
 
 class NotificationService
@@ -41,4 +45,44 @@ class NotificationService
             Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
+<<<<<<< Updated upstream
+=======
+
+
+    /**
+     * Notify the owner of a request that it has been put on hold,
+     * and notify all admins about the override.
+     */
+    public function notifyOnHold(Request $heldRequest, Request $heldByRequest, string $reason)
+    {
+        try {
+            // Notify the user whose request was put on hold
+            $user = User::findOrFail($heldRequest->user_id);
+            $user->notify(new RequestOnHold(
+                $heldRequest->title,
+                $heldByRequest->title,
+                $reason,
+                route("requests.detail", ["request_id" => $heldRequest->id]),
+                false
+            ));
+        } catch (\Exception $e) {
+            Log::error('On-hold user notification failed: ' . $e->getMessage());
+        }
+
+        try {
+            // Notify all admins
+            foreach (User::role("admin")->get() as $admin) {
+                $admin->notify(new RequestOnHold(
+                    $heldRequest->title,
+                    $heldByRequest->title,
+                    $reason,
+                    route("requests.detail", ["request_id" => $heldRequest->id]),
+                    true
+                ));
+            }
+        } catch (\Exception $e) {
+            Log::error('On-hold admin notification failed: ' . $e->getMessage());
+        }
+    }
+>>>>>>> Stashed changes
 }

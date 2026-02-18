@@ -459,4 +459,8 @@
 /* Also ensure the Sheet overlay is high enough */
 [data-radix-dialog-overlay] {
     z-index: 99 !important;
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> Stashed changes

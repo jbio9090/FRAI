@@ -8,7 +8,13 @@ import {
   FileX,
   BookOpen,
   Box,
+<<<<<<< Updated upstream
   Settings
+=======
+  Settings,
+  Bot,
+  PauseCircle
+>>>>>>> Stashed changes
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -58,6 +64,11 @@ const data = {
       title: "Denied",
       url: "requests.denied",
       icon: FileX
+    },
+    {
+      title: "On Hold",
+      url: "requests.on-hold",
+      icon: PauseCircle
     }
   ]
 }
@@ -121,6 +132,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
+
+          <SidebarMenuItem className="px-4 mt-4">
+            <SidebarGroupLabel>
+              AI Assistant
+            </SidebarGroupLabel>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem key="chatbot" className="px-4">
+            <SidebarMenuButton asChild isActive={checkRoute("chatbot")}>
+              <Link href={route("chatbot")}>
+                <Bot className="h-4 w-4" />
+                <span>Chatbot</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
