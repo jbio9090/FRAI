@@ -22,17 +22,6 @@ class FacilityFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-<<<<<<< Updated upstream
-            'title' => 'required|string|max:255',
-            'description' => 'string',
-            'facility_bookings' => 'required|array|min:1',
-            'facility_bookings.*.facility_id' => 'required|exists:facilities,id',
-            'facility_bookings.*.date' => 'required|date',
-            'facility_bookings.*.time_start' => 'required',
-            'facility_bookings.*.time_end' => 'required',
-            'facility_bookings.*.equipment' => 'array',
-            'facility_bookings.*.equipment.*.equipment_id' => 'required|exists:equipments,id',
-=======
             'title'                                           => 'required|string|max:255',
             'description'                                     => 'nullable|string',
             'priority_level'                                  => 'nullable|integer|in:0,1,2',
@@ -44,7 +33,6 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.time_end'                    => 'required',
             'facility_bookings.*.equipment'                   => 'array',
             'facility_bookings.*.equipment.*.equipment_id'    => 'required|exists:equipments,id',
->>>>>>> Stashed changes
             'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
         ];
     }

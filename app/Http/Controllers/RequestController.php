@@ -53,9 +53,6 @@ class RequestController extends Controller
             'page_title' => "Denied",
         ]);
     }
-<<<<<<< Updated upstream
-
-=======
 
 
     public function onHoldPage()
@@ -69,7 +66,6 @@ class RequestController extends Controller
     }
 
 
->>>>>>> Stashed changes
     // Admin-only: Approve request
     public function approve($id)
     {
@@ -87,14 +83,11 @@ class RequestController extends Controller
         $facilityRequest = FacilityRequest::findOrFail($id);
         $facilityRequest->update(['status' => RequestStatus::DENIED]);
 
-<<<<<<< Updated upstream
-=======
         // If this request was holding others on hold, release them
         foreach ($facilityRequest->heldRequests as $heldRequest) {
             $this->service->releaseFromHold($heldRequest);
         }
 
->>>>>>> Stashed changes
         $this->notification->notifyUser($facilityRequest);
 
         return redirect()->back()->with('success', 'Request rejected successfully');
@@ -117,30 +110,16 @@ class RequestController extends Controller
     }
 
     /**
-<<<<<<< Updated upstream
-     * Store the form request to database
-     * 
-=======
      * Store the form request to database.
      * If the new request has priority > 0, it will put conflicting lower-priority
      * requests on hold automatically.
      *
->>>>>>> Stashed changes
      * @param FacilityFormRequest
      * @return RedirectResponse
      */
     public function store(FacilityFormRequest $request)
     {
         $validated = $request->validated();
-<<<<<<< Updated upstream
-
-        $conflicts = $this->service->checkForConflicts($validated['facility_bookings']);
-
-        if (!empty($conflicts)) {
-            throw ValidationException::withMessages([
-                'facility_bookings' => $conflicts
-            ]);
-=======
         $priorityLevel = $validated['priority_level'] ?? 0;
 
         // For normal-priority requests, check for conflicts as usual
@@ -175,7 +154,6 @@ class RequestController extends Controller
 
                 Log::info("Request #{$conflictingRequest->id} put on hold by high-priority request #{$saved_request->id}");
             }
->>>>>>> Stashed changes
         }
 
         $saved_request = $this->service->create($validated);

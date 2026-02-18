@@ -4,11 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-<<<<<<< Updated upstream
-    "content-hash": "015f7ce470992f5a297afb92e93bf078",
-=======
     "content-hash": "67206741515ec0fda932d63734da4c90",
->>>>>>> Stashed changes
     "packages": [
         {
             "name": "brick/math",
@@ -1129,75 +1125,6 @@
         {
             "name": "laravel-notification-channels/webpush",
             "version": "10.4.0",
-<<<<<<< Updated upstream
-            "source": {
-                "type": "git",
-                "url": "https://github.com/laravel-notification-channels/webpush.git",
-                "reference": "a504bcbdd6258091b1fafdef6ca95b0891a47c9e"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/laravel-notification-channels/webpush/zipball/a504bcbdd6258091b1fafdef6ca95b0891a47c9e",
-                "reference": "a504bcbdd6258091b1fafdef6ca95b0891a47c9e",
-                "shasum": ""
-            },
-            "require": {
-                "illuminate/notifications": "^11.0|^12.0",
-                "illuminate/support": "^11.0|^12.0",
-                "minishlink/web-push": "^10.0",
-                "php": "^8.2"
-            },
-            "require-dev": {
-                "larastan/larastan": "^3.1",
-                "laravel/pint": "^1.25",
-                "mockery/mockery": "^1.0",
-                "orchestra/testbench": "^9.2|^10.0",
-                "phpunit/phpunit": "^10.5|^11.5.3",
-                "rector/rector": "^2.0"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "providers": [
-                        "NotificationChannels\\WebPush\\WebPushServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "NotificationChannels\\WebPush\\": "src"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Cretu Eusebiu",
-                    "email": "me@cretueusebiu.com",
-                    "homepage": "http://cretueusebiu.com",
-                    "role": "Developer"
-                },
-                {
-                    "name": "Joost de Bruijn",
-                    "email": "joost@aqualabs.nl",
-                    "role": "Maintainer"
-                }
-            ],
-            "description": "Web Push Notifications driver for Laravel.",
-            "homepage": "https://github.com/laravel-notification-channels/webpush",
-            "support": {
-                "issues": "https://github.com/laravel-notification-channels/webpush/issues",
-                "source": "https://github.com/laravel-notification-channels/webpush/tree/10.4.0"
-            },
-            "time": "2025-12-19T15:47:27+00:00"
-        },
-        {
-            "name": "laravel/framework",
-            "version": "v12.49.0",
-=======
->>>>>>> Stashed changes
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel-notification-channels/webpush.git",
@@ -3741,18 +3668,6 @@
         },
         {
             "name": "spatie/laravel-permission",
-<<<<<<< Updated upstream
-            "version": "7.0.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/spatie/laravel-permission.git",
-                "reference": "f2a55b4fae0e44ffb1f1411ed3c7573cdd251a59"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/spatie/laravel-permission/zipball/f2a55b4fae0e44ffb1f1411ed3c7573cdd251a59",
-                "reference": "f2a55b4fae0e44ffb1f1411ed3c7573cdd251a59",
-=======
             "version": "7.1.0",
             "source": {
                 "type": "git",
@@ -3763,7 +3678,6 @@
                 "type": "zip",
                 "url": "https://api.github.com/repos/spatie/laravel-permission/zipball/34bf23c9e541a5434e0898c7172fb6647d23889d",
                 "reference": "34bf23c9e541a5434e0898c7172fb6647d23889d",
->>>>>>> Stashed changes
                 "shasum": ""
             },
             "require": {
@@ -3771,11 +3685,7 @@
                 "illuminate/container": "^12.0",
                 "illuminate/contracts": "^12.0",
                 "illuminate/database": "^12.0",
-<<<<<<< Updated upstream
-                "php": "^8.4",
-=======
                 "php": "^8.3",
->>>>>>> Stashed changes
                 "spatie/laravel-package-tools": "^1.0"
             },
             "require-dev": {
@@ -3833,11 +3743,7 @@
             ],
             "support": {
                 "issues": "https://github.com/spatie/laravel-permission/issues",
-<<<<<<< Updated upstream
-                "source": "https://github.com/spatie/laravel-permission/tree/7.0.0"
-=======
                 "source": "https://github.com/spatie/laravel-permission/tree/7.1.0"
->>>>>>> Stashed changes
             },
             "funding": [
                 {
@@ -3845,11 +3751,7 @@
                     "type": "github"
                 }
             ],
-<<<<<<< Updated upstream
-            "time": "2026-02-11T08:43:07+00:00"
-=======
             "time": "2026-02-14T17:17:28+00:00"
->>>>>>> Stashed changes
         },
         {
             "name": "spomky-labs/base64url",

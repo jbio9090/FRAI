@@ -28,12 +28,6 @@ class RequestService
         return $requests;
     }
 
-<<<<<<< Updated upstream
-
-    public function getDetail(int $request_id)
-    {
-        return FacilityRequest::with(["user", "facilities", "equipment", "requestFacilities"])->where("id", $request_id)->firstOrFail();
-=======
     public function getOnHold()
     {
         $user = Auth::user();
@@ -55,7 +49,6 @@ class RequestService
     public function getDetail(int $request_id)
     {
         return FacilityRequest::with(["user", "facilities", "equipment", "requestFacilities", "heldByRequest", "heldRequests"])->where("id", $request_id)->firstOrFail();
->>>>>>> Stashed changes
     }
 
 
@@ -72,12 +65,8 @@ class RequestService
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
                 ->whereHas('request', function ($query) {
-<<<<<<< Updated upstream
-                    $query->where('status', RequestStatus::APPROVED);
-=======
                     $query->where('status', RequestStatus::APPROVED)
                           ->where('on_hold', false); // on-hold approved requests don't block
->>>>>>> Stashed changes
                 })
                 ->get();
 
@@ -105,16 +94,6 @@ class RequestService
         return $conflicts;
     }
 
-<<<<<<< Updated upstream
-
-    public function create(array $validated)
-    {
-        $facilityRequest = FacilityRequest::create([
-            'user_id' => Auth::id(),
-            'title' => $validated['title'],
-            'description' => $validated['description'],
-            'status' => RequestStatus::PENDING,
-=======
     /**
      * Find existing requests (pending or approved) that conflict with the new high-priority request's bookings.
      * Only puts on hold requests that:
@@ -206,24 +185,16 @@ class RequestService
             'status'         => RequestStatus::PENDING,
             'priority_level' => $priorityLevel,
             'priority_reason' => $priorityReason,
->>>>>>> Stashed changes
         ]);
 
         foreach ($validated['facility_bookings'] as $booking) {
             $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
 
             $facilityRequest->requestFacilities()->create([
-<<<<<<< Updated upstream
-                'facility_id' => $booking['facility_id'],
-                'date_requested' => $dateOnly,
-                'time_start' => $booking['time_start'],
-                'time_end' => $booking['time_end'],
-=======
                 'facility_id'    => $booking['facility_id'],
                 'date_requested' => $dateOnly,
                 'time_start'     => $booking['time_start'],
                 'time_end'       => $booking['time_end'],
->>>>>>> Stashed changes
             ]);
 
             if (!empty($booking['equipment'])) {

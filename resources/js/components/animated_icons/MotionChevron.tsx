@@ -18,8 +18,4 @@ export default function MotionChevron({ openCollapsible, size = 16, className = 
         }}
         className={className}
     />)
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes

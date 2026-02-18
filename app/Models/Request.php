@@ -12,11 +12,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Request extends Model
 {
     use HasFactory;
-<<<<<<< Updated upstream
-    
-=======
-
->>>>>>> Stashed changes
     protected $fillable = [
         'user_id',
         'title',

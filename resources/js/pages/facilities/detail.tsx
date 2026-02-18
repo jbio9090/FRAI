@@ -49,8 +49,4 @@ export default function FacilityDetail({ facility, initialEvents }: DetailProps)
 
         </DefaultLayout>
     );
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes

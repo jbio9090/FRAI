@@ -6,10 +6,7 @@ use App\Models\Request;
 use App\Models\User;
 use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
-<<<<<<< Updated upstream
-=======
 use App\Notifications\RequestOnHold;
->>>>>>> Stashed changes
 use Illuminate\Support\Facades\Log;
 
 class NotificationService
@@ -45,8 +42,6 @@ class NotificationService
             Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
-<<<<<<< Updated upstream
-=======
 
 
     /**
@@ -84,5 +79,4 @@ class NotificationService
             Log::error('On-hold admin notification failed: ' . $e->getMessage());
         }
     }
->>>>>>> Stashed changes
 }

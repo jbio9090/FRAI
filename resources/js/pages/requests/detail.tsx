@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-import { Calendar, Clock } from 'lucide-react';
-=======
 import { Calendar, Clock, PauseCircle, ShieldAlert, School } from 'lucide-react';
->>>>>>> Stashed changes
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -58,12 +54,8 @@ interface DetailProps {
 }
 
 export default function RequestDetail({ request }: DetailProps) {
-<<<<<<< Updated upstream
-    let statusColor = "";
-=======
     type BadgeVariant = 'default' | 'outline' | 'destructive' | 'secondary' | null | undefined;
     let statusColor: BadgeVariant = 'outline';
->>>>>>> Stashed changes
 
     function formatTime(time: string): string {
         return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {

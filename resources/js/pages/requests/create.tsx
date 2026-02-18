@@ -1,10 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
-<<<<<<< Updated upstream
-import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
-=======
 import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer, ShieldAlert, School } from "lucide-react";
->>>>>>> Stashed changes
 import { motion } from "motion/react"
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -316,40 +312,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                             )}
                         </div>
 
-<<<<<<< Updated upstream
-
-                        {/* Add Facility Booking */}
-                        <div className="space-y-4">
-                            <div className="space-y-4">
-                                {/* Facility Selection */}
-                                <div className="space-y-4">
-                                    <Label>Select Facility</Label>
-                                    <Select
-                                        value={selectedFacility?.toString() || ''}
-                                        onValueChange={handleFacilityChange}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Choose a Facility" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {facilities.map((facility) => (
-                                                <SelectItem key={facility.id} value={facility.id.toString()}>
-                                                    <b>
-                                                        {facility.name}
-                                                    </b>
-                                                    <div className="flex items-center gap-1 font-semibold text-muted-foreground">
-                                                        <User />
-                                                        <span className='text-xs '>
-                                                            {facility.capacity && facility.capacity}
-                                                        </span>
-                                                    </div>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-=======
                         {/* Priority Level Field */}
                         <div className="space-y-2">
                             <Label htmlFor="priority_level">Event Priority</Label>
@@ -431,7 +393,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </Select>
                                 </div>
 
->>>>>>> Stashed changes
 
                                 <Collapsible className='text-sm block lg:hidden' open={openCollapsible} onOpenChange={setCollapsibleState}>
                                     <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-4'>
@@ -441,10 +402,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         </span>
                                     </CollapsibleTrigger>
 
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
                                     {/* // Nice animation from - https://stackoverflow.com/a/78828383
                                     // Posted by Brandon, modified by community. See post 'Timeline' for change history
                                     // Retrieved 2026-02-10, License - CC BY-SA 4.0 */}
@@ -814,8 +771,4 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                 </div>
             )}
         </div>);
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes

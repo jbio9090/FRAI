@@ -8,13 +8,9 @@ import {
   FileX,
   BookOpen,
   Box,
-<<<<<<< Updated upstream
-  Settings
-=======
   Settings,
   Bot,
   PauseCircle
->>>>>>> Stashed changes
 } from "lucide-react"
 import * as React from "react"
 import {

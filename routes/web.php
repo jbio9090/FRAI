@@ -4,10 +4,7 @@ use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\FacilityController;
-<<<<<<< Updated upstream
-=======
 use App\Http\Controllers\ChatController;
->>>>>>> Stashed changes
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
@@ -59,8 +56,6 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");
 
-<<<<<<< Updated upstream
-=======
     // Chatbot
     Route::get("/chatbot", function () {
         return Inertia::render("chatbot/chatbot");
@@ -76,7 +71,6 @@ Route::middleware("auth")->group(function () {
         Route::post("/create-request", [ChatController::class, "createRequestApi"])->name("api.db.create.request")->middleware(["throttle:10,1"]);
     });
 
->>>>>>> Stashed changes
     Route::prefix("/push")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
         Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");

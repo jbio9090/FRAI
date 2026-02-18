@@ -177,8 +177,4 @@ export default function PushNotifications() {
             )}
         </div>
     );
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes

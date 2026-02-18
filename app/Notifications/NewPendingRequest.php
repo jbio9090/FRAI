@@ -35,16 +35,5 @@ class NewPendingRequest extends Notification implements ShouldQueue
             ->options(['TTL' => 1000])
             ->data(["url" => $this->url])
             ->tag("pending-".$this->request_title . Date::now()->toString());
-<<<<<<< Updated upstream
-        // ->vibrate();
-        // ->data(['id' => $notification->id])
-        // ->badge()
-        // ->dir()
-        // ->image()
-        // ->lang()
-        // ->renotify()
-        // ->requireInteraction()
-=======
->>>>>>> Stashed changes
     }
 }
