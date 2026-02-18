@@ -61,7 +61,7 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                         <h3 className="font-bold">{request.title}</h3>
                                         <p className="mt-2 text-sm">{request.description}</p>
 
-                                        <p className="text-sm mt-4 flex gap-2 items-center">
+                                        <div className="text-sm mt-4 flex gap-2 items-center">
                                             <Avatar size='sm'>
                                                 <AvatarImage
                                                     src='/profile/default.png'
@@ -73,7 +73,7 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                             <p className="text-xs text-muted-foreground">
                                                 Submitted {moment(request.updated_at).fromNow()}
                                             </p>
-                                        </p>
+                                        </div>
                                     </div>
 
                                     <Link href={route("requests.detail", request.id)} className='flex-0 ml-auto mr-0'>
