@@ -63,8 +63,7 @@ const CustomToolbar = (toolbar: ToolbarProps) => {
     };
 
     return (
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 p-2 sticky left-0 z-10 w-full ">
-            {/* Navigation */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 p-2 sticky left-0 w-full">
             <div className="flex items-center gap-1">
                 <Button
                     variant="outline"
@@ -88,12 +87,10 @@ const CustomToolbar = (toolbar: ToolbarProps) => {
                 </Button>
             </div>
 
-            {/* Label */}
             <div className="flex-1 text-center">
                 {label()}
             </div>
 
-            {/* View Selector ARFARFRAFRAF*/}
             <Select value={toolbar.view} onValueChange={handleViewChange}>
                 <SelectTrigger>
                     <SelectValue placeholder="Select view" />
@@ -158,18 +155,6 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
 
     return (
         <div className="h-[42rem] relative">
-            {loading && (
-                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center w-full justify-center z-10 rounded-lg">
-                    <div className="space-y-4 w-full max-w-4xl p-4">
-                        <Skeleton className="h-12 w-full" />
-                        <div className="grid grid-cols-7 gap-2">
-                            {Array.from({ length: 35 }).map((_, i) => (
-                                <Skeleton key={i} className="h-24" />
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
             <Calendar
                 views={['month', 'week', 'day']}
                 localizer={localizer}
@@ -177,7 +162,7 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
                 startAccessor="start"
                 endAccessor="end"
                 onRangeChange={handleRangeChange}
-                className='p-0 md:p-8'
+                className={'p-0 md:p-8 ' + ((loading) ? " [&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50" : "")}
                 components={{
                     toolbar: CustomToolbar,
                 }}
