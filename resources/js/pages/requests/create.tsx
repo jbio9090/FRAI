@@ -1,6 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
 import { motion } from "motion/react"
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"

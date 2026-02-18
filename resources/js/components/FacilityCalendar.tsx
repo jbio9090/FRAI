@@ -13,7 +13,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Skeleton } from '@/components/ui/skeleton'
 
 const localizer = momentLocalizer(moment);
 

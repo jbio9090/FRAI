@@ -63,6 +63,7 @@ export default function PushNotifications() {
                 },
                 onError: (errors) => {
                     setError('Failed to save subscription');
+                    console.log(errors);
                 }
             });
         } catch (err) {
