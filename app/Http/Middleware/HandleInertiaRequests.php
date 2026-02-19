@@ -47,6 +47,7 @@ class HandleInertiaRequests extends Middleware
                 ] : null,
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),
+            "csrfToken" => csrf_token(),
         ]);
     }
 

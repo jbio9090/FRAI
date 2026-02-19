@@ -2,11 +2,13 @@ import { useState, useCallback } from 'react';
 import { Message, ChatRequest, CreateRequestPayload } from '../types';
 import { sendChatMessage } from '../services/chatService';
 import { createRequest } from '../services/requestService';
+import { usePage } from '@inertiajs/react';
 
 /**
  * Custom hook for managing chat API interactions
  */
-export function useChatAPI(csrfToken?: string) {
+export function useChatAPI() {
+    const { csrfToken } = usePage().props;
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 

@@ -3,7 +3,7 @@ import Chatbot from '@/components/chatbot';
 
 export default function ChatbotPage() {
     return (
-        <DefaultLayout noGap>
+        <DefaultLayout>
             <Chatbot />
         </DefaultLayout>
     );
