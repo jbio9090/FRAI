@@ -54,7 +54,7 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
 
                 <div className="gap-4 flex flex-col lg:grid grid-cols-[1fr_1fr]">
                     {requests.map((request) => (
-                        <div key={request.id} className="border rounded-lg p-4 h-content min-h-0">
+                        <div key={request.id} className="border rounded-lg p-8 h-content min-h-0">
                             <div className="flex justify-between items-start flex-col gap-6">
                                 <div className="flex justify-around w-full">
                                     <div className='flex flex-col gap-1'>
@@ -149,7 +149,11 @@ function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
 
                     return (
                         <div className='flex flex-col items-center text-sm max-w-40 text-foreground mt-4' key={rf.date_requested + rf.time_start}>
-                            <span className='font-semibold w-full'>{facility?.name}</span>
+                            <Link href={route("facility.detail", [rf.facility_id])} className='mr-auto ml-0 hover:underline'>
+                                <span className='font-semibold'>
+                                    {facility?.name}
+                                </span>
+                            </Link>
                             <div className="flex items-center flex-wrap text-foreground/70 font-medium">
                                 <div className="flex gap-1 items-center">
                                     <Calendar size={12} />
