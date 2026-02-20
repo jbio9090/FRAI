@@ -1,7 +1,5 @@
 import PushNotifications from '@/components/notification/pushNotification';
-import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
-import { usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import {
     Select,
@@ -38,7 +36,7 @@ export default function Settings() {
         <DefaultLayout>
             <div className="flex flex-col mx-auto max-w-2xl gap-8 w-full">
                 <h1 className='text-lg font-semibold mb-2'>Settings</h1>
-                
+
                 <PushNotifications />
 
                 <div className="flex justify-between items-center">

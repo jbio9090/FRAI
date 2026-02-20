@@ -15,7 +15,6 @@ import {
     SidebarProvider,
     SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { registerServiceWorker } from '@/service_worker/registerServiceWorker';
 
 interface DashboardProps {
     children: React.ReactNode;
