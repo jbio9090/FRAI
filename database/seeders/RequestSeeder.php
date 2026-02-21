@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use App\Models\User;
 use App\Models\Facility;
+use App\RequestStatus;
 
 class RequestSeeder extends Seeder
 {
@@ -25,7 +26,7 @@ class RequestSeeder extends Seeder
                 'user_id' => $user->id,
                 'title' => 'Student Organization General Assembly',
                 'description' => 'General assembly meeting for all members',
-                'status' => 'pending',
+                'status' => RequestStatus::PENDING->value,
                 'created_at' => now()->subDays(5),
                 'updated_at' => now()->subDays(5),
                 'comment' => null,
@@ -34,7 +35,7 @@ class RequestSeeder extends Seeder
                 'user_id' => $user->id,
                 'title' => 'Department Seminar',
                 'description' => 'Guest speaker seminar for CEIT students',
-                'status' => 'approved',
+                'status' => RequestStatus::APPROVED->value,
                 'created_at' => now()->subDays(10),
                 'updated_at' => now()->subDays(8),
                 'comment' => 'Approved request',
@@ -43,7 +44,7 @@ class RequestSeeder extends Seeder
                 'user_id' => $admin->id,
                 'title' => 'University-wide Orientation',
                 'description' => 'Orientation event for incoming students',
-                'status' => 'approved',
+                'status' => RequestStatus::APPROVED->value,
                 'created_at' => now()->subDays(15),
                 'updated_at' => now()->subDays(12),
                 'comment' => 'Approved Request',
@@ -52,7 +53,7 @@ class RequestSeeder extends Seeder
                 'user_id' => $user->id,
                 'title' => 'End-of-Semester Party',
                 'description' => 'Celebration event for graduating students',
-                'status' => 'rejected',
+                'status' => RequestStatus::DENIED->value,
                 'created_at' => now()->subDays(7),
                 'updated_at' => now()->subDays(6),
                 'comment' => 'Day is unavailable due to upcoming storm',

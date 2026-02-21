@@ -12,13 +12,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Request extends Model
 {
     use HasFactory;
-    
+
     protected $fillable = [
         'user_id',
         'title',
         'description',
         'status',
         'comment',
+        'recommended_action',
+        'recommended_action_reason',
     ];
 
     protected $casts = [

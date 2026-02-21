@@ -6,8 +6,8 @@ import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
-import { useState } from 'react';
-import { Request, RequestsPageProps } from '@/types/requests';
+import { Request, RequestsPageProps } from '@/types/request';
+import { formatTime } from '@/lib/utils';
 
 export default function PendingRequests({ requests, page_title }: RequestsPageProps) {
     const { hasPermission } = usePermission();
@@ -58,10 +58,10 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                 {(hasPermission('approve requests') && page_title == "Pending") && (
                                     <div className="flex items-center w-full">
                                         <div className="flex flex-col">
-                                            <span className='text-xs text-muted-foreground'>Recommendation</span>
+                                            <span className='text-xs font-semibold text-muted-foreground'>Recommendation</span>
                                             <span className='font-bold'>{request.recommended_action}</span>
                                         </div>
-                                     
+
                                         <div className="flex justify-end gap-2 w-content ml-auto">
                                             <Button
                                                 onClick={() => {
@@ -98,15 +98,7 @@ interface CollapsibleProps {
 }
 
 function RequestDetails({ request }: CollapsibleProps) {
-    const [openCollapsible, setCollapsibleState] = useState(false);
-
-    const formatTime = (time: string) => {
-        const [hours, minutes] = time.split(':');
-        const h = parseInt(hours);
-        const ampm = h >= 12 ? 'pm' : 'am';
-        const hour12 = h % 12 || 12;
-        return `${hour12}:${minutes}${ampm}`;
-    };
+    const isPending: boolean = (request.status === "Pending") ? true : false;
 
     return (
         <Tabs defaultValue="facilities" className='w-full'>
@@ -120,6 +112,12 @@ function RequestDetails({ request }: CollapsibleProps) {
                     <MessageCircleWarning size={16} />
                     <span>Comment</span>
                 </TabsTrigger>
+                {isPending && (
+                    <TabsTrigger value='recommend'>
+                        <MessageCircleWarning size={16} />
+                        <span>Recommendation</span>
+                    </TabsTrigger>
+                )}
             </TabsList>
             <TabsContent value="facilities" className='flex flex-wrap gap-2 md:grid grid-cols-[1fr_1fr] w-auto'>
                 {request.request_facilities.map((rf) => {
@@ -162,6 +160,12 @@ function RequestDetails({ request }: CollapsibleProps) {
                 )}
 
             </TabsContent>
+            {(isPending) && (<TabsContent value='recommend'>
+                <p className='text-sm mt-4'>
+                    {request.recommended_action}
+                </p>
+            </TabsContent>)}
+
         </Tabs>
     );
 }

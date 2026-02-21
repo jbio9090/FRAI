@@ -4,8 +4,8 @@ namespace App;
 
 enum RequestStatus: string
 {
-    case PENDING = 'pending';
-    case APPROVED = 'approved';
-    case DENIED = 'denied';
-    case CONDITIONALLY_APPROVED = 'conditionally_approved';
+    case PENDING = 'Pending';
+    case APPROVED = 'Approved';
+    case DENIED = 'Denied';
+    case CONDITIONALLY_APPROVED = 'Conditionally Approved';
 }

@@ -26,23 +26,8 @@ import { Textarea } from "@/components/ui/textarea";
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
 import MotionChevron from '@/components/animated_icons/MotionChevron';
+import { Facility } from '@/types/facility';
 
-interface Equipment {
-    id: number;
-    name: string;
-    description?: string;
-    quantity: number;
-    facility_id: number;
-}
-
-interface Facility {
-    id: number;
-    name: string;
-    description?: string;
-    capacity: number;
-    building: string;
-    equipments?: Equipment[];
-}
 
 interface FacilityBooking {
     facility_id: number;

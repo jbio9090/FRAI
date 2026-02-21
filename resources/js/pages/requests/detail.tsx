@@ -61,14 +61,17 @@ export default function RequestDetail({ request }: DetailProps) {
     }
 
     switch (request.status) {
-        case 'approved':
+        case 'Approved':
             statusColor = "default";
             break;
-        case 'pending':
+        case 'Pending':
             statusColor = "outline";
             break;
-        case 'denied':
+        case 'Denied':
             statusColor = "destructive";
+            break;
+        case 'Conditionally Approved':
+            statusColor = "default";
             break;
     }
 
@@ -101,9 +104,9 @@ export default function RequestDetail({ request }: DetailProps) {
                                 <CardHeader>
                                     <CardTitle>{facility.name}</CardTitle>
                                     <CardDescription className='flex items-center text-sm gap-2'>
-                                        <Calendar size={16}/>
+                                        <Calendar size={16} />
                                         <span className='font-medium'>{date}</span>
-                                        <Clock className='ml-4' size={16}/>
+                                        <Clock className='ml-4' size={16} />
                                         <span className='font-medium'>
                                             {formatTime(facility.pivot.time_start)} to {formatTime(facility.pivot.time_end)}
                                         </span>
