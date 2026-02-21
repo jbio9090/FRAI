@@ -1,48 +1,13 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
 import { useState } from 'react';
-import MotionChevron from '@/components/animated_icons/MotionChevron';
-
-interface Request {
-    id: number;
-    title: string;
-    description: string;
-    status: string;
-    user: {
-        name: string;
-        email: string;
-    };
-    request_facilities: RequestFacility[];
-    facilities: Facility[];
-    created_at: string;
-    updated_at: string;
-}
-
-interface RequestFacility {
-    facility_id: number;
-    id: number,
-    time_end: string,
-    time_start: string,
-    date_requested: string;
-}
-
-interface Facility {
-    id: number;
-    name: string;
-    building: string;
-    capacity: number
-}
-
-interface RequestsPageProps {
-    requests: Request[];
-    page_title: string;
-}
+import { Request, RequestsPageProps } from '@/types/requests';
 
 export default function PendingRequests({ requests, page_title }: RequestsPageProps) {
     const { hasPermission } = usePermission();
@@ -59,7 +24,7 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                 <div className="flex justify-around w-full">
                                     <div className='flex flex-col gap-1'>
                                         <h3 className="font-bold">{request.title}</h3>
-                                        <p className="mt-2 text-sm">{request.description}</p>
+                                        <p className="mt-2 text-foreground/70 text-sm">{request.description}</p>
 
                                         <div className="text-sm mt-4 flex gap-2 items-center">
                                             <Avatar size='sm'>
@@ -86,30 +51,38 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                     </Link>
                                 </div>
 
-                                <RequestedFaciltiiesCollapsible
+                                <RequestDetails
                                     request={request}
                                 />
 
                                 {(hasPermission('approve requests') && page_title == "Pending") && (
-                                    <div className="flex justify-end gap-2 w-content ml-auto">
-                                        <Button
-                                            onClick={() => {
-                                                router.post(route('requests.approve', request.id));
-                                            }}
-                                            variant="default"
-                                        >
-                                            Approve
-                                        </Button>
-                                        <Button
-                                            onClick={() => {
-                                                router.post(route('requests.reject', request.id));
-                                            }}
-                                            variant="outline"
-                                            className='hover:border-destructive hover:text-destructive hover:bg-destructive/4'
-                                        >
-                                            Reject
-                                        </Button>
+                                    <div className="flex items-center w-full">
+                                        <div className="flex flex-col">
+                                            <span className='text-xs text-muted-foreground'>Recommendation</span>
+                                            <span className='font-bold'>{request.recommended_action}</span>
+                                        </div>
+                                     
+                                        <div className="flex justify-end gap-2 w-content ml-auto">
+                                            <Button
+                                                onClick={() => {
+                                                    router.post(route('requests.approve', request.id));
+                                                }}
+                                                variant="default"
+                                            >
+                                                Approve
+                                            </Button>
+                                            <Button
+                                                onClick={() => {
+                                                    router.post(route('requests.reject', request.id));
+                                                }}
+                                                variant="outline"
+                                                className='hover:border-destructive hover:text-destructive hover:bg-destructive/4'
+                                            >
+                                                Reject
+                                            </Button>
+                                        </div>
                                     </div>
+
                                 )}
                             </div>
                         </div>
@@ -124,7 +97,7 @@ interface CollapsibleProps {
     request: Request;
 }
 
-function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
+function RequestDetails({ request }: CollapsibleProps) {
     const [openCollapsible, setCollapsibleState] = useState(false);
 
     const formatTime = (time: string) => {
@@ -136,14 +109,19 @@ function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
     };
 
     return (
-        <Collapsible className='w-full' open={openCollapsible} onOpenChange={setCollapsibleState}>
-            <CollapsibleTrigger className='text-sm text-muted-foreground cursor-pointer flex items-center gap-1 hover:text-foreground w-full'>
-                <Calendar size={16} />
-                <span>Facilities Requested</span>
-                <span className='text-xs font-bold bg-muted-foreground text-background rounded-full w-4 h-4 ml-1'>{request.facilities.length}</span>
-                <MotionChevron openCollapsible={openCollapsible} className='mr-0 ml-auto' />
-            </CollapsibleTrigger>
-            <CollapsibleContent className='flex flex-wrap gap-2 md:grid grid-cols-[1fr_1fr] m-auto'>
+        <Tabs defaultValue="facilities" className='w-full'>
+            <TabsList className="w-full" variant={"line"}>
+                <TabsTrigger value="facilities">
+                    <Calendar size={16} />
+                    <span>Facilities Requested</span>
+                    <span className='font-bold text-xs bg-muted-foreground text-background rounded-full w-4 h-4 ml-1'>{request.facilities.length}</span>
+                </TabsTrigger>
+                <TabsTrigger value='comment'>
+                    <MessageCircleWarning size={16} />
+                    <span>Comment</span>
+                </TabsTrigger>
+            </TabsList>
+            <TabsContent value="facilities" className='flex flex-wrap gap-2 md:grid grid-cols-[1fr_1fr] w-auto'>
                 {request.request_facilities.map((rf) => {
                     const facility = request.facilities.find(f => f.id === rf.facility_id);
 
@@ -171,7 +149,19 @@ function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
                         </div>
                     );
                 })}
-            </CollapsibleContent>
-        </Collapsible>
+            </TabsContent>
+            <TabsContent value='comment'>
+                {(request.comment) ? (
+                    <p className='text-sm'>
+                        {request.comment}
+                    </p>
+                ) : (
+                    <p className='text-muted-foreground text-sm w-full p-8 text-center'>
+                        No comment from admin
+                    </p>
+                )}
+
+            </TabsContent>
+        </Tabs>
     );
 }

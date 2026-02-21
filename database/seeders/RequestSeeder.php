@@ -28,6 +28,7 @@ class RequestSeeder extends Seeder
                 'status' => 'pending',
                 'created_at' => now()->subDays(5),
                 'updated_at' => now()->subDays(5),
+                'comment' => null,
             ],
             [
                 'user_id' => $user->id,
@@ -36,6 +37,7 @@ class RequestSeeder extends Seeder
                 'status' => 'approved',
                 'created_at' => now()->subDays(10),
                 'updated_at' => now()->subDays(8),
+                'comment' => 'Approved request',
             ],
             [
                 'user_id' => $admin->id,
@@ -44,6 +46,7 @@ class RequestSeeder extends Seeder
                 'status' => 'approved',
                 'created_at' => now()->subDays(15),
                 'updated_at' => now()->subDays(12),
+                'comment' => 'Approved Request',
             ],
             [
                 'user_id' => $user->id,
@@ -52,6 +55,7 @@ class RequestSeeder extends Seeder
                 'status' => 'rejected',
                 'created_at' => now()->subDays(7),
                 'updated_at' => now()->subDays(6),
+                'comment' => 'Day is unavailable due to upcoming storm',
             ],
         ];
 

@@ -7,4 +7,5 @@ enum RequestStatus: string
     case PENDING = 'pending';
     case APPROVED = 'approved';
     case DENIED = 'denied';
+    case CONDITIONALLY_APPROVED = 'conditionally_approved';
 }

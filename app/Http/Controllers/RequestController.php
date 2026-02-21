@@ -58,7 +58,7 @@ class RequestController extends Controller
     public function approve($id)
     {
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::APPROVED]);
+        $facilityRequest->update(['status' => RequestStatus::APPROVED, "comment" => "Your request has been approved"]);
 
         $this->notification->notifyUser($facilityRequest);
 
@@ -69,7 +69,7 @@ class RequestController extends Controller
     public function reject($id)
     {
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::DENIED]);
+        $facilityRequest->update(['status' => RequestStatus::DENIED,  "comment" => "Your request has been denied"]);
 
         $this->notification->notifyUser($facilityRequest);
 

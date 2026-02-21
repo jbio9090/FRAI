@@ -18,10 +18,12 @@ class Request extends Model
         'title',
         'description',
         'status',
+        'comment',
     ];
 
     protected $casts = [
-        'status' => RequestStatus::class
+        'status' => RequestStatus::class,
+        'recommended_action' => RequestStatus::class,
     ];
 
     public function user()
