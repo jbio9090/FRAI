@@ -100,9 +100,6 @@ interface CollapsibleProps {
 function RequestDetails({ request }: CollapsibleProps) {
     const isPending: boolean = (request.status === "Pending") ? true : false;
 
-    console.log(request);
-    
-
     return (
         <Tabs defaultValue="facilities" className='w-full'>
             <TabsList className="w-full" variant={"line"}>

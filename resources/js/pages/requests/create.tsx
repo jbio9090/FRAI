@@ -95,9 +95,9 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             const data = await response.json();
             setFacilitySchedule(data);
 
-            // Check for conflicts after loading schedule
             if (currentTimeStart && currentTimeEnd) {
-                setHasTimeConflict(checkTimeConflict(currentTimeStart, currentTimeEnd));
+                // console.log(checkTimeConflict(currentTimeStart, currentTimeEnd))
+                setHasTimeConflict(checkTimeConflictWithData(data, currentTimeStart, currentTimeEnd));
             }
         } catch (error) {
             console.error('Failed to load schedule:', error);
@@ -188,7 +188,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             time_start: currentTimeStart,
             time_end: currentTimeEnd,
             equipment: selectedEquipment,
-            conflicts: getTimeConflicts(currentTimeStart, currentTimeEnd),
+            conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
         };
 
         // console.log(newBooking);
@@ -207,35 +207,32 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         setHasTimeConflict(false);
     }
 
-    function checkTimeConflict(startTime: string, endTime: string): boolean {
-        if (!facilitySchedule || !facilitySchedule.bookings.length) {
-            return false;
-        }
+    function checkTimeConflictWithData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): boolean {
+        if (!schedule || !schedule.bookings.length) return false;
 
         const start = new Date(`2000-01-01T${startTime}`);
         const end = new Date(`2000-01-01T${endTime}`);
 
-        return facilitySchedule.bookings.some(booking => {
+        return schedule.bookings.some(booking => {
             const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
             const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
-
-            // Check if times overlap
-            return (start < bookingEnd && end > bookingStart);
+            return start < bookingEnd && end > bookingStart;
         });
     }
 
-    function getTimeConflicts(startTime: string, endTime: string): BookingSchedule[] {
-        if (!facilitySchedule || !facilitySchedule.bookings.length) {
-            return [];
-        }
+    function checkTimeConflict(startTime: string, endTime: string): boolean {
+        return checkTimeConflictWithData(facilitySchedule, startTime, endTime);
+    }
+
+    function getTimeConflictsFromData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): BookingSchedule[] {
+        if (!schedule || !schedule.bookings.length) return [];
 
         const start = new Date(`2000-01-01T${startTime}`);
         const end = new Date(`2000-01-01T${endTime}`);
 
-        return facilitySchedule.bookings.filter(booking => {
+        return schedule.bookings.filter(booking => {
             const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
             const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
-
             return start < bookingEnd && end > bookingStart;
         });
     }
