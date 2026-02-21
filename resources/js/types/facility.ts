@@ -1,4 +1,4 @@
-import { Equipment } from "@/pages/requests/equipment";
+import { Equipment } from "@/types/equipment";
 
 export interface Facility {
     id: number;

@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -100,12 +100,15 @@ interface CollapsibleProps {
 function RequestDetails({ request }: CollapsibleProps) {
     const isPending: boolean = (request.status === "Pending") ? true : false;
 
+    console.log(request);
+    
+
     return (
         <Tabs defaultValue="facilities" className='w-full'>
             <TabsList className="w-full" variant={"line"}>
                 <TabsTrigger value="facilities">
                     <Calendar size={16} />
-                    <span>Facilities Requested</span>
+                    <span>Facilities</span>
                     <span className='font-bold text-xs bg-muted-foreground text-background rounded-full w-4 h-4 ml-1'>{request.facilities.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value='comment'>
@@ -114,7 +117,7 @@ function RequestDetails({ request }: CollapsibleProps) {
                 </TabsTrigger>
                 {isPending && (
                     <TabsTrigger value='recommend'>
-                        <MessageCircleWarning size={16} />
+                        <ThumbsUp size={16} />
                         <span>Recommendation</span>
                     </TabsTrigger>
                 )}
@@ -161,8 +164,9 @@ function RequestDetails({ request }: CollapsibleProps) {
 
             </TabsContent>
             {(isPending) && (<TabsContent value='recommend'>
-                <p className='text-sm mt-4'>
-                    {request.recommended_action}
+                <p className='font-bold mt-4'>{request.recommended_action}</p>
+                <p className='text-sm'>
+                    {request.recommended_action_reason}
                 </p>
             </TabsContent>)}
 

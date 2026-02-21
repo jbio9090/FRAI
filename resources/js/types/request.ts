@@ -5,6 +5,7 @@ export interface Request {
     status: string;
     comment: string;
     recommended_action: string;
+    recommended_action_reason: string;
     user: {
         name: string;
         email: string;

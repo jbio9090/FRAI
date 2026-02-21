@@ -10,24 +10,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea";
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
 import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { Facility } from '@/types/facility';
-
+import { Equipment } from '@/types/equipment';
 
 interface FacilityBooking {
     facility_id: number;
@@ -36,6 +26,7 @@ interface FacilityBooking {
     time_start: string;
     time_end: string;
     equipment: EquipmentRequest[];
+    conflicts: BookingSchedule[];
 }
 
 interface EquipmentRequest {
@@ -119,7 +110,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     function handleFacilityChange(value: string) {
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
-        setSelectedEquipment([]); // Reset equipment when facility changes
+        setSelectedEquipment([]);
 
         // Load schedule if date is already selected
         if (currentDate) {
@@ -197,7 +188,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             time_start: currentTimeStart,
             time_end: currentTimeEnd,
             equipment: selectedEquipment,
+            conflicts: getTimeConflicts(currentTimeStart, currentTimeEnd),
         };
+
+        // console.log(newBooking);
 
         const updatedBookings = [...facilityBookings, newBooking];
         setFacilityBookings(updatedBookings);
@@ -210,7 +204,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         setCurrentTimeEnd('');
         setSelectedEquipment([]);
         setFacilitySchedule(null);
-        setHasTimeConflict(false); // Reset conflict state
+        setHasTimeConflict(false);
     }
 
     function checkTimeConflict(startTime: string, endTime: string): boolean {
@@ -227,6 +221,22 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
             // Check if times overlap
             return (start < bookingEnd && end > bookingStart);
+        });
+    }
+
+    function getTimeConflicts(startTime: string, endTime: string): BookingSchedule[] {
+        if (!facilitySchedule || !facilitySchedule.bookings.length) {
+            return [];
+        }
+
+        const start = new Date(`2000-01-01T${startTime}`);
+        const end = new Date(`2000-01-01T${endTime}`);
+
+        return facilitySchedule.bookings.filter(booking => {
+            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
+            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+
+            return start < bookingEnd && end > bookingStart;
         });
     }
 
@@ -376,7 +386,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             )}
                                         </div>
 
-                                        <div className="border rounded-md p-3 space-y-3 max-h-48 overflow-y-auto">
+                                        <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
                                             {availableEquipment.map((equipment) => {
                                                 const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
                                                 return (
@@ -462,7 +472,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             onChange={handleTimeStartChange}
                                             min={"7:00"}
                                             max={"20:00"}
-                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500", "text-sm")}
+                                            className={"text-sm"}
                                         />
                                     </div>
 
@@ -476,7 +486,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             onChange={handleTimeEndChange}
                                             min={"7:00"}
                                             max={"20:00"}
-                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500", "text-sm")}
+                                            className={"text-sm"}
                                         />
                                     </div>
                                 </div>
@@ -523,6 +533,16 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                                 {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
                                                             </span>
                                                         </div>
+
+                                                        {(booking.conflicts.length > 0) && booking.conflicts.map((conflict) => (
+                                                            <Alert variant="destructive" className="my-4 border-destructive bg-destructive/4">
+                                                                <AlertCircleIcon />
+                                                                <AlertTitle>Time Conflict Detected</AlertTitle>
+                                                                <AlertDescription>
+                                                                    Your selected time overlaps with {conflict.request_title}, which is during {formatTime(conflict.time_start)}-{formatTime(conflict.time_end)}
+                                                                </AlertDescription>
+                                                            </Alert>
+                                                        ))}
 
                                                         {/* Show selected equipment */}
                                                         {booking.equipment.length > 0 && (
@@ -596,7 +616,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                     formatTime={formatTime}
                     isForSidebar={true}
                 />
-
 
             </div>
         </DefaultLayout>

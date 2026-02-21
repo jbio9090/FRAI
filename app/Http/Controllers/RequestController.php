@@ -104,13 +104,11 @@ class RequestController extends Controller
 
         $conflicts = $this->service->checkForConflicts($validated['facility_bookings']);
 
-        if (!empty($conflicts)) {
-            throw ValidationException::withMessages([
-                'facility_bookings' => $conflicts
-            ]);
-        }
-
         $saved_request = $this->service->create($validated);
+
+        if (!empty($conflicts)) {
+            $saved_request->update(["recommended_action" => RequestStatus::DENIED, "recommended_action_reason" => "Time conflict with events"]);
+        }
 
         $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
 
