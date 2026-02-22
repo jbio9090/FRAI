@@ -1,6 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus } from "lucide-react";
 import { motion } from "motion/react"
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -10,7 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Field } from '@/components/ui/field';
 import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea";
@@ -372,7 +371,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             <div className="flex justify-around items-end">
                                                 <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
                                                 {(selectedEquipment.length < availableEquipment.length) && (
-                                                    <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment}>
+                                                    <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment} className='text-muted-foreground hover:text-foreground'>
                                                         <SquareMousePointer />
                                                         <span className="text-sm">
                                                             Select All
@@ -380,7 +379,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                     </Button>
                                                 )}
                                                 {(selectedEquipment.length > 0) && (
-                                                    <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection}>
+                                                    <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection} className='text-muted-foreground hover:text-foreground'>
                                                         <X />
                                                         <span className="text-sm">
                                                             Clear All
@@ -436,9 +435,17 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         </div>
 
                                         <Collapsible>
-                                            <CollapsibleTrigger>Add external equipment</CollapsibleTrigger>
+                                            <CollapsibleTrigger >
+
+                                                <div className='rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-muted-foreground/20 p-2 cursor-pointer flex items-center gap-1'>
+                                                    <Plus size={16} />
+                                                    <span>
+                                                        Add external equipment
+                                                    </span>
+                                                </div>
+                                            </CollapsibleTrigger>
                                             <CollapsibleContent>
-                                                <div className="mt-3 space-y-2">
+                                                <div className="mt-3 space-y-4">
                                                     <Label htmlFor="external_equipment">External Equipment</Label>
                                                     <Textarea
                                                         id="external_equipment"
@@ -548,7 +555,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                             <span className='mr-4'>
                                                                 {format(booking.date, "PPP")}
                                                             </span>
-                                                            <Clock size={16} />
+                                                            <Clock className="text-muted-foreground" size={16} />
                                                             <span>
                                                                 {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
                                                             </span>

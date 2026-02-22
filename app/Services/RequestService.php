@@ -7,6 +7,7 @@ use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\RequestStatus;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 
 class RequestService
@@ -112,10 +113,28 @@ class RequestService
 
     public function recommendAction($validated, $saved_request)
     {
+
+        $externalEquipment = false;
+        $recommended_action = null;
+        $recommended_action_reason = null;
+
         $conflicts = $this->checkForConflicts($validated['facility_bookings']);
 
-        if (!empty($conflicts)) {
-            $saved_request->update(["recommended_action" => RequestStatus::DENIED, "recommended_action_reason" => "Time conflict with events"]);
+        foreach ($validated['facility_bookings'] as $booking) {
+            if (!empty($booking['external_equipment'])) {
+                $externalEquipment = true;
+                break;
+            }
         }
+
+        if (!empty($conflicts)) {
+            $recommended_action = RequestStatus::DENIED;
+            $recommended_action_reason = "Time conflict with events";
+        } else if ($externalEquipment) {
+            $recommended_action = RequestStatus::CONDITIONALLY_APPROVED;
+            $recommended_action_reason = "Approved request along with the external equipment";
+        }
+        
+        $saved_request->update(["recommended_action" => $recommended_action, "recommended_action_reason" => $recommended_action_reason]);
     }
 }
