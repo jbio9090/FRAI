@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\FacilityFormRequest;
+use Illuminate\Http\Request;
 use App\Models\Request as FacilityRequest;
 use Inertia\Inertia;
 use Illuminate\Validation\ValidationException;
@@ -55,10 +56,11 @@ class RequestController extends Controller
     }
 
     // Admin-only: Approve request
-    public function approve($id)
+    public function approve(Request $request, $id)
     {
+        $comment = $request->input("comment", "Your request has been approved");
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::APPROVED, "comment" => "Your request has been approved"]);
+        $facilityRequest->update(['status' => RequestStatus::APPROVED, "comment" => $comment]);
 
         $this->notification->notifyUser($facilityRequest);
 
@@ -66,10 +68,11 @@ class RequestController extends Controller
     }
 
     // Admin-only: Reject request
-    public function reject($id)
+    public function reject(Request $request, $id)
     {
+        $comment = $request->input("comment", "Your request has been approved");
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::DENIED,  "comment" => "Your request has been denied"]);
+        $facilityRequest->update(['status' => RequestStatus::DENIED,  "comment" => $comment]);
 
         $this->notification->notifyUser($facilityRequest);
 
