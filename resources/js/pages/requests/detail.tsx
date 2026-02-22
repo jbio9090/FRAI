@@ -8,6 +8,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import DefaultLayout from '@/layout.tsx/default.';
+import { RequestFacility } from '@/types/request';
 
 interface Facility {
     id: number;
@@ -42,6 +43,7 @@ interface Request {
     created_at: string;
     facilities: Facility[];
     equipment: Equipment[];
+    request_facilities: RequestFacility[],
 }
 
 interface DetailProps {
@@ -96,6 +98,12 @@ export default function RequestDetail({ request }: DetailProps) {
                         const facilityEquipment = request.equipment.filter(
                             (eq) => eq.facility_id === facility.id
                         );
+                        const facilityRequest = request.request_facilities.find(
+                            (rf) => rf.facility_id === facility.id &&
+                                facility.pivot.date_requested === rf.date_requested &&
+                                facility.pivot.time_start === rf.time_start &&
+                                facility.pivot.time_end === rf.time_end
+                        )
 
                         const date = new Date(facility.pivot.date_requested).toLocaleDateString();
 
@@ -124,6 +132,16 @@ export default function RequestDetail({ request }: DetailProps) {
                                         ))}
                                     </CardDescription>
                                 </CardContent>
+
+                                {facilityRequest?.external_equipment && (
+                                    <CardContent>
+                                        {(facilityEquipment.length > 0) && (<span className="font-semibold text-muted-foreground">External Equipments</span>)}
+                                        <CardDescription className='space-y-2'>
+                                            {facilityRequest.external_equipment}
+                                        </CardDescription>
+                                    </CardContent>
+                                )}
+
                             </Card>
                         );
                     })}

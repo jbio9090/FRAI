@@ -7,7 +7,7 @@ import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
 import { Request, RequestsPageProps } from '@/types/request';
-import { formatTime } from '@/lib/utils';
+import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 
 export default function PendingRequests({ requests, page_title }: RequestsPageProps) {
     const { hasPermission } = usePermission();
@@ -17,10 +17,10 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-2xl font-bold mb-6">{page_title} Requests</h1>
 
-                <div className="gap-4 flex flex-col lg:grid grid-cols-[1fr_1fr]">
+                <div className="gap-4 flex flex-col xl:grid grid-cols-[1fr_1fr]">
                     {requests.map((request) => (
-                        <div key={request.id} className="border rounded-lg p-8 h-content min-h-0">
-                            <div className="flex justify-between items-start flex-col gap-6">
+                        <div key={request.id} className="border rounded-lg p-8 h-content min-h-0 mx-auto w-full">
+                            <div className="flex justify-between items-start w-full flex-col gap-6">
                                 <div className="flex justify-around w-full">
                                     <div className='flex flex-col gap-1'>
                                         <h3 className="font-bold">{request.title}</h3>
@@ -59,7 +59,9 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                     <div className="flex items-center w-full">
                                         <div className="flex flex-col">
                                             <span className='text-xs font-semibold text-muted-foreground'>Recommendation</span>
-                                            <span className='font-bold'>{request.recommended_action}</span>
+                                            <span className={cn('font-black ', request.recommended_action === "Denied" && " text-destructive")}>
+                                                {recommendedActionToPresentTense(request.recommended_action)}
+                                            </span>
                                         </div>
 
                                         <div className="flex justify-end gap-2 w-content ml-auto">
@@ -78,7 +80,7 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
                                                 variant="outline"
                                                 className='hover:border-destructive hover:text-destructive hover:bg-destructive/4'
                                             >
-                                                Reject
+                                                Deny
                                             </Button>
                                         </div>
                                     </div>
@@ -106,7 +108,7 @@ function RequestDetails({ request }: CollapsibleProps) {
                 <TabsTrigger value="facilities">
                     <Calendar size={16} />
                     <span>Facilities</span>
-                    <span className='font-bold text-xs bg-muted-foreground text-background rounded-full w-4 h-4 ml-1'>{request.facilities.length}</span>
+                    <span className='font-bold text-xs bg-muted-foreground text-background rounded-full w-4 h-4'>{request.facilities.length}</span>
                 </TabsTrigger>
                 <TabsTrigger value='comment'>
                     <MessageCircleWarning size={16} />

@@ -102,13 +102,9 @@ class RequestController extends Controller
     {
         $validated = $request->validated();
 
-        $conflicts = $this->service->checkForConflicts($validated['facility_bookings']);
-
         $saved_request = $this->service->create($validated);
 
-        if (!empty($conflicts)) {
-            $saved_request->update(["recommended_action" => RequestStatus::DENIED, "recommended_action_reason" => "Time conflict with events"]);
-        }
+        $this->service->recommendAction($validated, $saved_request);
 
         $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
 

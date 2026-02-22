@@ -3,124 +3,126 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use App\Models\User;
 use App\Models\Facility;
+use App\Models\Request;
+use App\Models\RequestFacility;
+use App\Models\Equipment;
 use App\RequestStatus;
 
 class RequestSeeder extends Seeder
 {
     public function run(): void
     {
-        // Get users by role
         $admin = User::role('admin')->firstOrFail();
         $user  = User::role('user')->firstOrFail();
 
-        // Get facilities (assumes facilities are already seeded)
         $facilities = Facility::pluck('id')->toArray();
 
         // ---- REQUESTS ----
-        $requests = [
-            [
-                'user_id' => $user->id,
-                'title' => 'Student Organization General Assembly',
-                'description' => 'General assembly meeting for all members',
-                'status' => RequestStatus::PENDING->value,
-                'created_at' => now()->subDays(5),
-                'updated_at' => now()->subDays(5),
-                'comment' => null,
-            ],
-            [
-                'user_id' => $user->id,
-                'title' => 'Department Seminar',
-                'description' => 'Guest speaker seminar for CEIT students',
-                'status' => RequestStatus::APPROVED->value,
-                'created_at' => now()->subDays(10),
-                'updated_at' => now()->subDays(8),
-                'comment' => 'Approved request',
-            ],
-            [
-                'user_id' => $admin->id,
-                'title' => 'University-wide Orientation',
-                'description' => 'Orientation event for incoming students',
-                'status' => RequestStatus::APPROVED->value,
-                'created_at' => now()->subDays(15),
-                'updated_at' => now()->subDays(12),
-                'comment' => 'Approved Request',
-            ],
-            [
-                'user_id' => $user->id,
-                'title' => 'End-of-Semester Party',
-                'description' => 'Celebration event for graduating students',
-                'status' => RequestStatus::DENIED->value,
-                'created_at' => now()->subDays(7),
-                'updated_at' => now()->subDays(6),
-                'comment' => 'Day is unavailable due to upcoming storm',
-            ],
-        ];
+        $request1 = Request::create([
+            'user_id'     => $user->id,
+            'title'       => 'Student Organization General Assembly',
+            'description' => 'General assembly meeting for all members',
+            'status'      => RequestStatus::PENDING->value,
+            'comment'     => null,
+        ]);
 
-        DB::table('requests')->insert($requests);
+        $request2 = Request::create([
+            'user_id'     => $user->id,
+            'title'       => 'Department Seminar',
+            'description' => 'Guest speaker seminar for CEIT students',
+            'status'      => RequestStatus::APPROVED->value,
+            'comment'     => 'Approved request',
+        ]);
 
-        // Fetch inserted request IDs
-        $requestIds = DB::table('requests')->orderBy('id')->pluck('id');
+        $request3 = Request::create([
+            'user_id'     => $admin->id,
+            'title'       => 'University-wide Orientation',
+            'description' => 'Orientation event for incoming students',
+            'status'      => RequestStatus::APPROVED->value,
+            'comment'     => 'Approved Request',
+        ]);
+
+        $request4 = Request::create([
+            'user_id'     => $user->id,
+            'title'       => 'End-of-Semester Party',
+            'description' => 'Celebration event for graduating students',
+            'status'      => RequestStatus::DENIED->value,
+            'comment'     => 'Day is unavailable due to upcoming storm',
+        ]);
 
         // ---- REQUEST FACILITIES ----
-        $requestFacilities = [
-            // Request 1
-            [
-                'request_id' => $requestIds[0],
-                'facility_id' => $facilities[2], // COED AVR
-                'date_requested' => Carbon::now()->addDays(10)->toDateString(),
-                'time_start' => '09:00:00',
-                'time_end' => '12:00:00',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
+        RequestFacility::create([
+            'request_id'         => $request1->id,
+            'facility_id'        => $facilities[2],
+            'date_requested'     => Carbon::now()->addDays(10)->toDateString(),
+            'time_start'         => '09:00:00',
+            'time_end'           => '12:00:00',
+            'external_equipment' => null,
+        ]);
 
-            // Request 2 (2-day event)
-            [
-                'request_id' => $requestIds[1],
-                'facility_id' => $facilities[3], // CEIT Lecture Hall
-                'date_requested' => Carbon::now()->addDays(15)->toDateString(),
-                'time_start' => '10:00:00',
-                'time_end' => '16:00:00',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'request_id' => $requestIds[1],
-                'facility_id' => $facilities[3],
-                'date_requested' => Carbon::now()->addDays(16)->toDateString(),
-                'time_start' => '10:00:00',
-                'time_end' => '16:00:00',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
+        RequestFacility::create([
+            'request_id'         => $request2->id,
+            'facility_id'        => $facilities[3],
+            'date_requested'     => Carbon::now()->addDays(15)->toDateString(),
+            'time_start'         => '10:00:00',
+            'time_end'           => '16:00:00',
+            'external_equipment' => '1 portable projector, 2 extension cords',
+        ]);
 
-            // Request 3
-            [
-                'request_id' => $requestIds[2],
-                'facility_id' => $facilities[0], // Main Auditorium
-                'date_requested' => Carbon::now()->addDays(20)->toDateString(),
-                'time_start' => '08:00:00',
-                'time_end' => '17:00:00',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
+        RequestFacility::create([
+            'request_id'         => $request2->id,
+            'facility_id'        => $facilities[3],
+            'date_requested'     => Carbon::now()->addDays(16)->toDateString(),
+            'time_start'         => '10:00:00',
+            'time_end'           => '16:00:00',
+            'external_equipment' => null,
+        ]);
 
-            // Request 4
-            [
-                'request_id' => $requestIds[3],
-                'facility_id' => $facilities[5], // MPH 6D
-                'date_requested' => Carbon::now()->addDays(7)->toDateString(),
-                'time_start' => '18:00:00',
-                'time_end' => '22:00:00',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ];
+        RequestFacility::create([
+            'request_id'         => $request3->id,
+            'facility_id'        => $facilities[0],
+            'date_requested'     => Carbon::now()->addDays(20)->toDateString(),
+            'time_start'         => '08:00:00',
+            'time_end'           => '17:00:00',
+            'external_equipment' => '3 portable speakers, 1 mixing board, 2 microphone stands',
+        ]);
 
-        DB::table('request_facilities')->insert($requestFacilities);
+        RequestFacility::create([
+            'request_id'         => $request4->id,
+            'facility_id'        => $facilities[5],
+            'date_requested'     => Carbon::now()->addDays(7)->toDateString(),
+            'time_start'         => '18:00:00',
+            'time_end'           => '22:00:00',
+            'external_equipment' => '1 bluetooth speaker',
+        ]);
+
+        // ---- EQUIPMENT (via request_equipment pivot) ----
+        $coed_avr_equipment   = Equipment::where('facility_id', $facilities[2])->get();
+        $ceit_hall_equipment  = Equipment::where('facility_id', $facilities[3])->get();
+        $main_audit_equipment = Equipment::where('facility_id', $facilities[0])->get();
+
+        // Request 1 - attach up to 2 pieces of equipment from COED AVR
+        $request1->equipment()->attach(
+            $coed_avr_equipment->take(2)->mapWithKeys(fn($e) => [
+                $e->id => ['quantity_needed' => 1]
+            ])->all()
+        );
+
+        // Request 2 - attach up to 3 pieces from CEIT Lecture Hall
+        $request2->equipment()->attach(
+            $ceit_hall_equipment->take(3)->mapWithKeys(fn($e) => [
+                $e->id => ['quantity_needed' => 2]
+            ])->all()
+        );
+
+        // Request 3 - attach up to 2 pieces from Main Auditorium
+        $request3->equipment()->attach(
+            $main_audit_equipment->take(2)->mapWithKeys(fn($e) => [
+                $e->id => ['quantity_needed' => 1]
+            ])->all()
+        );
     }
 }

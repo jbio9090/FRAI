@@ -13,3 +13,12 @@ export function formatTime(time: string) {
   return `${hour12}:${minutes}${ampm}`;
 };
 
+export function recommendedActionToPresentTense(action: string): string {
+  let word = action;
+  switch (action) {
+    case "Denied":
+      word = "Deny";
+      break;
+  }
+  return word;
+}

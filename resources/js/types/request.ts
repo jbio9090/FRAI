@@ -22,6 +22,7 @@ export interface RequestFacility {
     time_end: string,
     time_start: string,
     date_requested: string;
+    external_equipment: string;
 }
 
 export interface Facility {

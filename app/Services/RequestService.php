@@ -94,6 +94,7 @@ class RequestService
                 'date_requested' => $dateOnly,
                 'time_start' => $booking['time_start'],
                 'time_end' => $booking['time_end'],
+                'external_equipment' => $booking['external_equipment'],
             ]);
 
             if (!empty($booking['equipment'])) {
@@ -106,5 +107,15 @@ class RequestService
         }
 
         return $facilityRequest;
+    }
+
+
+    public function recommendAction($validated, $saved_request)
+    {
+        $conflicts = $this->checkForConflicts($validated['facility_bookings']);
+
+        if (!empty($conflicts)) {
+            $saved_request->update(["recommended_action" => RequestStatus::DENIED, "recommended_action_reason" => "Time conflict with events"]);
+        }
     }
 }

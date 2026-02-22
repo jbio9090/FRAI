@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Field } from '@/components/ui/field';
 import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +28,7 @@ interface FacilityBooking {
     time_end: string;
     equipment: EquipmentRequest[];
     conflicts: BookingSchedule[];
+    external_equipment: string;
 }
 
 interface EquipmentRequest {
@@ -58,6 +60,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
+    const [externalEquipment, setExternalEquipment] = useState<string>('');
     const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
@@ -189,6 +192,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             time_end: currentTimeEnd,
             equipment: selectedEquipment,
             conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
+            external_equipment: externalEquipment,
         };
 
         // console.log(newBooking);
@@ -205,6 +209,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         setSelectedEquipment([]);
         setFacilitySchedule(null);
         setHasTimeConflict(false);
+        setExternalEquipment('');
     }
 
     function checkTimeConflictWithData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): boolean {
@@ -362,72 +367,90 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
                                 {/* Equipment Selection - Only show if facility is selected */}
                                 {selectedFacility && availableEquipment.length > 0 && (
-                                    <div className="space-y-2">
-                                        <div className="flex justify-around items-end">
-                                            <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
-                                            {(selectedEquipment.length < availableEquipment.length) && (
-                                                <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment}>
-                                                    <SquareMousePointer />
-                                                    <span className="text-sm">
-                                                        Select All
-                                                    </span>
-                                                </Button>
-                                            )}
-                                            {(selectedEquipment.length > 0) && (
-                                                <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection}>
-                                                    <X />
-                                                    <span className="text-sm">
-                                                        Clear All
-                                                    </span>
-                                                </Button>
-                                            )}
-                                        </div>
+                                    <>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-around items-end">
+                                                <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
+                                                {(selectedEquipment.length < availableEquipment.length) && (
+                                                    <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment}>
+                                                        <SquareMousePointer />
+                                                        <span className="text-sm">
+                                                            Select All
+                                                        </span>
+                                                    </Button>
+                                                )}
+                                                {(selectedEquipment.length > 0) && (
+                                                    <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection}>
+                                                        <X />
+                                                        <span className="text-sm">
+                                                            Clear All
+                                                        </span>
+                                                    </Button>
+                                                )}
+                                            </div>
 
-                                        <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
-                                            {availableEquipment.map((equipment) => {
-                                                const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
-                                                return (
-                                                    <div key={equipment.id} className="flex items-center justify-between gap-4">
-                                                        <div className="flex items-center space-x-3 flex-1">
-                                                            <Checkbox
-                                                                id={`equipment-${equipment.id}`}
-                                                                checked={!!selected}
-                                                                onCheckedChange={() => handleEquipmentToggle(equipment)}
-                                                            />
-                                                            <div className="flex-1">
-                                                                <Label
-                                                                    htmlFor={`equipment-${equipment.id}`}
-                                                                    className="text-sm text-foreground font-medium cursor-pointer"
-                                                                >
-                                                                    {equipment.name}
-                                                                </Label>
-                                                                <Label className="text-xs text-muted-foreground">
-                                                                    Available: {equipment.quantity}
-                                                                </Label>
-                                                            </div>
-                                                        </div>
-
-                                                        {selected && (
-                                                            <div className="flex items-center gap-4">
-                                                                <Label className="text-sm">Qty:</Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    min="1"
-                                                                    max={equipment.quantity}
-                                                                    value={selected.quantity_needed}
-                                                                    onChange={(e) => updateEquipmentQuantity(
-                                                                        equipment.id,
-                                                                        Math.min(Number(e.target.value), equipment.quantity)
-                                                                    )}
-                                                                    className="w-20 text-sm p-2"
+                                            <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
+                                                {availableEquipment.map((equipment) => {
+                                                    const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
+                                                    return (
+                                                        <div key={equipment.id} className="flex items-center justify-between gap-4">
+                                                            <div className="flex items-center space-x-3 flex-1">
+                                                                <Checkbox
+                                                                    id={`equipment-${equipment.id}`}
+                                                                    checked={!!selected}
+                                                                    onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                                 />
+                                                                <div className="flex-1">
+                                                                    <Label
+                                                                        htmlFor={`equipment-${equipment.id}`}
+                                                                        className="text-sm text-foreground font-medium cursor-pointer"
+                                                                    >
+                                                                        {equipment.name}
+                                                                    </Label>
+                                                                    <Label className="text-xs text-muted-foreground">
+                                                                        Available: {equipment.quantity}
+                                                                    </Label>
+                                                                </div>
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+
+                                                            {selected && (
+                                                                <div className="flex items-center gap-4">
+                                                                    <Label className="text-sm">Qty:</Label>
+                                                                    <Input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        max={equipment.quantity}
+                                                                        value={selected.quantity_needed}
+                                                                        onChange={(e) => updateEquipmentQuantity(
+                                                                            equipment.id,
+                                                                            Math.min(Number(e.target.value), equipment.quantity)
+                                                                        )}
+                                                                        className="w-20 text-sm p-2"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
+
+                                        <Collapsible>
+                                            <CollapsibleTrigger>Add external equipment</CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                                <div className="mt-3 space-y-2">
+                                                    <Label htmlFor="external_equipment">External Equipment</Label>
+                                                    <Textarea
+                                                        id="external_equipment"
+                                                        placeholder="Describe any external equipment you'll be bringing (e.g., 2 portable speakers, 1 projector stand)"
+                                                        rows={3}
+                                                        value={externalEquipment}
+                                                        onChange={(e) => setExternalEquipment(e.target.value)}
+                                                    />
+                                                </div>
+                                            </CollapsibleContent>
+                                        </Collapsible>
+                                    </>
                                 )}
 
                                 <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-6 md:gap-4 mt-8 w-full">
@@ -550,6 +573,13 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                                         • {eq.equipment_name} (Qty: {eq.quantity_needed})
                                                                     </div>
                                                                 ))}
+                                                            </div>
+                                                        )}
+
+                                                        {booking.external_equipment && (
+                                                            <div className="mt-2">
+                                                                <span className="font-semibold">External Equipment: </span>
+                                                                <span className="text-muted-foreground">{booking.external_equipment}</span>
                                                             </div>
                                                         )}
                                                     </div>
