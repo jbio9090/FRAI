@@ -18,7 +18,7 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
     return (
         <DefaultLayout>
             <div className="max-w-6xl mx-auto w-full">
-                <h1 className="text-2xl font-bold mb-6">{page_title} Requests</h1>
+                <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
 
                 <div className="gap-4 flex flex-col xl:grid grid-cols-[1fr_1fr]">
                     {requests.map((request) => (

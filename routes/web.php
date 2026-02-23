@@ -67,6 +67,10 @@ Route::middleware("auth")->group(function () {
         Route::post("/accounts/create", [AccountController::class, 'store'])->name("accounts.create");
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
     });
+
+    Route::middleware("permission:manage facilities")->group(function () {
+        Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
+    });
 });
 
 Route::prefix("/login")->group(function () {
