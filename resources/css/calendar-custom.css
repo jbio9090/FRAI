@@ -8,11 +8,6 @@
     min-width: 48rem;
 }
 
-.rbc-event {
-    background-color: var(--primary) !important;
-    font-size: 0.875rem;
-}
-
 .rbc-sticky-toolbar {
     position: sticky;
     left: 0;
@@ -49,7 +44,12 @@
 .rbc-event {
     padding: 0 !important;
     max-width: 100% !important;
+    width: 100% !important;
+    border: none !important;
+    border-radius:  0.25rem !important;
+    background-color: transparent !important;
 }
+
 
 /* ===== React Big Calendar Border Overrides ===== */
 
@@ -130,4 +130,9 @@
 /* Sometimes this one is used */
 .rbc-timeslot-group {
     border-bottom: 1px solid var(--border) !important;
+}
+
+/* Remove default event time label */
+.rbc-event-label {
+    display: none !important;
 }

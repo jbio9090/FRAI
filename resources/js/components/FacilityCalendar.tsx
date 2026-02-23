@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import moment from 'moment'
 import { useState, useEffect } from 'react'
 import type { ToolbarProps, View } from 'react-big-calendar';
@@ -131,13 +131,21 @@ function CustomToolbar(toolbar: ToolbarProps) {
     );
 };
 
+
 function CustomEvent({ event }: { event: Event }) {
     return (
-        <div className='bg-primary-foreground'>
-            <span className='px-2 text-xs'>{event.title}</span>
+        <div className='h-full flex flex-row lg:flex-col flex-wrap items-center rounded-sm bg-primary/30 border-primary border-1 px-1'>
+            <span className='font-bold text-xs text-primary'>{event.title}</span>
+            <div className="flex items-center gap-1 text-primary/80">
+                <Clock size={12}/>
+                <span className='text-xs'>
+                    {moment(event.start).format("h:mma").toString()}-{moment(event.end).format("h:mma").toString()}
+                    </span>
+            </div>
         </div>
     );
 }
+
 
 export default function FacilityCalendar({ facilityId, initialEvents = [] }: CalendarProps) {
     const [events, setEvents] = useState<Event[]>([]);
