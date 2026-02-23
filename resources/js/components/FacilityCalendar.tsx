@@ -29,7 +29,7 @@ interface CalendarProps {
 }
 
 // Custom Toolbar Component
-const CustomToolbar = (toolbar: ToolbarProps) => {
+function CustomToolbar(toolbar: ToolbarProps) {
     const goToBack = () => {
         toolbar.onNavigate('PREV');
     };
@@ -44,16 +44,43 @@ const CustomToolbar = (toolbar: ToolbarProps) => {
 
     const label = () => {
         const date = moment(toolbar.date);
+
+        if (toolbar.view === 'day') {
+            return (
+                <div className="flex flex-col font-light text-sm">
+                    <h4>{date.format('YYYY')}</h4>
+                    <h3 className="font-bold text-lg">
+                        {date.format('MMMM D')}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                        {date.format('dddd')}
+                    </span>
+                </div>
+            );
+        }
+
+        if (toolbar.view === 'week') {
+            const startOfWeek = date.clone().startOf('week');
+            const endOfWeek = date.clone().endOf('week');
+
+            return (
+                <div className="flex flex-col font-light text-sm">
+                    <h4>{date.format('YYYY')}</h4>
+                    <h3 className="font-bold text-lg">
+                        {startOfWeek.format('MMM D')} – {endOfWeek.format('MMM D')}
+                    </h3>
+                </div>
+            );
+        }
+
+        // month (default)
         return (
-            <div className="flex flex-col wrap font-light text-sm">
-                <h4 className='block'>
-                    {date.format('YYYY')}
-                </h4>
+            <div className="flex flex-col font-light text-sm">
+                <h4>{date.format('YYYY')}</h4>
                 <h3 className="font-bold text-lg">
                     {date.format('MMMM')}
                 </h3>
             </div>
-
         );
     };
 
@@ -104,6 +131,14 @@ const CustomToolbar = (toolbar: ToolbarProps) => {
     );
 };
 
+function CustomEvent({ event }: { event: Event }) {
+    return (
+        <div className='bg-primary-foreground'>
+            <span className='px-2 text-xs'>{event.title}</span>
+        </div>
+    );
+}
+
 export default function FacilityCalendar({ facilityId, initialEvents = [] }: CalendarProps) {
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(false);
@@ -153,7 +188,7 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
     };
 
     return (
-        <div className="h-[42rem] relative">
+        <div className="h-[64rem] relative">
             <Calendar
                 views={['month', 'week', 'day']}
                 localizer={localizer}
@@ -164,7 +199,10 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
                 className={'p-0 md:p-8 ' + ((loading) ? " [&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50" : "")}
                 components={{
                     toolbar: CustomToolbar,
+                    event: CustomEvent,
                 }}
+                step={60}
+                timeslots={1}
             />
         </div>
     )
