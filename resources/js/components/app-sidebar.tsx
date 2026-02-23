@@ -9,7 +9,8 @@ import {
   BookOpen,
   Box,
   Settings,
-  Check
+  Check,
+  User,
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -24,51 +25,62 @@ import {
   SidebarFooter,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
+import { usePermission } from "@/hooks/use-permission"
+import { useEffect, useState } from "react"
 
 
-const data = {
-  topNav: [
-    {
-      title: "Dashboard",
-      url: "dashboard",
-      icon: LayoutGrid,
-    },
-    {
-      title: "Rules",
-      url: "rules",
-      icon: BookOpen,
-    },
-    {
-      title: "Facilities",
-      url: "facilities",
-      icon: Box,
-    },
-  ],
-  navMenu: [
-    {
-      title: "Pending",
-      url: "requests.index",
-      icon: FileClock
-    },
-    {
-      title: "Approved",
-      url: "requests.approved",
-      icon: Check
-    },
-    {
-      title: "Conditionally Approved",
-      url: "requests.conditionally_approved",
-      icon: CheckLine
-    },
-    {
-      title: "Denied",
-      url: "requests.denied",
-      icon: X
-    },
-  ]
-}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { hasPermission } = usePermission();
+  const [data, setData] = useState({
+    topNav: [
+      {
+        title: "Dashboard",
+        url: "dashboard",
+        icon: LayoutGrid,
+      },
+      {
+        title: "Rules",
+        url: "rules",
+        icon: BookOpen,
+      },
+      {
+        title: "Facilities",
+        url: "facilities",
+        icon: Box,
+      },
+      ...(hasPermission("manage users")
+        ? [{
+          title: "Accounts",
+          url: "accounts.index",
+          icon: User,
+        }]
+        : [])
+    ],
+    navMenu: [
+      {
+        title: "Pending",
+        url: "requests.index",
+        icon: FileClock
+      },
+      {
+        title: "Approved",
+        url: "requests.approved",
+        icon: Check
+      },
+      {
+        title: "Conditionally Approved",
+        url: "requests.conditionally_approved",
+        icon: CheckLine
+      },
+      {
+        title: "Denied",
+        url: "requests.denied",
+        icon: X
+      },
+    ]
+  })
+
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     router.post(route("logout"));

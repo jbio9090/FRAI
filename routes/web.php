@@ -64,6 +64,8 @@ Route::middleware("auth")->group(function () {
 
     Route::middleware('permission:manage users')->group(function () {
         Route::get("/accounts", [AccountController::class, 'index'])->name("accounts.index");
+        Route::post("/accounts/create", [AccountController::class, 'store'])->name("accounts.create");
+        Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
     });
 });
 
