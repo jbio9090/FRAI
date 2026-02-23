@@ -1,14 +1,15 @@
 import { Link, router } from "@inertiajs/react"
 import {
   LayoutGrid,
-  FileText,
+  FileClock,
   LogOut,
   CirclePlus,
-  FileCheck,
-  FileX,
+  CheckLine,
+  X,
   BookOpen,
   Box,
-  Settings
+  Settings,
+  Check
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -47,18 +48,23 @@ const data = {
     {
       title: "Pending",
       url: "requests.index",
-      icon: FileText
+      icon: FileClock
     },
     {
       title: "Approved",
       url: "requests.approved",
-      icon: FileCheck
+      icon: Check
+    },
+    {
+      title: "Conditionally Approved",
+      url: "requests.conditionally_approved",
+      icon: CheckLine
     },
     {
       title: "Denied",
       url: "requests.denied",
-      icon: FileX
-    }
+      icon: X
+    },
   ]
 }
 

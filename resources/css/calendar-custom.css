@@ -34,3 +34,7 @@
         overflow-x: visible;
     }
 }
+
+.rbc-today {
+    background-color: var(--primary-foreground) !important;
+}

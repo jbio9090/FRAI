@@ -39,6 +39,7 @@ function RequestCard({ request, page_title }: { request: Request; page_title: st
     const toggleInput = () => {
         console.log("what the fuck");
         setCommentInputState(prev => !prev);
+        setComment("");
     }
 
     const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -117,7 +118,9 @@ function RequestCard({ request, page_title }: { request: Request; page_title: st
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
                                         <DropdownMenuGroup>
-                                            <DropdownMenuItem onClick={() => console.log("wala pa function")}>
+                                            <DropdownMenuItem onClick={() =>
+                                                router.post(route('requests.conditionally_approve', request.id), { comment: comment }
+                                                )}>
                                                 <CheckLine size={16} />
                                                 <span>
                                                     Conditionally Approve

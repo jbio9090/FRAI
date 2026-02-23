@@ -25,6 +25,7 @@ Route::middleware("auth")->group(function () {
     Route::get('/requests/pending', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
+    Route::get('/requests/conditionally_approved', [RequestController::class, 'conditionallyApprovedPage'])->name('requests.conditionally_approved');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
 
@@ -32,8 +33,8 @@ Route::middleware("auth")->group(function () {
     Route::middleware(['permission:approve requests'])->group(function () {
         Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
+        Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
     });
-
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
 
@@ -48,7 +49,7 @@ Route::middleware("auth")->group(function () {
     Route::get("/facilities", [FacilityController::class, "index"])->name("facilities");
     Route::get("/facilities/{facility_id}", [FacilityController::class, "detail"])->name("facility.detail");
 
-    // JSon
+    // JSON
     Route::get("/facilities/getSchedule/{facility}/{date}", [FacilityController::class, "getDayScheduleJson"])->name("facility.schedule");
     Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
 

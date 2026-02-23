@@ -113,9 +113,8 @@ class RequestService
 
     public function recommendAction($validated, $saved_request)
     {
-
         $externalEquipment = false;
-        $recommended_action = null;
+        $recommended_action = RequestStatus::APPROVED;
         $recommended_action_reason = null;
 
         $conflicts = $this->checkForConflicts($validated['facility_bookings']);

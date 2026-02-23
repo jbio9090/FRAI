@@ -44,7 +44,6 @@ class RequestController extends Controller
         ]);
     }
 
-
     public function deniedPage()
     {
         $requests = $this->service->get(RequestStatus::DENIED);
@@ -52,6 +51,16 @@ class RequestController extends Controller
         return Inertia::render('requests/index', [
             'requests' => $requests,
             'page_title' => "Denied",
+        ]);
+    }
+
+    public function conditionallyApprovedPage()
+    {
+        $requests = $this->service->get(RequestStatus::CONDITIONALLY_APPROVED);
+
+        return Inertia::render('requests/index', [
+            'requests' => $requests,
+            'page_title' => "Conditionally Approved",
         ]);
     }
 
@@ -77,6 +86,18 @@ class RequestController extends Controller
         $this->notification->notifyUser($facilityRequest);
 
         return redirect()->back()->with('success', 'Request rejected successfully');
+    }
+
+    // Admin laang
+    public function conditionally_approve(Request $request, $id)
+    {
+        $comment = $request->input("comment", "Your request has been conditionally approved");
+        $facilityRequest = FacilityRequest::findOrFail($id);
+        $facilityRequest->update(['status' => RequestStatus::CONDITIONALLY_APPROVED,  "comment" => $comment]);
+
+        $this->notification->notifyUser($facilityRequest);
+
+        return redirect()->back()->with('success', 'Request conditionally approved successfully');
     }
 
 
