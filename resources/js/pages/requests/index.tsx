@@ -46,6 +46,10 @@ function RequestCard({ request, page_title }: { request: Request; page_title: st
         setComment(e.target.value);
     }
 
+    const handleAction = (route_name: string) => {
+        router.post(route(route_name, request.id), { comment: (comment.length > 0) ? comment : null });
+    }
+
     return (
         <div key={request.id} className="border rounded-lg p-8 h-content min-h-0 mx-auto w-full">
             <div className="flex justify-between items-start w-full flex-col gap-6">
@@ -96,7 +100,7 @@ function RequestCard({ request, page_title }: { request: Request; page_title: st
                             <div className="flex justify-end gap-2 w-content ml-auto">
                                 <Button
                                     onClick={() => {
-                                        router.post(route('requests.approve', request.id), { comment: comment });
+                                        handleAction("requests.approve")
                                     }}
                                     variant="default"
                                 >
@@ -104,7 +108,7 @@ function RequestCard({ request, page_title }: { request: Request; page_title: st
                                 </Button>
                                 <Button
                                     onClick={() => {
-                                        router.post(route('requests.reject', request.id), { comment: comment });
+                                        handleAction("requests.reject");
                                     }}
                                     variant="outline"
                                     className='hover:border-destructive hover:text-destructive hover:bg-destructive/4'
@@ -119,8 +123,8 @@ function RequestCard({ request, page_title }: { request: Request; page_title: st
                                     <DropdownMenuContent>
                                         <DropdownMenuGroup>
                                             <DropdownMenuItem onClick={() =>
-                                                router.post(route('requests.conditionally_approve', request.id), { comment: comment }
-                                                )}>
+                                                handleAction("requests.conditionally_approve")
+                                            }>
                                                 <CheckLine size={16} />
                                                 <span>
                                                     Conditionally Approve
@@ -211,7 +215,7 @@ function RequestDetails({ request }: { request: Request }) {
             icon: <MessageCircleWarning size={16} />,
             label: "Comment",
             content: request.comment ? (
-                <p className='text-sm'>{request.comment}</p>
+                <p className='text-sm mt-4'>{request.comment}</p>
             ) : (
                 <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comment from admin</p>
             ),
@@ -222,7 +226,7 @@ function RequestDetails({ request }: { request: Request }) {
             label: "Recommendation",
             content: (
                 <>
-                    <p className='font-bold mt-4'>{request.recommended_action}</p>
+                    <p className='font-bold'>{request.recommended_action}</p>
                     <p className='text-sm'>{request.recommended_action_reason}</p>
                 </>
             ),

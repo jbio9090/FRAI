@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RulesController;
@@ -59,6 +60,10 @@ Route::middleware("auth")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
         Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");
         Route::post("/send", [NotificationController::class, "send"])->name("notification.subscribe");
+    });
+
+    Route::middleware('permission:manage users')->group(function () {
+        Route::get("/accounts", [AccountController::class, 'index'])->name("accounts.index");
     });
 });
 

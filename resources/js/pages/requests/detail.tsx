@@ -9,6 +9,9 @@ import {
 } from "@/components/ui/card"
 import DefaultLayout from '@/layout.tsx/default.';
 import { RequestFacility } from '@/types/request';
+import { Link } from '@inertiajs/react';
+import { Separator } from '@/components/ui/separator';
+import moment from 'moment';
 
 interface Facility {
     id: number;
@@ -73,27 +76,31 @@ export default function RequestDetail({ request }: DetailProps) {
             statusColor = "destructive";
             break;
         case 'Conditionally Approved':
-            statusColor = "default";
+            statusColor = "secondary";
             break;
     }
 
     return (
         <DefaultLayout>
             <div className="flex flex-col w-full max-w-4xl gap-4 *:text-sm">
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2 text-sm">
                     <h1 className='font-bold text-xl'>{request.title}</h1>
 
                     <Badge variant={statusColor}>
                         {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                     </Badge>
 
-                    <p>{request.description}</p>
-                    <p>Requested by: {request.user.name}</p>
+                    <p className='my-4'>{request.description}</p>
+
+                    <div className="flex items-center gap-2">
+                        <p>Requested by {request.user.name}</p>
+                        <p className='text-muted-foreground'>{moment(request.created_at).fromNow()}</p>
+                    </div>
                 </div>
 
-                <h2 className='font-semibold'>Facilities Requested</h2>
+                <h2 className='font-semibold text-muted-foreground mt-4'>Facilities Requested</h2>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-8 xl:grid grid-cols-[1fr_1fr] w-full">
                     {request.facilities.map((facility) => {
                         const facilityEquipment = request.equipment.filter(
                             (eq) => eq.facility_id === facility.id
@@ -108,35 +115,44 @@ export default function RequestDetail({ request }: DetailProps) {
                         const date = new Date(facility.pivot.date_requested).toLocaleDateString();
 
                         return (
-                            <Card key={facility.id}>
+                            <Card key={facility.id} className='py-8 px-4'>
                                 <CardHeader>
-                                    <CardTitle>{facility.name}</CardTitle>
-                                    <CardDescription className='flex items-center text-sm gap-2'>
-                                        <Calendar size={16} />
-                                        <span className='font-medium'>{date}</span>
-                                        <Clock className='ml-4' size={16} />
-                                        <span className='font-medium'>
-                                            {formatTime(facility.pivot.time_start)} to {formatTime(facility.pivot.time_end)}
-                                        </span>
+                                    <Link href={route("facility.detail", [facility.id])}>
+                                        <CardTitle className='hover:underline text-lg'>{facility.name}</CardTitle>
+                                    </Link>
+                                    <CardDescription className='flex items-center flex-wrap text-sm gap-2'>
+                                        <div className="flex items-center gap-1">
+                                            <Calendar size={16} />
+                                            <span className='font-medium'>{date}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Clock size={16} />
+                                            <span className='font-medium'>
+                                                {formatTime(facility.pivot.time_start)} to {formatTime(facility.pivot.time_end)}
+                                            </span>
+                                        </div>
                                     </CardDescription>
                                 </CardHeader>
 
-                                <CardContent>
-                                    {(facilityEquipment.length > 0) && (<span className="font-semibold text-muted-foreground">Equipments</span>)}
-                                    <CardDescription className='space-y-2'>
-                                        {facilityEquipment.map((eq) => (
-                                            <div key={eq.id} className="flex justify-between text-foreground">
-                                                <span>{eq.name}</span>
-                                                <span className="">x{eq.pivot.quantity_needed}</span>
-                                            </div>
-                                        ))}
-                                    </CardDescription>
-                                </CardContent>
+                                {(facilityEquipment.length > 0) && (
+                                    <CardContent>
+                                        <CardTitle className="font-semibold text-muted-foreground mb-4">Equipments</CardTitle>
+                                        <CardDescription className='flex flex-col gap-4'>
+                                            {facilityEquipment.map((eq) => (
+                                                <div key={eq.id} className="flex justify-between text-foreground">
+                                                    <span>{eq.name}</span>
+                                                    <span className="">{eq.pivot.quantity_needed}</span>
+                                                </div>
+                                            ))}
+                                        </CardDescription>
+                                    </CardContent>
+                                )}
 
                                 {facilityRequest?.external_equipment && (
                                     <CardContent>
-                                        {(facilityEquipment.length > 0) && (<span className="font-semibold text-muted-foreground">External Equipments</span>)}
-                                        <CardDescription className='space-y-2'>
+                                        <Separator />
+                                        <CardTitle className="font-semibold text-muted-foreground mt-4 mb-4">External Equipments</CardTitle>
+                                        <CardDescription className='space-y-2 text-foreground'>
                                             {facilityRequest.external_equipment}
                                         </CardDescription>
                                     </CardContent>

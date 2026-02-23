@@ -5,7 +5,7 @@
 .rbc-month-view,
 .rbc-time-view {
     width: auto;
-    min-width: 48rem;
+    min-width: 64rem;
 }
 
 .rbc-sticky-toolbar {
@@ -135,4 +135,8 @@
 /* Remove default event time label */
 .rbc-event-label {
     display: none !important;
+}
+
+.rbc-button-link {
+    padding: 1rem !important;
 }

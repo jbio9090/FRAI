@@ -13,7 +13,10 @@ class FacilityService
         $events = RequestFacility::query()
             ->whereBetween('date_requested', [$start, $end])
             ->whereHas('request', function ($query) {
-                $query->where('status', RequestStatus::APPROVED);
+                $query->whereIn('status', [
+                    RequestStatus::APPROVED,
+                    RequestStatus::CONDITIONALLY_APPROVED,
+                ]);
             })
             ->where('facility_id', $facility_id)
             ->with(['request:id,title', 'facility:id,name'])
@@ -36,7 +39,10 @@ class FacilityService
         $eventsThisDay = RequestFacility::where('facility_id', $facility_id)
             ->where('date_requested', $date)
             ->whereHas('request', function ($query) {
-                $query->where('status', RequestStatus::APPROVED);
+                $query->whereIn('status', [
+                    RequestStatus::APPROVED,
+                    RequestStatus::CONDITIONALLY_APPROVED,
+                ]);
             })
             ->with('request:id,title,status')
             ->get()
