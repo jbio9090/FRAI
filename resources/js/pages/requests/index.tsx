@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, MessageCircleOff, MousePointer2 } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, MessageCircleOff, MousePointer2, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGro
 import { useState } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
 
 
 export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
@@ -61,91 +62,96 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
         <DefaultLayout>
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
-                <div className="flex items-center w-full mt-4 mb-4 flex-wrap">
-                    <Button
-                        size={"sm"}
-                        variant={"outline"}
-                        onClick={toggleSelection}
-                        className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
-                    >
-                        <MousePointer2 className="mr-2 h-4 w-4" />
-                        <span>{!isSelecting ? "Bulk Action" : "Stop Selection"}</span>
-                    </Button>
-
-                    {(!(selected.length >= requests.length) && (isSelecting)) && (
+                <div className="flex flex-col justify-center w-full mt-4 mb-4 flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
                         <Button
                             size={"sm"}
                             variant={"outline"}
-                            onClick={selectAllSelection}
+                            onClick={toggleSelection}
+                            className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
                         >
-                            <MousePointer2 className="mr-2 h-4 w-4" />
-                            <span>Select All</span>
+                            <MousePointer2 size={16} />
+                            <span>{!isSelecting ? "Bulk Action" : "Stop Selection"}</span>
                         </Button>
-                    )}
 
-                    {(selected.length > 0 && (
-                        <Button
-                            size={"sm"}
-                            variant={"outline"}
-                            onClick={clearAllSelection}
-                        >
-                            <MousePointer2 className="mr-2 h-4 w-4" />
-                            <span>Clear Selection</span>
-                        </Button>
-                    ))}
+                        {(!(selected.length >= requests.length) && (isSelecting)) && (
+                            <Button
+                                size={"sm"}
+                                variant={"outline"}
+                                onClick={selectAllSelection}
+                            >
+                                <MousePointer2 size={16} />
+                                <span>Select All</span>
+                            </Button>
+                        )}
 
-                    {selected.length > 0 && (
-                        <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
-                            <MousePointer2 className="mr-2 h-4 w-4" />
-                            <span>Approve Selected</span>
-                        </Button>
-                    )}
+                        {(selected.length > 0 && (
+                            <Button
+                                size={"sm"}
+                                variant={"outline"}
+                                onClick={clearAllSelection}
+                            >
+                                <X size={16} />
+                                <span>Clear</span>
+                            </Button>
+                        ))}
 
-                    {selected.length > 0 && (
-                        <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
-                            <MousePointer2 className="mr-2 h-4 w-4" />
-                            <span>Deny Selected</span>
-                        </Button>
-                    )}
+                        <Separator orientation='vertical' />
 
-                    {selected.length > 0 && (
-                        <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
-                            <MousePointer2 className="mr-2 h-4 w-4" />
-                            <span>Conditionally Approve Selected</span>
-                        </Button>
-                    )}
+                        {isSelecting && selected.length > 0 && (
+                            <span className="ml-4 text-sm font-medium">
+                                {selected.length} selected
+                            </span>
+                        )}
+                    </div>
 
-                    {selected.length > 0 && (
-                        <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
-                            {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
-                            <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
-                        </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
+                                <Check size={16} />
+                                <span>Approve</span>
+                            </Button>
+                        )}
 
-                    {/* Bulk comment textarea — place this below the button row */}
-                    {selected.length > 0 && isBulkCommentOpen && (
-                        <div className="w-full mt-2">
-                            <Field>
-                                <FieldDescription>Comment to attach to all selected requests</FieldDescription>
-                                <Textarea
-                                    rows={3}
-                                    className="w-full"
-                                    value={bulkComment}
-                                    onChange={(e) => setBulkComment(e.target.value)}
-                                />
-                            </Field>
-                        </div>
-                    )}
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
+                                <X size={16} />
+                                <span>Deny</span>
+                            </Button>
+                        )}
 
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
+                                <CheckLine size={16} />
+                                <span>Conditionally Approve</span>
+                            </Button>
+                        )}
 
-                    {isSelecting && selected.length > 0 && (
-                        <span className="ml-4 text-sm font-medium">
-                            {selected.length} items selected
-                        </span>
-                    )}
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
+                                {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
+                                <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
-                <div className="gap-4 flex flex-col xl:grid grid-cols-[1fr_1fr]">
+                {selected.length > 0 && isBulkCommentOpen && (
+                    <div className="w-full mt-2">
+                        <Field>
+                            <FieldDescription>Comment to attach to all selected requests</FieldDescription>
+                            <Textarea
+                                rows={3}
+                                className="w-full"
+                                value={bulkComment}
+                                onChange={(e) => setBulkComment(e.target.value)}
+                            />
+                        </Field>
+                    </div>
+                )}
+
+
+                <div className="gap-4 mt-8 flex flex-col xl:grid grid-cols-[1fr_1fr]">
                     {requests.map((request) => (
                         <RequestCard
                             request={request}
