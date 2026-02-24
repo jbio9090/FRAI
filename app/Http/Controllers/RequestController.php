@@ -134,4 +134,46 @@ class RequestController extends Controller
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }
+
+
+    // RequestController.php
+
+    public function bulkAction(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:requests,id'],
+            'action' => ['required', 'string', 'in:approve,reject,conditionally_approve'],
+            'comment' => ['nullable', 'string'],
+        ]);
+
+        $ids = $validated['ids'];
+        $action = $validated['action'];
+        $comment = $validated['comment'] ?? null;
+
+        $statusMap = [
+            'approve' => RequestStatus::APPROVED,
+            'reject' => RequestStatus::DENIED,
+            'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
+        ];
+
+        $defaultCommentMap = [
+            'approve' => 'Your request has been approved.',
+            'reject' => 'Your request has been denied.',
+            'conditionally_approve' => 'Your request has been conditionally approved.',
+        ];
+
+        $facilityRequests = FacilityRequest::whereIn('id', $ids)->get();
+
+        foreach ($facilityRequests as $facilityRequest) {
+            $facilityRequest->update([
+                'status' => $statusMap[$action],
+                'comment' => $comment ?? $defaultCommentMap[$action],
+            ]);
+
+            $this->notification->notifyUser($facilityRequest);
+        }
+
+        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' applied to ' . count($facilityRequests) . ' request(s).');
+    }
 }

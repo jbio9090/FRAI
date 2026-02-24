@@ -34,6 +34,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
         Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
+        Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
     });
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
