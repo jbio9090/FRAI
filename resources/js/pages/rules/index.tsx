@@ -44,6 +44,7 @@ export default function Rules({ rules }: DashboardProps) {
 
     return (
         <DefaultLayout>
+            <h1 className='text-lg font-bold'>Rules</h1>
             {hasPermission("modify rules") && (
                 <header className='flex w-full max-w-4xl'>
                     <Button variant={"outline"} size={"sm"} onClick={() => setInputState(!showInput)}>
