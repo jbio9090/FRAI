@@ -1,4 +1,4 @@
-import { Link } from "@inertiajs/react";
+import { router, Link } from "@inertiajs/react";
 import {
     Table,
     TableBody,
@@ -13,18 +13,17 @@ interface Facility {
     id: number;
     name: string;
     building: string;
-    capacity: number
+    capacity: number;
 }
 
 interface FacilityProps {
-    children: React.ReactNode;
     facilities: Facility[];
 }
 
 export default function Facilities({ facilities }: FacilityProps) {
     return (
         <DefaultLayout>
-            <h1>Facilities</h1>
+            <h1 className='font-bold text-xl'>Facilities</h1>
 
             <Table>
                 <TableHeader>
@@ -35,15 +34,17 @@ export default function Facilities({ facilities }: FacilityProps) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-
                     {facilities.map((facility) => (
-                        <TableRow>
-                            <TableCell><Link className="w-full" href={route("facility.detail", [facility.id])}>{facility.name}</Link></TableCell>
-                            <TableCell><Link href={route("facility.detail", [facility.id])}>{facility.building}</Link></TableCell>
-                            <TableCell><Link href={route("facility.detail", [facility.id])}>{facility.capacity}</Link></TableCell>
+                        <TableRow
+                            key={facility.id}
+                            className="cursor-pointer"
+                            onClick={() => router.visit(route("facility.detail", [facility.id]))}
+                        >
+                            <TableCell>{facility.name}</TableCell>
+                            <TableCell>{facility.building}</TableCell>
+                            <TableCell>{facility.capacity}</TableCell>
                         </TableRow>
                     ))}
-
                 </TableBody>
             </Table>
         </DefaultLayout>

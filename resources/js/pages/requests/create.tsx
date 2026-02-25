@@ -1,6 +1,10 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
+<<<<<<< HEAD
 import { CalendarIcon, X, User, Clock, ChevronDown, Building, AlertCircleIcon, SquareMousePointer, ShieldAlert, School } from "lucide-react";
+=======
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus } from "lucide-react";
+>>>>>>> main
 import { motion } from "motion/react"
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -10,39 +14,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea";
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
 import MotionChevron from '@/components/animated_icons/MotionChevron';
-
-interface Equipment {
-    id: number;
-    name: string;
-    description?: string;
-    quantity: number;
-    facility_id: number;
-}
-
-interface Facility {
-    id: number;
-    name: string;
-    description?: string;
-    capacity: number;
-    building: string;
-    equipments?: Equipment[];
-}
+import { Facility } from '@/types/facility';
+import { Equipment } from '@/types/equipment';
 
 interface FacilityBooking {
     facility_id: number;
@@ -51,6 +30,8 @@ interface FacilityBooking {
     time_start: string;
     time_end: string;
     equipment: EquipmentRequest[];
+    conflicts: BookingSchedule[];
+    external_equipment: string;
 }
 
 interface EquipmentRequest {
@@ -82,6 +63,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
+    const [externalEquipment, setExternalEquipment] = useState<string>('');
     const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
@@ -121,9 +103,9 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             const data = await response.json();
             setFacilitySchedule(data);
 
-            // Check for conflicts after loading schedule
             if (currentTimeStart && currentTimeEnd) {
-                setHasTimeConflict(checkTimeConflict(currentTimeStart, currentTimeEnd));
+                // console.log(checkTimeConflict(currentTimeStart, currentTimeEnd))
+                setHasTimeConflict(checkTimeConflictWithData(data, currentTimeStart, currentTimeEnd));
             }
         } catch (error) {
             console.error('Failed to load schedule:', error);
@@ -136,7 +118,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     function handleFacilityChange(value: string) {
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
-        setSelectedEquipment([]); // Reset equipment when facility changes
+        setSelectedEquipment([]);
 
         // Load schedule if date is already selected
         if (currentDate) {
@@ -214,7 +196,11 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             time_start: currentTimeStart,
             time_end: currentTimeEnd,
             equipment: selectedEquipment,
+            conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
+            external_equipment: externalEquipment,
         };
+
+        // console.log(newBooking);
 
         const updatedBookings = [...facilityBookings, newBooking];
         setFacilityBookings(updatedBookings);
@@ -227,23 +213,37 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         setCurrentTimeEnd('');
         setSelectedEquipment([]);
         setFacilitySchedule(null);
-        setHasTimeConflict(false); // Reset conflict state
+        setHasTimeConflict(false);
+        setExternalEquipment('');
     }
 
-    function checkTimeConflict(startTime: string, endTime: string): boolean {
-        if (!facilitySchedule || !facilitySchedule.bookings.length) {
-            return false;
-        }
+    function checkTimeConflictWithData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): boolean {
+        if (!schedule || !schedule.bookings.length) return false;
 
         const start = new Date(`2000-01-01T${startTime}`);
         const end = new Date(`2000-01-01T${endTime}`);
 
-        return facilitySchedule.bookings.some(booking => {
+        return schedule.bookings.some(booking => {
             const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
             const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+            return start < bookingEnd && end > bookingStart;
+        });
+    }
 
-            // Check if times overlap
-            return (start < bookingEnd && end > bookingStart);
+    function checkTimeConflict(startTime: string, endTime: string): boolean {
+        return checkTimeConflictWithData(facilitySchedule, startTime, endTime);
+    }
+
+    function getTimeConflictsFromData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): BookingSchedule[] {
+        if (!schedule || !schedule.bookings.length) return [];
+
+        const start = new Date(`2000-01-01T${startTime}`);
+        const end = new Date(`2000-01-01T${endTime}`);
+
+        return schedule.bookings.filter(booking => {
+            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
+            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+            return start < bookingEnd && end > bookingStart;
         });
     }
 
@@ -420,72 +420,98 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
                                 {/* Equipment Selection - Only show if facility is selected */}
                                 {selectedFacility && availableEquipment.length > 0 && (
-                                    <div className="space-y-2">
-                                        <div className="flex justify-around items-end">
-                                            <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
-                                            {(selectedEquipment.length < availableEquipment.length) && (
-                                                <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment}>
-                                                    <SquareMousePointer />
-                                                    <span className="text-sm">
-                                                        Select All
-                                                    </span>
-                                                </Button>
-                                            )}
-                                            {(selectedEquipment.length > 0) && (
-                                                <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection}>
-                                                    <X />
-                                                    <span className="text-sm">
-                                                        Clear All
-                                                    </span>
-                                                </Button>
-                                            )}
-                                        </div>
+                                    <>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-around items-end">
+                                                <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
+                                                {(selectedEquipment.length < availableEquipment.length) && (
+                                                    <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment} className='text-muted-foreground hover:text-foreground'>
+                                                        <SquareMousePointer />
+                                                        <span className="text-sm">
+                                                            Select All
+                                                        </span>
+                                                    </Button>
+                                                )}
+                                                {(selectedEquipment.length > 0) && (
+                                                    <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection} className='text-muted-foreground hover:text-foreground'>
+                                                        <X />
+                                                        <span className="text-sm">
+                                                            Clear All
+                                                        </span>
+                                                    </Button>
+                                                )}
+                                            </div>
 
-                                        <div className="border rounded-md p-3 space-y-3 max-h-48 overflow-y-auto">
-                                            {availableEquipment.map((equipment) => {
-                                                const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
-                                                return (
-                                                    <div key={equipment.id} className="flex items-center justify-between gap-4">
-                                                        <div className="flex items-center space-x-3 flex-1">
-                                                            <Checkbox
-                                                                id={`equipment-${equipment.id}`}
-                                                                checked={!!selected}
-                                                                onCheckedChange={() => handleEquipmentToggle(equipment)}
-                                                            />
-                                                            <div className="flex-1">
-                                                                <Label
-                                                                    htmlFor={`equipment-${equipment.id}`}
-                                                                    className="text-sm text-foreground font-medium cursor-pointer"
-                                                                >
-                                                                    {equipment.name}
-                                                                </Label>
-                                                                <Label className="text-xs text-muted-foreground">
-                                                                    Available: {equipment.quantity}
-                                                                </Label>
-                                                            </div>
-                                                        </div>
-
-                                                        {selected && (
-                                                            <div className="flex items-center gap-4">
-                                                                <Label className="text-sm">Qty:</Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    min="1"
-                                                                    max={equipment.quantity}
-                                                                    value={selected.quantity_needed}
-                                                                    onChange={(e) => updateEquipmentQuantity(
-                                                                        equipment.id,
-                                                                        Math.min(Number(e.target.value), equipment.quantity)
-                                                                    )}
-                                                                    className="w-20 text-sm p-2"
+                                            <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
+                                                {availableEquipment.map((equipment) => {
+                                                    const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
+                                                    return (
+                                                        <div key={equipment.id} className="flex items-center justify-between gap-4">
+                                                            <div className="flex items-center space-x-3 flex-1">
+                                                                <Checkbox
+                                                                    id={`equipment-${equipment.id}`}
+                                                                    checked={!!selected}
+                                                                    onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                                 />
+                                                                <div className="flex-1">
+                                                                    <Label
+                                                                        htmlFor={`equipment-${equipment.id}`}
+                                                                        className="text-sm text-foreground font-medium cursor-pointer"
+                                                                    >
+                                                                        {equipment.name}
+                                                                    </Label>
+                                                                    <Label className="text-xs text-muted-foreground">
+                                                                        Available: {equipment.quantity}
+                                                                    </Label>
+                                                                </div>
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+
+                                                            {selected && (
+                                                                <div className="flex items-center gap-4">
+                                                                    <Label className="text-sm">Qty:</Label>
+                                                                    <Input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        max={equipment.quantity}
+                                                                        value={selected.quantity_needed}
+                                                                        onChange={(e) => updateEquipmentQuantity(
+                                                                            equipment.id,
+                                                                            Math.min(Number(e.target.value), equipment.quantity)
+                                                                        )}
+                                                                        className="w-20 text-sm p-2"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
+
+                                        <Collapsible>
+                                            <CollapsibleTrigger >
+
+                                                <div className='rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-muted-foreground/20 p-2 cursor-pointer flex items-center gap-1'>
+                                                    <Plus size={16} />
+                                                    <span>
+                                                        Add external equipment
+                                                    </span>
+                                                </div>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                                <div className="mt-3 space-y-4">
+                                                    <Label htmlFor="external_equipment">External Equipment</Label>
+                                                    <Textarea
+                                                        id="external_equipment"
+                                                        placeholder="Describe any external equipment you'll be bringing (e.g., 2 portable speakers, 1 projector stand)"
+                                                        rows={3}
+                                                        value={externalEquipment}
+                                                        onChange={(e) => setExternalEquipment(e.target.value)}
+                                                    />
+                                                </div>
+                                            </CollapsibleContent>
+                                        </Collapsible>
+                                    </>
                                 )}
 
                                 <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-6 md:gap-4 mt-8 w-full">
@@ -527,7 +553,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             onChange={handleTimeStartChange}
                                             min={"7:00"}
                                             max={"20:00"}
-                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500", "text-sm")}
+                                            className={"text-sm"}
                                         />
                                     </div>
 
@@ -541,7 +567,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             onChange={handleTimeEndChange}
                                             min={"7:00"}
                                             max={"20:00"}
-                                            className={cn(hasTimeConflict && "border-red-500 focus-visible:ring-red-500", "text-sm")}
+                                            className={"text-sm"}
                                         />
                                     </div>
                                 </div>
@@ -583,11 +609,21 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                             <span className='mr-4'>
                                                                 {format(booking.date, "PPP")}
                                                             </span>
-                                                            <Clock size={16} />
+                                                            <Clock className="text-muted-foreground" size={16} />
                                                             <span>
                                                                 {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
                                                             </span>
                                                         </div>
+
+                                                        {(booking.conflicts.length > 0) && booking.conflicts.map((conflict) => (
+                                                            <Alert variant="destructive" className="my-4 border-destructive bg-destructive/4">
+                                                                <AlertCircleIcon />
+                                                                <AlertTitle>Time Conflict Detected</AlertTitle>
+                                                                <AlertDescription>
+                                                                    Your selected time overlaps with {conflict.request_title}, which is during {formatTime(conflict.time_start)}-{formatTime(conflict.time_end)}
+                                                                </AlertDescription>
+                                                            </Alert>
+                                                        ))}
 
                                                         {/* Show selected equipment */}
                                                         {booking.equipment.length > 0 && (
@@ -598,6 +634,13 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                                         • {eq.equipment_name} (Qty: {eq.quantity_needed})
                                                                     </div>
                                                                 ))}
+                                                            </div>
+                                                        )}
+
+                                                        {booking.external_equipment && (
+                                                            <div className="mt-2">
+                                                                <span className="font-semibold">External Equipment: </span>
+                                                                <span className="text-muted-foreground">{booking.external_equipment}</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -661,7 +704,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                     formatTime={formatTime}
                     isForSidebar={true}
                 />
-
 
             </div>
         </DefaultLayout>

@@ -6,6 +6,7 @@ use App\Models\Facility;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Services\FacilityService;
+use Illuminate\Http\RedirectResponse;
 
 
 class FacilityController extends Controller
@@ -53,5 +54,18 @@ class FacilityController extends Controller
         $events = $this->service->getSchedule($facility_id, $start, $end);
 
         return response()->json($events);
+    }
+
+    public function update(Request $request, Facility $facility): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name'     => 'required|string|max:255',
+            'building' => 'required|string|max:255',
+            'capacity' => 'required|integer|min:1',
+        ]);
+
+        $facility->update($validated);
+
+        return redirect()->route('facility.detail', $facility->id);
     }
 }

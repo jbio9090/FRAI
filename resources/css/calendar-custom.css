@@ -5,12 +5,7 @@
 .rbc-month-view,
 .rbc-time-view {
     width: auto;
-    min-width: 48rem;
-}
-
-.rbc-event {
-    background-color: var(--primary) !important;
-    font-size: 0.875rem;
+    min-width: 64rem;
 }
 
 .rbc-sticky-toolbar {
@@ -25,6 +20,13 @@
     color: var(--foreground);
 }
 
+.rbc-time-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
 .rbc-off-range-bg {
     background-color: var(--muted) !important;
 }
@@ -33,4 +35,108 @@
     .rbc-calendar {
         overflow-x: visible;
     }
+}
+
+.rbc-today {
+    background-color: var(--primary-foreground) !important;
+}
+
+.rbc-event {
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    border: none !important;
+    border-radius:  0.25rem !important;
+    background-color: transparent !important;
+}
+
+
+/* ===== React Big Calendar Border Overrides ===== */
+
+.rbc-calendar,
+.rbc-month-view,
+.rbc-time-view,
+.rbc-header,
+.rbc-day-bg,
+.rbc-month-row,
+.rbc-time-header,
+.rbc-time-content,
+.rbc-time-gutter,
+.rbc-timeslot-group,
+.rbc-day-slot,
+.rbc-agenda-view table,
+.rbc-agenda-view table tbody>tr>td,
+.rbc-agenda-view table thead>tr>th {
+    border-color: var(--border) !important;
+}
+
+/* Month view grid lines */
+.rbc-month-row+.rbc-month-row {
+    border-top: 1px solid var(--border) !important;
+}
+
+.rbc-day-bg+.rbc-day-bg {
+    border-left: 1px solid var(--border) !important;
+}
+
+/* Time view vertical separators */
+.rbc-time-content>*+*>* {
+    border-left: 1px solid var(--border) !important;
+}
+
+/* Header bottom border */
+.rbc-time-header,
+.rbc-header {
+    border-bottom: 1px solid var(--border) !important;
+}
+
+/* Today highlight (optional polish) */
+.rbc-today {
+    background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+
+/* Current time indicator */
+.rbc-current-time-indicator {
+    background-color: var(--primary) !important;
+    height: 2px;
+}
+
+/* Remove default outer white border */
+.rbc-time-view {
+    border: 1px solid var(--border) !important;
+}
+
+/* Header separator line */
+.rbc-time-header {
+    border-bottom: 1px solid var(--border) !important;
+}
+
+/* Safety: remove any inherited hardcoded white borders */
+.rbc-time-content,
+.rbc-time-header-content {
+    border-color: var(--border) !important;
+}
+
+/* Time grid horizontal lines */
+.rbc-time-slot {
+    border-top: 1px solid var(--border) !important;
+}
+
+/* Ensure grouped slots match */
+.rbc-day-slot .rbc-time-slot {
+    border-top: 1px solid var(--border) !important;
+}
+
+/* Sometimes this one is used */
+.rbc-timeslot-group {
+    border-bottom: 1px solid var(--border) !important;
+}
+
+/* Remove default event time label */
+.rbc-event-label {
+    display: none !important;
+}
+
+.rbc-button-link {
+    padding: 1rem !important;
 }

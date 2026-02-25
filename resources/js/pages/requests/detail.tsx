@@ -8,6 +8,10 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import DefaultLayout from '@/layout.tsx/default.';
+import { RequestFacility } from '@/types/request';
+import { Link } from '@inertiajs/react';
+import { Separator } from '@/components/ui/separator';
+import moment from 'moment';
 
 interface Facility {
     id: number;
@@ -46,6 +50,7 @@ interface Request {
     created_at: string;
     facilities: Facility[];
     equipment: Equipment[];
+    request_facilities: RequestFacility[],
 }
 
 interface DetailProps {
@@ -66,21 +71,24 @@ export default function RequestDetail({ request }: DetailProps) {
     }
 
     switch (request.status) {
-        case 'approved':
-            statusColor = 'default';
+        case 'Approved':
+            statusColor = "default";
             break;
-        case 'pending':
-            statusColor = 'outline';
+        case 'Pending':
+            statusColor = "outline";
             break;
-        case 'denied':
-            statusColor = 'destructive';
+        case 'Denied':
+            statusColor = "destructive";
+            break;
+        case 'Conditionally Approved':
+            statusColor = "secondary";
             break;
     }
 
     return (
         <DefaultLayout>
             <div className="flex flex-col w-full max-w-4xl gap-4 *:text-sm">
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 text-sm">
                     <h1 className='font-bold text-xl'>{request.title}</h1>
 
                     <div className="flex flex-wrap gap-2 items-center">
@@ -118,45 +126,74 @@ export default function RequestDetail({ request }: DetailProps) {
                         </div>
                     )}
 
-                    <p>{request.description}</p>
-                    <p>Requested by: {request.user.name}</p>
+                    <p className='my-4'>{request.description}</p>
+
+                    <div className="flex items-center gap-2">
+                        <p>Requested by {request.user.name}</p>
+                        <p className='text-muted-foreground'>{moment(request.created_at).fromNow()}</p>
+                    </div>
                 </div>
 
-                <h2 className='font-semibold'>Facilities Requested</h2>
+                <h2 className='font-semibold text-muted-foreground mt-4'>Facilities Requested</h2>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-8 xl:grid grid-cols-[1fr_1fr] w-full">
                     {request.facilities.map((facility) => {
                         const facilityEquipment = request.equipment.filter(
                             (eq) => eq.facility_id === facility.id
                         );
+                        const facilityRequest = request.request_facilities.find(
+                            (rf) => rf.facility_id === facility.id &&
+                                facility.pivot.date_requested === rf.date_requested &&
+                                facility.pivot.time_start === rf.time_start &&
+                                facility.pivot.time_end === rf.time_end
+                        )
 
                         const date = new Date(facility.pivot.date_requested).toLocaleDateString();
 
                         return (
-                            <Card key={facility.id}>
+                            <Card key={facility.id} className='py-8 px-4'>
                                 <CardHeader>
-                                    <CardTitle>{facility.name}</CardTitle>
-                                    <CardDescription className='flex items-center text-sm gap-2'>
-                                        <Calendar size={16}/>
-                                        <span className='font-medium'>{date}</span>
-                                        <Clock className='ml-4' size={16}/>
-                                        <span className='font-medium'>
-                                            {formatTime(facility.pivot.time_start)} to {formatTime(facility.pivot.time_end)}
-                                        </span>
+                                    <Link href={route("facility.detail", [facility.id])}>
+                                        <CardTitle className='hover:underline text-lg'>{facility.name}</CardTitle>
+                                    </Link>
+                                    <CardDescription className='flex items-center flex-wrap text-sm gap-2'>
+                                        <div className="flex items-center gap-1">
+                                            <Calendar size={16} />
+                                            <span className='font-medium'>{date}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Clock size={16} />
+                                            <span className='font-medium'>
+                                                {formatTime(facility.pivot.time_start)} to {formatTime(facility.pivot.time_end)}
+                                            </span>
+                                        </div>
                                     </CardDescription>
                                 </CardHeader>
 
-                                <CardContent>
-                                    {(facilityEquipment.length > 0) && (<span className="font-semibold text-muted-foreground">Equipments</span>)}
-                                    <CardDescription className='space-y-2'>
-                                        {facilityEquipment.map((eq) => (
-                                            <div key={eq.id} className="flex justify-between text-foreground">
-                                                <span>{eq.name}</span>
-                                                <span className="">x{eq.pivot.quantity_needed}</span>
-                                            </div>
-                                        ))}
-                                    </CardDescription>
-                                </CardContent>
+                                {(facilityEquipment.length > 0) && (
+                                    <CardContent>
+                                        <CardTitle className="font-semibold text-muted-foreground mb-4">Equipments</CardTitle>
+                                        <CardDescription className='flex flex-col gap-4'>
+                                            {facilityEquipment.map((eq) => (
+                                                <div key={eq.id} className="flex justify-between text-foreground">
+                                                    <span>{eq.name}</span>
+                                                    <span className="">{eq.pivot.quantity_needed}</span>
+                                                </div>
+                                            ))}
+                                        </CardDescription>
+                                    </CardContent>
+                                )}
+
+                                {facilityRequest?.external_equipment && (
+                                    <CardContent>
+                                        <Separator />
+                                        <CardTitle className="font-semibold text-muted-foreground mt-4 mb-4">External Equipments</CardTitle>
+                                        <CardDescription className='space-y-2 text-foreground'>
+                                            {facilityRequest.external_equipment}
+                                        </CardDescription>
+                                    </CardContent>
+                                )}
+
                             </Card>
                         );
                     })}

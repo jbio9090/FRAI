@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AccountController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\RequestController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\RulesController;
@@ -14,9 +16,7 @@ use Inertia\Inertia;
 Route::middleware("auth")->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware("auth")->name("logout");
 
-    Route::get("/", function () {
-        return Inertia::render("dashboard");
-    })->name('dashboard');
+    Route::get("/", [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
@@ -27,6 +27,7 @@ Route::middleware("auth")->group(function () {
     Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
     Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
     Route::get('/requests/on-hold', [RequestController::class, 'onHoldPage'])->name('requests.on-hold');
+    Route::get('/requests/conditionally_approved', [RequestController::class, 'conditionallyApprovedPage'])->name('requests.conditionally_approved');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
 
@@ -34,8 +35,9 @@ Route::middleware("auth")->group(function () {
     Route::middleware(['permission:approve requests'])->group(function () {
         Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
+        Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
+        Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
     });
-
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
 
@@ -50,7 +52,7 @@ Route::middleware("auth")->group(function () {
     Route::get("/facilities", [FacilityController::class, "index"])->name("facilities");
     Route::get("/facilities/{facility_id}", [FacilityController::class, "detail"])->name("facility.detail");
 
-    // JSon
+    // JSON
     Route::get("/facilities/getSchedule/{facility}/{date}", [FacilityController::class, "getDayScheduleJson"])->name("facility.schedule");
     Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
 
@@ -75,6 +77,16 @@ Route::middleware("auth")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
         Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");
         Route::post("/send", [NotificationController::class, "send"])->name("notification.subscribe");
+    });
+
+    Route::middleware('permission:manage users')->group(function () {
+        Route::get("/accounts", [AccountController::class, 'index'])->name("accounts.index");
+        Route::post("/accounts/create", [AccountController::class, 'store'])->name("accounts.create");
+        Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+    });
+
+    Route::middleware("permission:manage facilities")->group(function () {
+        Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
     });
 });
 

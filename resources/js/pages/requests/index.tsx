@@ -1,149 +1,166 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, PauseCircle, ShieldAlert, School } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, MessageCircleOff, MousePointer2, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
+import { Request, RequestsPageProps } from '@/types/request';
+import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
+import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { useState } from 'react';
-import MotionChevron from '@/components/animated_icons/MotionChevron';
+import { Field, FieldDescription } from '@/components/ui/field';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
 
-interface Request {
-    id: number;
-    title: string;
-    description: string;
-    status: string;
-    on_hold: boolean;
-    priority_level: number;
-    priority_reason: string | null;
-    held_by_request: { id: number; title: string } | null;
-    user: {
-        name: string;
-        email: string;
+
+export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
+    const [selected, setSelected] = useState<number[]>([]);
+    const [isSelecting, setSelectState] = useState<boolean>(false);
+    const [bulkComment, setBulkComment] = useState("");
+    const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
+
+    const handleSelection = (request_id: number) => {
+        setSelected((prev) =>
+            prev.includes(request_id)
+                ? prev.filter((id) => id !== request_id)
+                : [...prev, request_id]
+        );
     };
-    request_facilities: RequestFacility[];
-    facilities: Facility[];
-    created_at: string;
-    updated_at: string;
-}
 
-interface RequestFacility {
-    facility_id: number;
-    id: number,
-    time_end: string,
-    time_start: string,
-    date_requested: string;
-}
+    const clearAllSelection = () => {
+        setSelected([]);
+    }
 
-interface Facility {
-    id: number;
-    name: string;
-    building: string;
-    capacity: number
-}
+    const selectAllSelection = () => {
+        setSelected(requests.map((req) => req.id));
+    }
 
-interface RequestsPageProps {
-    requests: Request[];
-    page_title: string;
-}
+    const toggleSelection = () => {
+        setSelectState(!isSelecting);
+        if (isSelecting) setSelected([]);
+    }
 
-export default function PendingRequests({ requests, page_title }: RequestsPageProps) {
-    const { hasPermission } = usePermission();
+    const bulkAction = (action: string) => {
+        router.post(route('bulk.action'), {
+            ids: selected,
+            action,
+            comment: bulkComment.length > 0 ? bulkComment : null,
+        }, {
+            onSuccess: () => {
+                setSelected([]);
+                setSelectState(false);
+                setBulkComment("");
+                setIsBulkCommentOpen(false);
+            },
+        });
+    };
 
     return (
         <DefaultLayout>
             <div className="max-w-6xl mx-auto w-full">
-                <h1 className="text-2xl font-bold mb-6">{page_title} Requests</h1>
+                <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
+                <div className="flex flex-col justify-center w-full mt-4 mb-4 flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                        <Button
+                            size={"sm"}
+                            variant={"outline"}
+                            onClick={toggleSelection}
+                            className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
+                        >
+                            <MousePointer2 size={16} />
+                            <span>{!isSelecting ? "Bulk Action" : "Stop Selection"}</span>
+                        </Button>
 
-                <div className="gap-4 flex flex-col lg:grid grid-cols-[1fr_1fr]">
+                        {(!(selected.length >= requests.length) && (isSelecting)) && (
+                            <Button
+                                size={"sm"}
+                                variant={"outline"}
+                                onClick={selectAllSelection}
+                            >
+                                <MousePointer2 size={16} />
+                                <span>Select All</span>
+                            </Button>
+                        )}
+
+                        {(selected.length > 0 && (
+                            <Button
+                                size={"sm"}
+                                variant={"outline"}
+                                onClick={clearAllSelection}
+                            >
+                                <X size={16} />
+                                <span>Clear</span>
+                            </Button>
+                        ))}
+
+                        <Separator orientation='vertical' />
+
+                        {isSelecting && selected.length > 0 && (
+                            <span className="ml-4 text-sm font-medium">
+                                {selected.length} selected
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
+                                <Check size={16} />
+                                <span>Approve</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
+                                <X size={16} />
+                                <span>Deny</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
+                                <CheckLine size={16} />
+                                <span>Conditionally Approve</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
+                                {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
+                                <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                {selected.length > 0 && isBulkCommentOpen && (
+                    <div className="w-full mt-2">
+                        <Field>
+                            <FieldDescription>Comment to attach to all selected requests</FieldDescription>
+                            <Textarea
+                                rows={3}
+                                className="w-full"
+                                value={bulkComment}
+                                onChange={(e) => setBulkComment(e.target.value)}
+                            />
+                        </Field>
+                    </div>
+                )}
+
+
+                <div className="gap-4 mt-8 flex flex-col xl:grid grid-cols-[1fr_1fr]">
                     {requests.map((request) => (
-                        <div key={request.id} className="border rounded-lg p-4 h-content min-h-0">
-                            <div className="flex justify-between items-start flex-col gap-6">
-                                <div className="flex justify-around w-full">
-                                    <div className='flex flex-col gap-1'>
-                                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <h3 className="font-bold">{request.title}</h3>
-                                            {request.on_hold && (
-                                                <Badge variant="outline" className="text-yellow-600 border-yellow-500 bg-yellow-50 flex items-center gap-1">
-                                                    <PauseCircle size={12} />
-                                                    On Hold
-                                                </Badge>
-                                            )}
-                                            {request.priority_level === 2 && (
-                                                <Badge variant="outline" className="text-red-600 border-red-500 bg-red-50 flex items-center gap-1">
-                                                    <ShieldAlert size={12} />
-                                                    Gov / High Authority
-                                                </Badge>
-                                            )}
-                                            {request.priority_level === 1 && (
-                                                <Badge variant="outline" className="text-blue-600 border-blue-500 bg-blue-50 flex items-center gap-1">
-                                                    <School size={12} />
-                                                    School Event
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <p className="mt-1 text-sm">{request.description}</p>
-                                        {request.on_hold && request.held_by_request && (
-                                            <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-1 mt-1">
-                                                ⏸ Put on hold by: <span className="font-semibold">"{request.held_by_request.title}"</span>
-                                                {request.priority_reason && <span> — {request.priority_reason}</span>}
-                                            </p>
-                                        )}
-
-                                        <div className="text-sm mt-4 flex gap-2 items-center">
-                                            <Avatar size='sm'>
-                                                <AvatarImage
-                                                    src='/profile/default.png'
-                                                />
-                                            </Avatar>
-                                            <span className='text-sm'>
-                                                {request.user.name}
-                                            </span>
-                                            <p className="text-xs text-muted-foreground">
-                                                Submitted {moment(request.updated_at).fromNow()}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <Link href={route("requests.detail", request.id)} className='flex-0 ml-auto mr-0'>
-                                        <Button
-                                            size="xs"
-                                            variant="outline"
-                                        >
-                                            <ArrowUpRight />
-                                        </Button>
-                                    </Link>
-                                </div>
-
-                                <RequestedFaciltiiesCollapsible
-                                    request={request}
-                                />
-
-                                {(hasPermission('approve requests') && page_title == "Pending") && (
-                                    <div className="flex justify-end gap-2 w-content ml-auto">
-                                        <Button
-                                            onClick={() => {
-                                                router.post(route('requests.approve', request.id));
-                                            }}
-                                            variant="default"
-                                        >
-                                            Approve
-                                        </Button>
-                                        <Button
-                                            onClick={() => {
-                                                router.post(route('requests.reject', request.id));
-                                            }}
-                                            variant="outline"
-                                            className='hover:border-destructive hover:text-destructive hover:bg-destructive/4'
-                                        >
-                                            Reject
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                        <RequestCard
+                            request={request}
+                            page_title={page_title}
+                            key={request.id}
+                            isSelecting={isSelecting}
+                            isSelected={selected.includes(request.id)}
+                            handleSelection={handleSelection}
+                        />
                     ))}
                 </div>
             </div>
@@ -151,54 +168,216 @@ export default function PendingRequests({ requests, page_title }: RequestsPagePr
     );
 }
 
-interface CollapsibleProps {
+
+function RequestCard({
+    request,
+    page_title,
+    handleSelection,
+    isSelecting,
+    isSelected
+}: {
     request: Request;
-}
+    page_title: string;
+    handleSelection: (id: number) => void;
+    isSelecting: boolean;
+    isSelected: boolean;
+}) {
+    const { hasPermission } = usePermission();
+    const [isCommentInputOpen, setCommentInputState] = useState(false);
+    const [comment, setComment] = useState("");
 
-function RequestedFaciltiiesCollapsible({ request }: CollapsibleProps) {
-    const [openCollapsible, setCollapsibleState] = useState(false);
+    const toggleInput = () => {
+        setCommentInputState(prev => !prev);
+        setComment("");
+    }
 
-    const formatTime = (time: string) => {
-        const [hours, minutes] = time.split(':');
-        const h = parseInt(hours);
-        const ampm = h >= 12 ? 'pm' : 'am';
-        const hour12 = h % 12 || 12;
-        return `${hour12}:${minutes}${ampm}`;
-    };
+    const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setComment(e.target.value);
+    }
+
+    const handleAction = (route_name: string) => {
+        router.post(route(route_name, request.id), { comment: (comment.length > 0) ? comment : null });
+    }
 
     return (
-        <Collapsible className='w-full' open={openCollapsible} onOpenChange={setCollapsibleState}>
-            <CollapsibleTrigger className='text-sm text-muted-foreground cursor-pointer flex items-center gap-1 hover:text-foreground w-full'>
-                <Calendar size={16} />
-                <span>Facilities Requested</span>
-                <span className='text-xs font-bold bg-muted-foreground text-background rounded-full w-4 h-4 ml-1'>{request.facilities.length}</span>
-                <MotionChevron openCollapsible={openCollapsible} className='mr-0 ml-auto' />
-            </CollapsibleTrigger>
-            <CollapsibleContent className='flex flex-wrap gap-2 md:grid grid-cols-[1fr_1fr] m-auto'>
-                {request.request_facilities.map((rf) => {
-                    const facility = request.facilities.find(f => f.id === rf.facility_id);
+        <div
+            onClick={() => isSelecting && handleSelection(request.id)}
+            className={cn(
+                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200",
+                isSelecting && "cursor-pointer hover:border-primary/50",
+                isSelected && "border-primary ring-1 ring-primary"
+            )}
+        >
+            <div className={cn("flex justify-between items-start w-full flex-col gap-6", isSelecting && "pointer-events-none")}>
+                <div className="flex justify-around w-full">
+                    <div className='flex flex-col gap-1'>
+                        <h3 className="font-bold">{request.title}</h3>
+                        <p className="mt-2 text-foreground/70 text-sm">{request.description}</p>
 
-                    return (
-                        <div className='flex flex-col items-center text-sm max-w-40 text-foreground mt-4' key={rf.date_requested + rf.time_start}>
-                            <span className='font-semibold w-full'>{facility?.name}</span>
-                            <div className="flex items-center flex-wrap text-foreground/70 font-medium">
-                                <div className="flex gap-1 items-center">
-                                    <Calendar size={12} />
-                                    <span className='text-sm'>
-                                        {moment(rf.date_requested).format("MMM D, YYYY")}
-                                    </span>
-                                </div>
-                                <div className="flex gap-1 items-center">
-                                    <Clock size={12} />
-                                    <span className='text-sm'>
-                                        {formatTime(rf.time_start)} - {formatTime(rf.time_end)}
-                                    </span>
-                                </div>
+                        <div className="text-sm mt-4 flex gap-2 items-center">
+                            <Avatar size='sm'>
+                                <AvatarImage src='/profile/default.png' />
+                            </Avatar>
+                            <span className='text-sm'>{request.user.name}</span>
+                            <p className="text-xs text-muted-foreground">
+                                Submitted {moment(request.updated_at).fromNow()}
+                            </p>
+                        </div>
+                    </div>
+
+                    <Link href={route("requests.detail", request.id)} className='flex-0 ml-auto mr-0'>
+                        <Button size="xs" variant="outline">
+                            <ArrowUpRight />
+                        </Button>
+                    </Link>
+                </div>
+
+                <RequestDetails request={request} />
+
+                {(hasPermission('approve requests') && page_title == "Pending") && (
+                    <div className="flex flex-col w-full">
+                        <div className="flex items-center">
+                            <div className="flex flex-col">
+                                <span className='text-xs font-semibold text-muted-foreground'>Recommendation</span>
+                                <span className={cn('font-black ', request.recommended_action === "Denied" && " text-destructive")}>
+                                    {recommendedActionToPresentTense(request.recommended_action)}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-end gap-2 w-content ml-auto">
+                                <Button onClick={() => handleAction("requests.approve")} variant="default">
+                                    Approve
+                                </Button>
+                                <Button onClick={() => handleAction("requests.reject")} variant="outline" className='hover:border-destructive hover:text-destructive hover:bg-destructive/4'>
+                                    Deny
+                                </Button>
+
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline">More</Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        <DropdownMenuGroup>
+                                            <DropdownMenuItem onClick={() => handleAction("requests.conditionally_approve")}>
+                                                <CheckLine size={16} />
+                                                <span>Conditionally Approve</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={toggleInput}>
+                                                {isCommentInputOpen ? <MessageCircleOff size={16} /> : <MessageCirclePlus size={16} />}
+                                                <span>{isCommentInputOpen ? "Cancel Comment" : "Add Comment"}</span>
+                                            </DropdownMenuItem>
+                                        </DropdownMenuGroup>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         </div>
-                    );
-                })}
-            </CollapsibleContent>
-        </Collapsible>
+
+                        {isCommentInputOpen && (
+                            <Field className="flex mt-8">
+                                <FieldDescription>Specify your reason for your action</FieldDescription>
+                                <Textarea rows={3} className='w-full' onChange={handleCommentChange} />
+                            </Field>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
+function RequestDetails({ request }: { request: Request }) {
+    const isPending: boolean = request.status === "Pending";
+    const [activeTab, setActiveTab] = useState("facilities");
+
+    const tabs = [
+        {
+            value: "facilities",
+            icon: <Calendar size={16} />,
+            label: "Facilities",
+            badge: request.facilities.length,
+            content: (
+                <div className='flex flex-wrap gap-2 md:grid grid-cols-[1fr_1fr] w-auto'>
+                    {request.request_facilities.map((rf) => {
+                        const facility = request.facilities.find(f => f.id === rf.facility_id);
+                        return (
+                            <div className='flex flex-col items-center text-sm max-w-40 text-foreground mt-4' key={rf.date_requested + rf.time_start}>
+                                <Link href={route("facility.detail", [rf.facility_id])} className='mr-auto ml-0 hover:underline'>
+                                    <span className='font-semibold'>{facility?.name}</span>
+                                </Link>
+                                <div className="flex items-center flex-wrap text-foreground/70 font-medium">
+                                    <div className="flex gap-1 items-center">
+                                        <Calendar size={12} />
+                                        <span className='text-sm'>{moment(rf.date_requested).format("MMM D, YYYY")}</span>
+                                    </div>
+                                    <div className="flex gap-1 items-center">
+                                        <Clock size={12} />
+                                        <span className='text-sm'>{formatTime(rf.time_start)} - {formatTime(rf.time_end)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ),
+        },
+        {
+            value: "comment",
+            icon: <MessageCircleWarning size={16} />,
+            label: "Comment",
+            content: request.comment ? (
+                <p className='text-sm mt-4'>{request.comment}</p>
+            ) : (
+                <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comment from admin</p>
+            ),
+        },
+        ...(isPending ? [{
+            value: "recommend",
+            icon: <ThumbsUp size={16} />,
+            label: "Recommendation",
+            content: (
+                <>
+                    <p className='font-bold'>{request.recommended_action}</p>
+                    <p className='text-sm'>{request.recommended_action_reason}</p>
+                </>
+            ),
+        }] : []),
+    ];
+
+    return (
+        <>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full hidden xs:block'>
+                <TabsList className="w-full" variant={"line"}>
+                    {tabs.map((tab) => (
+                        <TabsTrigger key={tab.value} value={tab.value}>
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                            {tab.badge !== undefined && (
+                                <span className='font-bold text-xs bg-muted-foreground text-background rounded-full w-4 h-4'>{tab.badge}</span>
+                            )}
+                        </TabsTrigger>
+                    ))}
+                </TabsList>
+                {tabs.map((tab) => (
+                    <TabsContent key={tab.value} value={tab.value}>
+                        {tab.content}
+                    </TabsContent>
+                ))}
+            </Tabs>
+
+            <div className='w-full block xs:hidden'>
+                <Select value={activeTab} onValueChange={setActiveTab}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select view" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {tabs.map((tab) => (
+                            <SelectItem key={tab.value} value={tab.value}>{tab.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {tabs.find(tab => tab.value === activeTab)?.content}
+            </div>
+        </>
     );
 }

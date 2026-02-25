@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\FacilityFormRequest;
+use Illuminate\Http\Request;
 use App\Models\Request as FacilityRequest;
 use Inertia\Inertia;
 use Illuminate\Validation\ValidationException;
@@ -43,7 +44,6 @@ class RequestController extends Controller
         ]);
     }
 
-
     public function deniedPage()
     {
         $requests = $this->service->get(RequestStatus::DENIED);
@@ -65,12 +65,12 @@ class RequestController extends Controller
         ]);
     }
 
-
     // Admin-only: Approve request
-    public function approve($id)
+    public function approve(Request $request, $id)
     {
+        $comment = $request->input("comment", "Your request has been approved");
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::APPROVED]);
+        $facilityRequest->update(['status' => RequestStatus::APPROVED, "comment" => $comment]);
 
         $this->notification->notifyUser($facilityRequest);
 
@@ -78,10 +78,11 @@ class RequestController extends Controller
     }
 
     // Admin-only: Reject request
-    public function reject($id)
+    public function reject(Request $request, $id)
     {
+        $comment = $request->input("comment", "Your request has been approved");
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::DENIED]);
+        $facilityRequest->update(['status' => RequestStatus::DENIED,  "comment" => $comment]);
 
         // If this request was holding others on hold, release them
         foreach ($facilityRequest->heldRequests as $heldRequest) {
@@ -93,11 +94,33 @@ class RequestController extends Controller
         return redirect()->back()->with('success', 'Request rejected successfully');
     }
 
+    // Admin laang
+    public function conditionally_approve(Request $request, $id)
+    {
+        $comment = $request->input("comment", "Your request has been conditionally approved");
+        $facilityRequest = FacilityRequest::findOrFail($id);
+        $facilityRequest->update(['status' => RequestStatus::CONDITIONALLY_APPROVED,  "comment" => $comment]);
+
+        $this->notification->notifyUser($facilityRequest);
+
+        return redirect()->back()->with('success', 'Request conditionally approved successfully');
+    }
+
 
     public function createPage()
     {
         return Inertia::render("requests/create", [
             'facilities' => Facility::with('equipments')->get(),
+        ]);
+    }
+
+    public function conditionallyApprovedPage()
+    {
+        $requests = $this->service->get(RequestStatus::CONDITIONALLY_APPROVED);
+
+        return Inertia::render('requests/index', [
+            'requests' => $requests,
+            'page_title' => "Conditionally Approved",
         ]);
     }
 
@@ -158,8 +181,52 @@ class RequestController extends Controller
 
         $saved_request = $this->service->create($validated);
 
+        $this->service->recommendAction($validated, $saved_request);
+
         $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
+    }
+
+
+    // RequestController.php
+
+    public function bulkAction(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:requests,id'],
+            'action' => ['required', 'string', 'in:approve,reject,conditionally_approve'],
+            'comment' => ['nullable', 'string'],
+        ]);
+
+        $ids = $validated['ids'];
+        $action = $validated['action'];
+        $comment = $validated['comment'] ?? null;
+
+        $statusMap = [
+            'approve' => RequestStatus::APPROVED,
+            'reject' => RequestStatus::DENIED,
+            'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
+        ];
+
+        $defaultCommentMap = [
+            'approve' => 'Your request has been approved.',
+            'reject' => 'Your request has been denied.',
+            'conditionally_approve' => 'Your request has been conditionally approved.',
+        ];
+
+        $facilityRequests = FacilityRequest::whereIn('id', $ids)->get();
+
+        foreach ($facilityRequests as $facilityRequest) {
+            $facilityRequest->update([
+                'status' => $statusMap[$action],
+                'comment' => $comment ?? $defaultCommentMap[$action],
+            ]);
+
+            $this->notification->notifyUser($facilityRequest);
+        }
+
+        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' applied to ' . count($facilityRequests) . ' request(s).');
     }
 }

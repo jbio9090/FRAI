@@ -34,6 +34,7 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.equipment'                   => 'array',
             'facility_bookings.*.equipment.*.equipment_id'    => 'required|exists:equipments,id',
             'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
+            'facility_bookings.*.external_equipment' => 'nullable|string|max:1000',
         ];
     }
 
@@ -48,6 +49,7 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.time_start' => 'start time',
             'facility_bookings.*.time_end' => 'end time',
             'facility_bookings.*.equipment.*.quantity_needed' => 'equipment quantity',
+            'facility_bookings.*.external_equipment' => 'external equipment',
         ];
     }
 }

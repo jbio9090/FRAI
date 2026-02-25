@@ -1,16 +1,18 @@
 import { Link, router } from "@inertiajs/react"
 import {
   LayoutGrid,
-  FileText,
+  FileClock,
   LogOut,
   CirclePlus,
-  FileCheck,
-  FileX,
+  CheckLine,
+  X,
   BookOpen,
   Box,
   Settings,
   Bot,
-  PauseCircle
+  PauseCircle,
+  Check,
+  User,
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -25,51 +27,66 @@ import {
   SidebarFooter,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
+import { usePermission } from "@/hooks/use-permission"
+import { useEffect, useState } from "react"
 
-
-const data = {
-  topNav: [
-    {
-      title: "Dashboard",
-      url: "dashboard",
-      icon: LayoutGrid,
-    },
-    {
-      title: "Rules",
-      url: "rules",
-      icon: BookOpen,
-    },
-    {
-      title: "Facilities",
-      url: "facilities",
-      icon: Box,
-    },
-  ],
-  navMenu: [
-    {
-      title: "Pending",
-      url: "requests.index",
-      icon: FileText
-    },
-    {
-      title: "Approved",
-      url: "requests.approved",
-      icon: FileCheck
-    },
-    {
-      title: "Denied",
-      url: "requests.denied",
-      icon: FileX
-    },
-    {
-      title: "On Hold",
-      url: "requests.on-hold",
-      icon: PauseCircle
-    }
-  ]
-}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { hasPermission } = usePermission();
+  const [data, setData] = useState({
+    topNav: [
+      {
+        title: "Dashboard",
+        url: "dashboard",
+        icon: LayoutGrid,
+      },
+      {
+        title: "Rules",
+        url: "rules",
+        icon: BookOpen,
+      },
+      {
+        title: "Facilities",
+        url: "facilities",
+        icon: Box,
+      },
+      ...(hasPermission("manage users")
+        ? [{
+          title: "Accounts",
+          url: "accounts.index",
+          icon: User,
+        }]
+        : [])
+    ],
+    navMenu: [
+      {
+        title: "Pending",
+        url: "requests.index",
+        icon: FileClock
+      },
+      {
+        title: "Approved",
+        url: "requests.approved",
+        icon: Check
+      },
+      {
+        title: "Conditionally Approved",
+        url: "requests.conditionally_approved",
+        icon: CheckLine
+      },
+      {
+        title: "Denied",
+        url: "requests.denied",
+        icon: X
+      },
+      {
+        title: "On Hold",
+        url: "requests.on-hold",
+        icon: PauseCircle
+      }
+    ]
+  })
+
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     router.post(route("logout"));

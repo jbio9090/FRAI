@@ -27,6 +27,9 @@ class Request extends Model
         'status'         => RequestStatus::class,
         'on_hold'        => 'boolean',
         'priority_level' => 'integer',
+        'comment',
+        'recommended_action',
+        'recommended_action_reason',
     ];
 
     /**

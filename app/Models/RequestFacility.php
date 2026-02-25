@@ -13,6 +13,7 @@ class RequestFacility extends Model
         'date_requested',
         'time_start',
         'time_end',
+        'external_equipment',
     ];
 
     public function request()
