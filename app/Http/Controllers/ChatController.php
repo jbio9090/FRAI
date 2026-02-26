@@ -16,8 +16,13 @@ use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
-    private $ollamaUrl = 'http://127.0.0.1:11434';
-    private $model = 'qwen3:0.6b';
+    private string $ollamaUrl = 'http://127.0.0.1:11434';
+    private string $model;
+
+    public function __construct()
+    {
+        $this->model = config("ollama-laravel.model", "FRAI");
+    }
 
     /**
      * Filter facilities by participant count
@@ -214,86 +219,86 @@ class ChatController extends Controller
             $data = json_decode($response->getBody(), true);
 
             // Validate the assistant's reply against rules using a validator prompt (rules enforced always)
-            if (!empty($rules)) {
-                // try {
-                //     // Extract assistant output text
-                //     $assistantText = '';
-                //     if (is_array($data) && isset($data['message']['content'])) {
-                //         $assistantText = $data['message']['content'];
-                //     } elseif (is_array($data) && isset($data['response'])) {
-                //         $assistantText = $data['response'];
-                //     } elseif (is_string($data)) {
-                //         $assistantText = $data;
-                //     }
+            // if (!empty($rules)) {
+            //     try {
+            //         // Extract assistant output text
+            //         $assistantText = '';
+            //         if (is_array($data) && isset($data['message']['content'])) {
+            //             $assistantText = $data['message']['content'];
+            //         } elseif (is_array($data) && isset($data['response'])) {
+            //             $assistantText = $data['response'];
+            //         } elseif (is_string($data)) {
+            //             $assistantText = $data;
+            //         }
 
-                //     $validatorMessages = [
-                //         [
-                //             'role' => 'system',
-                //             'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules. Important distinctions:\n\n- VIOLATIONS (hard constraints): Explicit prohibitions like 'do not mention X', 'never do Y', 'forbidden topic', 'cannot discuss Z'\n- NOT VIOLATIONS (soft guidelines): Style preferences like 'be brief', 'be concise', 'use simple language', 'be friendly' - these are aspirational, not absolute prohibitions\n\nOnly flag something as a violation if it DIRECTLY contradicts a strict prohibition. Stylistic guidelines or tone suggestions should NOT be flagged. Return ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). Example: {\"violations\": [0,2]} or {\"violations\": []}. No extra text."
-                //         ],
-                //         [
-                //             'role' => 'user',
-                //             'content' => "Rules:\n- " . implode("\n- ", $rules) . "\n\nAssistant Response:\n" . $assistantText
-                //         ]
-                //     ];
+            //         $validatorMessages = [
+            //             [
+            //                 'role' => 'system',
+            //                 'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules. Important distinctions:\n\n- VIOLATIONS (hard constraints): Explicit prohibitions like 'do not mention X', 'never do Y', 'forbidden topic', 'cannot discuss Z'\n- NOT VIOLATIONS (soft guidelines): Style preferences like 'be brief', 'be concise', 'use simple language', 'be friendly' - these are aspirational, not absolute prohibitions\n\nOnly flag something as a violation if it DIRECTLY contradicts a strict prohibition. Stylistic guidelines or tone suggestions should NOT be flagged. Return ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). Example: {\"violations\": [0,2]} or {\"violations\": []}. No extra text."
+            //             ],
+            //             [
+            //                 'role' => 'user',
+            //                 'content' => "Rules:\n- " . implode("\n- ", $rules) . "\n\nAssistant Response:\n" . $assistantText
+            //             ]
+            //         ];
 
-                //     try {
-                //         $validatorResp = $client->post($this->ollamaUrl . '/api/chat', [
-                //             'json' => [
-                //                 'model' => $this->model,
-                //                 'messages' => $validatorMessages,
-                //                 'stream' => false,
-                //             ],
-                //         ]);
+            //         try {
+            //             $validatorResp = $client->post($this->ollamaUrl . '/api/chat', [
+            //                 'json' => [
+            //                     'model' => $this->model,
+            //                     'messages' => $validatorMessages,
+            //                     'stream' => false,
+            //                 ],
+            //             ]);
 
-                //         // Check if the response is successful
-                //         if (!$validatorResp->getStatusCode() || $validatorResp->getStatusCode() >= 400) {
-                //             \Log::warning('Validator API returned error status: ' . $validatorResp->getStatusCode());
-                //             // Skip validation if validator fails
-                //             return response()->json($data);
-                //         }
+            //             // Check if the response is successful
+            //             if (!$validatorResp->getStatusCode() || $validatorResp->getStatusCode() >= 400) {
+            //                 \Log::warning('Validator API returned error status: ' . $validatorResp->getStatusCode());
+            //                 // Skip validation if validator fails
+            //                 return response()->json($data);
+            //             }
 
-                //         $validatorData = json_decode($validatorResp->getBody(), true);
-                //         $jsonText = '';
-                //         if (is_array($validatorData) && isset($validatorData['message']['content'])) {
-                //             $jsonText = $validatorData['message']['content'];
-                //         } elseif (is_array($validatorData) && isset($validatorData['response'])) {
-                //             $jsonText = $validatorData['response'];
-                //         } else {
-                //             $jsonText = is_string($validatorData) ? $validatorData : '';
-                //         }
+            //             $validatorData = json_decode($validatorResp->getBody(), true);
+            //             $jsonText = '';
+            //             if (is_array($validatorData) && isset($validatorData['message']['content'])) {
+            //                 $jsonText = $validatorData['message']['content'];
+            //             } elseif (is_array($validatorData) && isset($validatorData['response'])) {
+            //                 $jsonText = $validatorData['response'];
+            //             } else {
+            //                 $jsonText = is_string($validatorData) ? $validatorData : '';
+            //             }
 
-                //         $parsed = @json_decode($jsonText, true);
-                //         if (is_array($parsed) && isset($parsed['violations']) && is_array($parsed['violations']) && !empty($parsed['violations'])) {
-                //             // Build detailed violation message with rule indices and text
-                //             $violationDetails = [];
-                //             foreach ($parsed['violations'] as $ruleIndex) {
-                //                 if (isset($rules[$ruleIndex])) {
-                //                     $violationDetails[] = "Rule #" . ($ruleIndex + 1) . ": " . $rules[$ruleIndex];
-                //                 }
-                //             }
+            //             $parsed = @json_decode($jsonText, true);
+            //             if (is_array($parsed) && isset($parsed['violations']) && is_array($parsed['violations']) && !empty($parsed['violations'])) {
+            //                 // Build detailed violation message with rule indices and text
+            //                 $violationDetails = [];
+            //                 foreach ($parsed['violations'] as $ruleIndex) {
+            //                     if (isset($rules[$ruleIndex])) {
+            //                         $violationDetails[] = "Rule #" . ($ruleIndex + 1) . ": " . $rules[$ruleIndex];
+            //                     }
+            //                 }
 
-                //             $violationMessage = "I cannot comply with that request because it would violate the following rules:\n\n" . implode("\n\n", $violationDetails);
+            //                 $violationMessage = "I cannot comply with that request because it would violate the following rules:\n\n" . implode("\n\n", $violationDetails);
 
-                //             // Replace assistant response with refusal message
-                //             $data = [
-                //                 'message' => [
-                //                     'content' => $violationMessage,
-                //                     'role' => 'assistant',
-                //                 ]
-                //             ];
-                //         }
-                //     } catch (RequestException $ve) {
-                //         // Validator API call failed
-                //         \Log::warning('Validator API request failed: ' . $ve->getMessage());
-                //         // Skip validation and return original response
-                //         return response()->json($data);
-                //     }
-                // } catch (\Exception $e) {
-                //     \Log::warning('Rule validation failed: ' . $e->getMessage());
-                //     // If validation fails, keep original response
-                // }
-            }
+            //                 // Replace assistant response with refusal message
+            //                 $data = [
+            //                     'message' => [
+            //                         'content' => $violationMessage,
+            //                         'role' => 'assistant',
+            //                     ]
+            //                 ];
+            //             }
+            //         } catch (RequestException $ve) {
+            //             // Validator API call failed
+            //             \Log::warning('Validator API request failed: ' . $ve->getMessage());
+            //             // Skip validation and return original response
+            //             return response()->json($data);
+            //         }
+            //     } catch (\Exception $e) {
+            //         \Log::warning('Rule validation failed: ' . $e->getMessage());
+            //         // If validation fails, keep original response
+            //     }
+            // }
 
             return response()->json($data);
         } catch (RequestException $e) {

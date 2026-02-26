@@ -7,7 +7,6 @@ use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\RequestStatus;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 
 class RequestService

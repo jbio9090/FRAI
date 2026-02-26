@@ -16,8 +16,7 @@ export default function Chatbot() {
 
     const { messages, addMessage, getMessagesText } = useMessages();
     const { participantCount, extractAndSet, getCurrentCount } = useParticipantCount();
-    const csrfToken = (page.props as any).csrf_token || '';
-    const { isLoading, error, sendMessage, detectAndSubmitRequest } = useChatAPI(csrfToken);
+    const { isLoading, error, sendMessage, detectAndSubmitRequest } = useChatAPI();
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
