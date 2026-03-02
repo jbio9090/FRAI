@@ -64,76 +64,83 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
                 <div className="flex flex-col justify-center w-full mt-4 mb-4 flex-wrap gap-4">
                     <div className="flex items-center gap-2">
-                        <Button
-                            size={"sm"}
-                            variant={"outline"}
-                            onClick={toggleSelection}
-                            className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
-                        >
-                            <MousePointer2 size={16} />
-                            <span>{!isSelecting ? "Bulk Action" : "Stop Selection"}</span>
-                        </Button>
+                        {(page_title === "Pending") && (
+                            <>
+                                <Button
+                                    size={"sm"}
+                                    variant={"outline"}
+                                    onClick={toggleSelection}
+                                    className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
+                                >
+                                    <MousePointer2 size={16} />
+                                    <span>{!isSelecting ? "Bulk Action" : "Stop Selection"}</span>
+                                </Button>
 
-                        {(!(selected.length >= requests.length) && (isSelecting)) && (
-                            <Button
-                                size={"sm"}
-                                variant={"outline"}
-                                onClick={selectAllSelection}
-                            >
-                                <MousePointer2 size={16} />
-                                <span>Select All</span>
-                            </Button>
-                        )}
 
-                        {(selected.length > 0 && (
-                            <Button
-                                size={"sm"}
-                                variant={"outline"}
-                                onClick={clearAllSelection}
-                            >
-                                <X size={16} />
-                                <span>Clear</span>
-                            </Button>
-                        ))}
+                                {(!(selected.length >= requests.length) && (isSelecting)) && (
+                                    <Button
+                                        size={"sm"}
+                                        variant={"outline"}
+                                        onClick={selectAllSelection}
+                                    >
+                                        <MousePointer2 size={16} />
+                                        <span>Select All</span>
+                                    </Button>
+                                )}
 
-                        <Separator orientation='vertical' />
+                                {(selected.length > 0 && (
+                                    <Button
+                                        size={"sm"}
+                                        variant={"outline"}
+                                        onClick={clearAllSelection}
+                                    >
+                                        <X size={16} />
+                                        <span>Clear</span>
+                                    </Button>
+                                ))}
 
-                        {isSelecting && selected.length > 0 && (
-                            <span className="ml-4 text-sm font-medium">
-                                {selected.length} selected
-                            </span>
-                        )}
-                    </div>
+                                <Separator orientation='vertical' />
 
-                    <div className="flex items-center gap-2">
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
-                                <Check size={16} />
-                                <span>Approve</span>
-                            </Button>
-                        )}
-
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
-                                <X size={16} />
-                                <span>Deny</span>
-                            </Button>
-                        )}
-
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
-                                <CheckLine size={16} />
-                                <span>Conditionally Approve</span>
-                            </Button>
-                        )}
-
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
-                                {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
-                                <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
-                            </Button>
+                                {isSelecting && selected.length > 0 && (
+                                    <span className="ml-4 text-sm font-medium">
+                                        {selected.length} selected
+                                    </span>
+                                )}
+                            </>
                         )}
                     </div>
+
+                    {(page_title === "Pending") && (
+                        <div className="flex items-center gap-2">
+                            {selected.length > 0 && (
+                                <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
+                                    <Check size={16} />
+                                    <span>Approve</span>
+                                </Button>
+                            )}
+
+                            {selected.length > 0 && (
+                                <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
+                                    <X size={16} />
+                                    <span>Deny</span>
+                                </Button>
+                            )}
+
+                            {selected.length > 0 && (
+                                <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
+                                    <CheckLine size={16} />
+                                    <span>Conditionally Approve</span>
+                                </Button>
+                            )}
+
+                            {selected.length > 0 && (
+                                <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
+                                    {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
+                                    <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
+                                </Button>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {selected.length > 0 && isBulkCommentOpen && (
@@ -219,7 +226,7 @@ function RequestCard({
                                 <AvatarImage src='/profile/default.png' />
                             </Avatar>
                             <span className='text-sm'>{request.user.name}</span>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                                 Submitted {moment(request.updated_at).fromNow()}
                             </p>
                         </div>

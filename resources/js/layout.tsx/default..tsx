@@ -81,7 +81,9 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
 
                             {(labeledBreadcrumb) && (
                                 <React.Fragment key={labeledBreadcrumb}>
-                                    <BreadcrumbSeparator />
+                                    {(breadcrumbs.length > 0) && (
+                                        <BreadcrumbSeparator />
+                                    )}
 
                                     <BreadcrumbItem>
                                         <BreadcrumbPage>

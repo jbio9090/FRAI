@@ -27,6 +27,7 @@ class FacilityService
                     'title' => $booking->request->title,
                     'start' => $booking->date_requested . 'T' . $booking->time_start,
                     'end' => $booking->date_requested . 'T' . $booking->time_end,
+                    'request_id' => $booking->request->id,
                 ];
             });
 
@@ -52,6 +53,7 @@ class FacilityService
                     'status' => $booking->request->status,
                     'time_start' => $booking->time_start,
                     'time_end' => $booking->time_end,
+                    'request_id' => $booking->request->id,
                 ];
             });
 
