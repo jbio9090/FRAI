@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { router } from "@inertiajs/react";
 import { Link } from "@inertiajs/react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
+import wordToColor from "@/lib/wordToColor";
+
 
 interface Facility {
     id: number;
