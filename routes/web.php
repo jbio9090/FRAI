@@ -8,6 +8,7 @@ use App\Http\Controllers\RulesController;
 use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\ChatController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -70,6 +71,21 @@ Route::middleware("auth")->group(function () {
 
     Route::middleware("permission:manage facilities")->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
+    });
+
+    // Chatbot
+    Route::get("/chatbot", function () {
+        return Inertia::render("chatbot/chatbot");
+    })->name("chatbot");
+    Route::prefix("/chat")->group(function () {
+        Route::post("/", [ChatController::class, "chat"])->name("api.chat")->middleware(["throttle:60,1"]);
+        Route::get("/test", [ChatController::class, "testCsrf"])->name("chat.test");
+        Route::get("/models", [ChatController::class, "models"])->name("chat.models");
+        Route::get("/requests", [ChatController::class, "latestRequests"])->name("chat.requests");
+        Route::get("/rules", [ChatController::class, "rulesList"])->name("chat.rules");
+        Route::get("/facilities", [ChatController::class, "facilitiesList"])->name("chat.facilities");
+        Route::get("/equipment", [ChatController::class, "equipmentList"])->name("chat.equipment");
+        Route::post("/create-request", [ChatController::class, "createRequestApi"])->name("api.db.create.request")->middleware(["throttle:10,1"]);
     });
 });
 

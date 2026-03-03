@@ -15,18 +15,54 @@ class Request extends Model
 
     protected $fillable = [
         'user_id',
+        'facility_id',
+        'date',
+        'start_time',
+        'end_time',
+        'participants',
+        'priority_level',
+        'status',
+        'overridden_by_request_id',
         'title',
         'description',
-        'status',
-        'comment',
-        'recommended_action',
-        'recommended_action_reason',
+        'on_hold',
+        'priority_reason',
+        'held_by_request_id',
     ];
 
     protected $casts = [
-        'status' => RequestStatus::class,
-        'recommended_action' => RequestStatus::class,
+        'status'         => RequestStatus::class,
+        'on_hold'        => 'boolean',
+        'priority_level' => 'integer',
     ];
+
+    /**
+     * Priority level labels
+     * 0 = Normal
+     * 1 = School Event (department heads, school-wide events)
+     * 2 = Government / High Authority (government officials, external high-priority)
+     */
+    public const PRIORITY_NORMAL     = 0;
+    public const PRIORITY_SCHOOL     = 1;
+    public const PRIORITY_GOVERNMENT = 2;
+
+    public static function priorityLabel(int $level): string
+    {
+        return match ($level) {
+            self::PRIORITY_SCHOOL     => 'School Event',
+            self::PRIORITY_GOVERNMENT => 'Government / High Authority',
+            default                   => 'Normal',
+        };
+    }
+
+    /* =========================================
+     | RELATIONSHIPS
+     ========================================= */
+
+    public function facility()
+    {
+        return $this->belongsTo(Facility::class);
+    }
 
     public function user()
     {
@@ -50,5 +86,78 @@ class Request extends Model
         return $this->belongsToMany(Equipment::class, 'request_equipment')
             ->withPivot('quantity_needed')
             ->withTimestamps();
+    }
+
+    public function overriddenBy()
+    {
+        return $this->belongsTo(Request::class, 'overridden_by_request_id');
+    }
+
+    /** The higher-priority request that caused this one to be put on hold */
+    public function heldByRequest()
+    {
+        return $this->belongsTo(Request::class, 'held_by_request_id');
+    }
+
+    /** Requests that were put on hold because of this request */
+    public function heldRequests()
+    {
+        return $this->hasMany(Request::class, 'held_by_request_id');
+    }
+
+    /* SCOPES */
+
+    public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)
+    {
+        return $query->where('facility_id', $facilityId)
+            ->where('date', $date)
+            ->where(function ($q) use ($start, $end) {
+                $q->whereBetween('start_time', [$start, $end])
+                  ->orWhereBetween('end_time', [$start, $end])
+                  ->orWhere(function ($inner) use ($start, $end) {
+                      $inner->where('start_time', '<=', $start)
+                            ->where('end_time', '>=', $end);
+                  });
+            })
+            ->whereIn('status', ['Pending', 'Approved']);
+    }
+
+    /* =========================================
+     | PRIORITY OVERRIDE LOGIC
+     ========================================= */
+
+    public function handlePriorityConflict()
+    {
+        $conflicts = self::conflicting(
+            $this->facility_id,
+            $this->date,
+            $this->start_time,
+            $this->end_time
+        )->get();
+
+        foreach ($conflicts as $existing) {
+
+            if ($this->priority_level > $existing->priority_level) {
+
+                $existing->status = 'On Hold';
+                $existing->overridden_by_request_id = $this->id;
+                $existing->save();
+
+            } elseif ($this->priority_level < $existing->priority_level) {
+
+                $this->status = 'On Hold';
+                $this->save();
+
+                return false;
+            } else {
+
+                $this->status = 'Pending Review';
+                $this->save();
+
+                return false;
+            }
+        }
+
+        return true;
     }
 }

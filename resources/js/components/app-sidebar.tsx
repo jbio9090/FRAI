@@ -11,6 +11,7 @@ import {
   Settings,
   Check,
   User,
+  Bot,
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -103,11 +104,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <SidebarMenu>
 
-          <SidebarMenuItem key="create-request" className="my-2 px-4">
+          <SidebarMenuItem key="create-request" className="mt-2 px-4">
             <SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer hover:text-primary-foreground">
               <Link href={route("request.create")}>
                 <CirclePlus className="h-4 w-4" />
                 <span>Create Request</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem key="chatbot" className="mb-2 px-4">
+            <SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer hover:text-primary-foreground">
+              <Link href={route("chatbot")}>
+                <Bot className="h-4 w-4" />
+                <span>Chatbot</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
