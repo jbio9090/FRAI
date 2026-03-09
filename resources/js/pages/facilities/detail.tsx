@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, Building, Pencil } from "lucide-react";
+import { User, Building, Pencil, ChevronDown } from "lucide-react";
 import FacilityCalendar from "@/components/FacilityCalendar";
 import DefaultLayout from "@/layout.tsx/default.";
 import { usePermission } from "@/hooks/use-permission";
@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { router } from "@inertiajs/react";
+import { Link } from "@inertiajs/react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
+import wordToColor from "@/lib/wordToColor";
+
 
 interface Facility {
     id: number;
@@ -25,9 +29,10 @@ interface Event {
 interface DetailProps {
     facility: Facility;
     initialEvents: Event[];
+    facilities: Facility[];
 }
 
-export default function FacilityDetail({ facility, initialEvents }: DetailProps) {
+export default function FacilityDetail({ facility, initialEvents, facilities }: DetailProps) {
     const { hasPermission } = usePermission();
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(facility.name);
@@ -52,13 +57,35 @@ export default function FacilityDetail({ facility, initialEvents }: DetailProps)
             <div className="flex flex-col p-4 md:p-8">
                 <div className="flex items-center gap-2">
                     <h3 className='font-semibold text-xl'>{facility.name}</h3>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                size="icon"
+                                variant="ghost">
+                                <ChevronDown />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuGroup>
+                                {facilities.map((f) => (
+                                    <Link href={route("facility.detail", [f.id])}>
+                                        <DropdownMenuItem>
+                                            {f.name}
+                                        </DropdownMenuItem>
+                                    </Link>
+                                ))}
+                            </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
                     {hasPermission("manage facilities") && (
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => setIsEditing(!isEditing)}
                         >
-                            <Pencil size={16}/>
+                            <Pencil size={16} />
                         </Button>
                     )}
                 </div>

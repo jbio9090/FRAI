@@ -111,8 +111,10 @@ class RequestController extends Controller
 
     public function detail(int $request_id)
     {
+        $requestDetail = $this->service->getDetail($request_id);
         return Inertia::render("requests/detail", [
-            'request' => $this->service->getDetail($request_id),
+            'request' => $requestDetail,
+            'labeledBreadcrumb' => $requestDetail['title'],
         ]);
     }
 

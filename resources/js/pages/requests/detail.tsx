@@ -100,7 +100,7 @@ export default function RequestDetail({ request }: DetailProps) {
 
                 <h2 className='font-semibold text-muted-foreground mt-4'>Facilities Requested</h2>
 
-                <div className="flex flex-col gap-8 xl:grid grid-cols-[1fr_1fr] w-full">
+                <div className="flex flex-col gap-8 md:grid grid-cols-[1fr_1fr] w-full">
                     {request.facilities.map((facility) => {
                         const facilityEquipment = request.equipment.filter(
                             (eq) => eq.facility_id === facility.id

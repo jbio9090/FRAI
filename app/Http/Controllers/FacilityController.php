@@ -24,6 +24,8 @@ class FacilityController extends Controller
     {
         $facility = Facility::where("id", $facility_id)->firstOrFail();
 
+        $facilities = Facility::all();
+
         $start = now()->startOfMonth()->format('Y-m-d');
         $end = now()->endOfMonth()->format('Y-m-d');
 
@@ -32,7 +34,8 @@ class FacilityController extends Controller
         return Inertia::render("facilities/detail", [
             "facility" => $facility,
             "initialEvents" => $initialEvents,
-            "labeledBreadcrumb" => $facility->name
+            "labeledBreadcrumb" => $facility->name,
+            "facilities" => $facilities,
         ]);
     }
 

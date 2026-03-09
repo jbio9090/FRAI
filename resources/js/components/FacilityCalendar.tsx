@@ -13,6 +13,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Link } from '@inertiajs/react';
+import wordToColor from '@/lib/wordToColor';
 
 const localizer = momentLocalizer(moment);
 
@@ -21,6 +23,7 @@ interface Event {
     end: Date;
     title: string;
     id: number;
+    request_id: string|number;
 }
 
 interface CalendarProps {
@@ -133,16 +136,21 @@ function CustomToolbar(toolbar: ToolbarProps) {
 
 
 function CustomEvent({ event }: { event: Event }) {
+    const {text, background} = wordToColor(event.title);
+
     return (
-        <div className='h-full flex flex-row lg:flex-col flex-wrap items-center rounded-sm bg-primary/30 border-primary border-1 px-1'>
-            <span className='font-bold text-xs text-primary'>{event.title}</span>
-            <div className="flex items-center gap-1 text-primary/80">
-                <Clock size={12}/>
-                <span className='text-xs'>
-                    {moment(event.start).format("h:mma").toString()}-{moment(event.end).format("h:mma").toString()}
+        <Link href={route("requests.detail", [event.request_id])}>
+            <div className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm  border-primary border-1 px-1'
+            style={{backgroundColor: background, color: text, borderColor: text}}>
+                <span className='font-bold text-xs'>{event.title}</span>
+                <div className="flex text-left items-center gap-1">
+                    <Clock size={12} />
+                    <span className='text-xs'>
+                        {moment(event.start).format("h:mma").toString()}-{moment(event.end).format("h:mma").toString()}
                     </span>
+                </div>
             </div>
-        </div>
+        </Link>
     );
 }
 
