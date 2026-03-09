@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/card"
 import DefaultLayout from '@/layout.tsx/default.';
 import { Request } from '@/types/request';
-import { Equipment } from '@/types/equipment';
 import { Link } from '@inertiajs/react';
 import { Separator } from '@/components/ui/separator';
 import moment from 'moment';
