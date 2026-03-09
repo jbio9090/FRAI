@@ -96,7 +96,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                     </Breadcrumb>
                 </header>
 
-                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible" + ((hasPadding) ? " p-4 md:p-8" : "")}>
+                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible" + ((hasPadding) ? " p-6 md:p-8" : "")}>
                     {children}
                 </div>
             </SidebarInset>

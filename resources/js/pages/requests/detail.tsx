@@ -8,46 +8,10 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import DefaultLayout from '@/layout.tsx/default.';
-import { RequestFacility } from '@/types/request';
+import { Request } from '@/types/request';
 import { Link } from '@inertiajs/react';
 import { Separator } from '@/components/ui/separator';
 import moment from 'moment';
-
-interface Facility {
-    id: number;
-    name: string;
-    room_number: string;
-    capacity: number;
-    pivot: {
-        date_requested: string;
-        time_start: string;
-        time_end: string;
-    };
-}
-
-interface Equipment {
-    id: number;
-    name: string;
-    facility_id: number;
-    pivot: {
-        quantity_needed: number;
-    };
-}
-
-interface Request {
-    id: number;
-    title: string;
-    description: string;
-    status: string;
-    user: {
-        name: string;
-        email: string;
-    };
-    created_at: string;
-    facilities: Facility[];
-    equipment: Equipment[];
-    request_facilities: RequestFacility[],
-}
 
 interface DetailProps {
     children: React.ReactNode;
@@ -83,24 +47,42 @@ export default function RequestDetail({ request }: DetailProps) {
     return (
         <DefaultLayout>
             <div className="flex flex-col w-full max-w-4xl gap-4 *:text-sm">
-                <div className="flex flex-col gap-2 text-sm">
-                    <h1 className='font-bold text-xl'>{request.title}</h1>
-
-                    <Badge variant={statusColor}>
-                        {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                    </Badge>
-
-                    <p className='my-4'>{request.description}</p>
-
-                    <div className="flex items-center gap-2">
-                        <p>Requested by {request.user.name}</p>
-                        <p className='text-muted-foreground'>{moment(request.created_at).fromNow()}</p>
+                <div className="flex flex-col gap-7 text-sm">
+                    <div className="flex flex-col gap-3">
+                        <h1 className='font-bold text-xl'>{request.title}</h1>
+                        <Badge variant={statusColor}>
+                            {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                        </Badge>
                     </div>
+
+                    <div className="flex flex-col w-md max-w-full">
+                        <p className='font-semibold mb-2 text-muted-foreground '>Description</p>
+                        <p >{request.description}</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-12">
+                        <div className="flex flex-col">
+                            <p className='font-semibold mb-2 text-muted-foreground '>Requested by</p>
+                            <p>{request.user.name}</p>
+                        </div>
+
+                        <div className="flex flex-col">
+                            <p className='font-semibold mb-2 text-muted-foreground '>Date Submitted</p>
+                            <p>{moment(request.created_at).format("MMMM D, YYYY")}</p>
+                        </div>
+                    </div>
+
+                    {request.comment && (
+                        <div className="flex flex-col w-md max-w-full">
+                            <p className='font-semibold mb-2 text-muted-foreground '>Admin Comment</p>
+                            <p >{request.comment}</p>
+                        </div>
+                    )}
                 </div>
 
-                <h2 className='font-semibold text-muted-foreground mt-4'>Facilities Requested</h2>
 
-                <div className="flex flex-col gap-8 md:grid grid-cols-[1fr_1fr] w-full">
+                <h2 className='font-semibold text-muted-foreground mt-9 mb-4'>Facilities Requested</h2>
+                <div className="flex flex-col gap-8 lg:grid grid-cols-[1fr_1fr] w-full">
                     {request.facilities.map((facility) => {
                         const facilityEquipment = request.equipment.filter(
                             (eq) => eq.facility_id === facility.id
@@ -120,7 +102,7 @@ export default function RequestDetail({ request }: DetailProps) {
                                     <Link href={route("facility.detail", [facility.id])}>
                                         <CardTitle className='hover:underline text-lg'>{facility.name}</CardTitle>
                                     </Link>
-                                    <CardDescription className='flex items-center flex-wrap text-sm gap-2'>
+                                    <CardDescription className='flex items-center flex-wrap text-sm gap-2 justify-between'>
                                         <div className="flex items-center gap-1">
                                             <Calendar size={16} />
                                             <span className='font-medium'>{date}</span>
