@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 
 
 export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
@@ -63,6 +64,33 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
                 <div className="flex flex-col justify-center w-full mt-4 mb-4 flex-wrap gap-4">
+
+                    <div className="flex flex-wrap gap-4">
+                        <Input
+                            className='max-w-md'
+                            placeholder='Search for request name'
+                        />
+
+                        <div className="searchBar flex w-auto justify-between flex-1">
+                            <div className="flex justify-between gap-3">
+                                <Button className='rounded-full' size="sm" variant="default">
+                                    This Week
+                                </Button>
+                                <Button className='rounded-full' size="sm" variant="outline">
+                                    This Month
+                                </Button>
+                                <Button className='rounded-full' size="sm" variant="outline">
+                                    Today
+                                </Button>
+                            </div>
+
+                            <Button variant="outline" size="sm">
+                                More Filters
+                            </Button>
+                        </div>
+                    </div>
+
+
                     <div className="flex items-center gap-2">
                         {(page_title === "Pending") && (
                             <>
