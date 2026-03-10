@@ -333,7 +333,12 @@ function RequestDetails({ request }: { request: Request }) {
             icon: <MessageCircleWarning size={16} />,
             label: "Comment",
             content: request.comment ? (
-                <p className='text-sm mt-4'>{request.comment}</p>
+                <div className='flex gap-3 mt-4 pl-4'>
+                    <Avatar size="sm">
+                        <AvatarImage src='/profile/default.png' />
+                    </Avatar>
+                    <p className='text-sm'>{request.comment}</p>
+                </div>
             ) : (
                 <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comment from admin</p>
             ),
@@ -344,6 +349,7 @@ function RequestDetails({ request }: { request: Request }) {
             label: "Recommendation",
             content: (
                 <>
+                    <p className='font-semibold text-muted-foreground mt-4'>Recommended Action</p>
                     <p className='font-bold'>{request.recommended_action}</p>
                     <p className='text-sm'>{request.recommended_action_reason}</p>
                 </>
