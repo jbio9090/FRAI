@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, MessageCircleOff, MousePointer2, X, Check } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, MessageCircleOff, MousePointer2, X, Check, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -22,6 +22,22 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
     const [isSelecting, setSelectState] = useState<boolean>(false);
     const [bulkComment, setBulkComment] = useState("");
     const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
+    const [currentActiveFitler, setActiveFilter] = useState("Today");
+
+    const commonFilterOptions = [
+        {
+            title: "Today",
+        },
+        {
+            title: "This Week",
+        },
+        {
+            title: "This Month",
+        },
+        {
+            title: "All",
+        },
+    ]
 
     const handleSelection = (request_id: number) => {
         setSelected((prev) =>
@@ -59,39 +75,40 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
         });
     };
 
+    const handleFilterButtonClick = (title: string) => {
+        setActiveFilter(title);
+    }
+
     return (
         <DefaultLayout>
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
-                <div className="flex flex-col justify-center w-full mt-4 mb-4 flex-wrap gap-4">
-
-                    <div className="flex flex-wrap gap-4">
+                <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">
+                    <div className="flex justify-between gap-2">
                         <Input
                             className='max-w-md'
                             placeholder='Search for request name'
                         />
 
-                        <div className="searchBar flex w-auto justify-between flex-1">
-                            <div className="flex justify-between gap-3">
-                                <Button className='rounded-full' size="sm" variant="default">
-                                    This Week
-                                </Button>
-                                <Button className='rounded-full' size="sm" variant="outline">
-                                    This Month
-                                </Button>
-                                <Button className='rounded-full' size="sm" variant="outline">
-                                    Today
-                                </Button>
-                            </div>
-
-                            <Button variant="outline" size="sm">
-                                More Filters
-                            </Button>
-                        </div>
+                        <Button variant="outline">
+                            More Filters
+                        </Button>
                     </div>
 
+                    <div className="flex gap-3">
+                        {commonFilterOptions.map((filter) => (
+                            <Button
+                                className='rounded-full'
+                                size="sm"
+                                variant={currentActiveFitler === filter.title ? "default" : "outline"}
+                                onClick={() => handleFilterButtonClick(filter.title)}
+                            >
+                                {filter.title}
+                            </Button>
+                        ))}
+                    </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap mt-2">
                         {(page_title === "Pending") && (
                             <>
                                 <Button
@@ -121,25 +138,18 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                                         size={"sm"}
                                         variant={"outline"}
                                         onClick={clearAllSelection}
+                                        className='items-center'
                                     >
+                                        <span>{selected.length} selected</span>
                                         <X size={16} />
-                                        <span>Clear</span>
                                     </Button>
                                 ))}
-
-                                <Separator orientation='vertical' />
-
-                                {isSelecting && selected.length > 0 && (
-                                    <span className="ml-4 text-sm font-medium">
-                                        {selected.length} selected
-                                    </span>
-                                )}
                             </>
                         )}
                     </div>
 
                     {(page_title === "Pending") && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             {selected.length > 0 && (
                                 <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
                                     <Check size={16} />
@@ -186,7 +196,7 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                 )}
 
 
-                <div className="gap-4 mt-8 flex flex-col xl:grid grid-cols-[1fr_1fr]">
+                <div className="gap-4 mt-6 flex flex-col xl:grid grid-cols-[1fr_1fr]">
                     {requests.map((request) => (
                         <RequestCard
                             request={request}

@@ -275,7 +275,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         <DefaultLayout>
             <div className="w-full lg:grid lg:grid-cols-[5fr_3fr] gap-8">
                 <div className="max-w-3xl w-full mx-auto">
-                    <form onSubmit={submit} className="space-y-6 flex flex-col gap-4">
+                    <form onSubmit={submit} className="space-y-8 flex flex-col gap-4">
                         {/* Title Field */}
                         <div className="space-y-2">
                             <Label htmlFor="title">Request Title</Label>
@@ -309,7 +309,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
                         {/* Add Facility Booking */}
                         <div className="space-y-4">
-                            <div className="space-y-4">
+                            <div className="space-y-6">
                                 {/* Facility Selection */}
                                 <div className="space-y-4">
                                     <Label>Select Facility</Label>
@@ -372,18 +372,18 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                 <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
                                                 {(selectedEquipment.length < availableEquipment.length) && (
                                                     <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment} className='text-muted-foreground hover:text-foreground'>
-                                                        <SquareMousePointer />
                                                         <span className="text-sm">
                                                             Select All
                                                         </span>
+                                                        <SquareMousePointer />
                                                     </Button>
                                                 )}
                                                 {(selectedEquipment.length > 0) && (
                                                     <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection} className='text-muted-foreground hover:text-foreground'>
-                                                        <X />
                                                         <span className="text-sm">
                                                             Clear All
                                                         </span>
+                                                        <X />
                                                     </Button>
                                                 )}
                                             </div>
@@ -435,14 +435,13 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         </div>
 
                                         <Collapsible>
-                                            <CollapsibleTrigger >
-
-                                                <div className='rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-muted-foreground/20 p-2 cursor-pointer flex items-center gap-1'>
+                                            <CollapsibleTrigger asChild>
+                                                <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
                                                     <Plus size={16} />
                                                     <span>
                                                         Add external equipment
                                                     </span>
-                                                </div>
+                                                </Button>
                                             </CollapsibleTrigger>
                                             <CollapsibleContent>
                                                 <div className="mt-3 space-y-4">
