@@ -12,6 +12,7 @@ import { Request } from '@/types/request';
 import { Link } from '@inertiajs/react';
 import { Separator } from '@/components/ui/separator';
 import moment from 'moment';
+import { Avatar, AvatarImage } from '@/components/ui/avatar';
 
 interface DetailProps {
     children: React.ReactNode;
@@ -73,16 +74,21 @@ export default function RequestDetail({ request }: DetailProps) {
                     </div>
 
                     {request.comment && (
-                        <div className="flex flex-col w-md max-w-full">
+                        <div className="flex flex-col w-full max-w-2xl mt-4">
                             <p className='font-semibold mb-2 text-muted-foreground '>Admin Comment</p>
-                            <p >{request.comment}</p>
+                            <div className="flex gap-3 px-4 py-5 border border-border border-1 rounded-sm">
+                                <Avatar size="sm">
+                                    <AvatarImage src='/profile/default.png'/>
+                                </Avatar>
+                                <p >{request.comment}</p>
+                            </div>
                         </div>
                     )}
                 </div>
 
 
                 <h2 className='font-semibold text-muted-foreground mt-9 mb-4'>Facilities Requested</h2>
-                <div className="flex flex-col gap-8 lg:grid grid-cols-[1fr_1fr] w-full">
+                <div className="flex flex-col gap-4 lg:grid grid-cols-[1fr_1fr] w-full">
                     {request.facilities.map((facility) => {
                         const facilityEquipment = request.equipment.filter(
                             (eq) => eq.facility_id === facility.id
@@ -100,7 +106,7 @@ export default function RequestDetail({ request }: DetailProps) {
                             <Card key={facility.id} className='py-8 px-4'>
                                 <CardHeader>
                                     <Link href={route("facility.detail", [facility.id])}>
-                                        <CardTitle className='hover:underline text-lg'>{facility.name}</CardTitle>
+                                        <h2 className='font-bold hover:underline text-lg w-auto'>{facility.name}</h2>
                                     </Link>
                                     <CardDescription className='flex items-center flex-wrap text-sm gap-2 justify-between'>
                                         <div className="flex items-center gap-1">
