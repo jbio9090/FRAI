@@ -53,6 +53,37 @@ class RequestSeeder extends Seeder
             'comment'     => 'Day is unavailable due to upcoming storm',
         ]);
 
+        // ---- FACTORY-GENERATED REQUESTS ----
+        $statuses = [
+            'pending'              => 29,
+            'approved'             => 8,
+            'denied'               => 6,
+            'conditionallyApproved' => 6,
+        ];
+
+        $facilityCollection = Facility::all();
+
+        foreach ($statuses as $state => $count) {
+            Request::factory($count)
+                ->$state()
+                ->for($user)
+                ->create()
+                ->each(function ($request) use ($facilityCollection) {
+                    $picked = $facilityCollection->random(rand(1, min(3, $facilityCollection->count())));
+
+                    foreach ($picked as $facility) {
+                        RequestFacility::create([
+                            'request_id'     => $request->id,
+                            'facility_id'    => $facility->id,
+                            'date_requested' => Carbon::now()->addDays(rand(1, 30))->toDateString(),
+                            'time_start'     => '08:00:00',
+                            'time_end'       => '10:00:00',
+                            'external_equipment' => null,
+                        ]);
+                    }
+                });
+        }
+
         // ---- REQUEST FACILITIES ----
         RequestFacility::create([
             'request_id'         => $request1->id,
@@ -104,21 +135,18 @@ class RequestSeeder extends Seeder
         $ceit_hall_equipment  = Equipment::where('facility_id', $facilities[3])->get();
         $main_audit_equipment = Equipment::where('facility_id', $facilities[0])->get();
 
-        // Request 1 - attach up to 2 pieces of equipment from COED AVR
         $request1->equipment()->attach(
             $coed_avr_equipment->take(2)->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 1]
             ])->all()
         );
 
-        // Request 2 - attach up to 3 pieces from CEIT Lecture Hall
         $request2->equipment()->attach(
             $ceit_hall_equipment->take(3)->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 2]
             ])->all()
         );
 
-        // Request 3 - attach up to 2 pieces from Main Auditorium
         $request3->equipment()->attach(
             $main_audit_equipment->take(2)->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 1]

@@ -17,14 +17,13 @@ class RequestService
     {
         $user = Auth::user();
 
-        // Admins see all requests, users see only their own
         $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", $status)->latest()->get()
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", $status)->latest()->paginate(20)
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
             ->where("status", $status)
             ->latest()
-            ->get();
+            ->paginate(20);
 
         return $requests;
     }

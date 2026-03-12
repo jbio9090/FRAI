@@ -1,21 +1,35 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, MessageCircleOff, MousePointer2, X, Check, Search } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
-import { Request, RequestsPageProps } from '@/types/request';
+import { Request } from '@/types/request';
 import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { useState } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupButton } from '@/components/ui/input-group';
 
+
+export interface PaginatedRequests {
+    data: Request[];
+    links: { url: string | null; label: string; active: boolean }[];
+    current_page: number;
+    last_page: number;
+    total: number;
+}
+
+export interface RequestsPageProps {
+    requests: PaginatedRequests;
+    page_title: string;
+}
 
 export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
     const [selected, setSelected] = useState<number[]>([]);
@@ -52,7 +66,7 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
     }
 
     const selectAllSelection = () => {
-        setSelected(requests.map((req) => req.id));
+        setSelected(requests.data.map((req) => req.id));
     }
 
     const toggleSelection = () => {
@@ -84,14 +98,27 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
                 <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">
-                    <div className="flex justify-between gap-2">
-                        <Input
-                            className='max-w-md'
-                            placeholder='Search for request name'
-                        />
+                    <div className="flex gap-2">
+                        <InputGroup className='max-w-md'>
+                            <InputGroupAddon>
+                                <Search />
+                            </InputGroupAddon>
+                            <InputGroupInput
+                                placeholder='Search for request name'
+                            />
+                        </InputGroup>
+
+                        <Button
+                            variant={"outline"}
+                            onClick={toggleSelection}
+                            className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
+                        >
+                            <MousePointer2 size={16} />
+                            <span>{!isSelecting ? "Bulk" : "Stop"}</span>
+                        </Button>
 
                         <Button variant="outline">
-                            More Filters
+                            <Funnel />
                         </Button>
                     </div>
 
@@ -111,18 +138,7 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                     <div className="flex items-center gap-2 flex-wrap mt-2">
                         {(page_title === "Pending") && (
                             <>
-                                <Button
-                                    size={"sm"}
-                                    variant={"outline"}
-                                    onClick={toggleSelection}
-                                    className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
-                                >
-                                    <MousePointer2 size={16} />
-                                    <span>{!isSelecting ? "Bulk Action" : "Stop Selection"}</span>
-                                </Button>
-
-
-                                {(!(selected.length >= requests.length) && (isSelecting)) && (
+                                {(!(selected.length >= requests.data.length) && (isSelecting)) && (
                                     <Button
                                         size={"sm"}
                                         variant={"outline"}
@@ -195,9 +211,36 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                     </div>
                 )}
 
+                <Pagination>
+                    <PaginationContent>
+                        <PaginationItem>
+                            <PaginationPrevious
+                                href={requests.links[0].url ?? '#'}
+                                className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
+                            />
+                        </PaginationItem>
+
+                        {requests.links.slice(1, -1).map((link) => (
+                            <PaginationItem key={link.label}>
+                                <PaginationLink
+                                    href={link.url ?? '#'}
+                                    isActive={link.active}
+                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                />
+                            </PaginationItem>
+                        ))}
+
+                        <PaginationItem>
+                            <PaginationNext
+                                href={requests.links[requests.links.length - 1].url ?? '#'}
+                                className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
+                            />
+                        </PaginationItem>
+                    </PaginationContent>
+                </Pagination>
 
                 <div className="gap-4 mt-6 flex flex-col xl:grid grid-cols-[1fr_1fr]">
-                    {requests.map((request) => (
+                    {requests.data.length > 0 ? requests.data.map((request) => (
                         <RequestCard
                             request={request}
                             page_title={page_title}
@@ -206,8 +249,42 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                             isSelected={selected.includes(request.id)}
                             handleSelection={handleSelection}
                         />
-                    ))}
+                    )) :
+                        (
+                            <h1>No Requests</h1>
+                        )}
                 </div>
+
+                {requests.data.length > 9 && (
+                    <Pagination className='my-8'>
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    href={requests.links[0].url ?? '#'}
+                                    className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
+                                />
+                            </PaginationItem>
+
+                            {requests.links.slice(1, -1).map((link) => (
+                                <PaginationItem key={link.label}>
+                                    <PaginationLink
+                                        href={link.url ?? '#'}
+                                        isActive={link.active}
+                                        dangerouslySetInnerHTML={{ __html: link.label }}
+                                    />
+                                </PaginationItem>
+                            ))}
+
+                            <PaginationItem>
+                                <PaginationNext
+                                    href={requests.links[requests.links.length - 1].url ?? '#'}
+                                    className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
+                )}
+
             </div>
         </DefaultLayout>
     );
