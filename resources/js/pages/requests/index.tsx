@@ -10,12 +10,11 @@ import { Request } from '@/types/request';
 import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination"
 import { useState } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupButton } from '@/components/ui/input-group';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 
 
 export interface PaginatedRequests {
@@ -29,9 +28,10 @@ export interface PaginatedRequests {
 export interface RequestsPageProps {
     requests: PaginatedRequests;
     page_title: string;
+    filter: string;
 }
 
-export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
+export default function RequestsPage({ requests, page_title, filter }: RequestsPageProps) {
     const [selected, setSelected] = useState<number[]>([]);
     const [isSelecting, setSelectState] = useState<boolean>(false);
     const [bulkComment, setBulkComment] = useState("");
@@ -52,6 +52,23 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
             title: "All",
         },
     ]
+
+    const filterMap: Record<string, string> = {
+        "Today": "today",
+        "This Week": "this_week",
+        "This Month": "this_month",
+        "All": "all",
+    };
+
+    const activeLabel = Object.entries(filterMap).find(([, v]) => v === filter)?.[0] ?? "Today";
+
+    const handleFilterButtonClick = (title: string) => {
+        setActiveFilter(title)
+        router.get(route(route().current()), { filter: filterMap[title] }, {
+            preserveState: true,
+            preserveScroll: true,
+        });
+    };
 
     const handleSelection = (request_id: number) => {
         setSelected((prev) =>
@@ -88,10 +105,6 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
             },
         });
     };
-
-    const handleFilterButtonClick = (title: string) => {
-        setActiveFilter(title);
-    }
 
     return (
         <DefaultLayout>
@@ -231,6 +244,10 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                         ))}
 
                         <PaginationItem>
+                            <PaginationEllipsis />
+                        </PaginationItem>
+
+                        <PaginationItem>
                             <PaginationNext
                                 href={requests.links[requests.links.length - 1].url ?? '#'}
                                 className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
@@ -274,6 +291,10 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                                     />
                                 </PaginationItem>
                             ))}
+
+                            <PaginationItem>
+                                <PaginationEllipsis />
+                            </PaginationItem>
 
                             <PaginationItem>
                                 <PaginationNext

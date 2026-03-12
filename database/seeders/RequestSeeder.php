@@ -53,37 +53,6 @@ class RequestSeeder extends Seeder
             'comment'     => 'Day is unavailable due to upcoming storm',
         ]);
 
-        // ---- FACTORY-GENERATED REQUESTS ----
-        $statuses = [
-            'pending'              => 29,
-            'approved'             => 8,
-            'denied'               => 6,
-            'conditionallyApproved' => 6,
-        ];
-
-        $facilityCollection = Facility::all();
-
-        foreach ($statuses as $state => $count) {
-            Request::factory($count)
-                ->$state()
-                ->for($user)
-                ->create()
-                ->each(function ($request) use ($facilityCollection) {
-                    $picked = $facilityCollection->random(rand(1, min(3, $facilityCollection->count())));
-
-                    foreach ($picked as $facility) {
-                        RequestFacility::create([
-                            'request_id'     => $request->id,
-                            'facility_id'    => $facility->id,
-                            'date_requested' => Carbon::now()->addDays(rand(1, 30))->toDateString(),
-                            'time_start'     => '08:00:00',
-                            'time_end'       => '10:00:00',
-                            'external_equipment' => null,
-                        ]);
-                    }
-                });
-        }
-
         // ---- REQUEST FACILITIES ----
         RequestFacility::create([
             'request_id'         => $request1->id,

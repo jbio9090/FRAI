@@ -13,19 +13,24 @@ use Illuminate\Support\Carbon;
 class RequestService
 {
 
-    public function get(RequestStatus $status)
+    public function get(RequestStatus $status, string $filter = 'today')
     {
         $user = Auth::user();
 
-        $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", $status)->latest()->paginate(20)
+        $query = $user->hasRole('admin')
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", $status)
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
-            ->where("status", $status)
-            ->latest()
-            ->paginate(20);
+            ->where("status", $status);
 
-        return $requests;
+        $query = match ($filter) {
+            'today'      => $query->whereDate('created_at', Carbon::today()),
+            'this_week'  => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
+            'this_month' => $query->whereBetween('created_at', [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()]),
+            default      => $query,
+        };
+
+        return $query->latest()->paginate(20);
     }
 
 
@@ -132,7 +137,7 @@ class RequestService
             $recommended_action = RequestStatus::CONDITIONALLY_APPROVED;
             $recommended_action_reason = "Approved request along with the external equipment";
         }
-        
+
         $saved_request->update(["recommended_action" => $recommended_action, "recommended_action_reason" => $recommended_action_reason]);
     }
 }
