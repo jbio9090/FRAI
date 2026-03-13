@@ -149,65 +149,61 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap mt-2">
-                        {(page_title === "Pending") && (
-                            <>
-                                {(!(selected.length >= requests.data.length) && (isSelecting)) && (
-                                    <Button
-                                        size={"sm"}
-                                        variant={"outline"}
-                                        onClick={selectAllSelection}
-                                    >
-                                        <MousePointer2 size={16} />
-                                        <span>Select All</span>
-                                    </Button>
-                                )}
+                        {(!(selected.length >= requests.data.length) && (isSelecting)) && (
+                            <Button
+                                size={"sm"}
+                                variant={"outline"}
+                                onClick={selectAllSelection}
+                            >
+                                <MousePointer2 size={16} />
+                                <span>Select All</span>
+                            </Button>
+                        )}
 
-                                {(selected.length > 0 && (
-                                    <Button
-                                        size={"sm"}
-                                        variant={"outline"}
-                                        onClick={clearAllSelection}
-                                        className='items-center'
-                                    >
-                                        <span>{selected.length} selected</span>
-                                        <X size={16} />
-                                    </Button>
-                                ))}
-                            </>
+                        {(selected.length > 0 && (
+                            <Button
+                                size={"sm"}
+                                variant={"outline"}
+                                onClick={clearAllSelection}
+                                className='items-center'
+                            >
+                                <span>{selected.length} selected</span>
+                                <X size={16} />
+                            </Button>
+                        ))}
+                    </div>
+
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
+                                <Check size={16} />
+                                <span>Approve</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
+                                <X size={16} />
+                                <span>Deny</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
+                                <CheckLine size={16} />
+                                <span>Conditionally Approve</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
+                                {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
+                                <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
+                            </Button>
                         )}
                     </div>
 
-                    {(page_title === "Pending") && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {selected.length > 0 && (
-                                <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
-                                    <Check size={16} />
-                                    <span>Approve</span>
-                                </Button>
-                            )}
-
-                            {selected.length > 0 && (
-                                <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
-                                    <X size={16} />
-                                    <span>Deny</span>
-                                </Button>
-                            )}
-
-                            {selected.length > 0 && (
-                                <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
-                                    <CheckLine size={16} />
-                                    <span>Conditionally Approve</span>
-                                </Button>
-                            )}
-
-                            {selected.length > 0 && (
-                                <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
-                                    {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
-                                    <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
-                                </Button>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 {selected.length > 0 && isBulkCommentOpen && (

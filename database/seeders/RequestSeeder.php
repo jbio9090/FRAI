@@ -99,6 +99,41 @@ class RequestSeeder extends Seeder
             'external_equipment' => '1 bluetooth speaker',
         ]);
 
+
+        // ---- FACTORY-GENERATED REQUESTS ----
+        $statuses = [
+            'pending'              => 29,
+            'approved'             => 8,
+            'denied'               => 6,
+            'conditionallyApproved' => 6,
+        ];
+
+        $facilityCollection = Facility::all();
+
+        foreach ($statuses as $state => $count) {
+            Request::factory($count)
+                ->$state()
+                ->for($user)
+                ->create()  // <-- remove created_at from here
+                ->each(function ($request) use ($facilityCollection) {
+                    // Set a random created_at per individual request
+                    $request->update(['created_at' => Carbon::now()->subDays(rand(0, 45)), 'updated_at' => Carbon::now()->subDays(rand(0, 45))]);
+
+                    $picked = $facilityCollection->random(rand(1, min(3, $facilityCollection->count())));
+
+                    foreach ($picked as $facility) {
+                        RequestFacility::create([
+                            'request_id'         => $request->id,
+                            'facility_id'        => $facility->id,
+                            'date_requested'     => Carbon::now()->addDays(rand(1, 30))->toDateString(),
+                            'time_start'         => '08:00:00',
+                            'time_end'           => '10:00:00',
+                            'external_equipment' => null,
+                        ]);
+                    }
+                });
+        }
+
         // ---- EQUIPMENT (via request_equipment pivot) ----
         $coed_avr_equipment   = Equipment::where('facility_id', $facilities[2])->get();
         $ceit_hall_equipment  = Equipment::where('facility_id', $facilities[3])->get();

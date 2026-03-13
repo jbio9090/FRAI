@@ -24,9 +24,9 @@ class RequestService
             ->where("status", $status);
 
         $query = match ($filter) {
-            'today'      => $query->whereDate('created_at', Carbon::today()),
-            'this_week'  => $query->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
-            'this_month' => $query->whereBetween('created_at', [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()]),
+            'today'      => $query->whereDate('updated_at', Carbon::today()),
+            'this_week'  => $query->whereBetween('updated_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
+            'this_month' => $query->whereBetween('updated_at', [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()]),
             default      => $query,
         };
 
