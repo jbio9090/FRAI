@@ -10,6 +10,7 @@ use App\Models\Request;
 use App\Models\RequestFacility;
 use App\Models\Equipment;
 use App\RequestStatus;
+use Illuminate\Support\Facades\DB;
 
 class RequestSeeder extends Seeder
 {
@@ -28,6 +29,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::PENDING->value,
             'comment'     => null,
         ]);
+        DB::table('requests')->where('id', $request1->id)->update(['updated_at' => Carbon::now()->subDays(2)]);
 
         $request2 = Request::create([
             'user_id'     => $user->id,
@@ -36,6 +38,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::APPROVED->value,
             'comment'     => 'Approved request',
         ]);
+        DB::table('requests')->where('id', $request2->id)->update(['updated_at' => Carbon::now()->subDays(5)]);
 
         $request3 = Request::create([
             'user_id'     => $admin->id,
@@ -44,6 +47,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::APPROVED->value,
             'comment'     => 'Approved Request',
         ]);
+        DB::table('requests')->where('id', $request3->id)->update(['updated_at' => Carbon::now()->subDays(8)]);
 
         $request4 = Request::create([
             'user_id'     => $user->id,
@@ -52,6 +56,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::DENIED->value,
             'comment'     => 'Day is unavailable due to upcoming storm',
         ]);
+        DB::table('requests')->where('id', $request4->id)->update(['updated_at' => Carbon::now()->subDays(1)]);
 
         // ---- REQUEST FACILITIES ----
         RequestFacility::create([
@@ -98,41 +103,6 @@ class RequestSeeder extends Seeder
             'time_end'           => '22:00:00',
             'external_equipment' => '1 bluetooth speaker',
         ]);
-
-
-        // ---- FACTORY-GENERATED REQUESTS ----
-        $statuses = [
-            'pending'              => 29,
-            'approved'             => 8,
-            'denied'               => 6,
-            'conditionallyApproved' => 6,
-        ];
-
-        $facilityCollection = Facility::all();
-
-        foreach ($statuses as $state => $count) {
-            Request::factory($count)
-                ->$state()
-                ->for($user)
-                ->create()  // <-- remove created_at from here
-                ->each(function ($request) use ($facilityCollection) {
-                    // Set a random created_at per individual request
-                    $request->update(['created_at' => Carbon::now()->subDays(rand(0, 45)), 'updated_at' => Carbon::now()->subDays(rand(0, 45))]);
-
-                    $picked = $facilityCollection->random(rand(1, min(3, $facilityCollection->count())));
-
-                    foreach ($picked as $facility) {
-                        RequestFacility::create([
-                            'request_id'         => $request->id,
-                            'facility_id'        => $facility->id,
-                            'date_requested'     => Carbon::now()->addDays(rand(1, 30))->toDateString(),
-                            'time_start'         => '08:00:00',
-                            'time_end'           => '10:00:00',
-                            'external_equipment' => null,
-                        ]);
-                    }
-                });
-        }
 
         // ---- EQUIPMENT (via request_equipment pivot) ----
         $coed_avr_equipment   = Equipment::where('facility_id', $facilities[2])->get();

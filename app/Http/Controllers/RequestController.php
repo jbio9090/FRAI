@@ -23,9 +23,9 @@ class RequestController extends Controller
         protected NotificationService $notification,
     ) {}
 
-    public function index()
+    public function index(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::PENDING);
+        $requests = $this->service->get(RequestStatus::PENDING, $request->input("filter") ?? "this_week");
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
@@ -34,9 +34,9 @@ class RequestController extends Controller
     }
 
 
-    public function approvedPage()
+    public function approvedPage(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::APPROVED);
+        $requests = $this->service->get(RequestStatus::APPROVED, $request->input("filter") ?? "this_week");
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
@@ -44,9 +44,9 @@ class RequestController extends Controller
         ]);
     }
 
-    public function deniedPage()
+    public function deniedPage(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::DENIED);
+        $requests = $this->service->get(RequestStatus::DENIED, $request->input("filter") ?? "this_week");
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
@@ -54,9 +54,9 @@ class RequestController extends Controller
         ]);
     }
 
-    public function conditionallyApprovedPage()
+    public function conditionallyApprovedPage(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::CONDITIONALLY_APPROVED);
+        $requests = $this->service->get(RequestStatus::CONDITIONALLY_APPROVED, $request->input("filter") ?? "this_week");
 
         return Inertia::render('requests/index', [
             'requests' => $requests,

@@ -36,8 +36,8 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
     const [isSelecting, setSelectState] = useState<boolean>(false);
     const [bulkComment, setBulkComment] = useState("");
     const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
-    const [currentActiveFitler, setActiveFilter] = useState("Today");
-
+    const [currentActiveFitler, setActiveFilter] = useState("This Week");
+    console.log(requests);
     const commonFilterOptions = [
         {
             title: "Today",
@@ -59,8 +59,6 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
         "This Month": "this_month",
         "All": "all",
     };
-
-    const activeLabel = Object.entries(filterMap).find(([, v]) => v === filter)?.[0] ?? "Today";
 
     const handleFilterButtonClick = (title: string) => {
         setActiveFilter(title)
@@ -142,6 +140,7 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                                 size="sm"
                                 variant={currentActiveFitler === filter.title ? "default" : "outline"}
                                 onClick={() => handleFilterButtonClick(filter.title)}
+                                key={filter.title}
                             >
                                 {filter.title}
                             </Button>

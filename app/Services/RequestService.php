@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
 class RequestService
 {
 
-    public function get(RequestStatus $status, string $filter = 'today')
+    public function get(RequestStatus $status, string $filter = 'Today')
     {
         $user = Auth::user();
 
@@ -25,8 +25,8 @@ class RequestService
 
         $query = match ($filter) {
             'today'      => $query->whereDate('updated_at', Carbon::today()),
-            'this_week'  => $query->whereBetween('updated_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
-            'this_month' => $query->whereBetween('updated_at', [Carbon::now()->startOfMonth(), Carbon::now()->endOfMonth()]),
+            'this_week'  => $query->where('updated_at', '>=', Carbon::now()->subWeek()),
+            'this_month' => $query->where('updated_at', '>=', Carbon::now()->subMonth()),
             default      => $query,
         };
 
