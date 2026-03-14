@@ -39,7 +39,7 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
     const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
     const [currentActiveFitler, setActiveFilter] = useState("This Week");
     const [searchQuery, setSearchQuery] = useState("");
-    console.log(requests);
+
     useEffect(() => {
         const timeout = setTimeout(() => {
             router.get(route(route().current()), {
