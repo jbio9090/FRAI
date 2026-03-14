@@ -214,7 +214,7 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                     </div>
 
 
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap my-4">
                         {selected.length > 0 && (
                             <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
                                 <Check size={16} />
@@ -247,7 +247,7 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                 </div>
 
                 {selected.length > 0 && isBulkCommentOpen && (
-                    <div className="w-full mt-2">
+                    <div className="w-full mt-2 mb-6">
                         <Field>
                             <FieldDescription>Comment to attach to all selected requests</FieldDescription>
                             <Textarea
