@@ -10,6 +10,7 @@ use App\Models\Rule as RuleModel;
 use App\Models\Facility;
 use App\Models\Equipment;
 use App\RequestStatus;
+use App\PriorityLevel;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 
@@ -64,11 +65,7 @@ class ChatController extends Controller
                         );
                     })->implode('; ');
 
-                    $priorityLabel = match ((int) $r->priority_level) {
-                        1 => 'School Event',
-                        2 => 'Government/High Authority',
-                        default => 'Normal',
-                    };
+                    $priorityLabel = $priorityLabel = $r->priority_level->label();
 
                     $holdInfo = $r->on_hold ? ' [ON HOLD]' : '';
 

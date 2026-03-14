@@ -93,6 +93,8 @@ class RequestService
             'title' => $validated['title'],
             'description' => $validated['description'],
             'status' => RequestStatus::PENDING,
+            'priority_level' => $validated['priority_level'] ?? 0,
+            'priority_reason' => $validated['priority_reason'] ?? null,
         ]);
 
         foreach ($validated['facility_bookings'] as $booking) {

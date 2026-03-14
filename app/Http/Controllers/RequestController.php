@@ -33,7 +33,6 @@ class RequestController extends Controller
         ]);
     }
 
-
     public function approvedPage(Request $request)
     {
         $requests = $this->service->get(RequestStatus::APPROVED, $request->input("filter") ?? "this_week", $request->input("search"),);
@@ -136,9 +135,6 @@ class RequestController extends Controller
 
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }
-
-
-    // RequestController.php
 
     public function bulkAction(Request $request)
     {

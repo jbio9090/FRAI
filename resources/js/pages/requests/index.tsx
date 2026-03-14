@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { PRIORITY_LABELS } from '@/types/request';
 
 
 export interface PaginatedRequests {
@@ -38,7 +39,7 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
     const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
     const [currentActiveFitler, setActiveFilter] = useState("This Week");
     const [searchQuery, setSearchQuery] = useState("");
-
+    console.log(requests);
     useEffect(() => {
         const timeout = setTimeout(() => {
             router.get(route(route().current()), {
@@ -391,6 +392,13 @@ function RequestCard({
                 <div className="flex justify-around w-full">
                     <div className='flex flex-col gap-1'>
                         <h3 className="font-bold">{request.title}</h3>
+
+                        {(request.priority_level > 0) && (
+                            <div className="p-1 text-xs border-border border-1 rounded-full ml-0 mr-auto">
+                                {PRIORITY_LABELS[request.priority_level]}
+                            </div>
+                        )}
+
                         <p className="mt-2 text-foreground/70 text-sm">{request.description}</p>
 
                         <div className="text-sm mt-4 flex gap-2 items-center">

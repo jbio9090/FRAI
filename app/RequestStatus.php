@@ -8,4 +8,5 @@ enum RequestStatus: string
     case APPROVED = 'Approved';
     case DENIED = 'Denied';
     case CONDITIONALLY_APPROVED = 'Conditionally Approved';
+    case ON_HOLD = 'On Hold';
 }

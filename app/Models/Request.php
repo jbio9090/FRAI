@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\Models\User;
+use App\PriorityLevel;
 use App\RequestStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -33,27 +34,8 @@ class Request extends Model
     protected $casts = [
         'status'         => RequestStatus::class,
         'on_hold'        => 'boolean',
-        'priority_level' => 'integer',
+        'priority_level' => PriorityLevel::class,
     ];
-
-    /**
-     * Priority level labels
-     * 0 = Normal
-     * 1 = School Event (department heads, school-wide events)
-     * 2 = Government / High Authority (government officials, external high-priority)
-     */
-    public const PRIORITY_NORMAL     = 0;
-    public const PRIORITY_SCHOOL     = 1;
-    public const PRIORITY_GOVERNMENT = 2;
-
-    public static function priorityLabel(int $level): string
-    {
-        return match ($level) {
-            self::PRIORITY_SCHOOL     => 'School Event',
-            self::PRIORITY_GOVERNMENT => 'Government / High Authority',
-            default                   => 'Normal',
-        };
-    }
 
     /* =========================================
      | RELATIONSHIPS

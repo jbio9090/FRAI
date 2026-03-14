@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { Facility } from '@/types/facility';
 import { Equipment } from '@/types/equipment';
+import { PRIORITY_LABELS } from '@/types/request';
 
 interface FacilityBooking {
     facility_id: number;
@@ -70,6 +71,8 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         title: '',
         description: '',
         facility_bookings: [] as FacilityBooking[],
+        priority_level: 0,
+        priority_reason: '',
     });
 
     const availableEquipment = selectedFacility
@@ -306,6 +309,27 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                             )}
                         </div>
 
+                        <div className="space-y-2">
+                            <Label htmlFor="priority">Priority Level</Label>
+                            <Select
+                                value={data.priority_level.toString()}
+                                onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}
+                            >
+                                <SelectTrigger className='w-full'>
+                                    <SelectValue placeholder="Select priority" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                                        <SelectItem key={value} value={value}>
+                                            {label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {errors.priority_level && (
+                                <p className="text-sm text-destructive">{errors.priority_level}</p>
+                            )}
+                        </div>
 
                         {/* Add Facility Booking */}
                         <div className="space-y-4">
