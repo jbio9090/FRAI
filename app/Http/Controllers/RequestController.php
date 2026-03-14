@@ -25,7 +25,7 @@ class RequestController extends Controller
 
     public function index(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::PENDING, $request->input("filter") ?? "this_week");
+        $requests = $this->service->get(RequestStatus::PENDING, $request->input("filter") ?? "this_week", $request->input("search"),);
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
@@ -36,7 +36,7 @@ class RequestController extends Controller
 
     public function approvedPage(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::APPROVED, $request->input("filter") ?? "this_week");
+        $requests = $this->service->get(RequestStatus::APPROVED, $request->input("filter") ?? "this_week", $request->input("search"),);
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
@@ -46,7 +46,7 @@ class RequestController extends Controller
 
     public function deniedPage(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::DENIED, $request->input("filter") ?? "this_week");
+        $requests = $this->service->get(RequestStatus::DENIED, $request->input("filter") ?? "this_week", $request->input("search"),);
 
         return Inertia::render('requests/index', [
             'requests' => $requests,
@@ -56,7 +56,7 @@ class RequestController extends Controller
 
     public function conditionallyApprovedPage(Request $request)
     {
-        $requests = $this->service->get(RequestStatus::CONDITIONALLY_APPROVED, $request->input("filter") ?? "this_week");
+        $requests = $this->service->get(RequestStatus::CONDITIONALLY_APPROVED, $request->input("filter") ?? "this_week", $request->input("search"),);
 
         return Inertia::render('requests/index', [
             'requests' => $requests,

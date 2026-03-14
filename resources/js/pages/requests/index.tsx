@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -11,7 +11,7 @@ import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
@@ -37,7 +37,22 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
     const [bulkComment, setBulkComment] = useState("");
     const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
     const [currentActiveFitler, setActiveFilter] = useState("This Week");
-    console.log(requests);
+    const [searchQuery, setSearchQuery] = useState("");
+
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            router.get(route(route().current()), {
+                filter: filterMap[currentActiveFitler],
+                search: searchQuery,
+            }, {
+                preserveState: true,
+                preserveScroll: true,
+            });
+        }, 400);
+
+        return () => clearTimeout(timeout);
+    }, [searchQuery]);
+
     const commonFilterOptions = [
         {
             title: "Today",
@@ -60,12 +75,31 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
         "All": "all",
     };
 
-    const handleFilterButtonClick = (title: string) => {
-        setActiveFilter(title)
-        router.get(route(route().current()), { filter: filterMap[title] }, {
+    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSearchQuery(value);
+        router.get(route(route().current()), {
+            filter: filterMap[currentActiveFitler],
+            search: value
+        }, {
             preserveState: true,
             preserveScroll: true,
         });
+    };
+
+    const handleFilterButtonClick = (title: string) => {
+        setActiveFilter(title)
+        router.get(
+            route(route().current()),
+            {
+                filter: filterMap[title],
+                search: searchQuery,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+            }
+        );
     };
 
     const handleSelection = (request_id: number) => {
@@ -110,14 +144,24 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
                 <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">
                     <div className="flex gap-2">
-                        <InputGroup className='max-w-md'>
+                        <InputGroup className='max-w-sm md:max-w-md'>
                             <InputGroupAddon>
                                 <Search />
                             </InputGroupAddon>
                             <InputGroupInput
                                 placeholder='Search for request name'
+                                value={searchQuery}
+                                onChange={handleSearch}
                             />
                         </InputGroup>
+
+                        <Button variant="outline">
+                            <ArrowDownUp />
+                        </Button>
+
+                        <Button variant="outline">
+                            <Funnel />
+                        </Button>
 
                         <Button
                             variant={"outline"}
@@ -128,9 +172,6 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                             <span>{!isSelecting ? "Bulk" : "Stop"}</span>
                         </Button>
 
-                        <Button variant="outline">
-                            <Funnel />
-                        </Button>
                     </div>
 
                     <div className="flex gap-3">

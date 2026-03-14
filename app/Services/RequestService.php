@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
 class RequestService
 {
 
-    public function get(RequestStatus $status, string $filter = 'Today')
+    public function get(RequestStatus $status, string $filter = 'this_week', ?string $search = null)
     {
         $user = Auth::user();
 
@@ -29,6 +29,10 @@ class RequestService
             'this_month' => $query->where('updated_at', '>=', Carbon::now()->subMonth()),
             default      => $query,
         };
+
+        if ($search) {
+            $query->where('title', 'like', "%{$search}%");
+        }
 
         return $query->latest()->paginate(20);
     }
