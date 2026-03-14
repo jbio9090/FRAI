@@ -83,7 +83,7 @@ export default function Chatbot() {
     };
 
     return (
-        <div className="w-full h-full flex flex-col bg-white">
+        <div className="w-full h-full flex flex-col">
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {messages.length === 0 ? (

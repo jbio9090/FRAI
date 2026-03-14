@@ -15,16 +15,21 @@ use GuzzleHttp\Exception\RequestException;
 
 class ChatController extends Controller
 {
-    private $ollamaUrl = 'http://127.0.0.1:11434';
-    private $model = 'FRAI';
+    private string $ollamaUrl;
+    private string $model;
 
+    public function __construct()
+    {
+        $this->ollamaUrl  = config("ollama-laravel.url");
+        $this->model = config("ollama-laravel.model", "FRAI");
+    }
     /**
      * Filter facilities by participant count
      */
     private function filterFacilitiesByCapacity($facilities, $participants)
     {
         return $facilities->filter(function ($facility) use ($participants) {
-            return $participants <= $facility->capacity 
+            return $participants <= $facility->capacity
                 && $participants >= ($facility->capacity * 0.5);
         });
     }
@@ -35,6 +40,7 @@ class ChatController extends Controller
     public function chat(Request $request): JsonResponse
     {
         try {
+            set_time_limit(300); // 5 minutes
             $messages = $request->input('messages', []);
             $participantCount = $request->input('participant_count'); // Optional: for capacity-based filtering
 
@@ -191,7 +197,7 @@ class ChatController extends Controller
                     'content' => "You MUST follow rules stored in the system database. If a user request would violate any configured rule, you MUST refuse and explain which rule would be violated. Do NOT provide prohibited content."
                 ]);
             }
-            
+
             if (empty($messages)) {
                 return response()->json([
                     'error' => 'No messages provided'
@@ -199,7 +205,7 @@ class ChatController extends Controller
             }
 
             $client = new Client(['timeout' => 1200]);
-            
+
             $response = $client->post($this->ollamaUrl . '/api/chat', [
                 'json' => [
                     'model' => $this->model,
@@ -269,9 +275,9 @@ class ChatController extends Controller
                                     $violationDetails[] = "Rule #" . ($ruleIndex + 1) . ": " . $rules[$ruleIndex];
                                 }
                             }
-                            
+
                             $violationMessage = "I cannot comply with that request because it would violate the following rules:\n\n" . implode("\n\n", $violationDetails);
-                            
+
                             // Replace assistant response with refusal message
                             $data = [
                                 'message' => [
@@ -295,14 +301,14 @@ class ChatController extends Controller
             return response()->json($data);
         } catch (RequestException $e) {
             \Log::error('Chat error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'error' => 'Failed to connect to Ollama',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred'
             ], 500);
         } catch (\Exception $e) {
             \Log::error('Chat error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'error' => 'Failed to process chat request',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred'
@@ -317,10 +323,10 @@ class ChatController extends Controller
     {
         try {
             $client = new Client(['timeout' => 10]);
-            
+
             $response = $client->get($this->ollamaUrl . '/api/tags');
             $data = json_decode($response->getBody(), true);
-            
+
             return response()->json([
                 'message' => 'Connected to Ollama',
                 'models' => $data['models'] ?? [],
@@ -328,7 +334,7 @@ class ChatController extends Controller
             ]);
         } catch (\Exception $e) {
             \Log::error('Ollama connection test failed: ' . $e->getMessage());
-            
+
             return response()->json([
                 'error' => 'Cannot connect to Ollama at ' . $this->ollamaUrl,
                 'message' => config('app.debug') ? $e->getMessage() : 'Connection failed'
@@ -343,16 +349,16 @@ class ChatController extends Controller
     {
         try {
             $client = new Client(['timeout' => 10]);
-            
+
             $response = $client->get($this->ollamaUrl . '/api/tags');
             $data = json_decode($response->getBody(), true);
-            
+
             return response()->json([
                 'models' => $data['models'] ?? []
             ]);
         } catch (\Exception $e) {
             \Log::error('Models fetch error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'error' => 'Failed to fetch models',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred'
@@ -599,4 +605,3 @@ class ChatController extends Controller
         }
     }
 }
-
