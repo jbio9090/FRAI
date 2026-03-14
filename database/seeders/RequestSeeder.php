@@ -10,6 +10,7 @@ use App\Models\Request;
 use App\Models\RequestFacility;
 use App\Models\Equipment;
 use App\RequestStatus;
+use Illuminate\Support\Facades\DB;
 
 class RequestSeeder extends Seeder
 {
@@ -28,6 +29,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::PENDING->value,
             'comment'     => null,
         ]);
+        DB::table('requests')->where('id', $request1->id)->update(['updated_at' => Carbon::now()->subDays(2)]);
 
         $request2 = Request::create([
             'user_id'     => $user->id,
@@ -36,6 +38,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::APPROVED->value,
             'comment'     => 'Approved request',
         ]);
+        DB::table('requests')->where('id', $request2->id)->update(['updated_at' => Carbon::now()->subDays(5)]);
 
         $request3 = Request::create([
             'user_id'     => $admin->id,
@@ -44,6 +47,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::APPROVED->value,
             'comment'     => 'Approved Request',
         ]);
+        DB::table('requests')->where('id', $request3->id)->update(['updated_at' => Carbon::now()->subDays(8)]);
 
         $request4 = Request::create([
             'user_id'     => $user->id,
@@ -52,6 +56,7 @@ class RequestSeeder extends Seeder
             'status'      => RequestStatus::DENIED->value,
             'comment'     => 'Day is unavailable due to upcoming storm',
         ]);
+        DB::table('requests')->where('id', $request4->id)->update(['updated_at' => Carbon::now()->subDays(1)]);
 
         // ---- REQUEST FACILITIES ----
         RequestFacility::create([
@@ -104,21 +109,18 @@ class RequestSeeder extends Seeder
         $ceit_hall_equipment  = Equipment::where('facility_id', $facilities[3])->get();
         $main_audit_equipment = Equipment::where('facility_id', $facilities[0])->get();
 
-        // Request 1 - attach up to 2 pieces of equipment from COED AVR
         $request1->equipment()->attach(
             $coed_avr_equipment->take(2)->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 1]
             ])->all()
         );
 
-        // Request 2 - attach up to 3 pieces from CEIT Lecture Hall
         $request2->equipment()->attach(
             $ceit_hall_equipment->take(3)->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 2]
             ])->all()
         );
 
-        // Request 3 - attach up to 2 pieces from Main Auditorium
         $request3->equipment()->attach(
             $main_audit_equipment->take(2)->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 1]

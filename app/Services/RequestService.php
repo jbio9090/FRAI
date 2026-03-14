@@ -13,20 +13,28 @@ use Illuminate\Support\Carbon;
 class RequestService
 {
 
-    public function get(RequestStatus $status)
+    public function get(RequestStatus $status, string $filter = 'this_week', ?string $search = null)
     {
         $user = Auth::user();
 
-        // Admins see all requests, users see only their own
-        $requests = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", $status)->latest()->get()
+        $query = $user->hasRole('admin')
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", $status)
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
             ->where('user_id', $user->id)
-            ->where("status", $status)
-            ->latest()
-            ->get();
+            ->where("status", $status);
 
-        return $requests;
+        $query = match ($filter) {
+            'today'      => $query->whereDate('updated_at', Carbon::today()),
+            'this_week'  => $query->where('updated_at', '>=', Carbon::now()->subWeek()),
+            'this_month' => $query->where('updated_at', '>=', Carbon::now()->subMonth()),
+            default      => $query,
+        };
+
+        if ($search) {
+            $query->where('title', 'like', "%{$search}%");
+        }
+
+        return $query->latest()->paginate(20);
     }
 
 
@@ -133,7 +141,7 @@ class RequestService
             $recommended_action = RequestStatus::CONDITIONALLY_APPROVED;
             $recommended_action_reason = "Approved request along with the external equipment";
         }
-        
+
         $saved_request->update(["recommended_action" => $recommended_action, "recommended_action_reason" => $recommended_action_reason]);
     }
 }
