@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -395,14 +395,17 @@ function RequestCard({
 
                         <div className="flex gap-2 flex-wrap">
                             {(request.priority_level > 0) && (
-                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full ml-0 mr-auto">
+                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full">
                                     {PRIORITY_LABELS[request.priority_level]}
                                 </div>
                             )}
 
                             {request.on_hold && (
-                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full ml-0 mr-auto">
-                                    On Hold
+                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full flex gap-1 items-center bg-yellow-200/50">
+                                    <CirclePause size={14}/>
+                                    <span>
+                                        On Hold
+                                    </span>
                                 </div>
                             )}
                         </div>

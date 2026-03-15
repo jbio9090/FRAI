@@ -24,6 +24,7 @@ class Request extends Model
         'priority_level',
         'recommended_action',
         'recommended_action_reason',
+        'comment',
         'status',
         'overridden_by_request_id',
         'title',

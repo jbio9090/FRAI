@@ -9,6 +9,7 @@ use App\Models\Facility;
 use App\RequestStatus;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class RequestService
 {
@@ -167,12 +168,6 @@ class RequestService
     {
         $request = FacilityRequest::with(['requestFacilities'])->findOrFail($request_id);
 
-        Log::debug('Approving request', [
-            'id'             => $request->id,
-            'priority_level' => $request->priority_level,
-            'status'         => $request->status,
-        ]);
-
         $bookings = $request->requestFacilities->map(fn($rf) => [
             'facility_id' => $rf->facility_id,
             'date'        => $rf->date_requested,
@@ -181,16 +176,6 @@ class RequestService
         ])->toArray();
 
         $conflictingRequests = $this->getConflictingApprovedRequests($bookings, $request->id);
-
-        Log::debug('Conflicting requests found', [
-            'count'     => $conflictingRequests->count(),
-            'conflicts' => $conflictingRequests->map(fn($r) => [
-                'id'             => $r->id,
-                'status'         => $r->status,
-                'priority_level' => $r->priority_level,
-                'on_hold'        => $r->on_hold,
-            ])->toArray(),
-        ]);
 
         if ($conflictingRequests->isEmpty()) {
             $request->update([
@@ -205,7 +190,6 @@ class RequestService
         $highestConflictPriority = $conflictingRequests->max(fn($r) => $r->priority_level->value);
 
         if ($request->priority_level->value > $highestConflictPriority) {
-            // Incoming request wins — approve it, put conflicting ones on hold
             $request->update([
                 'status'             => RequestStatus::APPROVED,
                 'on_hold'            => false,
@@ -214,9 +198,11 @@ class RequestService
 
             foreach ($conflictingRequests as $conflicting) {
                 $conflicting->update([
-                    'status'             => RequestStatus::PENDING,
-                    'on_hold'            => true,
-                    'held_by_request_id' => $request->id,
+                    'status'                    => RequestStatus::PENDING,
+                    'on_hold'                   => true,
+                    'held_by_request_id'        => $request->id,
+                    'recommended_action'        => RequestStatus::DENIED,
+                    'recommended_action_reason' => 'Superseded by higher priority request: "' . $request->title . '"',
                 ]);
             }
         } else {
@@ -224,9 +210,11 @@ class RequestService
             $winner = $conflictingRequests->sortByDesc('priority_level')->first();
 
             $request->update([
-                'status'             => RequestStatus::PENDING,
-                'on_hold'            => true,
-                'held_by_request_id' => $winner->id,
+                'status'                    => RequestStatus::PENDING,
+                'on_hold'                   => true,
+                'held_by_request_id'        => $winner->id,
+                'recommended_action'        => RequestStatus::DENIED,
+                'recommended_action_reason' => 'Time conflict with higher priority approved request: "' . $winner->title . '"',
             ]);
         }
 
@@ -234,7 +222,7 @@ class RequestService
     }
 
 
-    private function getConflictingApprovedRequests(array $bookings, int $excludeRequestId): \Illuminate\Support\Collection
+    private function getConflictingApprovedRequests(array $bookings, int $excludeRequestId): Collection
     {
         $conflictingIds = collect();
 
