@@ -23,43 +23,24 @@ class RequestController extends Controller
         protected NotificationService $notification,
     ) {}
 
-    public function index(Request $request)
+    public function index(Request $request, string $status)
     {
-        $requests = $this->service->get(RequestStatus::PENDING, $request->input("filter") ?? "this_week", $request->input("search"),);
+        $requestStatus = collect(RequestStatus::cases())
+            ->firstWhere(fn($case) => strtolower($case->name) === $status);
+
+        abort_if(!$requestStatus, 404);
+
+        $requests = $this->service->get(
+            $requestStatus,
+            $request->input("filter") ?? "this_week",
+            $request->input("search"),
+            $request->input("sort"),
+            $request->input("order", "asc"),
+        );
 
         return Inertia::render('requests/index', [
-            'requests' => $requests,
-            'page_title' => "Pending",
-        ]);
-    }
-
-    public function approvedPage(Request $request)
-    {
-        $requests = $this->service->get(RequestStatus::APPROVED, $request->input("filter") ?? "this_week", $request->input("search"),);
-
-        return Inertia::render('requests/index', [
-            'requests' => $requests,
-            'page_title' => "Approved",
-        ]);
-    }
-
-    public function deniedPage(Request $request)
-    {
-        $requests = $this->service->get(RequestStatus::DENIED, $request->input("filter") ?? "this_week", $request->input("search"),);
-
-        return Inertia::render('requests/index', [
-            'requests' => $requests,
-            'page_title' => "Denied",
-        ]);
-    }
-
-    public function conditionallyApprovedPage(Request $request)
-    {
-        $requests = $this->service->get(RequestStatus::CONDITIONALLY_APPROVED, $request->input("filter") ?? "this_week", $request->input("search"),);
-
-        return Inertia::render('requests/index', [
-            'requests' => $requests,
-            'page_title' => "Conditionally Approved",
+            'requests'   => $requests,
+            'page_title' => $requestStatus->value,
         ]);
     }
 
@@ -139,7 +120,8 @@ class RequestController extends Controller
 
         $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
 
-        return redirect()->route('requests.index')->with('success', 'Request created successfully');
+        return redirect()->route('requests.index', ['status' => strtolower(RequestStatus::PENDING->name)])
+            ->with('success', 'Request created successfully');
     }
 
 

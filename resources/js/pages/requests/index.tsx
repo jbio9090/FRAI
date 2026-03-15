@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -10,8 +10,9 @@ import { Request } from '@/types/request';
 import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination"
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
@@ -45,10 +46,18 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
     const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
     const [currentActiveFitler, setActiveFilter] = useState("This Week");
     const [searchQuery, setSearchQuery] = useState("");
+    const [sortField, setSortField] = useState<string | null>(null);
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const isMounted = useRef(false);
 
     useEffect(() => {
+        if (!isMounted.current) {
+            isMounted.current = true;
+            return;
+        }
+
         const timeout = setTimeout(() => {
-            router.get(route(route().current()), {
+            router.get(route(route().current(), { status: route().params.status }), {
                 filter: filterMap[currentActiveFitler],
                 search: searchQuery,
             }, {
@@ -83,21 +92,13 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
     };
 
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setSearchQuery(value);
-        router.get(route(route().current()), {
-            filter: filterMap[currentActiveFitler],
-            search: value
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
+        setSearchQuery(e.target.value);
     };
 
     const handleFilterButtonClick = (title: string) => {
         setActiveFilter(title)
         router.get(
-            route(route().current()),
+            route(route().current(), { status: route().params.status }),
             {
                 filter: filterMap[title],
                 search: searchQuery,
@@ -115,6 +116,23 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                 ? prev.filter((id) => id !== request_id)
                 : [...prev, request_id]
         );
+    };
+
+    const handleSort = (field: string) => {
+        const newOrder = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
+        setSortField(field);
+        setSortOrder(newOrder);
+        router.get(route(route().current(), { status: route().params.status }),
+            {
+                filter: filterMap[currentActiveFitler],
+                search: searchQuery,
+                sort: field,
+                order: newOrder,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+            });
     };
 
     const clearAllSelection = () => {
@@ -162,9 +180,41 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                             />
                         </InputGroup>
 
-                        <Button variant="outline">
-                            <ArrowDownUp />
-                        </Button>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline">
+                                    <ArrowDownUp />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="p-0">
+                                <PopoverHeader>
+                                    <PopoverTitle className='px-3 py-2'>Sort By</PopoverTitle>
+                                </PopoverHeader>
+                                <div className="flex flex-col">
+                                    {[
+                                        { label: "Date Submitted", value: "created_at" },
+                                        { label: "Priority Level", value: "priority_level" },
+                                        { label: "Title", value: "title" },
+                                        { label: "Requester", value: "user_name" },
+                                    ].map((option) => (
+                                        <Button
+                                            key={option.value}
+                                            onClick={() => handleSort(option.value)}
+                                            variant="ghost"
+                                            className='flex'
+                                            size="sm"
+                                        >
+                                            <span>{option.label}</span>
+                                            {sortField === option.value && (
+                                                sortOrder === 'asc'
+                                                    ? <ArrowUp size={14} className="rotate-180" />
+                                                    : <ArrowUp size={14} />
+                                            )}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
 
                         <Button variant="outline">
                             <Funnel />

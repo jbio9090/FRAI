@@ -14,20 +14,21 @@ use Illuminate\Support\Collection;
 class RequestService
 {
 
-    public function get(RequestStatus $status, string $filter = 'this_week', ?string $search = null)
+    public function get(RequestStatus $status, string $filter = 'this_week', ?string $search = null, ?string $sort = null, string $order = 'asc')
     {
         $user = Auth::user();
+        $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
         $query = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("status", $status)
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("requests.status", $status)
             : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
-            ->where('user_id', $user->id)
-            ->where("status", $status);
+            ->where('requests.user_id', $user->id)
+            ->where("requests.status", $status);
 
         $query = match ($filter) {
-            'today'      => $query->whereDate('updated_at', Carbon::today()),
-            'this_week'  => $query->where('updated_at', '>=', Carbon::now()->subWeek()),
-            'this_month' => $query->where('updated_at', '>=', Carbon::now()->subMonth()),
+            'today'      => $query->whereDate('requests.updated_at', Carbon::today()),
+            'this_week'  => $query->where('requests.updated_at', '>=', Carbon::now()->subWeek()),
+            'this_month' => $query->where('requests.updated_at', '>=', Carbon::now()->subMonth()),
             default      => $query,
         };
 
@@ -35,7 +36,25 @@ class RequestService
             $query->where('title', 'like', "%{$search}%");
         }
 
-        return $query->latest()->paginate(20);
+        $sortMap = [
+            'created_at'     => 'requests.created_at',
+            'priority_level' => 'requests.priority_level',
+            'title'          => 'requests.title',
+            'user_name'      => 'users.name',
+        ];
+
+        if ($sort && isset($sortMap[$sort])) {
+            if ($sort === 'user_name') {
+                $query->join('users', 'requests.user_id', '=', 'users.id')
+                    ->orderBy('users.name', $order);
+            } else {
+                $query->orderBy($sortMap[$sort], $order);
+            }
+        } else {
+            $query->latest();
+        }
+
+        return $query->paginate(20);
     }
 
 

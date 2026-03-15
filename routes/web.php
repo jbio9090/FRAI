@@ -23,10 +23,7 @@ Route::middleware("auth")->group(function () {
     Route::get('/requests', function () {
         return redirect()->intended(route("requests.index"));
     })->name("requests");
-    Route::get('/requests/pending', [RequestController::class, 'index'])->name('requests.index');
-    Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
-    Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
-    Route::get('/requests/conditionally_approved', [RequestController::class, 'conditionallyApprovedPage'])->name('requests.conditionally_approved');
+    Route::get('/requests/{status}', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
 

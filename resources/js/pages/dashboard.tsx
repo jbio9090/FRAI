@@ -25,7 +25,7 @@ export default function Dashboard({ pending, approved, denied }: { pending: Requ
                 <div className="flex flex-col p-4 w-full border-1 border-border rounded">
                     <p className='text-sm'>Pending Requests</p>
                     <p className='text-4xl font-bold'>{pending.length}</p>
-                    <Link href={route("requests.index")}>
+                    <Link href={route("requests.index", ['pending'])}>
                         <Button variant={"link"} className='px-0 mt-2'>See all</Button>
                     </Link>
                 </div>
@@ -33,7 +33,7 @@ export default function Dashboard({ pending, approved, denied }: { pending: Requ
                 <div className="flex flex-col p-4 w-full border-1 border-border rounded">
                     <p className='text-sm'>Approved Requests you made</p>
                     <p className='text-4xl font-bold'>{approved.length}</p>
-                    <Link href={route("requests.index")}>
+                    <Link href={route("requests.index", ['pending'])}>
                         <Button variant={"link"} className='px-0 mt-2'>See all</Button>
                     </Link>
                 </div>
@@ -41,7 +41,7 @@ export default function Dashboard({ pending, approved, denied }: { pending: Requ
                 <div className="flex flex-col p-4 w-full border-1 border-border rounded">
                     <p className='text-sm'>Denied Requests you made</p>
                     <p className='text-4xl font-bold'>{denied.length}</p>
-                    <Link href={route("requests.index")}>
+                    <Link href={route("requests.index", ['pending'])}>
                         <Button variant={"link"} className='px-0 mt-2'>See all</Button>
                     </Link>
                 </div>

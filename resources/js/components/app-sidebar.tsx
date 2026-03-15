@@ -33,7 +33,7 @@ import { useEffect, useState } from "react"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { hasPermission } = usePermission();
-  const [data, setData] = useState({
+  const data = {
     topNav: [
       {
         title: "Dashboard",
@@ -61,26 +61,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     navMenu: [
       {
         title: "Pending",
-        url: "requests.index",
+        url: route("requests.index", ["pending"]),
+        status: 'pending',
         icon: FileClock
       },
       {
         title: "Approved",
-        url: "requests.approved",
+        url: route("requests.index", ["approved"]),
+        status: 'approved',
         icon: Check
       },
       {
         title: "Conditionally Approved",
-        url: "requests.conditionally_approved",
+        url: route("requests.index", ["conditionally_approved"]),
+        status: 'conditionally_approved',
         icon: CheckLine
       },
       {
         title: "Denied",
-        url: "requests.denied",
+        url: route("requests.index", ["denied"]),
+        status: 'denied',
         icon: X
       },
     ]
-  })
+  }
 
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -141,8 +145,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           {data.navMenu.map((item) => (
             <SidebarMenuItem key={item.title} className="px-4">
-              <SidebarMenuButton asChild isActive={checkRoute(item.url)}>
-                <Link href={route(item.url)}>
+              <SidebarMenuButton asChild isActive={route().current('requests.index') && route().params.status === item.status}>
+                <Link href={item.url}>
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
                 </Link>
