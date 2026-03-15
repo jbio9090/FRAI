@@ -68,11 +68,17 @@ class RequestController extends Controller
     {
         $comment = $request->input("comment", "Your request has been approved");
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::APPROVED, "comment" => $comment]);
+
+        $facilityRequest->update(['comment' => $comment]);
+        $facilityRequest = $this->service->approve($id);
 
         $this->notification->notifyUser($facilityRequest);
 
-        return redirect()->back()->with('success', 'Request approved successfully');
+        $message = $facilityRequest->on_hold
+            ? 'Request placed on hold due to a higher-priority conflict.'
+            : 'Request approved successfully.';
+
+        return redirect()->back()->with('success', $message);
     }
 
     // Admin-only: Reject request

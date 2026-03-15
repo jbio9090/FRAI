@@ -393,11 +393,20 @@ function RequestCard({
                     <div className='flex flex-col gap-1'>
                         <h3 className="font-bold">{request.title}</h3>
 
-                        {(request.priority_level > 0) && (
-                            <div className="p-1 text-xs border-border border-1 rounded-full ml-0 mr-auto">
-                                {PRIORITY_LABELS[request.priority_level]}
-                            </div>
-                        )}
+                        <div className="flex gap-2 flex-wrap">
+                            {(request.priority_level > 0) && (
+                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full ml-0 mr-auto">
+                                    {PRIORITY_LABELS[request.priority_level]}
+                                </div>
+                            )}
+
+                            {request.on_hold && (
+                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full ml-0 mr-auto">
+                                    On Hold
+                                </div>
+                            )}
+                        </div>
+
 
                         <p className="mt-2 text-foreground/70 text-sm">{request.description}</p>
 

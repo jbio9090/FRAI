@@ -22,6 +22,8 @@ class Request extends Model
         'end_time',
         'participants',
         'priority_level',
+        'recommended_action',
+        'recommended_action_reason',
         'status',
         'overridden_by_request_id',
         'title',
