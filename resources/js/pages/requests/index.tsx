@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -32,7 +32,13 @@ export interface RequestsPageProps {
     filter: string;
 }
 
-export default function RequestsPage({ requests, page_title, filter }: RequestsPageProps) {
+export const PRIORITY_ICONS: Record<0 | 1 | 2, React.ReactNode> = {
+    0: null,
+    1: <GraduationCap size={14} />,
+    2: <Landmark size={14} />,
+};
+
+export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
     const [selected, setSelected] = useState<number[]>([]);
     const [isSelecting, setSelectState] = useState<boolean>(false);
     const [bulkComment, setBulkComment] = useState("");
@@ -261,37 +267,39 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                     </div>
                 )}
 
-                <Pagination>
-                    <PaginationContent>
-                        <PaginationItem>
-                            <PaginationPrevious
-                                href={requests.links[0].url ?? '#'}
-                                className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
-                            />
-                        </PaginationItem>
-
-                        {requests.links.slice(1, -1).map((link) => (
-                            <PaginationItem key={link.label}>
-                                <PaginationLink
-                                    href={link.url ?? '#'}
-                                    isActive={link.active}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                {requests.data.length > 0 && (
+                    <Pagination>
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    href={requests.links[0].url ?? '#'}
+                                    className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
                                 />
                             </PaginationItem>
-                        ))}
 
-                        <PaginationItem>
-                            <PaginationEllipsis />
-                        </PaginationItem>
+                            {requests.links.slice(1, -1).map((link) => (
+                                <PaginationItem key={link.label}>
+                                    <PaginationLink
+                                        href={link.url ?? '#'}
+                                        isActive={link.active}
+                                        dangerouslySetInnerHTML={{ __html: link.label }}
+                                    />
+                                </PaginationItem>
+                            ))}
 
-                        <PaginationItem>
-                            <PaginationNext
-                                href={requests.links[requests.links.length - 1].url ?? '#'}
-                                className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
-                            />
-                        </PaginationItem>
-                    </PaginationContent>
-                </Pagination>
+                            <PaginationItem>
+                                <PaginationEllipsis />
+                            </PaginationItem>
+
+                            <PaginationItem>
+                                <PaginationNext
+                                    href={requests.links[requests.links.length - 1].url ?? '#'}
+                                    className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
+                )}
 
                 <div className="gap-4 mt-6 flex flex-col xl:grid grid-cols-[1fr_1fr]">
                     {requests.data.length > 0 ? requests.data.map((request) => (
@@ -305,7 +313,11 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                         />
                     )) :
                         (
-                            <h1>No Requests</h1>
+                            <div className='w-full mt-8 text-center col-span-full'>
+                                <p>
+                                    No Requests
+                                </p>
+                            </div>
                         )}
                 </div>
 
@@ -395,13 +407,16 @@ function RequestCard({
 
                         <div className="flex gap-2 flex-wrap">
                             {(request.priority_level > 0) && (
-                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full">
-                                    {PRIORITY_LABELS[request.priority_level]}
+                                <div className="flex gap-1 px-2 py-1 font-semibold text-xs border-border border-1 rounded-full">
+                                    {PRIORITY_ICONS[request.priority_level as 0 | 1 | 2]}
+                                    <span>
+                                        {PRIORITY_LABELS[request.priority_level]}
+                                    </span>
                                 </div>
                             )}
 
                             {request.on_hold && (
-                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full flex gap-1 items-center bg-yellow-200/50">
+                                <div className="px-2 py-1 font-semibold text-xs text-yellow-900 dark:text-yellow-100 border-yellow-900 dark:border-yellow-200 border-1 rounded-full flex gap-1 items-center bg-yellow-200/50">
                                     <CirclePause size={14} />
                                     <span>
                                         On Hold
