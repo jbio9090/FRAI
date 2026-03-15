@@ -142,6 +142,18 @@ class RequestController extends Controller
         return redirect()->route('requests.index')->with('success', 'Request created successfully');
     }
 
+
+    public function hold($id)
+    {
+        $facilityRequest = \App\Models\Request::findOrFail($id);
+
+        $facilityRequest->on_hold = !$facilityRequest->on_hold;
+        $facilityRequest->save();
+
+        return back()->with('success', $facilityRequest->on_hold ? 'Request placed on hold.' : 'Request removed from hold.');
+    }
+
+
     public function bulkAction(Request $request)
     {
         $validated = $request->validate([

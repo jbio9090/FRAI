@@ -36,6 +36,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
         Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
+        Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
     });
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
@@ -73,7 +74,6 @@ Route::middleware("auth")->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
     });
 
-    // Chatbot
     Route::get("/chatbot", function () {
         return Inertia::render("chatbot/chatbot");
     })->name("chatbot");

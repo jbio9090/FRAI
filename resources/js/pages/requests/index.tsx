@@ -402,7 +402,7 @@ function RequestCard({
 
                             {request.on_hold && (
                                 <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full flex gap-1 items-center bg-yellow-200/50">
-                                    <CirclePause size={14}/>
+                                    <CirclePause size={14} />
                                     <span>
                                         On Hold
                                     </span>
@@ -464,6 +464,10 @@ function RequestCard({
                                             <DropdownMenuItem onClick={toggleInput}>
                                                 {isCommentInputOpen ? <MessageCircleOff size={16} /> : <MessageCirclePlus size={16} />}
                                                 <span>{isCommentInputOpen ? "Cancel Comment" : "Add Comment"}</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleAction("requests.hold")}>
+                                                <CirclePause size={16} />
+                                                <span>{request.on_hold ? "Unhold Request" : "Hold Request"}</span>
                                             </DropdownMenuItem>
                                         </DropdownMenuGroup>
                                     </DropdownMenuContent>
