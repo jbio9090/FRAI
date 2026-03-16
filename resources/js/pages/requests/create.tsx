@@ -1,13 +1,14 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Save } from "lucide-react";
 import { motion } from "motion/react"
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
@@ -19,6 +20,7 @@ import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { Facility } from '@/types/facility';
 import { Equipment } from '@/types/equipment';
 import { PRIORITY_LABELS } from '@/types/request';
+import { toast } from "sonner";
 
 interface FacilityBooking {
     facility_id: number;
@@ -64,8 +66,73 @@ interface CreateRequestProps {
     existingRequest?: ExistingRequest;
 }
 
+interface DraftData {
+    title: string;
+    description: string;
+    facility_bookings: FacilityBooking[];
+    priority_level: 0 | 1 | 2;
+    priority_reason: string;
+    savedAt: number; // unix timestamp
+}
+
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
+
+function getDraftKey(existingId?: number) {
+    return existingId ? `request_draft_edit_${existingId}` : 'request_draft_create';
+}
+
+function loadDraft(existingId?: number): DraftData | null {
+    try {
+        const raw = localStorage.getItem(getDraftKey(existingId));
+        if (!raw) return null;
+        const draft: DraftData = JSON.parse(raw);
+        if (Date.now() - draft.savedAt > DRAFT_TTL_MS) {
+            localStorage.removeItem(getDraftKey(existingId));
+            return null;
+        }
+        return draft;
+    } catch {
+        return null;
+    }
+}
+
+function saveDraft(data: Omit<DraftData, 'savedAt'>, existingId?: number) {
+    try {
+        localStorage.setItem(getDraftKey(existingId), JSON.stringify({
+            ...data,
+            savedAt: Date.now(),
+        }));
+    } catch {
+        // localStorage might be full or unavailable
+    }
+}
+
+function clearDraft(existingId?: number) {
+    localStorage.removeItem(getDraftKey(existingId));
+}
+
+function timeAgo(ts: number): string {
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
+    const draft = loadDraft(existingRequest?.id);
+
+    // If there's a saved draft, we'll prompt to restore it
+    const [showDraftBanner, setShowDraftBanner] = useState<boolean>(!!draft);
+    const [draftRestoredAt] = useState<number | null>(draft?.savedAt ?? null);
+    const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+
+    // Initialize from draft if restored, otherwise from existingRequest or empty
+    const getInitialBookings = () => {
+        if (draft && showDraftBanner) return draft.facility_bookings;
+        return existingRequest?.facility_bookings ?? [];
+    };
 
     const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>(
         existingRequest?.facility_bookings ?? []
@@ -82,12 +149,55 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [openCollapsible, setCollapsibleState] = useState(false);
 
     const { data, setData, post, put, processing, errors } = useForm({
-        title:              existingRequest?.title ?? '',
-        description:        existingRequest?.description ?? '',
-        facility_bookings:  existingRequest?.facility_bookings ?? [] as FacilityBooking[],
-        priority_level:     existingRequest?.priority_level ?? 0,
-        priority_reason:    existingRequest?.priority_reason ?? '',
+        title: existingRequest?.title ?? '',
+        description: existingRequest?.description ?? '',
+        facility_bookings: existingRequest?.facility_bookings ?? [] as FacilityBooking[],
+        priority_level: existingRequest?.priority_level ?? 0,
+        priority_reason: existingRequest?.priority_reason ?? '',
     });
+
+    useEffect(() => {
+        if (showDraftBanner) return;
+
+        const timeout = setTimeout(() => {
+            saveDraft({
+                title: data.title,
+                description: data.description,
+                facility_bookings: facilityBookings,
+                priority_level: data.priority_level as 0 | 1 | 2,
+                priority_reason: data.priority_reason,
+            }, existingRequest?.id);
+
+            toast.success(
+                'Draft saved',
+                {
+                    description: 'Your progress has been saved locally.',
+                    duration: 2000,
+                    position: "top-right"
+                }
+            );
+        }, 2000);
+
+        return () => clearTimeout(timeout);
+    }, [data.title, data.description, data.priority_level, data.priority_reason, facilityBookings, showDraftBanner]);
+
+    // Restore draft
+    const restoreDraft = () => {
+        if (!draft) return;
+        setData('title', draft.title);
+        setData('description', draft.description);
+        setData('priority_level', draft.priority_level);
+        setData('priority_reason', draft.priority_reason);
+        setData('facility_bookings', draft.facility_bookings);
+        setFacilityBookings(draft.facility_bookings);
+        setShowDraftBanner(false);
+        setLastSavedAt(draft.savedAt);
+    };
+
+    const discardDraft = () => {
+        clearDraft(existingRequest?.id);
+        setShowDraftBanner(false);
+    };
 
     const availableEquipment = selectedFacility
         ? facilities.find(f => f.id === selectedFacility)?.equipments || []
@@ -110,7 +220,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             );
             const data = await response.json();
             setFacilitySchedule(data);
-
             if (currentTimeStart && currentTimeEnd) {
                 setHasTimeConflict(checkTimeConflictWithData(data, currentTimeStart, currentTimeEnd));
             }
@@ -198,22 +307,17 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     function handleTimeStartChange(e: React.ChangeEvent<HTMLInputElement>) {
         const newStartTime = e.target.value;
         setCurrentTimeStart(newStartTime);
-        if (newStartTime && currentTimeEnd) {
-            setHasTimeConflict(checkTimeConflict(newStartTime, currentTimeEnd));
-        }
+        if (newStartTime && currentTimeEnd) setHasTimeConflict(checkTimeConflict(newStartTime, currentTimeEnd));
     }
 
     function handleTimeEndChange(e: React.ChangeEvent<HTMLInputElement>) {
         const newEndTime = e.target.value;
         setCurrentTimeEnd(newEndTime);
-        if (currentTimeStart && newEndTime) {
-            setHasTimeConflict(checkTimeConflict(currentTimeStart, newEndTime));
-        }
+        if (currentTimeStart && newEndTime) setHasTimeConflict(checkTimeConflict(currentTimeStart, newEndTime));
     }
 
     function addFacilityBooking() {
         if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) return;
-
         const facility = facilities.find(f => f.id === selectedFacility);
         if (!facility) return;
 
@@ -251,22 +355,40 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     function submit(e: React.FormEvent) {
         e.preventDefault();
         if (isEditing) {
-            put(route('requests.update', existingRequest!.id));
+            put(route('requests.update', existingRequest!.id), {
+                onSuccess: () => clearDraft(existingRequest?.id),
+            });
         } else {
-            post(route('requests.store'));
+            post(route('requests.store'), {
+                onSuccess: () => clearDraft(),
+            });
         }
     }
 
     return (
         <DefaultLayout>
-            <h1 className="font-bold text-xl mb-6">
-                {isEditing ? 'Edit Request' : 'New Request'}
-            </h1>
+            <AlertDialog open={showDraftBanner} onOpenChange={(open) => { if (!open) discardDraft(); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Restore unsaved draft?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            You have an unsaved draft from <span className="font-medium text-foreground">{draft ? timeAgo(draft.savedAt) : ''}</span>. Would you like to restore it, or start fresh?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={discardDraft}>
+                            Discard
+                        </AlertDialogCancel>
+                        <AlertDialogAction onClick={restoreDraft}>
+                            Restore Draft
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <div className="w-full lg:grid lg:grid-cols-[5fr_3fr] gap-8">
                 <div className="max-w-3xl w-full mx-auto">
                     <form onSubmit={submit} className="space-y-8 flex flex-col gap-4">
-                        {/* Title Field */}
                         <div className="space-y-2">
                             <Label htmlFor="title">Request Title</Label>
                             <Input
@@ -276,12 +398,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 onChange={(e) => setData('title', e.target.value)}
                                 placeholder="e.g., Annual Company Meeting"
                             />
-                            {errors.title && (
-                                <p className="text-sm text-destructive">{errors.title}</p>
-                            )}
+                            {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
                         </div>
 
-                        {/* Description Field */}
                         <div className="space-y-2">
                             <Label htmlFor="description">Description</Label>
                             <Textarea
@@ -291,9 +410,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 placeholder="Provide details about your request"
                                 rows={4}
                             />
-                            {errors.description && (
-                                <p className="text-sm text-destructive">{errors.description}</p>
-                            )}
+                            {errors.description && <p className="text-sm text-destructive">{errors.description}</p>}
                         </div>
 
                         <div className="space-y-2">
@@ -311,12 +428,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {errors.priority_level && (
-                                <p className="text-sm text-destructive">{errors.priority_level}</p>
-                            )}
+                            {errors.priority_level && <p className="text-sm text-destructive">{errors.priority_level}</p>}
                         </div>
 
-                        {/* Add Facility Booking */}
                         <div className="space-y-4">
                             <div className="space-y-6">
                                 <div className="space-y-4">
@@ -334,9 +448,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     <b>{facility.name}</b>
                                                     <div className="flex items-center gap-1 font-semibold text-muted-foreground">
                                                         <User />
-                                                        <span className='text-xs'>
-                                                            {facility.capacity && facility.capacity}
-                                                        </span>
+                                                        <span className='text-xs'>{facility.capacity && facility.capacity}</span>
                                                     </div>
                                                 </SelectItem>
                                             ))}
@@ -519,13 +631,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                             </div>
 
                             {facilityBookings.length > 0 && (
-                                <div className="space-y-2">
-                                    <Label>
-                                        {isEditing ? 'Facility Bookings' : 'Added Facility Bookings'}
-                                    </Label>
-                                    <div className="border rounded-md divide-y">
+                                <div className="space-y-4 mt-8">
+                                    <Label>{isEditing ? 'Facility Bookings' : 'Added Facility Bookings'}</Label>
+                                    <div className="divide-y">
                                         {facilityBookings.map((booking, index) => (
-                                            <div key={index} className="p-3">
+                                            <div key={index} className="py-6 px-8 border border-border border-2">
                                                 <div className="flex items-start justify-between">
                                                     <div className="text-sm flex-1">
                                                         <div className="font-bold text-lg">{booking.facility_name}</div>
@@ -591,9 +701,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     <li key={idx}>{error}</li>
                                                 ))}
                                             </ul>
-                                        ) : (
-                                            errors.facility_bookings
-                                        )}
+                                        ) : errors.facility_bookings}
                                     </AlertDescription>
                                 </Alert>
                             )}
@@ -626,7 +734,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     );
 }
 
-// FacilityInfo component stays exactly the same — no changes needed
+// FacilityInfo unchanged
 interface FacilityInfoProps {
     selectedFacility: number | null;
     facilities: Facility[];

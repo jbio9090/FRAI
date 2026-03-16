@@ -206,6 +206,7 @@ class RequestController extends Controller
                     'conflicts' => [],
                 ]),
             ],
+            'labeledBreadcrumb' => "Edit Request"
         ]);
     }
 

@@ -479,3 +479,7 @@
 [data-radix-dialog-overlay] {
     z-index: 99 !important;
 }
+
+[data-description] {
+    color: var(--foreground) !important;
+}
