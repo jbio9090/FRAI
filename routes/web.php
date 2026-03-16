@@ -17,6 +17,7 @@ Route::middleware("auth")->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware("auth")->name("logout");
 
     Route::get("/", [DashboardController::class, 'index'])->name('dashboard');
+    Route::get("/dashboard/calendar", [FacilityController::class, "calendarEvents"])->name("dashboard.calendar");
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 

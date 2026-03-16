@@ -23,27 +23,19 @@ interface Event {
     end: Date;
     title: string;
     id: number;
-    request_id: string|number;
+    request_id: string | number;
 }
 
 interface CalendarProps {
     facilityId: number;
     initialEvents?: Event[];
+    calendarRoute?: string;
 }
 
-// Custom Toolbar Component
 function CustomToolbar(toolbar: ToolbarProps) {
-    const goToBack = () => {
-        toolbar.onNavigate('PREV');
-    };
-
-    const goToNext = () => {
-        toolbar.onNavigate('NEXT');
-    };
-
-    const goToToday = () => {
-        toolbar.onNavigate('TODAY');
-    };
+    const goToBack = () => toolbar.onNavigate('PREV');
+    const goToNext = () => toolbar.onNavigate('NEXT');
+    const goToToday = () => toolbar.onNavigate('TODAY');
 
     const label = () => {
         const date = moment(toolbar.date);
@@ -52,12 +44,8 @@ function CustomToolbar(toolbar: ToolbarProps) {
             return (
                 <div className="flex flex-col font-light text-sm">
                     <h4>{date.format('YYYY')}</h4>
-                    <h3 className="font-bold text-lg">
-                        {date.format('MMMM D')}
-                    </h3>
-                    <span className="text-xs text-muted-foreground">
-                        {date.format('dddd')}
-                    </span>
+                    <h3 className="font-bold text-lg">{date.format('MMMM D')}</h3>
+                    <span className="text-xs text-muted-foreground">{date.format('dddd')}</span>
                 </div>
             );
         }
@@ -65,7 +53,6 @@ function CustomToolbar(toolbar: ToolbarProps) {
         if (toolbar.view === 'week') {
             const startOfWeek = date.clone().startOf('week');
             const endOfWeek = date.clone().endOf('week');
-
             return (
                 <div className="flex flex-col font-light text-sm">
                     <h4>{date.format('YYYY')}</h4>
@@ -76,51 +63,27 @@ function CustomToolbar(toolbar: ToolbarProps) {
             );
         }
 
-        // month (default)
         return (
             <div className="flex flex-col font-light text-sm">
                 <h4>{date.format('YYYY')}</h4>
-                <h3 className="font-bold text-lg">
-                    {date.format('MMMM')}
-                </h3>
+                <h3 className="font-bold text-lg">{date.format('MMMM')}</h3>
             </div>
         );
-    };
-
-    const handleViewChange = (value: string) => {
-        toolbar.onView(value as View);
     };
 
     return (
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4 p-2 sticky left-0 w-full">
             <div className="flex items-center gap-1">
-                <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={goToBack}
-                >
+                <Button variant="outline" size="icon" onClick={goToBack}>
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button
-                    variant="outline"
-                    onClick={goToToday}
-                >
-                    Today
-                </Button>
-                <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={goToNext}
-                >
+                <Button variant="outline" onClick={goToToday}>Today</Button>
+                <Button variant="outline" size="icon" onClick={goToNext}>
                     <ChevronRight className="h-4 w-4" />
                 </Button>
             </div>
-
-            <div className="flex-1 text-center">
-                {label()}
-            </div>
-
-            <Select value={toolbar.view} onValueChange={handleViewChange}>
+            <div className="flex-1 text-center">{label()}</div>
+            <Select value={toolbar.view} onValueChange={(v) => toolbar.onView(v as View)}>
                 <SelectTrigger>
                     <SelectValue placeholder="Select view" />
                 </SelectTrigger>
@@ -132,21 +95,29 @@ function CustomToolbar(toolbar: ToolbarProps) {
             </Select>
         </div>
     );
-};
+}
 
+const FACILITY_SEPARATOR = ' — ';
 
-function CustomEvent({ event }: { event: Event }) {
-    const {text, background} = wordToColor(event.title);
+function CustomEvent({ event, isDashboard }: { event: Event; isDashboard: boolean }) {
+    const [facilityName, requestTitle] = isDashboard && event.title.includes(FACILITY_SEPARATOR)
+        ? event.title.split(FACILITY_SEPARATOR)
+        : [event.title, event.title];
+
+    const colorSeed = isDashboard ? facilityName : event.title + event.start + event.end;
+    const { text, background } = wordToColor(colorSeed);
 
     return (
         <Link href={route("requests.detail", [event.request_id])}>
-            <div className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm  border-primary border-1 px-1'
-            style={{backgroundColor: background, color: text, borderColor: text}}>
-                <span className='font-bold text-xs'>{event.title}</span>
+            <div
+                className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm border-1 px-1'
+                style={{ backgroundColor: background, color: text, borderColor: text }}
+            >
+                <span className='font-bold text-xs'>{requestTitle}</span>
                 <div className="flex text-left items-center gap-1">
                     <Clock size={12} />
                     <span className='text-xs'>
-                        {moment(event.start).format("h:mma").toString()}-{moment(event.end).format("h:mma").toString()}
+                        {moment(event.start).format("h:mma")}-{moment(event.end).format("h:mma")}
                     </span>
                 </div>
             </div>
@@ -154,18 +125,21 @@ function CustomEvent({ event }: { event: Event }) {
     );
 }
 
-
-export default function FacilityCalendar({ facilityId, initialEvents = [] }: CalendarProps) {
+export default function FacilityCalendar({
+    facilityId,
+    initialEvents = [],
+    calendarRoute = 'facility.schedule.calendar',
+}: CalendarProps) {
+    const isDashboard = calendarRoute === 'dashboard.calendar';
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const formattedInitialEvents = initialEvents.map((event: Event) => ({
+        setEvents(initialEvents.map((event) => ({
             ...event,
             start: moment(event.start).toDate(),
             end: moment(event.end).toDate(),
-        }));
-        setEvents(formattedInitialEvents);
+        })));
     }, [initialEvents]);
 
     const handleRangeChange = async (range: Date[] | { start: Date; end: Date }) => {
@@ -180,22 +154,24 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
         }
 
         setLoading(true);
-
         try {
-            const response = await axios.get(route('facility.schedule.calendar', [facilityId]), {
-                params: {
-                    start: moment(start).format('YYYY-MM-DD'),
-                    end: moment(end).format('YYYY-MM-DD'),
+            const response = await axios.get(
+                isDashboard
+                    ? route('dashboard.calendar')
+                    : route('facility.schedule.calendar', [facilityId]),
+                {
+                    params: {
+                        start: moment(start).format('YYYY-MM-DD'),
+                        end: moment(end).format('YYYY-MM-DD'),
+                    }
                 }
-            });
+            );
 
-            const formattedEvents = response.data.map((event: Event) => ({
+            setEvents(response.data.map((event: Event) => ({
                 ...event,
                 start: moment(event.start).toDate(),
                 end: moment(event.end).toDate(),
-            }));
-
-            setEvents(formattedEvents);
+            })));
         } catch (error) {
             console.error('Failed to fetch events:', error);
         } finally {
@@ -212,14 +188,16 @@ export default function FacilityCalendar({ facilityId, initialEvents = [] }: Cal
                 startAccessor="start"
                 endAccessor="end"
                 onRangeChange={handleRangeChange}
-                className={'p-0 md:p-8 ' + ((loading) ? " [&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50" : "")}
+                popup                        
+                popupOffset={{ x: 0, y: 8 }} 
+                className={'p-0 md:p-8 ' + (loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : '')}
                 components={{
                     toolbar: CustomToolbar,
-                    event: CustomEvent,
+                    event: (props) => <CustomEvent {...props} isDashboard={isDashboard} />,
                 }}
                 step={60}
                 timeslots={1}
             />
         </div>
-    )
+    );
 }

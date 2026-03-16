@@ -59,6 +59,14 @@ class FacilityController extends Controller
         return response()->json($events);
     }
 
+    public function calendarEvents(Request $request)
+    {
+        $start  = $request->input('start');
+        $end    = $request->input('end');
+        $events = $this->service->getAllSchedule($start, $end);
+        return response()->json($events);
+    }
+
     public function update(Request $request, Facility $facility): RedirectResponse
     {
         $validated = $request->validate([
