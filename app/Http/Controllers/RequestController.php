@@ -6,13 +6,9 @@ use App\Http\Requests\FacilityFormRequest;
 use Illuminate\Http\Request;
 use App\Models\Request as FacilityRequest;
 use Inertia\Inertia;
-use Illuminate\Validation\ValidationException;
 use App\Models\Facility;
-use App\Models\User;
 use App\RequestStatus;
 use App\Services\RequestService;
-use App\Notifications\NewPendingRequest;
-use Illuminate\Support\Facades\Log;
 use App\Services\NotificationService;
 
 
@@ -173,5 +169,57 @@ class RequestController extends Controller
         }
 
         return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' applied to ' . count($facilityRequests) . ' request(s).');
+    }
+
+    public function edit(FacilityRequest $request)
+    {
+        abort_if($request->user_id !== auth()->id(), 403);
+        abort_if($request->status !== RequestStatus::PENDING, 403);
+
+        $detail = $this->service->getDetail($request->id);
+
+        return Inertia::render("requests/create", [
+            'facilities' => Facility::with('equipments')->get(),
+            'existingRequest' => [
+                'id'               => $detail->id,
+                'title'            => $detail->title,
+                'description'      => $detail->description,
+                'priority_level'   => $detail->priority_level,
+                'priority_reason'  => $detail->priority_reason,
+                'facility_bookings' => $detail->facilities->map(fn($facility) => [
+                    'facility_id'        => $facility->id,
+                    'facility_name'      => $facility->name,
+                    'date'               => $facility->pivot->date_requested,
+                    'time_start'         => $facility->pivot->time_start,
+                    'time_end'           => $facility->pivot->time_end,
+                    'external_equipment' => $detail->requestFacilities
+                        ->firstWhere('facility_id', $facility->id)
+                        ?->external_equipment ?? '',
+                    'equipment' => $detail->equipment
+                        ->where('facility_id', $facility->id)
+                        ->map(fn($eq) => [
+                            'equipment_id'    => $eq->id,
+                            'equipment_name'  => $eq->name,
+                            'quantity_needed' => $eq->pivot->quantity_needed,
+                            'max_quantity'    => $eq->quantity,
+                        ])->values(),
+                    'conflicts' => [],
+                ]),
+            ],
+        ]);
+    }
+
+    public function update(FacilityFormRequest $httpRequest, FacilityRequest $request)
+    {
+        abort_if($request->user_id !== auth()->id(), 403);
+        abort_if($request->status !== RequestStatus::PENDING, 403);
+
+        $validated = $httpRequest->validated();
+
+        $updated = $this->service->update($validated, $request->id);
+
+        $this->service->recommendAction($validated, $updated);
+
+        return redirect()->route('requests.detail', $request->id);
     }
 }

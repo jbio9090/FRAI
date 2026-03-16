@@ -50,12 +50,26 @@ interface FacilityScheduleData {
     date: string;
 }
 
-interface CreateRequestProps {
-    facilities: Facility[];
+interface ExistingRequest {
+    id: number;
+    title: string;
+    description: string;
+    priority_level: 0 | 1 | 2;
+    priority_reason: string;
+    facility_bookings: FacilityBooking[];
 }
 
-export default function CreateRequest({ facilities }: CreateRequestProps) {
-    const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>([]);
+interface CreateRequestProps {
+    facilities: Facility[];
+    existingRequest?: ExistingRequest;
+}
+
+export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
+    const isEditing = !!existingRequest;
+
+    const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>(
+        existingRequest?.facility_bookings ?? []
+    );
     const [selectedFacility, setSelectedFacility] = useState<number | null>(null);
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
@@ -67,12 +81,12 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
     const [hasTimeConflict, setHasTimeConflict] = useState(false);
     const [openCollapsible, setCollapsibleState] = useState(false);
 
-    const { data, setData, post, processing, errors } = useForm({
-        title: '',
-        description: '',
-        facility_bookings: [] as FacilityBooking[],
-        priority_level: 0,
-        priority_reason: '',
+    const { data, setData, post, put, processing, errors } = useForm({
+        title:              existingRequest?.title ?? '',
+        description:        existingRequest?.description ?? '',
+        facility_bookings:  existingRequest?.facility_bookings ?? [] as FacilityBooking[],
+        priority_level:     existingRequest?.priority_level ?? 0,
+        priority_reason:    existingRequest?.priority_reason ?? '',
     });
 
     const availableEquipment = selectedFacility
@@ -92,16 +106,12 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         try {
             const dateString = format(date, 'yyyy-MM-dd');
             const response = await fetch(
-                route('facility.schedule', {
-                    facility: facilityId,
-                    date: dateString
-                })
+                route('facility.schedule', { facility: facilityId, date: dateString })
             );
             const data = await response.json();
             setFacilitySchedule(data);
 
             if (currentTimeStart && currentTimeEnd) {
-                // console.log(checkTimeConflict(currentTimeStart, currentTimeEnd))
                 setHasTimeConflict(checkTimeConflictWithData(data, currentTimeStart, currentTimeEnd));
             }
         } catch (error) {
@@ -110,26 +120,18 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         } finally {
             setLoadingSchedule(false);
         }
-    };
+    }
 
     function handleFacilityChange(value: string) {
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
         setSelectedEquipment([]);
-
-        // Load schedule if date is already selected
-        if (currentDate) {
-            loadSchedule(facilityId, currentDate);
-        }
-    };
+        if (currentDate) loadSchedule(facilityId, currentDate);
+    }
 
     const handleDateChange = (date: Date | undefined) => {
         setCurrentDate(date);
-
-        // Load schedule if facility is already selected and date is set
-        if (selectedFacility && date) {
-            loadSchedule(selectedFacility, date);
-        }
+        if (selectedFacility && date) loadSchedule(selectedFacility, date);
     };
 
     function clearEquipmentSelection(e: React.MouseEvent<HTMLButtonElement>) {
@@ -139,49 +141,78 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
     function selectAllEquipment(e: React.MouseEvent<HTMLButtonElement>) {
         e.preventDefault();
-        const selectAllBruh = availableEquipment.map((equipment) => {
-            return {
-                equipment_id: equipment.id,
-                equipment_name: equipment.name,
-                quantity_needed: equipment.quantity,
-                max_quantity: equipment.quantity,
-            }
-        });
-        setSelectedEquipment([...selectedEquipment, ...selectAllBruh]);
+        setSelectedEquipment(availableEquipment.map((equipment) => ({
+            equipment_id: equipment.id,
+            equipment_name: equipment.name,
+            quantity_needed: equipment.quantity,
+            max_quantity: equipment.quantity,
+        })));
     }
 
     function handleEquipmentToggle(equipment: Equipment) {
         const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
-
         if (exists) {
             setSelectedEquipment(selectedEquipment.filter(e => e.equipment_id !== equipment.id));
         } else {
-            setSelectedEquipment([
-                ...selectedEquipment,
-                {
-                    equipment_id: equipment.id,
-                    equipment_name: equipment.name,
-                    quantity_needed: equipment.quantity,
-                    max_quantity: equipment.quantity,
-                }
-            ]);
+            setSelectedEquipment([...selectedEquipment, {
+                equipment_id: equipment.id,
+                equipment_name: equipment.name,
+                quantity_needed: equipment.quantity,
+                max_quantity: equipment.quantity,
+            }]);
         }
     }
 
     function updateEquipmentQuantity(equipmentId: number, quantity: number) {
-        setSelectedEquipment(
-            selectedEquipment.map(e =>
-                e.equipment_id === equipmentId
-                    ? { ...e, quantity_needed: quantity }
-                    : e
-            )
-        );
+        setSelectedEquipment(selectedEquipment.map(e =>
+            e.equipment_id === equipmentId ? { ...e, quantity_needed: quantity } : e
+        ));
+    }
+
+    function checkTimeConflictWithData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): boolean {
+        if (!schedule || !schedule.bookings.length) return false;
+        const start = new Date(`2000-01-01T${startTime}`);
+        const end = new Date(`2000-01-01T${endTime}`);
+        return schedule.bookings.some(booking => {
+            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
+            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+            return start < bookingEnd && end > bookingStart;
+        });
+    }
+
+    function checkTimeConflict(startTime: string, endTime: string): boolean {
+        return checkTimeConflictWithData(facilitySchedule, startTime, endTime);
+    }
+
+    function getTimeConflictsFromData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): BookingSchedule[] {
+        if (!schedule || !schedule.bookings.length) return [];
+        const start = new Date(`2000-01-01T${startTime}`);
+        const end = new Date(`2000-01-01T${endTime}`);
+        return schedule.bookings.filter(booking => {
+            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
+            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+            return start < bookingEnd && end > bookingStart;
+        });
+    }
+
+    function handleTimeStartChange(e: React.ChangeEvent<HTMLInputElement>) {
+        const newStartTime = e.target.value;
+        setCurrentTimeStart(newStartTime);
+        if (newStartTime && currentTimeEnd) {
+            setHasTimeConflict(checkTimeConflict(newStartTime, currentTimeEnd));
+        }
+    }
+
+    function handleTimeEndChange(e: React.ChangeEvent<HTMLInputElement>) {
+        const newEndTime = e.target.value;
+        setCurrentTimeEnd(newEndTime);
+        if (currentTimeStart && newEndTime) {
+            setHasTimeConflict(checkTimeConflict(currentTimeStart, newEndTime));
+        }
     }
 
     function addFacilityBooking() {
-        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) {
-            return;
-        }
+        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) return;
 
         const facility = facilities.find(f => f.id === selectedFacility);
         if (!facility) return;
@@ -197,13 +228,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
             external_equipment: externalEquipment,
         };
 
-        // console.log(newBooking);
-
         const updatedBookings = [...facilityBookings, newBooking];
         setFacilityBookings(updatedBookings);
         setData('facility_bookings', updatedBookings);
 
-        // Reset current inputs
         setSelectedFacility(null);
         setCurrentDate(undefined);
         setCurrentTimeStart('');
@@ -214,54 +242,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
         setExternalEquipment('');
     }
 
-    function checkTimeConflictWithData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): boolean {
-        if (!schedule || !schedule.bookings.length) return false;
-
-        const start = new Date(`2000-01-01T${startTime}`);
-        const end = new Date(`2000-01-01T${endTime}`);
-
-        return schedule.bookings.some(booking => {
-            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
-            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
-            return start < bookingEnd && end > bookingStart;
-        });
-    }
-
-    function checkTimeConflict(startTime: string, endTime: string): boolean {
-        return checkTimeConflictWithData(facilitySchedule, startTime, endTime);
-    }
-
-    function getTimeConflictsFromData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): BookingSchedule[] {
-        if (!schedule || !schedule.bookings.length) return [];
-
-        const start = new Date(`2000-01-01T${startTime}`);
-        const end = new Date(`2000-01-01T${endTime}`);
-
-        return schedule.bookings.filter(booking => {
-            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
-            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
-            return start < bookingEnd && end > bookingStart;
-        });
-    }
-
-    function handleTimeStartChange(e: React.ChangeEvent<HTMLInputElement>) {
-        const newStartTime = e.target.value;
-        setCurrentTimeStart(newStartTime);
-
-        if (newStartTime && currentTimeEnd) {
-            setHasTimeConflict(checkTimeConflict(newStartTime, currentTimeEnd));
-        }
-    };
-
-    function handleTimeEndChange(e: React.ChangeEvent<HTMLInputElement>) {
-        const newEndTime = e.target.value;
-        setCurrentTimeEnd(newEndTime);
-
-        if (currentTimeStart && newEndTime) {
-            setHasTimeConflict(checkTimeConflict(currentTimeStart, newEndTime));
-        }
-    };
-
     function removeBooking(index: number) {
         const updatedBookings = facilityBookings.filter((_, i) => i !== index);
         setFacilityBookings(updatedBookings);
@@ -270,12 +250,19 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
 
     function submit(e: React.FormEvent) {
         e.preventDefault();
-        post(route('requests.store'));
+        if (isEditing) {
+            put(route('requests.update', existingRequest!.id));
+        } else {
+            post(route('requests.store'));
+        }
     }
-
 
     return (
         <DefaultLayout>
+            <h1 className="font-bold text-xl mb-6">
+                {isEditing ? 'Edit Request' : 'New Request'}
+            </h1>
+
             <div className="w-full lg:grid lg:grid-cols-[5fr_3fr] gap-8">
                 <div className="max-w-3xl w-full mx-auto">
                     <form onSubmit={submit} className="space-y-8 flex flex-col gap-4">
@@ -320,9 +307,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 </SelectTrigger>
                                 <SelectContent>
                                     {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                                        <SelectItem key={value} value={value}>
-                                            {label}
-                                        </SelectItem>
+                                        <SelectItem key={value} value={value}>{label}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
@@ -334,7 +319,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                         {/* Add Facility Booking */}
                         <div className="space-y-4">
                             <div className="space-y-6">
-                                {/* Facility Selection */}
                                 <div className="space-y-4">
                                     <Label>Select Facility</Label>
                                     <Select
@@ -347,12 +331,10 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         <SelectContent>
                                             {facilities.map((facility) => (
                                                 <SelectItem key={facility.id} value={facility.id.toString()}>
-                                                    <b>
-                                                        {facility.name}
-                                                    </b>
+                                                    <b>{facility.name}</b>
                                                     <div className="flex items-center gap-1 font-semibold text-muted-foreground">
                                                         <User />
-                                                        <span className='text-xs '>
+                                                        <span className='text-xs'>
                                                             {facility.capacity && facility.capacity}
                                                         </span>
                                                     </div>
@@ -362,19 +344,11 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </Select>
                                 </div>
 
-
                                 <Collapsible className='text-sm block lg:hidden' open={openCollapsible} onOpenChange={setCollapsibleState}>
                                     <CollapsibleTrigger className='cursor-pointer flex items-center text-muted-foreground gap-4'>
                                         <MotionChevron openCollapsible={openCollapsible} />
-                                        <span className='font-semibold'>
-                                            Facility Info
-                                        </span>
+                                        <span className='font-semibold'>Facility Info</span>
                                     </CollapsibleTrigger>
-
-
-                                    {/* // Nice animation from - https://stackoverflow.com/a/78828383
-                                    // Posted by Brandon, modified by community. See post 'Timeline' for change history
-                                    // Retrieved 2026-02-10, License - CC BY-SA 4.0 */}
                                     <CollapsibleContent className={cn("text-popover-foreground outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2")}>
                                         <FacilityInfo
                                             selectedFacility={selectedFacility}
@@ -388,30 +362,24 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </CollapsibleContent>
                                 </Collapsible>
 
-                                {/* Equipment Selection - Only show if facility is selected */}
                                 {selectedFacility && availableEquipment.length > 0 && (
                                     <>
                                         <div className="space-y-2">
                                             <div className="flex justify-around items-end">
                                                 <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
-                                                {(selectedEquipment.length < availableEquipment.length) && (
+                                                {selectedEquipment.length < availableEquipment.length && (
                                                     <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment} className='text-muted-foreground hover:text-foreground'>
-                                                        <span className="text-sm">
-                                                            Select All
-                                                        </span>
+                                                        <span className="text-sm">Select All</span>
                                                         <SquareMousePointer />
                                                     </Button>
                                                 )}
-                                                {(selectedEquipment.length > 0) && (
+                                                {selectedEquipment.length > 0 && (
                                                     <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection} className='text-muted-foreground hover:text-foreground'>
-                                                        <span className="text-sm">
-                                                            Clear All
-                                                        </span>
+                                                        <span className="text-sm">Clear All</span>
                                                         <X />
                                                     </Button>
                                                 )}
                                             </div>
-
                                             <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
                                                 {availableEquipment.map((equipment) => {
                                                     const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
@@ -424,10 +392,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                                     onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                                 />
                                                                 <div className="flex-1">
-                                                                    <Label
-                                                                        htmlFor={`equipment-${equipment.id}`}
-                                                                        className="text-sm text-foreground font-medium cursor-pointer"
-                                                                    >
+                                                                    <Label htmlFor={`equipment-${equipment.id}`} className="text-sm text-foreground font-medium cursor-pointer">
                                                                         {equipment.name}
                                                                     </Label>
                                                                     <Label className="text-xs text-muted-foreground">
@@ -435,7 +400,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                                     </Label>
                                                                 </div>
                                                             </div>
-
                                                             {selected && (
                                                                 <div className="flex items-center gap-4">
                                                                     <Label className="text-sm">Qty:</Label>
@@ -462,9 +426,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                             <CollapsibleTrigger asChild>
                                                 <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
                                                     <Plus size={16} />
-                                                    <span>
-                                                        Add external equipment
-                                                    </span>
+                                                    <span>Add external equipment</span>
                                                 </Button>
                                             </CollapsibleTrigger>
                                             <CollapsibleContent>
@@ -484,7 +446,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 )}
 
                                 <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-6 md:gap-4 mt-8 w-full">
-                                    {/* Date Picker */}
                                     <div className="space-y-2 col-span-full md:col-span-1">
                                         <Label>Date</Label>
                                         <Popover>
@@ -492,10 +453,7 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                 <Button
                                                     type="button"
                                                     variant="outline"
-                                                    className={cn(
-                                                        "w-full justify-start text-left font-normal overflow-truncate",
-                                                        !currentDate && "text-muted-foreground"
-                                                    )}
+                                                    className={cn("w-full justify-start text-left font-normal overflow-truncate", !currentDate && "text-muted-foreground")}
                                                 >
                                                     <CalendarIcon className="mr-1 h-4 w-4" />
                                                     {currentDate ? format(currentDate, "PPP") : "Pick a date"}
@@ -512,7 +470,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         </Popover>
                                     </div>
 
-                                    {/* Start Time */}
                                     <div className="space-y-2">
                                         <Label htmlFor="time_start">Start Time</Label>
                                         <Input
@@ -526,7 +483,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                         />
                                     </div>
 
-                                    {/* End Time */}
                                     <div className="space-y-2">
                                         <Label htmlFor="time_end">End Time</Label>
                                         <Input
@@ -541,7 +497,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                     </div>
                                 </div>
 
-                                {/* Time Conflict Warning */}
                                 {hasTimeConflict && (
                                     <Alert variant="destructive" className="border-destructive bg-destructive/4">
                                         <AlertCircleIcon />
@@ -563,10 +518,11 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                 </Button>
                             </div>
 
-                            {/* Display Added Bookings */}
                             {facilityBookings.length > 0 && (
                                 <div className="space-y-2">
-                                    <Label>Added Facility Bookings</Label>
+                                    <Label>
+                                        {isEditing ? 'Facility Bookings' : 'Added Facility Bookings'}
+                                    </Label>
                                     <div className="border rounded-md divide-y">
                                         {facilityBookings.map((booking, index) => (
                                             <div key={index} className="p-3">
@@ -575,17 +531,13 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                         <div className="font-bold text-lg">{booking.facility_name}</div>
                                                         <div className="text-muted-foreground flex gap-4 items-center">
                                                             <CalendarIcon size={16} />
-                                                            <span className='mr-4'>
-                                                                {format(booking.date, "PPP")}
-                                                            </span>
+                                                            <span className='mr-4'>{format(booking.date, "PPP")}</span>
                                                             <Clock className="text-muted-foreground" size={16} />
-                                                            <span>
-                                                                {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
-                                                            </span>
+                                                            <span>{formatTime(booking.time_start)} - {formatTime(booking.time_end)}</span>
                                                         </div>
 
-                                                        {(booking.conflicts.length > 0) && booking.conflicts.map((conflict) => (
-                                                            <Alert variant="destructive" className="my-4 border-destructive bg-destructive/4">
+                                                        {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
+                                                            <Alert key={i} variant="destructive" className="my-4 border-destructive bg-destructive/4">
                                                                 <AlertCircleIcon />
                                                                 <AlertTitle>Time Conflict Detected</AlertTitle>
                                                                 <AlertDescription>
@@ -594,7 +546,6 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                                                             </Alert>
                                                         ))}
 
-                                                        {/* Show selected equipment */}
                                                         {booking.equipment.length > 0 && (
                                                             <div className="mt-2 space-y-1">
                                                                 <div className="font-semibold">Equipment:</div>
@@ -649,21 +600,18 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                         </div>
 
                         <div className="flex justify-end gap-4 mb-16">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => window.history.back()}
-                            >
+                            <Button type="button" variant="outline" onClick={() => window.history.back()}>
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={processing}>
-                                {processing ? 'Submitting...' : 'Submit Request'}
+                                {processing
+                                    ? (isEditing ? 'Saving...' : 'Submitting...')
+                                    : (isEditing ? 'Save Changes' : 'Submit Request')}
                             </Button>
                         </div>
                     </form>
                 </div>
 
-                {/* Facility Info Sidebar */}
                 <FacilityInfo
                     selectedFacility={selectedFacility}
                     facilities={facilities}
@@ -673,13 +621,12 @@ export default function CreateRequest({ facilities }: CreateRequestProps) {
                     formatTime={formatTime}
                     isForSidebar={true}
                 />
-
             </div>
         </DefaultLayout>
     );
 }
 
-
+// FacilityInfo component stays exactly the same — no changes needed
 interface FacilityInfoProps {
     selectedFacility: number | null;
     facilities: Facility[];
@@ -693,11 +640,9 @@ interface FacilityInfoProps {
 function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedule, facilitySchedule, formatTime, isForSidebar }: FacilityInfoProps) {
     return (
         <div className={'space-y-4 ' + ((isForSidebar) ? 'hidden lg:block' : 'block lg:hidden')}>
-            {(isForSidebar) && (<h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>)}
-
+            {isForSidebar && <h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>}
             {selectedFacility ? (
-                <motion.div
-                    className=''>
+                <motion.div>
                     {(() => {
                         const facility = facilities.find(f => f.id === selectedFacility);
                         return (
@@ -706,80 +651,51 @@ function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedu
                                     <h3 className='font-semibold text-xl mt-2'>{facility?.name}</h3>
                                     <div className='flex text-muted-foreground font-semibold text-xl gap-1 mt-2'>
                                         <Building size={16} className={cn(isForSidebar && "hidden")} />
-                                        <span className='text-sm text-wrap'>
-                                            {facility?.building}
-                                        </span>
-
+                                        <span className='text-sm text-wrap'>{facility?.building}</span>
                                     </div>
                                     <div className='flex font-semibold text-xl items-center gap-1 mt-2'>
                                         <User size={16} />
-                                        <span className='text-sm'>
-                                            Capacity - {facility?.capacity || 'N/A'}
-                                        </span>
+                                        <span className='text-sm'>Capacity - {facility?.capacity || 'N/A'}</span>
                                     </div>
                                 </div>
-
                                 {currentDate && (
                                     <div className='mt-6'>
                                         <h4 className='text-sm font-semibold mb-3 flex flex-wrap items-center'>
                                             <CalendarIcon size={16} />
-                                            <span className='text-muted-foreground ml-2 mr-1'>
-                                                Schedule for
-                                            </span>
-                                            <span>
-                                                {format(currentDate, 'PPP')}
-                                            </span>
+                                            <span className='text-muted-foreground ml-2 mr-1'>Schedule for</span>
+                                            <span>{format(currentDate, 'PPP')}</span>
                                         </h4>
-
                                         {loadingSchedule ? (
-                                            <div className='text-sm text-muted-foreground py-4 text-center'>
-                                                Loading schedule...
-                                            </div>
+                                            <div className='text-sm text-muted-foreground py-4 text-center'>Loading schedule...</div>
                                         ) : facilitySchedule && facilitySchedule.bookings.length > 0 ? (
                                             <div className='space-y-3'>
                                                 {facilitySchedule.bookings.map((booking, idx) => (
-                                                    <motion.div
-                                                        key={idx}
-                                                        className='border rounded-md p-3 bg-muted/30'
-                                                        initial={{ opacity: 0 }}
-                                                        animate={{ opacity: 1 }}
-                                                    >
-                                                        <div className='font-medium text-sm'>
-                                                            {booking.request_title}
-                                                        </div>
+                                                    <motion.div key={idx} className='border rounded-md p-3 bg-muted/30' initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                                                        <div className='font-medium text-sm'>{booking.request_title}</div>
                                                         <div className='flex items-center gap-4 text-xs text-muted-foreground mt-1'>
                                                             <Clock size={14} />
-                                                            <span>
-                                                                {formatTime(booking.time_start)} - {formatTime(booking.time_end)}
-                                                            </span>
+                                                            <span>{formatTime(booking.time_start)} - {formatTime(booking.time_end)}</span>
                                                         </div>
                                                     </motion.div>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <motion.div
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                className='text-sm text-muted-foreground py-4 text-center border rounded-md bg-muted/10'>
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className='text-sm text-muted-foreground py-4 text-center border rounded-md bg-muted/10'>
                                                 No bookings for this date
                                             </motion.div>
                                         )}
                                     </div>
                                 )}
-
                                 {!currentDate && (
-                                    <div className='text-sm text-muted-foreground py-4 text-center'>
-                                        Select a date to view schedule
-                                    </div>
+                                    <div className='text-sm text-muted-foreground py-4 text-center'>Select a date to view schedule</div>
                                 )}
                             </>
                         );
                     })()}
                 </motion.div>
             ) : (
-                <div className='px-6 pb-6 text-sm text-muted-foreground text-center py-8'>
-                    Select a facility to view details
-                </div>
+                <div className='px-6 pb-6 text-sm text-muted-foreground text-center py-8'>Select a facility to view details</div>
             )}
-        </div>);
+        </div>
+    );
 }

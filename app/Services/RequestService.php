@@ -63,6 +63,48 @@ class RequestService
         return FacilityRequest::with(["user", "facilities", "equipment", "requestFacilities"])->where("id", $request_id)->firstOrFail();
     }
 
+    public function update(array $validated, int $requestId): FacilityRequest
+    {
+        $facilityRequest = FacilityRequest::findOrFail($requestId);
+
+        abort_if($facilityRequest->user_id !== Auth::id(), 403);
+        abort_if($facilityRequest->status !== RequestStatus::PENDING, 403);
+        abort_if($facilityRequest->on_hold, 403);
+
+        $facilityRequest->update([
+            'title'           => $validated['title'],
+            'description'     => $validated['description'],
+            'priority_level'  => $validated['priority_level'] ?? 0,
+            'priority_reason' => $validated['priority_reason'] ?? null,
+        ]);
+
+        $facilityRequest->equipment()->detach();
+
+        $facilityRequest->requestFacilities()->delete();
+
+        foreach ($validated['facility_bookings'] as $booking) {
+            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+
+            $facilityRequest->requestFacilities()->create([
+                'facility_id'        => $booking['facility_id'],
+                'date_requested'     => $dateOnly,
+                'time_start'         => $booking['time_start'],
+                'time_end'           => $booking['time_end'],
+                'external_equipment' => $booking['external_equipment'],
+            ]);
+
+            if (!empty($booking['equipment'])) {
+                foreach ($booking['equipment'] as $equipment) {
+                    $facilityRequest->equipment()->attach($equipment['equipment_id'], [
+                        'quantity_needed' => $equipment['quantity_needed'],
+                    ]);
+                }
+            }
+        }
+
+        return $facilityRequest;
+    }
+
 
     public function checkForConflicts(array $bookings): array
     {
