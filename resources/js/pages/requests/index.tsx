@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from 'sonner';
+import { downloadRequestsCSV } from '@/lib/downloadCSV';
 
 
 export interface PaginatedRequests {
@@ -291,6 +292,26 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                             <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
                                 <CheckLine size={16} />
                                 <span>Conditionally Approve</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                    const selectedRequests = requests.data.filter((r) =>
+                                        selected.includes(r.id)
+                                    );
+                                    downloadRequestsCSV(
+                                        selectedRequests,
+                                        `Requests Report-${moment().format("YYYY-MM-DD")}.csv`
+                                    );
+                                    toast.success(`Exported ${selectedRequests.length} request(s) to CSV`);
+                                }}
+                            >
+                                <Download size={16} />
+                                <span>CSV</span>
                             </Button>
                         )}
 
