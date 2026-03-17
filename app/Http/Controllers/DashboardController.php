@@ -7,6 +7,7 @@ use App\RequestStatus;
 use App\Services\FacilityService;
 use App\Services\RequestService;
 use Inertia\Inertia;
+use Illuminate\Http\Request;
 
 
 class DashboardController extends Controller
@@ -30,5 +31,19 @@ class DashboardController extends Controller
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
             'buildings' => Facility::distinct()->pluck('building')->filter()->values(),
         ]);
+    }
+
+    public function calendarEvents(Request $request)
+    {
+        $start = $request->input('start');
+        $end   = $request->input('end');
+
+        if (!$start || !$end) {
+            return response()->json([]);
+        }
+
+        return response()->json(
+            $this->facilityService->getAllSchedule($start, $end)
+        );
     }
 }

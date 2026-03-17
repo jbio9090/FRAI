@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import moment from 'moment'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { ToolbarProps, View } from 'react-big-calendar';
 import { Calendar, momentLocalizer } from 'react-big-calendar'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
@@ -110,10 +110,10 @@ function CustomEvent({ event, isDashboard }: { event: Event; isDashboard: boolea
     return (
         <Link href={route("requests.detail", [event.request_id])}>
             <div
-                className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm border-1 px-1'
+                className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm border-1 px-1 mx-2'
                 style={{ backgroundColor: background, color: text, borderColor: text }}
             >
-                <span className='font-bold text-xs'>{requestTitle}</span>
+                <span className='font-bold text-xs truncate'>{requestTitle}</span>
                 <div className="flex text-left items-center gap-1">
                     <Clock size={12} />
                     <span className='text-xs'>
@@ -133,6 +133,9 @@ export default function FacilityCalendar({
     const isDashboard = calendarRoute === 'dashboard.calendar';
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(false);
+    const [currentView, setCurrentView] = useState<View>('month');
+    const [currentDate, setCurrentDate] = useState<Date>(new Date());
+    const onNavigate = useCallback((newDate) => setCurrentDate(newDate), [currentDate])
 
     useEffect(() => {
         setEvents(initialEvents.map((event) => ({
@@ -142,17 +145,7 @@ export default function FacilityCalendar({
         })));
     }, [initialEvents]);
 
-    const handleRangeChange = async (range: Date[] | { start: Date; end: Date }) => {
-        let start: Date, end: Date;
-
-        if (Array.isArray(range)) {
-            start = range[0];
-            end = range[range.length - 1];
-        } else {
-            start = range.start;
-            end = range.end;
-        }
-
+    const fetchEvents = async (start: Date, end: Date) => {
         setLoading(true);
         try {
             const response = await axios.get(
@@ -179,17 +172,31 @@ export default function FacilityCalendar({
         }
     };
 
+    const handleRangeChange = async (range: Date[] | { start: Date; end: Date }) => {
+        let start: Date, end: Date;
+
+        if (Array.isArray(range)) {
+            start = range[0];
+            end = range[range.length - 1];
+        } else {
+            start = range.start;
+            end = range.end;
+        }
+
+        await fetchEvents(start, end);
+    };
+
     return (
-        <div className="h-[64rem] relative">
+        <div className="h-[57rem] relative">
             <Calendar
                 views={['month', 'week', 'day']}
                 localizer={localizer}
                 events={events}
                 startAccessor="start"
                 endAccessor="end"
+                view={currentView}
+                onView={(view) => setCurrentView(view)}
                 onRangeChange={handleRangeChange}
-                popup                        
-                popupOffset={{ x: 0, y: 8 }} 
                 className={'p-0 md:p-8 ' + (loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : '')}
                 components={{
                     toolbar: CustomToolbar,
