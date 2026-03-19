@@ -197,6 +197,7 @@ export default function FacilityCalendar({
                 view={currentView}
                 onView={(view) => setCurrentView(view)}
                 onRangeChange={handleRangeChange}
+                showAllEvents
                 className={'p-0 md:p-8 ' + (loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : '')}
                 components={{
                     toolbar: CustomToolbar,

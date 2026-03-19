@@ -47,7 +47,7 @@ export default function Dashboard({
     );
 
     return (
-        <DefaultLayout>
+        <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-8">
                 <div className="flex text-sm gap-2 items-center">
                     <CalendarIcon size={16} />
@@ -83,7 +83,7 @@ export default function Dashboard({
 
             <div className="mt-8">
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3 p-8">
-                    <h2 className="font-semibold text-sm text-muted-foreground">Facility Schedule</h2>
+                    <h2 className="font-semibold text-sm text-foreground">Facility Schedule</h2>
 
                     <Popover>
                         <PopoverTrigger asChild>
@@ -137,6 +137,10 @@ export default function Dashboard({
                     initialEvents={filteredEvents}
                     calendarRoute="dashboard.calendar"
                 />
+
+                <div className="flex flex-col gap-4 mt-8 p-8">
+                    <h2 className="font-semibold text-2xl text-muted-foreground">Reports</h2>
+                </div>
             </div>
         </DefaultLayout>
     );

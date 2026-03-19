@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp, Download } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp, Download, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -19,6 +19,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from 'sonner';
 import { downloadRequestsCSV } from '@/lib/downloadCSV';
+import { motion } from 'motion/react';
 
 
 export interface PaginatedRequests {
@@ -170,8 +171,8 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
                 <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">
-                    <div className="flex gap-2">
-                        <InputGroup className='max-w-sm md:max-w-md'>
+                    <div className="flex gap-2 flex-wrap">
+                        <InputGroup className='max-w-xs sm:max-w-sm md:max-w-md'>
                             <InputGroupAddon>
                                 <Search />
                             </InputGroupAddon>
@@ -385,11 +386,22 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                         />
                     )) :
                         (
-                            <div className='w-full mt-8 text-center col-span-full'>
-                                <p>
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{
+                                    duration: 0.4,
+                                    scale: { type: "tween", visualDuration: 0.4, bounce: 0.5 },
+                                }}
+                                className='m-auto items-center mt-8 flex flex-col text-center col-span-full gap-2'>
+                                <FolderOpen size={32}/>
+                                <h1 className='font-bold text-2xl'>
                                     No Requests
+                                </h1>
+                                <p>
+                                    Nothing to see here
                                 </p>
-                            </div>
+                            </motion.div>
                         )}
                 </div>
 
