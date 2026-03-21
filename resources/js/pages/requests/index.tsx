@@ -549,16 +549,23 @@ function RequestCard({
                             </div>
 
                             <div className="flex justify-end gap-2 w-content ml-auto">
-                                <Button onClick={() => handleAction("requests.approve")} variant="default">
+                                <Button onClick={() => handleAction("requests.approve")} variant="default" className='hidden xs:block'>
                                     Approve
                                 </Button>
-                                <Button onClick={() => handleAction("requests.reject")} variant="outline" className='hover:border-destructive hover:text-destructive hover:bg-destructive/4'>
+                                <Button onClick={() => handleAction("requests.reject")} variant="outline" className='hidden xs:block hover:border-destructive hover:text-destructive hover:bg-destructive/4'>
                                     Deny
                                 </Button>
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline">More</Button>
+                                        <Button variant="outline">
+                                            <span className="hidden xs:block">
+                                                More
+                                            </span>
+                                            <span className="block xs:hidden">
+                                                Actions
+                                            </span>
+                                        </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
                                         <DropdownMenuGroup>
@@ -573,6 +580,14 @@ function RequestCard({
                                             <DropdownMenuItem onClick={() => handleAction("requests.hold")}>
                                                 <CirclePause size={16} />
                                                 <span>{request.on_hold ? "Unhold Request" : "Hold Request"}</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleAction("requests.approve")} className="flex items-center xs:hidden">
+                                                <Check size={16} />
+                                                <span>Approve</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleAction("requests.reject")} className="flex items-center xs:hidden">
+                                                <X size={16} />
+                                                <span>Deny</span>
                                             </DropdownMenuItem>
                                         </DropdownMenuGroup>
                                     </DropdownMenuContent>
