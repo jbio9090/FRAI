@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -10,12 +10,15 @@ import { Request } from '@/types/request';
 import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination"
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { PRIORITY_LABELS } from '@/types/request';
+import { toast } from 'sonner';
+import { downloadRequestsCSV } from '@/lib/downloadCSV';
 
 
 export interface PaginatedRequests {
@@ -32,17 +35,31 @@ export interface RequestsPageProps {
     filter: string;
 }
 
-export default function RequestsPage({ requests, page_title, filter }: RequestsPageProps) {
+export const PRIORITY_ICONS: Record<0 | 1 | 2, React.ReactNode> = {
+    0: null,
+    1: <GraduationCap size={14} />,
+    2: <Landmark size={14} />,
+};
+
+export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
     const [selected, setSelected] = useState<number[]>([]);
     const [isSelecting, setSelectState] = useState<boolean>(false);
     const [bulkComment, setBulkComment] = useState("");
     const [isBulkCommentOpen, setIsBulkCommentOpen] = useState(false);
     const [currentActiveFitler, setActiveFilter] = useState("This Week");
     const [searchQuery, setSearchQuery] = useState("");
+    const [sortField, setSortField] = useState<string | null>(null);
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const isMounted = useRef(false);
 
     useEffect(() => {
+        if (!isMounted.current) {
+            isMounted.current = true;
+            return;
+        }
+
         const timeout = setTimeout(() => {
-            router.get(route(route().current()), {
+            router.get(route(route().current(), { status: route().params.status }), {
                 filter: filterMap[currentActiveFitler],
                 search: searchQuery,
             }, {
@@ -77,21 +94,13 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
     };
 
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setSearchQuery(value);
-        router.get(route(route().current()), {
-            filter: filterMap[currentActiveFitler],
-            search: value
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
+        setSearchQuery(e.target.value);
     };
 
     const handleFilterButtonClick = (title: string) => {
         setActiveFilter(title)
         router.get(
-            route(route().current()),
+            route(route().current(), { status: route().params.status }),
             {
                 filter: filterMap[title],
                 search: searchQuery,
@@ -109,6 +118,23 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                 ? prev.filter((id) => id !== request_id)
                 : [...prev, request_id]
         );
+    };
+
+    const handleSort = (field: string) => {
+        const newOrder = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
+        setSortField(field);
+        setSortOrder(newOrder);
+        router.get(route(route().current(), { status: route().params.status }),
+            {
+                filter: filterMap[currentActiveFitler],
+                search: searchQuery,
+                sort: field,
+                order: newOrder,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+            });
     };
 
     const clearAllSelection = () => {
@@ -156,9 +182,41 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                             />
                         </InputGroup>
 
-                        <Button variant="outline">
-                            <ArrowDownUp />
-                        </Button>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline">
+                                    <ArrowDownUp />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="p-0">
+                                <PopoverHeader>
+                                    <PopoverTitle className='px-3 py-2'>Sort By</PopoverTitle>
+                                </PopoverHeader>
+                                <div className="flex flex-col">
+                                    {[
+                                        { label: "Date Submitted", value: "created_at" },
+                                        { label: "Priority Level", value: "priority_level" },
+                                        { label: "Title", value: "title" },
+                                        { label: "Requester", value: "user_name" },
+                                    ].map((option) => (
+                                        <Button
+                                            key={option.value}
+                                            onClick={() => handleSort(option.value)}
+                                            variant="ghost"
+                                            className='flex'
+                                            size="sm"
+                                        >
+                                            <span>{option.label}</span>
+                                            {sortField === option.value && (
+                                                sortOrder === 'asc'
+                                                    ? <ArrowUp size={14} className="rotate-180" />
+                                                    : <ArrowUp size={14} />
+                                            )}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
 
                         <Button variant="outline">
                             <Funnel />
@@ -238,6 +296,26 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                         )}
 
                         {selected.length > 0 && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                    const selectedRequests = requests.data.filter((r) =>
+                                        selected.includes(r.id)
+                                    );
+                                    downloadRequestsCSV(
+                                        selectedRequests,
+                                        `Requests Report-${moment().format("YYYY-MM-DD")}.csv`
+                                    );
+                                    toast.success(`Exported ${selectedRequests.length} request(s) to CSV`);
+                                }}
+                            >
+                                <Download size={16} />
+                                <span>CSV</span>
+                            </Button>
+                        )}
+
+                        {selected.length > 0 && (
                             <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
                                 {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
                                 <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
@@ -261,37 +339,39 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                     </div>
                 )}
 
-                <Pagination>
-                    <PaginationContent>
-                        <PaginationItem>
-                            <PaginationPrevious
-                                href={requests.links[0].url ?? '#'}
-                                className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
-                            />
-                        </PaginationItem>
-
-                        {requests.links.slice(1, -1).map((link) => (
-                            <PaginationItem key={link.label}>
-                                <PaginationLink
-                                    href={link.url ?? '#'}
-                                    isActive={link.active}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                {requests.data.length > 0 && (
+                    <Pagination>
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    href={requests.links[0].url ?? '#'}
+                                    className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
                                 />
                             </PaginationItem>
-                        ))}
 
-                        <PaginationItem>
-                            <PaginationEllipsis />
-                        </PaginationItem>
+                            {requests.links.slice(1, -1).map((link) => (
+                                <PaginationItem key={link.label}>
+                                    <PaginationLink
+                                        href={link.url ?? '#'}
+                                        isActive={link.active}
+                                        dangerouslySetInnerHTML={{ __html: link.label }}
+                                    />
+                                </PaginationItem>
+                            ))}
 
-                        <PaginationItem>
-                            <PaginationNext
-                                href={requests.links[requests.links.length - 1].url ?? '#'}
-                                className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
-                            />
-                        </PaginationItem>
-                    </PaginationContent>
-                </Pagination>
+                            <PaginationItem>
+                                <PaginationEllipsis />
+                            </PaginationItem>
+
+                            <PaginationItem>
+                                <PaginationNext
+                                    href={requests.links[requests.links.length - 1].url ?? '#'}
+                                    className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
+                )}
 
                 <div className="gap-4 mt-6 flex flex-col xl:grid grid-cols-[1fr_1fr]">
                     {requests.data.length > 0 ? requests.data.map((request) => (
@@ -305,7 +385,11 @@ export default function RequestsPage({ requests, page_title, filter }: RequestsP
                         />
                     )) :
                         (
-                            <h1>No Requests</h1>
+                            <div className='w-full mt-8 text-center col-span-full'>
+                                <p>
+                                    No Requests
+                                </p>
+                            </div>
                         )}
                 </div>
 
@@ -395,14 +479,17 @@ function RequestCard({
 
                         <div className="flex gap-2 flex-wrap">
                             {(request.priority_level > 0) && (
-                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full">
-                                    {PRIORITY_LABELS[request.priority_level]}
+                                <div className="flex gap-1 px-2 py-1 font-semibold text-xs border-border border-1 rounded-full">
+                                    {PRIORITY_ICONS[request.priority_level as 0 | 1 | 2]}
+                                    <span>
+                                        {PRIORITY_LABELS[request.priority_level]}
+                                    </span>
                                 </div>
                             )}
 
                             {request.on_hold && (
-                                <div className="px-2 py-1 font-semibold text-xs border-border border-1 rounded-full flex gap-1 items-center bg-yellow-200/50">
-                                    <CirclePause size={14}/>
+                                <div className="px-2 py-1 font-semibold text-xs text-yellow-900 dark:text-yellow-100 border-yellow-900 dark:border-yellow-200 border-1 rounded-full flex gap-1 items-center bg-yellow-200/50">
+                                    <CirclePause size={14} />
                                     <span>
                                         On Hold
                                     </span>
@@ -464,6 +551,10 @@ function RequestCard({
                                             <DropdownMenuItem onClick={toggleInput}>
                                                 {isCommentInputOpen ? <MessageCircleOff size={16} /> : <MessageCirclePlus size={16} />}
                                                 <span>{isCommentInputOpen ? "Cancel Comment" : "Add Comment"}</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleAction("requests.hold")}>
+                                                <CirclePause size={16} />
+                                                <span>{request.on_hold ? "Unhold Request" : "Hold Request"}</span>
                                             </DropdownMenuItem>
                                         </DropdownMenuGroup>
                                     </DropdownMenuContent>

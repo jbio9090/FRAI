@@ -1,3 +1,6 @@
+import { GraduationCap, Landmark } from "lucide-react";
+
+
 export interface Request {
     id: number;
     title: string;

@@ -16,4 +16,13 @@ enum PriorityLevel: int
             self::Government => 'Government / High Authority',
         };
     }
+
+    public function icon(): ?string
+    {
+        return match ($this) {
+            self::Normal     => null,
+            self::School     => 'GraduationCap',
+            self::Government => 'Landmark',
+        };
+    }
 }

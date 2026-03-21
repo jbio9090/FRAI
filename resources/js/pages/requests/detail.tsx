@@ -9,10 +9,12 @@ import {
 } from "@/components/ui/card"
 import DefaultLayout from '@/layout.tsx/default.';
 import { Request } from '@/types/request';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Separator } from '@/components/ui/separator';
 import moment from 'moment';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
+import { Pen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface DetailProps {
     children: React.ReactNode;
@@ -21,6 +23,11 @@ interface DetailProps {
 
 export default function RequestDetail({ request }: DetailProps) {
     let statusColor = "";
+    const auth = usePage().props.auth;
+
+    const canEdit = request.status === 'Pending'
+        && !request.on_hold
+        && request.user.id === auth.user.id;
 
     function formatTime(time: string): string {
         return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
@@ -50,7 +57,19 @@ export default function RequestDetail({ request }: DetailProps) {
             <div className="flex flex-col w-full max-w-4xl gap-4 *:text-sm">
                 <div className="flex flex-col gap-7 text-sm">
                     <div className="flex flex-col gap-3">
-                        <h1 className='font-bold text-xl'>{request.title}</h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className='font-bold text-xl'>{request.title}</h1>
+                            {canEdit && (
+                                <Link href={route("requests.edit", request.id)}>
+                                    <Button
+                                        variant={"ghost"}
+                                        size={"icon-sm"}>
+                                        <Pen />
+                                    </Button>
+                                </Link>
+                            )}
+                        </div>
+
                         <Badge variant={statusColor}>
                             {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                         </Badge>
@@ -78,7 +97,7 @@ export default function RequestDetail({ request }: DetailProps) {
                             <p className='font-semibold mb-2 text-muted-foreground '>Admin Comment</p>
                             <div className="flex gap-3 px-4 py-5 border border-border border-1 rounded-sm">
                                 <Avatar size="sm">
-                                    <AvatarImage src='/profile/default.png'/>
+                                    <AvatarImage src='/profile/default.png' />
                                 </Avatar>
                                 <p >{request.comment}</p>
                             </div>

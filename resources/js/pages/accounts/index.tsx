@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UserPlus2, Trash2 } from "lucide-react";
+import { UserPlus2, Trash2, Pencil, UserPen } from "lucide-react";
 import DefaultLayout from "@/layout.tsx/default.";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,32 +13,78 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
 
 interface User {
     id: number;
     name: string;
     email: string;
+    role: string;
 }
 
-export default function FacilityDetail({ users }: { users: User[] }) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [username, setUsername] = useState("");
-    const [password, setPassword] = useState("");
-    const [email, setEmail] = useState("");
+interface Props {
+    users: User[];
+    roles: string[];
+}
 
-    const handleSubmit = (e: React.FormEvent) => {
+interface UserForm {
+    username: string;
+    email: string;
+    password: string;
+    role: string;
+}
+
+const emptyForm: UserForm = { username: "", email: "", password: "", role: "user" };
+
+export default function AccountsPage({ users, roles }: Props) {
+    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [addForm, setAddForm] = useState<UserForm>(emptyForm);
+    const [editForm, setEditForm] = useState<UserForm>(emptyForm);
+
+    const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
         router.post(route("accounts.store"), {
-            name: username,
-            email,
-            password,
+            name: addForm.username,
+            email: addForm.email,
+            password: addForm.password,
+            role: addForm.role,
         }, {
             onSuccess: () => {
-                setIsOpen(false);
-                setUsername("");
-                setEmail("");
-                setPassword("");
-            }
+                setIsAddOpen(false);
+                setAddForm(emptyForm);
+            },
+        });
+    };
+
+    const openEdit = (user: User) => {
+        setEditingUser(user);
+        setEditForm({ username: user.name, email: user.email, password: "", role: user.role });
+    };
+
+    const handleEdit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUser) return;
+        router.put(route("accounts.update", editingUser.id), {
+            name: editForm.username,
+            email: editForm.email,
+            password: editForm.password || undefined,
+            role: editForm.role,
+        }, {
+            onSuccess: () => setEditingUser(null),
         });
     };
 
@@ -46,69 +92,136 @@ export default function FacilityDetail({ users }: { users: User[] }) {
         router.delete(route("accounts.destroy", id));
     };
 
+    const FormFields = ({
+        form,
+        onChange,
+        isEdit = false,
+    }: {
+        form: UserForm;
+        onChange: (f: UserForm) => void;
+        isEdit?: boolean;
+    }) => (
+        <>
+            <div className="flex flex-col gap-1.5">
+                <Label>
+                    <span>
+                        Username
+                    </span>
+                </Label>
+                <Input
+                    type="text"
+                    placeholder="Enter username"
+                    value={form.username}
+                    onChange={(e) => onChange({ ...form, username: e.target.value })}
+                />
+            </div>
+            <div className="flex flex-col gap-1.5">
+                <Label>Email</Label>
+                <Input
+                    type="email"
+                    placeholder="Enter email"
+                    value={form.email}
+                    onChange={(e) => onChange({ ...form, email: e.target.value })}
+                />
+            </div>
+            <div className="flex flex-col gap-1.5">
+                <Label>{isEdit ? "New Password" : "Password"}</Label>
+                <Input
+                    type="password"
+                    placeholder={isEdit ? "Leave blank to keep current" : "Enter password"}
+                    value={form.password}
+                    onChange={(e) => onChange({ ...form, password: e.target.value })}
+                />
+            </div>
+            <div className="flex flex-col gap-1.5">
+                <Label>Role</Label>
+                <Select value={form.role} onValueChange={(v) => onChange({ ...form, role: v })}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {roles.map((r) => (
+                            <SelectItem key={r} value={r}>
+                                {r[0].toUpperCase() + r.slice(1)}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+        </>
+    );
+
     return (
         <DefaultLayout>
-            <h1 className='font-bold text-xl'>Account Management</h1>
+            <h1 className="font-bold text-xl">Account Management</h1>
 
-            <div className="mt-6 w-full max-w-sm">
+            <div className="mt-6">
                 <Button
                     variant="outline"
                     className="flex items-center gap-2"
-                    onClick={() => setIsOpen(!isOpen)}
+                    onClick={() => setIsAddOpen(true)}
                 >
                     <UserPlus2 className="h-4 w-4" />
                     Add User
                 </Button>
-
-                {isOpen && (
-                    <form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-4 rounded-md border p-4">
-                        <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="username">Username</Label>
-                            <Input
-                                id="username"
-                                type="text"
-                                placeholder="Enter username"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="email">Email</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                placeholder="Enter email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="password">Password</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                placeholder="Enter password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                        </div>
-
-                        <Button type="submit" className="w-full">
-                            Save Credentials
-                        </Button>
-                    </form>
-                )}
             </div>
 
+            {/* Add Dialog */}
+            <Dialog open={isAddOpen} onOpenChange={(open) => {
+                setIsAddOpen(open);
+                if (!open) setAddForm(emptyForm);
+            }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <UserPlus2 />
+                            Add User
+                        </DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleAdd} className="flex flex-col gap-4 mb-8">
+                        <FormFields form={addForm} onChange={setAddForm} />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit">Save Credentials</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Dialog */}
+            <Dialog open={!!editingUser} onOpenChange={(open) => {
+                if (!open) setEditingUser(null);
+            }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 mb-8">
+                            <UserPen />
+                            Edit User
+                        </DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleEdit} className="flex flex-col gap-4">
+                        <FormFields form={editForm} onChange={setEditForm} isEdit />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit">Update</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Users Table */}
             <div className="mt-6">
                 <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead>Name</TableHead>
                             <TableHead>Email</TableHead>
-                            <TableHead className="w-[50px]" />
+                            <TableHead>Role</TableHead>
+                            <TableHead className="w-[80px]" />
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -116,7 +229,15 @@ export default function FacilityDetail({ users }: { users: User[] }) {
                             <TableRow key={user.id}>
                                 <TableCell>{user.name}</TableCell>
                                 <TableCell>{user.email}</TableCell>
-                                <TableCell>
+                                <TableCell className="capitalize">{user.role}</TableCell>
+                                <TableCell className="flex gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => openEdit(user)}
+                                    >
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
                                     <Button
                                         variant="ghost"
                                         size="icon"

@@ -15,6 +15,8 @@ import {
     SidebarProvider,
     SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/sonner"
+import { toast } from 'sonner';
 
 interface DashboardProps {
     children: React.ReactNode;
@@ -31,14 +33,18 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     const page = usePage<PageProps>();
     const breadcrumbs = page.props.breadcrumbs;
     const labeledBreadcrumb = page.props.labeledBreadcrumb;
+    const flash = (page.props as any).flash as { success?: string; error?: string } | undefined;
 
     useEffect(() => {
+        if (flash?.success) toast.success(flash.success);
+        if (flash?.error) toast.error(flash.error);
+
         document.documentElement.classList.toggle(
             "dark",
             localStorage.getItem("theme") === "dark" ||
             (!("theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches),
         );
-    }, []);
+    }, [flash?.success, flash?.error]);
 
 
     return (
@@ -99,6 +105,17 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                 <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible" + ((hasPadding) ? " p-6 md:p-8" : "")}>
                     {children}
                 </div>
+
+                <Toaster
+                    toastOptions={{
+                        classNames: {
+                            toast: "group toast",
+                            description: "group-[.toast]:text-foreground",
+                            title: "font-bold",
+                        }
+                    }}
+                    position='top-right'
+                />
             </SidebarInset>
         </SidebarProvider>
     )

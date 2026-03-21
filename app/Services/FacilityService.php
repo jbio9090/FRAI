@@ -59,4 +59,28 @@ class FacilityService
 
         return $eventsThisDay;
     }
+
+    public function getAllSchedule(string $start, string $end): Collection
+    {
+        return RequestFacility::query()
+            ->whereBetween('date_requested', [$start, $end])
+            ->whereHas('request', function ($query) {
+                $query->whereIn('status', [
+                    RequestStatus::APPROVED,
+                    RequestStatus::CONDITIONALLY_APPROVED,
+                ]);
+            })
+            ->with(['request:id,title', 'facility:id,name,building'])
+            ->get()
+            ->map(function ($booking) {
+                return [
+                    'id'         => $booking->id,
+                    'title'      => $booking->facility->name . ' — ' . $booking->request->title,
+                    'start'      => $booking->date_requested . 'T' . $booking->time_start,
+                    'end'        => $booking->date_requested . 'T' . $booking->time_end,
+                    'request_id' => $booking->request->id,
+                    'building'   => $booking->facility->building,
+                ];
+            });
+    }
 }

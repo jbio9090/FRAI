@@ -50,8 +50,6 @@ export default function FacilityDetail({ facility, initialEvents, facilities }: 
         });
     };
 
-    console.log(hasPermission("manage facilities"))
-
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-4 md:p-8">

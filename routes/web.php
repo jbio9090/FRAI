@@ -17,17 +17,14 @@ Route::middleware("auth")->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware("auth")->name("logout");
 
     Route::get("/", [DashboardController::class, 'index'])->name('dashboard');
+    Route::get("/dashboard/calendar", [DashboardController::class, "calendarEvents"])->name("dashboard.calendar");
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
-    Route::get('/requests', function () {
-        return redirect()->intended(route("requests.index"));
-    })->name("requests");
-    Route::get('/requests/pending', [RequestController::class, 'index'])->name('requests.index');
-    Route::get('/requests/approved', [RequestController::class, 'approvedPage'])->name('requests.approved');
-    Route::get('/requests/denied', [RequestController::class, 'deniedPage'])->name('requests.denied');
-    Route::get('/requests/conditionally_approved', [RequestController::class, 'conditionallyApprovedPage'])->name('requests.conditionally_approved');
+    Route::get('/requests/{status}', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
+    Route::get('/requests/{request}/edit', [RequestController::class, 'edit'])->name('requests.edit');
+    Route::put('/requests/{request}', [RequestController::class, 'update'])->name('requests.update');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
 
     // Admin only routes
@@ -36,6 +33,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
         Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
+        Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
     });
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
@@ -65,7 +63,8 @@ Route::middleware("auth")->group(function () {
 
     Route::middleware('permission:manage users')->group(function () {
         Route::get("/accounts", [AccountController::class, 'index'])->name("accounts.index");
-        Route::post("/accounts/create", [AccountController::class, 'store'])->name("accounts.create");
+        Route::post("/accounts/create", [AccountController::class, 'store'])->name("accounts.store");
+        Route::put('/accounts/{user}', [AccountController::class, 'update'])->name('accounts.update');
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
     });
 
@@ -73,7 +72,6 @@ Route::middleware("auth")->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
     });
 
-    // Chatbot
     Route::get("/chatbot", function () {
         return Inertia::render("chatbot/chatbot");
     })->name("chatbot");
