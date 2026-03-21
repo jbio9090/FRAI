@@ -171,13 +171,13 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
                 <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-2">
                         <InputGroup className='max-w-xs sm:max-w-sm md:max-w-md'>
                             <InputGroupAddon>
                                 <Search />
                             </InputGroupAddon>
                             <InputGroupInput
-                                placeholder='Search for request name'
+                                placeholder='Search'
                                 value={searchQuery}
                                 onChange={handleSearch}
                             />
@@ -394,7 +394,7 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                                     scale: { type: "tween", visualDuration: 0.4, bounce: 0.5 },
                                 }}
                                 className='m-auto items-center mt-8 flex flex-col text-center col-span-full gap-2'>
-                                <FolderOpen size={32}/>
+                                <FolderOpen size={32} />
                                 <h1 className='font-bold text-2xl'>
                                     No Requests
                                 </h1>
@@ -476,7 +476,13 @@ function RequestCard({
     }
 
     return (
-        <div
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{
+                duration: 0.4,
+                scale: { type: "tween", visualDuration: 0.05 },
+            }}
             onClick={() => isSelecting && handleSelection(request.id)}
             className={cn(
                 "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200",
@@ -583,7 +589,7 @@ function RequestCard({
                     </div>
                 )}
             </div>
-        </div>
+        </motion.div>
     );
 }
 
