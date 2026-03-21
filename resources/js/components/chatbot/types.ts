@@ -1,9 +1,5 @@
 export interface Message {
-<<<<<<< Updated upstream
-    role: 'user' | 'assistant';
-=======
     role: 'user' | 'assistant' | 'system';
->>>>>>> Stashed changes
     content: string;
 }
 
@@ -20,8 +16,4 @@ export interface CreateRequestPayload {
         end_time: string;
     }>;
     [key: string]: any;
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes

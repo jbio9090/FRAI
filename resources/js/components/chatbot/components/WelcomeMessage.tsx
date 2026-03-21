@@ -1,6 +1,3 @@
-<<<<<<< Updated upstream
-export default function WelcomeMessage() {
-=======
 import QuickReplies from './QuickReplies';
 import { QuickReply } from './QuickReplies';
 
@@ -9,7 +6,6 @@ interface WelcomeMessageProps {
 }
 
 export default function WelcomeMessage({ onQuickReply }: WelcomeMessageProps) {
->>>>>>> Stashed changes
     return (
         <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -17,14 +13,6 @@ export default function WelcomeMessage({ onQuickReply }: WelcomeMessageProps) {
                 <p className="text-gray-600">
                     Connected to <strong>FRAI</strong> model via CloudStudio Ollama.
                     <br />
-<<<<<<< Updated upstream
-                    Start a conversation by typing a message below.
-                </p>
-            </div>
-        </div>
-    );
-}
-=======
                     Start a conversation by typing a message below, or choose a quick action.
                 </p>
                 <QuickReplies onSelect={onQuickReply} />
@@ -32,4 +20,3 @@ export default function WelcomeMessage({ onQuickReply }: WelcomeMessageProps) {
         </div>
     );
 }
->>>>>>> Stashed changes

@@ -22,12 +22,9 @@ class Request extends Model
         'end_time',
         'participants',
         'priority_level',
-<<<<<<< Updated upstream
         'recommended_action',
         'recommended_action_reason',
         'comment',
-=======
->>>>>>> Stashed changes
         'status',
         'overridden_by_request_id',
         'title',
@@ -40,34 +37,9 @@ class Request extends Model
     protected $casts = [
         'status'         => RequestStatus::class,
         'on_hold'        => 'boolean',
-<<<<<<< Updated upstream
         'priority_level' => PriorityLevel::class,
     ];
 
-=======
-        'priority_level' => 'integer',
-    ];
-
-    /**
-     * Priority level labels
-     * 0 = Normal
-     * 1 = School Event (department heads, school-wide events)
-     * 2 = Government / High Authority (government officials, external high-priority)
-     */
-    public const PRIORITY_NORMAL     = 0;
-    public const PRIORITY_SCHOOL     = 1;
-    public const PRIORITY_GOVERNMENT = 2;
-
-    public static function priorityLabel(int $level): string
-    {
-        return match ($level) {
-            self::PRIORITY_SCHOOL     => 'School Event',
-            self::PRIORITY_GOVERNMENT => 'Government / High Authority',
-            default                   => 'Normal',
-        };
-    }
-
->>>>>>> Stashed changes
     /* =========================================
      | RELATIONSHIPS
      ========================================= */

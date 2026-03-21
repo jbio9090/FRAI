@@ -1,45 +1,23 @@
-<<<<<<< Updated upstream
-import React, { useRef, useEffect } from 'react';
-=======
 import React, { useRef, useEffect, useState } from 'react';
->>>>>>> Stashed changes
 import { usePage } from '@inertiajs/react';
 import { Message } from './types';
 import { useMessages } from './hooks/useMessages';
 import { useParticipantCount } from './hooks/useParticipantCount';
 import { useChatAPI } from './hooks/useChatAPI';
-<<<<<<< Updated upstream
-=======
 import { QuickReply } from './components/QuickReplies';
 import { Facility } from './hooks/useBookingFlow';
->>>>>>> Stashed changes
 import WelcomeMessage from './components/WelcomeMessage';
 import MessageList from './components/MessageList';
 import LoadingIndicator from './components/LoadingIndicator';
 import ChatInput from './components/ChatInput';
-<<<<<<< Updated upstream
-=======
 import BookingFlow from './components/BookingFlow';
 
 type ChatMode = 'idle' | 'booking' | 'ai';
->>>>>>> Stashed changes
 
 export default function Chatbot() {
     const page = usePage();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [input, setInput] = React.useState('');
-<<<<<<< Updated upstream
-
-    const { messages, addMessage, getMessagesText } = useMessages();
-    const { participantCount, extractAndSet, getCurrentCount } = useParticipantCount();
-    const csrfToken = (page.props as any).csrf_token || '';
-    const { isLoading, error, sendMessage, detectAndSubmitRequest } = useChatAPI(csrfToken);
-
-    // Auto-scroll to bottom when messages change
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
-=======
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
 
@@ -47,6 +25,7 @@ export default function Chatbot() {
     const { extractAndSet, getCurrentCount } = useParticipantCount();
     const csrfToken = (page.props as any).csrf_token || '';
     const { isLoading, sendMessage, detectAndSubmitRequest } = useChatAPI(csrfToken);
+    const [pendingPayload, setPendingPayload] = useState(null);
 
     // Auto-scroll to bottom when messages change or mode changes
     useEffect(() => {
@@ -62,19 +41,32 @@ export default function Chatbot() {
             .then(json => {
                 if (json.data) setFacilities(json.data);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     const processAndSend = async (userMessage: Message, contextNote?: string) => {
         addMessage(userMessage);
 
+        // Check if user is confirming a pending request
+        const isConfirming = pendingPayload && /\b(yes|proceed|confirm|ok)\b/i.test(userMessage.content);
+
+        if (isConfirming && pendingPayload) {
+            try {
+                const result = await submitRequest(pendingPayload);
+                setPendingPayload(null);
+                addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
+            } catch (err) {
+                const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
+                addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
+            }
+            return; // don't send to AI again
+        }
+
         try {
             extractAndSet(userMessage.content);
 
             const allMessages: Message[] = [
-                ...(contextNote
-                    ? [{ role: 'system' as const, content: `QUICK REPLY CONTEXT: ${contextNote} Guide the conversation accordingly from the very first response.` }]
-                    : []),
+                ...(contextNote ? [{ role: 'system' as const, content: `QUICK REPLY CONTEXT: ${contextNote}` }] : []),
                 ...messages,
                 userMessage,
             ];
@@ -83,15 +75,17 @@ export default function Chatbot() {
             const responseContent = await sendMessage(allMessages, currentCount);
             addMessage({ role: 'assistant', content: responseContent });
 
-            try {
-                const result = await detectAndSubmitRequest(responseContent);
-                if (result) {
-                    addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
-                }
-            } catch (err) {
-                const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
-                addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
+            // Detect JSON payload in AI response and stage it — don't submit yet
+            const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                try {
+                    const payload = JSON.parse(jsonMatch[0]);
+                    if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
+                        setPendingPayload(payload); // stage for confirmation
+                    }
+                } catch (_) { }
             }
+
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
             addMessage({ role: 'assistant', content: `Error: ${errorMsg}` });
@@ -108,63 +102,13 @@ export default function Chatbot() {
         setMode('ai');
         processAndSend({ role: 'user', content: option.message }, option.context);
     };
->>>>>>> Stashed changes
 
     const handleSendMessage = async () => {
         const message = input.trim();
         if (!message || isLoading) return;
-<<<<<<< Updated upstream
-
-        // Add user message
-        const userMessage: Message = { role: 'user', content: message };
-        addMessage(userMessage);
-        setInput('');
-
-        try {
-            // Update participant count if mentioned in this message
-            extractAndSet(message);
-
-            // Get all messages including the new one
-            const allMessages = [...messages, userMessage];
-            const currentCount = getCurrentCount(getMessagesText());
-
-            // Send message to API
-            const responseContent = await sendMessage(allMessages, currentCount);
-
-            // Add assistant response
-            addMessage({
-                role: 'assistant',
-                content: responseContent,
-            });
-
-            // Try to detect and submit request creation
-            try {
-                const result = await detectAndSubmitRequest(responseContent);
-                if (result) {
-                    addMessage({
-                        role: 'assistant',
-                        content: `✓ Request #${result.request_id} created successfully!`,
-                    });
-                }
-            } catch (err) {
-                const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
-                addMessage({
-                    role: 'assistant',
-                    content: `✗ Failed to create request: ${errorMsg}`,
-                });
-            }
-        } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
-            addMessage({
-                role: 'assistant',
-                content: `Error: ${errorMsg}`,
-            });
-        }
-=======
         setInput('');
         if (mode === 'idle') setMode('ai');
         await processAndSend({ role: 'user', content: message });
->>>>>>> Stashed changes
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -174,32 +118,6 @@ export default function Chatbot() {
         }
     };
 
-<<<<<<< Updated upstream
-    return (
-        <div className="w-full h-full flex flex-col">
-            {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {messages.length === 0 ? (
-                    <WelcomeMessage />
-                ) : (
-                    <MessageList messages={messages} messagesEndRef={messagesEndRef} />
-                )}
-
-                {isLoading && <LoadingIndicator />}
-            </div>
-
-            {/* Input Area */}
-            <ChatInput
-                value={input}
-                onChange={setInput}
-                onKeyPress={handleKeyPress}
-                onSend={handleSendMessage}
-                disabled={isLoading}
-            />
-        </div>
-    );
-}
-=======
     const handleBookingComplete = (resultMessage: string) => {
         setMode('ai');
         addMessage({ role: 'assistant', content: resultMessage });
@@ -248,4 +166,3 @@ export default function Chatbot() {
         </div>
     );
 }
->>>>>>> Stashed changes

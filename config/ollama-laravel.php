@@ -3,11 +3,7 @@
 // Config for Cloudstudio/Ollama
 
 return [
-<<<<<<< Updated upstream
     'model' => env('OLLAMA_MODEL', 'FRAI'),
-=======
-    'model' => env('OLLAMA_MODEL', 'llama2'),
->>>>>>> Stashed changes
     'url' => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
     'default_prompt' => env('OLLAMA_DEFAULT_PROMPT', 'Hello, how can I assist you today?'),
 
