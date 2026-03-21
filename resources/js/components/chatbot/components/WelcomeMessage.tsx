@@ -1,4 +1,11 @@
-export default function WelcomeMessage() {
+import QuickReplies from './QuickReplies';
+import { QuickReply } from './QuickReplies';
+
+interface WelcomeMessageProps {
+    onQuickReply: (option: QuickReply) => void;
+}
+
+export default function WelcomeMessage({ onQuickReply }: WelcomeMessageProps) {
     return (
         <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -6,8 +13,9 @@ export default function WelcomeMessage() {
                 <p className="text-gray-600">
                     Connected to <strong>FRAI</strong> model via CloudStudio Ollama.
                     <br />
-                    Start a conversation by typing a message below.
+                    Start a conversation by typing a message below, or choose a quick action.
                 </p>
+                <QuickReplies onSelect={onQuickReply} />
             </div>
         </div>
     );

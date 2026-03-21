@@ -47,14 +47,14 @@ export function useChatAPI(csrfToken?: string) {
         }
     }, [csrfToken]);
 
-    const detectAndSubmitRequest = useCallback(async (content: string) => {
+    const detectAndSubmitRequest = useCallback(async (content: string, userConfirmed: boolean = false) => {
+        if (!userConfirmed) return null;  // <-- don't auto-submit
+
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (!jsonMatch) return null;
 
         try {
             const payload = JSON.parse(jsonMatch[0]);
-
-            // Check if it looks like a create-request payload
             if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
                 return await submitRequest(payload);
             }
