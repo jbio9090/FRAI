@@ -20,6 +20,7 @@ import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from 'sonner';
 import { downloadRequestsCSV } from '@/lib/downloadCSV';
 import { motion } from 'motion/react';
+import { ButtonGroup } from '@/components/ui/button-group';
 
 
 export interface PaginatedRequests {
@@ -274,7 +275,7 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                     </div>
 
 
-                    <div className="flex items-center gap-2 flex-wrap my-4">
+                    <ButtonGroup className="flex items-center flex-wrap my-4">
                         {selected.length > 0 && (
                             <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
                                 <Check size={16} />
@@ -322,7 +323,7 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                                 <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
                             </Button>
                         )}
-                    </div>
+                    </ButtonGroup>
 
                 </div>
 

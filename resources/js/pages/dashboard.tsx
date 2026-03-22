@@ -48,7 +48,7 @@ export default function Dashboard({
 
     return (
         <DefaultLayout hasPadding={false}>
-            <div className="flex flex-col p-8">
+            <div className="flex flex-col p-6 md:p-8">
                 <div className="flex text-sm gap-2 items-center">
                     <CalendarIcon size={16} />
                     <p>{moment().format("MMM Do, YYYY")}</p>
@@ -82,7 +82,7 @@ export default function Dashboard({
             </div>
 
             <div className="mt-8">
-                <div className="flex items-center justify-between mb-4 flex-wrap gap-3 p-8">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-3 px-6 md:px-8">
                     <h2 className="font-semibold text-sm text-foreground">Facility Schedule</h2>
 
                     <Popover>

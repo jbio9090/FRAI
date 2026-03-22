@@ -631,19 +631,23 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                             </div>
 
                             {facilityBookings.length > 0 && (
-                                <div className="space-y-4 mt-8">
+                                <div className="space-y-4 mt-16">
                                     <Label>{isEditing ? 'Facility Bookings' : 'Added Facility Bookings'}</Label>
-                                    <div className="divide-y">
+                                    <div className="flex flex-wrap gap-2 lg:grid grid-cols-[1fr_1fr] ">
                                         {facilityBookings.map((booking, index) => (
-                                            <div key={index} className="py-6 px-8 border border-border border-2">
+                                            <div key={index} className="py-5 pl-7 pr-2 border border-border border-1 rounded-sm grow-1 bg-secondary/50">
                                                 <div className="flex items-start justify-between">
                                                     <div className="text-sm flex-1">
                                                         <div className="font-bold text-lg">{booking.facility_name}</div>
-                                                        <div className="text-muted-foreground flex gap-4 items-center">
-                                                            <CalendarIcon size={16} />
-                                                            <span className='mr-4'>{format(booking.date, "PPP")}</span>
-                                                            <Clock className="text-muted-foreground" size={16} />
-                                                            <span>{formatTime(booking.time_start)} - {formatTime(booking.time_end)}</span>
+                                                        <div className="text-foreground flex flex-wrap items-center">
+                                                            <div className="flex items-center gap-1">
+                                                                <CalendarIcon size={16} />
+                                                                <span className='mr-4'>{format(booking.date, "PPP")}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <Clock className="text-foreground" size={16} />
+                                                                <span>{formatTime(booking.time_start)} - {formatTime(booking.time_end)}</span>
+                                                            </div>
                                                         </div>
 
                                                         {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
@@ -657,20 +661,20 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                         ))}
 
                                                         {booking.equipment.length > 0 && (
-                                                            <div className="mt-2 space-y-1">
-                                                                <div className="font-semibold">Equipment:</div>
+                                                            <div className="mt-4 space-y-1">
+                                                                <div className="text-muted-foreground">Equipment:</div>
                                                                 {booking.equipment.map((eq, eqIndex) => (
-                                                                    <div key={eqIndex} className="text-muted-foreground">
-                                                                        • {eq.equipment_name} (Qty: {eq.quantity_needed})
+                                                                    <div key={eqIndex} className="">
+                                                                        {eq.equipment_name} (Qty: {eq.quantity_needed})
                                                                     </div>
                                                                 ))}
                                                             </div>
                                                         )}
 
                                                         {booking.external_equipment && (
-                                                            <div className="mt-2">
-                                                                <span className="font-semibold">External Equipment: </span>
-                                                                <span className="text-muted-foreground">{booking.external_equipment}</span>
+                                                            <div className="mt-4 flex flex-col">
+                                                                <span className="text-muted-foreground">External Equipment: </span>
+                                                                <span className="">{booking.external_equipment}</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -748,7 +752,7 @@ interface FacilityInfoProps {
 function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedule, facilitySchedule, formatTime, isForSidebar }: FacilityInfoProps) {
     return (
         <div className={'space-y-4 ' + ((isForSidebar) ? 'hidden lg:block' : 'block lg:hidden')}>
-            {isForSidebar && <h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>}
+            {isForSidebar && <h2 className='font-semibold text-sm text-foreground'>Facility Info</h2>}
             {selectedFacility ? (
                 <motion.div>
                     {(() => {
