@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { downloadRequestsCSV } from '@/lib/downloadCSV';
 import { motion } from 'motion/react';
 import { ButtonGroup } from '@/components/ui/button-group';
+import SmartPagination from '@/components/SmartPagination';
 
 
 export interface PaginatedRequests {
@@ -342,37 +343,15 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                 )}
 
                 {requests.data.length > 0 && (
-                    <Pagination>
-                        <PaginationContent>
-                            <PaginationItem>
-                                <PaginationPrevious
-                                    href={requests.links[0].url ?? '#'}
-                                    className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
-                                />
-                            </PaginationItem>
-
-                            {requests.links.slice(1, -1).map((link) => (
-                                <PaginationItem key={link.label}>
-                                    <PaginationLink
-                                        href={link.url ?? '#'}
-                                        isActive={link.active}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                    />
-                                </PaginationItem>
-                            ))}
-
-                            <PaginationItem>
-                                <PaginationEllipsis />
-                            </PaginationItem>
-
-                            <PaginationItem>
-                                <PaginationNext
-                                    href={requests.links[requests.links.length - 1].url ?? '#'}
-                                    className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
-                                />
-                            </PaginationItem>
-                        </PaginationContent>
-                    </Pagination>
+                    <SmartPagination
+                        currentPage={requests.current_page}
+                        lastPage={requests.last_page}
+                        onPageChange={(page) => router.get(
+                            route(route().current(), { status: route().params.status }),
+                            { page, filter: filterMap[currentActiveFitler], search: searchQuery },
+                            { preserveState: true, preserveScroll: true }
+                        )}
+                    />
                 )}
 
                 <div className="gap-4 mt-6 flex flex-col xl:grid grid-cols-[1fr_1fr]">
@@ -407,37 +386,15 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                 </div>
 
                 {requests.data.length > 9 && (
-                    <Pagination className='my-8'>
-                        <PaginationContent>
-                            <PaginationItem>
-                                <PaginationPrevious
-                                    href={requests.links[0].url ?? '#'}
-                                    className={!requests.links[0].url ? 'pointer-events-none opacity-50' : ''}
-                                />
-                            </PaginationItem>
-
-                            {requests.links.slice(1, -1).map((link) => (
-                                <PaginationItem key={link.label}>
-                                    <PaginationLink
-                                        href={link.url ?? '#'}
-                                        isActive={link.active}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                    />
-                                </PaginationItem>
-                            ))}
-
-                            <PaginationItem>
-                                <PaginationEllipsis />
-                            </PaginationItem>
-
-                            <PaginationItem>
-                                <PaginationNext
-                                    href={requests.links[requests.links.length - 1].url ?? '#'}
-                                    className={!requests.links[requests.links.length - 1].url ? 'pointer-events-none opacity-50' : ''}
-                                />
-                            </PaginationItem>
-                        </PaginationContent>
-                    </Pagination>
+                    <SmartPagination
+                        currentPage={requests.current_page}
+                        lastPage={requests.last_page}
+                        onPageChange={(page) => router.get(
+                            route(route().current(), { status: route().params.status }),
+                            { page, filter: filterMap[currentActiveFitler], search: searchQuery },
+                            { preserveState: true, preserveScroll: true }
+                        )}
+                    />
                 )}
 
             </div>
