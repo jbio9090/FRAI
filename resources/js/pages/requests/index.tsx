@@ -1,5 +1,5 @@
 import { router, Link } from '@inertiajs/react';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, Funnel, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp, Download, FolderOpen } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, SlidersHorizontal, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, CirclePause, GraduationCap, Landmark, ArrowUp, Download, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
@@ -11,7 +11,6 @@ import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from "@/components/ui/pagination"
 import { useState, useEffect, useRef } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,6 +21,8 @@ import { downloadRequestsCSV } from '@/lib/downloadCSV';
 import { motion } from 'motion/react';
 import { ButtonGroup } from '@/components/ui/button-group';
 import SmartPagination from '@/components/SmartPagination';
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger, } from "@/components/ui/sheet"
+import { Facility } from '@/types/facility';
 
 
 export interface PaginatedRequests {
@@ -36,6 +37,8 @@ export interface RequestsPageProps {
     requests: PaginatedRequests;
     page_title: string;
     filter: string;
+    facilities: Facility[];
+    requesters: { id: string | number; name: string }[];
 }
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2, React.ReactNode> = {
@@ -44,7 +47,7 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2, React.ReactNode> = {
     2: <Landmark size={14} />,
 };
 
-export default function RequestsPage({ requests, page_title }: RequestsPageProps) {
+export default function RequestsPage({ requests, page_title, facilities, requesters }: RequestsPageProps) {
     const [selected, setSelected] = useState<number[]>([]);
     const [isSelecting, setSelectState] = useState<boolean>(false);
     const [bulkComment, setBulkComment] = useState("");
@@ -54,6 +57,9 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
     const [sortField, setSortField] = useState<string | null>(null);
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const isMounted = useRef(false);
+    const [facilityFilter, setFacilityFilter] = useState<string[]>([]);
+    const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
+    const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>("");
 
     useEffect(() => {
         if (!isMounted.current) {
@@ -89,6 +95,14 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
         },
     ]
 
+    const sortOptions = [
+        { label: "Date Submitted", value: "created_at" },
+        { label: "Priority Level", value: "priority_level" },
+        { label: "Title", value: "title" },
+        { label: "Requester", value: "user_name" },
+        { label: "None", value: "" }
+    ];
+
     const filterMap: Record<string, string> = {
         "Today": "today",
         "This Week": "this_week",
@@ -96,22 +110,45 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
         "All": "all",
     };
 
+    const getParams = (overrides = {}) => ({
+        filter: filterMap[currentActiveFitler],
+        search: searchQuery,
+        ...(requesterFilter.length && { requester: requesterFilter.join(',') }),
+        ...(facilityFilter.length && { facility: facilityFilter.join(',') }),
+        ...(externalEquipmentFilter && { has_external_equipment: externalEquipmentFilter }),
+        ...overrides,
+    });
+
+    const toggleFacility = (id: string) => {
+        setFacilityFilter(prev =>
+            prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
+        );
+    };
+
+    const toggleRequester = (id: string) => {
+        setRequesterFilter(prev =>
+            prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
+        );
+    };
+
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         setSearchQuery(e.target.value);
     };
 
     const handleFilterButtonClick = (title: string) => {
-        setActiveFilter(title)
+        setActiveFilter(title);
         router.get(
             route(route().current(), { status: route().params.status }),
-            {
-                filter: filterMap[title],
-                search: searchQuery,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-            }
+            getParams({ filter: filterMap[title] }),
+            { preserveState: true, preserveScroll: true }
+        );
+    };
+
+    const applyAdvancedFilters = () => {
+        router.get(
+            route(route().current(), { status: route().params.status }),
+            getParams(),
+            { preserveState: true, preserveScroll: true }
         );
     };
 
@@ -124,20 +161,25 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
     };
 
     const handleSort = (field: string) => {
+        if (field === "") {
+            setSortField(null);
+            setSortOrder('asc');
+            router.get(
+                route(route().current(), { status: route().params.status }),
+                getParams({ sort: undefined, order: undefined }),
+                { preserveState: true, preserveScroll: true }
+            );
+            return;
+        }
+
         const newOrder = sortField === field && sortOrder === 'asc' ? 'desc' : 'asc';
         setSortField(field);
         setSortOrder(newOrder);
-        router.get(route(route().current(), { status: route().params.status }),
-            {
-                filter: filterMap[currentActiveFitler],
-                search: searchQuery,
-                sort: field,
-                order: newOrder,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-            });
+        router.get(
+            route(route().current(), { status: route().params.status }),
+            getParams({ sort: field, order: newOrder }),  // <-- was missing getParams
+            { preserveState: true, preserveScroll: true }
+        );
     };
 
     const clearAllSelection = () => {
@@ -185,58 +227,381 @@ export default function RequestsPage({ requests, page_title }: RequestsPageProps
                             />
                         </InputGroup>
 
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline">
-                                    <ArrowDownUp />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="p-0">
-                                <PopoverHeader>
-                                    <PopoverTitle className='px-3 py-2'>Sort By</PopoverTitle>
-                                </PopoverHeader>
-                                <div className="flex flex-col">
-                                    {[
-                                        { label: "Date Submitted", value: "created_at" },
-                                        { label: "Priority Level", value: "priority_level" },
-                                        { label: "Title", value: "title" },
-                                        { label: "Requester", value: "user_name" },
-                                    ].map((option) => (
-                                        <Button
-                                            key={option.value}
-                                            onClick={() => handleSort(option.value)}
-                                            variant="ghost"
-                                            className='flex'
-                                            size="sm"
-                                        >
-                                            <span>{option.label}</span>
-                                            {sortField === option.value && (
-                                                sortOrder === 'asc'
-                                                    ? <ArrowUp size={14} className="rotate-180" />
-                                                    : <ArrowUp size={14} />
-                                            )}
+                        <div className="hidden sm:flex gap-2">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline">
+                                        <ArrowDownUp />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="p-0 w-48">
+                                    <PopoverHeader>
+                                        <PopoverTitle className='px-3 py-1 pt-4 text-xs text-muted-foreground font-semibold'>
+                                            Sort By
+                                        </PopoverTitle>
+                                    </PopoverHeader>
+                                    <div className="flex flex-col p-1">
+                                        {sortOptions.map((option) => (
+                                            <Button
+                                                key={option.value || "none"}
+                                                onClick={() => {
+                                                    handleSort(option.value);
+                                                }}
+                                                variant={sortField === option.value || (option.value === "" && !sortField) ? "secondary" : "ghost"}
+                                                className='justify-between w-full px-2'
+                                                size="sm"
+                                            >
+                                                <span>{option.label}</span>
+                                                {option.value !== "" && (sortField === option.value
+                                                    ? sortOrder === 'asc'
+                                                        ? <ArrowUp size={14} className="rotate-180 text-foreground" />
+                                                        : <ArrowUp size={14} className="text-foreground" />
+                                                    : <ArrowUp size={14} className="opacity-0" />
+                                                )}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        className={cn(
+                                            (requesterFilter.length || facilityFilter.length || externalEquipmentFilter) &&
+                                            "border-primary text-primary bg-primary/5"
+                                        )}
+                                    >
+                                        <SlidersHorizontal size={16} />
+                                        {(requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0)) > 0 && (
+                                            <span className="text-xs font-semibold">
+                                                {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0)}
+                                            </span>
+                                        )}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="p-0 w-72" align="start">
+                                    <PopoverHeader>
+                                        <PopoverTitle className="px-3 pt-3 text-muted-foreground font-semibold">
+                                            Filters
+                                        </PopoverTitle>
+                                    </PopoverHeader>
+                                    <div className="flex flex-col gap-4 p-3 max-h-96 overflow-y-auto">
+
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-muted-foreground font-semibold">Facility</p>
+                                                <Button
+                                                    className="text-xs text-primary"
+                                                    variant={"ghost"}
+                                                    size={"xs"}
+                                                    onClick={() =>
+                                                        facilityFilter.length === facilities.length
+                                                            ? setFacilityFilter([])
+                                                            : setFacilityFilter(facilities.map(f => String(f.id)))
+                                                    }
+                                                >
+                                                    {facilityFilter.length === facilities.length ? "Deselect all" : "Select all"}
+                                                </Button>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                {facilities.map((f) => (
+                                                    <label
+                                                        key={f.id}
+                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="accent-primary"
+                                                            checked={facilityFilter.includes(String(f.id))}
+                                                            onChange={() => toggleFacility(String(f.id))}
+                                                        />
+                                                        {f.name}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-muted-foreground font-semibold">Requester</p>
+                                                <Button
+                                                    className="text-xs text-primary hover:underline"
+                                                    variant={"ghost"}
+                                                    size={"xs"}
+                                                    onClick={() =>
+                                                        requesterFilter.length === requesters.length
+                                                            ? setRequesterFilter([])
+                                                            : setRequesterFilter(requesters.map(r => String(r.id)))
+                                                    }
+                                                >
+                                                    {requesterFilter.length === requesters.length ? "Deselect all" : "Select all"}
+                                                </Button>
+                                            </div>
+                                            <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                                                {requesters.map((r) => (
+                                                    <label
+                                                        key={r.id}
+                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="accent-primary"
+                                                            checked={requesterFilter.includes(String(r.id))}
+                                                            onChange={() => toggleRequester(String(r.id))}
+                                                        />
+                                                        {r.name}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs text-muted-foreground font-semibold">External Equipment</p>
+                                            <div className="flex flex-col gap-1">
+                                                {[
+                                                    { label: "Has external equipment", value: "yes" },
+                                                    { label: "No external equipment", value: "no" },
+                                                ].map((opt) => (
+                                                    <label
+                                                        key={opt.value}
+                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="accent-primary"
+                                                            checked={externalEquipmentFilter === opt.value}
+                                                            onChange={() =>
+                                                                setExternalEquipmentFilter(prev => prev === opt.value ? "" : opt.value)
+                                                            }
+                                                        />
+                                                        {opt.label}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    <div className="flex gap-2 p-3 border-t">
+                                        <Button size="sm" className="flex-1" onClick={applyAdvancedFilters}>
+                                            Apply
                                         </Button>
-                                    ))}
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => {
+                                                setRequesterFilter([]);
+                                                setFacilityFilter([]);
+                                                setExternalEquipmentFilter("");
+                                                router.get(
+                                                    route(route().current(), { status: route().params.status }),
+                                                    { filter: filterMap[currentActiveFitler], search: searchQuery },
+                                                    { preserveState: true, preserveScroll: true }
+                                                );
+                                            }}
+                                        >
+                                            Clear
+                                        </Button>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+
+                            <Button
+                                variant={"outline"}
+                                onClick={toggleSelection}
+                                className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
+                            >
+                                <MousePointer2 size={16} />
+                                <span>{!isSelecting ? "Bulk" : "Stop"}</span>
+                            </Button>
+                        </div>
+
+                        <Sheet>
+                            <SheetTrigger asChild>
+                                <Button variant="outline" className="sm:hidden">
+                                    <SlidersHorizontal />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="right" className="sm:hidden overflow-y-auto flex flex-col" showCloseButton={false}>
+                                <SheetHeader>
+                                    <SheetTitle>Filters & Actions</SheetTitle>
+                                </SheetHeader>
+
+                                <div className="flex flex-col gap-6 px-4">
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-xs font-semibold text-muted-foreground pt-4">Actions</p>
+                                        <SheetClose asChild>
+                                            <Button
+                                                variant={"outline"}
+                                                onClick={toggleSelection}
+                                                className={cn("w-full", isSelecting ? "text-primary border-primary bg-primary/5" : "")}
+                                            >
+                                                <MousePointer2 size={16} />
+                                                <span>{!isSelecting ? "Bulk Select" : "Stop Selecting"}</span>
+                                            </Button>
+                                        </SheetClose>
+                                    </div>
+
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-xs font-semibold text-muted-foreground pt-4">Sort By</p>
+                                        <div className="flex flex-col gap-1">
+                                            {[
+                                                { label: "None", value: "" },
+                                                { label: "Date Submitted", value: "created_at" },
+                                                { label: "Priority Level", value: "priority_level" },
+                                                { label: "Title", value: "title" },
+                                                { label: "Requester", value: "user_name" },
+                                            ].map((option) => (
+                                                <Button
+                                                    key={option.value || "none"}
+                                                    onClick={() => handleSort(option.value)}
+                                                    variant={sortField === option.value || (option.value === "" && !sortField) ? "secondary" : "ghost"}
+                                                    className='justify-between w-full'
+                                                    size="sm"
+                                                >
+                                                    <span>{option.label}</span>
+                                                    {option.value !== "" && (
+                                                        sortField === option.value
+                                                            ? sortOrder === 'asc'
+                                                                ? <ArrowUp size={14} className="rotate-180" />
+                                                                : <ArrowUp size={14} />
+                                                            : <ArrowUp size={14} className="opacity-0" />
+                                                    )}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Facilities */}
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs font-semibold text-muted-foreground">Facility</p>
+                                            <Button
+                                                className="text-xs text-primary"
+                                                variant="ghost"
+                                                size="xs"
+                                                onClick={() =>
+                                                    facilityFilter.length === facilities.length
+                                                        ? setFacilityFilter([])
+                                                        : setFacilityFilter(facilities.map(f => String(f.id)))
+                                                }
+                                            >
+                                                {facilityFilter.length === facilities.length ? "Deselect all" : "Select all"}
+                                            </Button>
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            {facilities.map((f) => (
+                                                <label
+                                                    key={f.id}
+                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="accent-primary"
+                                                        checked={facilityFilter.includes(String(f.id))}
+                                                        onChange={() => toggleFacility(String(f.id))}
+                                                    />
+                                                    {f.name}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Requesters */}
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs font-semibold text-muted-foreground pt-4">Requester</p>
+                                            <Button
+                                                className="text-xs text-primary"
+                                                variant="ghost"
+                                                size="xs"
+                                                onClick={() =>
+                                                    requesterFilter.length === requesters.length
+                                                        ? setRequesterFilter([])
+                                                        : setRequesterFilter(requesters.map(r => String(r.id)))
+                                                }
+                                            >
+                                                {requesterFilter.length === requesters.length ? "Deselect all" : "Select all"}
+                                            </Button>
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            {requesters.map((r) => (
+                                                <label
+                                                    key={r.id}
+                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="accent-primary"
+                                                        checked={requesterFilter.includes(String(r.id))}
+                                                        onChange={() => toggleRequester(String(r.id))}
+                                                    />
+                                                    {r.name}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* External Equipment */}
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-xs font-semibold text-muted-foreground pt-4">External Equipment</p>
+                                        <div className="flex flex-col gap-1">
+                                            {[
+                                                { label: "Has external equipment", value: "yes" },
+                                                { label: "No external equipment", value: "no" },
+                                            ].map((opt) => (
+                                                <label
+                                                    key={opt.value}
+                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="accent-primary"
+                                                        checked={externalEquipmentFilter === opt.value}
+                                                        onChange={() =>
+                                                            setExternalEquipmentFilter(prev => prev === opt.value ? "" : opt.value)
+                                                        }
+                                                    />
+                                                    {opt.label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 py-4 bg-background sticky bottom-0">
+                                        <SheetClose asChild>
+                                            <Button size="sm" className="flex-1" onClick={applyAdvancedFilters}>
+                                                Apply
+                                            </Button>
+                                        </SheetClose>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => {
+                                                setRequesterFilter([]);
+                                                setFacilityFilter([]);
+                                                setExternalEquipmentFilter("");
+                                                router.get(
+                                                    route(route().current(), { status: route().params.status }),
+                                                    { filter: filterMap[currentActiveFitler], search: searchQuery },
+                                                    { preserveState: true, preserveScroll: true }
+                                                );
+                                            }}
+                                        >
+                                            Clear
+                                        </Button>
+                                    </div>
+
                                 </div>
-                            </PopoverContent>
-                        </Popover>
-
-                        <Button variant="outline">
-                            <Funnel />
-                        </Button>
-
-                        <Button
-                            variant={"outline"}
-                            onClick={toggleSelection}
-                            className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
-                        >
-                            <MousePointer2 size={16} />
-                            <span>{!isSelecting ? "Bulk" : "Stop"}</span>
-                        </Button>
-
+                            </SheetContent>
+                        </Sheet>
                     </div>
 
-                    <div className="flex gap-3">
+                    <div className="flex max-w-full gap-2 overflow-x-scroll [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                         {commonFilterOptions.map((filter) => (
                             <Button
                                 className='rounded-full'

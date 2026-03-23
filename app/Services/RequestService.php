@@ -14,8 +14,16 @@ use Illuminate\Support\Collection;
 class RequestService
 {
 
-    public function get(RequestStatus $status, string $filter = 'this_week', ?string $search = null, ?string $sort = null, string $order = 'asc')
-    {
+    public function get(
+        RequestStatus $status,
+        string $filter = 'this_week',
+        ?string $search = null,
+        ?string $sort = null,
+        string $order = 'asc',
+        ?string $requester = null,
+        ?string $facility = null,
+        ?string $hasExternalEquipment = null,
+    ) {
         $user = Auth::user();
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
@@ -34,6 +42,21 @@ class RequestService
 
         if ($search) {
             $query->where('title', 'like', "%{$search}%");
+        }
+
+        if ($requester) {
+            $query->where('requests.user_id', $requester);
+        }
+
+        if (!empty($facility)) {
+            $facilityIds = is_array($facility) ? $facility : explode(',', $facility);
+            $query->whereHas('requestFacilities', fn($q) => $q->whereIn('facility_id', $facilityIds));
+        }
+
+        if ($hasExternalEquipment === 'yes') {
+            $query->whereHas('requestFacilities', fn($q) => $q->whereNotNull('external_equipment')->where('external_equipment', '!=', ''));
+        } elseif ($hasExternalEquipment === 'no') {
+            $query->whereDoesntHave('requestFacilities', fn($q) => $q->whereNotNull('external_equipment')->where('external_equipment', '!=', ''));
         }
 
         $sortMap = [
@@ -56,7 +79,6 @@ class RequestService
 
         return $query->paginate(20);
     }
-
 
     public function getDetail(int $request_id)
     {

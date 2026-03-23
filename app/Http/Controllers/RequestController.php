@@ -32,14 +32,18 @@ class RequestController extends Controller
             $request->input("search"),
             $request->input("sort"),
             $request->input("order", "asc"),
+            $request->input("requester"),
+            $request->input("facility"),
+            $request->input("has_external_equipment"),
         );
 
         return Inertia::render('requests/index', [
             'requests'   => $requests,
             'page_title' => $requestStatus->value,
+            'facilities' => \App\Models\Facility::select('id', 'name')->orderBy('name')->get(),
+            'requesters' => \App\Models\User::select('id', 'name')->orderBy('name')->get(),
         ]);
     }
-
     // Admin-only: Approve request
     public function approve(Request $request, $id)
     {
