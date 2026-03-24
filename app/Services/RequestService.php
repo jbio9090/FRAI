@@ -88,44 +88,45 @@ class RequestService
 
     public function update(array $validated, int $requestId): FacilityRequest
     {
-        $facilityRequest = FacilityRequest::findOrFail($requestId);
+        return DB::transaction(function () use ($validated, $requestId) {
+            $facilityRequest = FacilityRequest::lockForUpdate()->findOrFail($requestId);
 
-        abort_if($facilityRequest->user_id !== Auth::id(), 403);
-        abort_if($facilityRequest->status !== RequestStatus::PENDING, 403);
-        abort_if($facilityRequest->on_hold, 403);
+            abort_if($facilityRequest->user_id !== Auth::id(), 403);
+            abort_if($facilityRequest->status !== RequestStatus::PENDING, 403);
+            abort_if($facilityRequest->on_hold, 403);
 
-        $facilityRequest->update([
-            'title'           => $validated['title'],
-            'description'     => $validated['description'],
-            'priority_level'  => $validated['priority_level'] ?? 0,
-            'priority_reason' => $validated['priority_reason'] ?? null,
-        ]);
-
-        $facilityRequest->equipment()->detach();
-
-        $facilityRequest->requestFacilities()->delete();
-
-        foreach ($validated['facility_bookings'] as $booking) {
-            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
-
-            $facilityRequest->requestFacilities()->create([
-                'facility_id'        => $booking['facility_id'],
-                'date_requested'     => $dateOnly,
-                'time_start'         => $booking['time_start'],
-                'time_end'           => $booking['time_end'],
-                'external_equipment' => $booking['external_equipment'],
+            $facilityRequest->update([
+                'title'           => $validated['title'],
+                'description'     => $validated['description'],
+                'priority_level'  => $validated['priority_level'] ?? 0,
+                'priority_reason' => $validated['priority_reason'] ?? null,
             ]);
 
-            if (!empty($booking['equipment'])) {
-                foreach ($booking['equipment'] as $equipment) {
-                    $facilityRequest->equipment()->attach($equipment['equipment_id'], [
-                        'quantity_needed' => $equipment['quantity_needed'],
-                    ]);
+            $facilityRequest->equipment()->detach();
+            $facilityRequest->requestFacilities()->delete();
+
+            foreach ($validated['facility_bookings'] as $booking) {
+                $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+
+                $facilityRequest->requestFacilities()->create([
+                    'facility_id'        => $booking['facility_id'],
+                    'date_requested'     => $dateOnly,
+                    'time_start'         => $booking['time_start'],
+                    'time_end'           => $booking['time_end'],
+                    'external_equipment' => $booking['external_equipment'],
+                ]);
+
+                if (!empty($booking['equipment'])) {
+                    foreach ($booking['equipment'] as $equipment) {
+                        $facilityRequest->equipment()->attach($equipment['equipment_id'], [
+                            'quantity_needed' => $equipment['quantity_needed'],
+                        ]);
+                    }
                 }
             }
-        }
 
-        return $facilityRequest;
+            return $facilityRequest;
+        });
     }
 
 
@@ -185,38 +186,40 @@ class RequestService
     }
 
 
-    public function create(array $validated)
+    public function create(array $validated): FacilityRequest
     {
-        $facilityRequest = FacilityRequest::create([
-            'user_id' => Auth::id(),
-            'title' => $validated['title'],
-            'description' => $validated['description'],
-            'status' => RequestStatus::PENDING,
-            'priority_level' => $validated['priority_level'] ?? 0,
-            'priority_reason' => $validated['priority_reason'] ?? null,
-        ]);
-
-        foreach ($validated['facility_bookings'] as $booking) {
-            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
-
-            $facilityRequest->requestFacilities()->create([
-                'facility_id' => $booking['facility_id'],
-                'date_requested' => $dateOnly,
-                'time_start' => $booking['time_start'],
-                'time_end' => $booking['time_end'],
-                'external_equipment' => $booking['external_equipment'],
+        return DB::transaction(function () use ($validated) {
+            $facilityRequest = FacilityRequest::create([
+                'user_id'         => Auth::id(),
+                'title'           => $validated['title'],
+                'description'     => $validated['description'],
+                'status'          => RequestStatus::PENDING,
+                'priority_level'  => $validated['priority_level'] ?? 0,
+                'priority_reason' => $validated['priority_reason'] ?? null,
             ]);
 
-            if (!empty($booking['equipment'])) {
-                foreach ($booking['equipment'] as $equipment) {
-                    $facilityRequest->equipment()->attach($equipment['equipment_id'], [
-                        'quantity_needed' => $equipment['quantity_needed']
-                    ]);
+            foreach ($validated['facility_bookings'] as $booking) {
+                $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+
+                $facilityRequest->requestFacilities()->create([
+                    'facility_id'        => $booking['facility_id'],
+                    'date_requested'     => $dateOnly,
+                    'time_start'         => $booking['time_start'],
+                    'time_end'           => $booking['time_end'],
+                    'external_equipment' => $booking['external_equipment'],
+                ]);
+
+                if (!empty($booking['equipment'])) {
+                    foreach ($booking['equipment'] as $equipment) {
+                        $facilityRequest->equipment()->attach($equipment['equipment_id'], [
+                            'quantity_needed' => $equipment['quantity_needed'],
+                        ]);
+                    }
                 }
             }
-        }
 
-        return $facilityRequest;
+            return $facilityRequest;
+        });
     }
 
 
