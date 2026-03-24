@@ -18,7 +18,7 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange }:
         }
         side === 'left' ? setEditingLeft(false) : setEditingRight(false);
         setInputVal("");
-    };
+    }
 
     const getPageWindow = () => {
         const delta = 2; // pages on each side of current
@@ -27,7 +27,7 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange }:
             range.push(i);
         }
         return range;
-    };
+    }
 
     const pageWindow = getPageWindow();
     const showLeftEllipsis = pageWindow[0] > 2;

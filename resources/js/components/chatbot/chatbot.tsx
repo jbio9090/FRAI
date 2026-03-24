@@ -1,9 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePage } from '@inertiajs/react';
-import { Message } from './types';
 import { useMessages } from './hooks/useMessages';
 import { useParticipantCount } from './hooks/useParticipantCount';
 import { useChatAPI } from './hooks/useChatAPI';
+import { Message } from './types';
 import { QuickReply } from './components/QuickReplies';
 import { Facility } from './hooks/useBookingFlow';
 import WelcomeMessage from './components/WelcomeMessage';
@@ -24,7 +24,7 @@ export default function Chatbot() {
     const { messages, addMessage, getMessagesText } = useMessages();
     const { extractAndSet, getCurrentCount } = useParticipantCount();
     const csrfToken = (page.props as any).csrf_token || '';
-    const { isLoading, sendMessage, detectAndSubmitRequest } = useChatAPI(csrfToken);
+    const { isLoading, sendMessage } = useChatAPI(csrfToken);
     const [pendingPayload, setPendingPayload] = useState(null);
 
     // Auto-scroll to bottom when messages change or mode changes
@@ -83,7 +83,9 @@ export default function Chatbot() {
                     if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
                         setPendingPayload(payload); // stage for confirmation
                     }
-                } catch (_) { }
+                } catch (_) { 
+                    console.log("eyy");
+                }
             }
 
         } catch (err) {

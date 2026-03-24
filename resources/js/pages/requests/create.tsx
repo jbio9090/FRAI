@@ -1,6 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Save } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus } from "lucide-react";
 import { motion } from "motion/react"
 import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -102,8 +102,8 @@ function saveDraft(data: Omit<DraftData, 'savedAt'>, existingId?: number) {
             ...data,
             savedAt: Date.now(),
         }));
-    } catch {
-        // localStorage might be full or unavailable
+    } catch (err) {
+        console.error(err);
     }
 }
 
@@ -123,16 +123,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
 
-    // If there's a saved draft, we'll prompt to restore it
     const [showDraftBanner, setShowDraftBanner] = useState<boolean>(!!draft);
-    const [draftRestoredAt] = useState<number | null>(draft?.savedAt ?? null);
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
-
-    // Initialize from draft if restored, otherwise from existingRequest or empty
-    const getInitialBookings = () => {
-        if (draft && showDraftBanner) return draft.facility_bookings;
-        return existingRequest?.facility_bookings ?? [];
-    };
 
     const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>(
         existingRequest?.facility_bookings ?? []
@@ -158,6 +150,15 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     useEffect(() => {
         if (showDraftBanner) return;
+
+        const isEmpty =
+            !data.title.trim() &&
+            !data.description.trim() &&
+            !data.priority_reason.trim() &&
+            facilityBookings.length === 0 &&
+            data.priority_level === 0;
+
+        if (isEmpty) return;
 
         const timeout = setTimeout(() => {
             saveDraft({

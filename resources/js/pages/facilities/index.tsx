@@ -1,4 +1,4 @@
-import { router, Link } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import {
     Table,
     TableBody,
