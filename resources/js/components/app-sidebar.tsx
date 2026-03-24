@@ -11,7 +11,7 @@ import {
   Settings,
   Check,
   User,
-  Bot,
+  Sparkles,
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -27,8 +27,6 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { usePermission } from "@/hooks/use-permission"
-import { useEffect, useState } from "react"
-
 
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -117,10 +115,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          <SidebarMenuItem key="chatbot" className="mb-2 px-4">
+          <SidebarMenuItem key="chatbot" className="px-4">
             <SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer hover:text-primary-foreground">
               <Link href={route("chatbot")}>
-                <Bot className="h-4 w-4" />
+                <Sparkles className="h-4 w-4" />
                 <span>Chatbot</span>
               </Link>
             </SidebarMenuButton>
