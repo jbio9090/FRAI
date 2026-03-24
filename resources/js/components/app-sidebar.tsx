@@ -107,7 +107,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
 
           <SidebarMenuItem key="create-request" className="mt-2 px-4">
-            <SidebarMenuButton asChild className="bg-primary text-foreground hover:bg-primary/90 cursor-pointer">
+            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/90 cursor-pointer">
               <Link href={route("request.create")}>
                 <CirclePlus className="h-4 w-4" />
                 <span>Create Request</span>
@@ -116,7 +116,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
 
           <SidebarMenuItem key="chatbot" className="px-4">
-            <SidebarMenuButton asChild className="bg-primary text-foreground hover:bg-primary/80 cursor-pointer">
+            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/80 cursor-pointer">
               <Link href={route("chatbot")}>
                 <Sparkles className="h-4 w-4" />
                 <span>Chatbot</span>
