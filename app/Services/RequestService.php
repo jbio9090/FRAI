@@ -46,7 +46,8 @@ class RequestService
         }
 
         if ($requester) {
-            $query->where('requests.user_id', $requester);
+            $requesterIds = explode(',', $requester);
+            $query->whereIn('requests.user_id', $requesterIds);
         }
 
         if (!empty($facility)) {
