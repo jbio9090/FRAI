@@ -43,7 +43,6 @@ class HandleInertiaRequests extends Middleware
                     'email' => $request->user()->email,
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
-
                 ] : null,
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),

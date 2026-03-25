@@ -70,6 +70,8 @@ Route::middleware("auth")->group(function () {
 
     Route::middleware("permission:manage facilities")->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
+        Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
+        Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
 
     Route::get("/chatbot", function () {

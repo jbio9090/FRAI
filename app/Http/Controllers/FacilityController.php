@@ -71,4 +71,23 @@ class FacilityController extends Controller
 
         return redirect()->route('facility.detail', $facility->id);
     }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name'     => 'required|string|max:255',
+            'building' => 'required|string|max:255',
+            'capacity' => 'required|integer|min:1',
+        ]);
+
+        Facility::create($validated);
+
+        return redirect()->back()->with("success", "$validated[name] has been created");
+    }
+
+    public function destroy(Facility $facility): RedirectResponse
+    {
+        $facility->delete();
+        return redirect()->back();
+    }
 }
