@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePage } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen } from "lucide-react";
 import DefaultLayout from "@/layout.tsx/default.";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,17 @@ interface UserForm {
     role: string;
 }
 
+interface AccountForm {
+    username: string;
+    email: string;
+    password: string;
+}
+
+interface PageProps {
+    errors: Partial<Record<keyof AccountForm, string>>;
+    [key: string]: unknown;
+}
+
 const emptyForm: UserForm = { username: "", email: "", password: "", role: "user" };
 
 export default function AccountsPage({ users, roles }: Props) {
@@ -54,6 +66,7 @@ export default function AccountsPage({ users, roles }: Props) {
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [addForm, setAddForm] = useState<UserForm>(emptyForm);
     const [editForm, setEditForm] = useState<UserForm>(emptyForm);
+    const { errors } = usePage<PageProps>().props;
 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
@@ -112,8 +125,12 @@ export default function AccountsPage({ users, roles }: Props) {
                     type="text"
                     placeholder="Enter username"
                     value={form.username}
+                    className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
                     onChange={(e) => onChange({ ...form, username: e.target.value })}
                 />
+                {errors.username && (
+                    <p className="text-sm text-destructive">{errors.name}</p>
+                )}
             </div>
             <div className="flex flex-col gap-1.5">
                 <Label>Email</Label>
@@ -121,8 +138,12 @@ export default function AccountsPage({ users, roles }: Props) {
                     type="email"
                     placeholder="Enter email"
                     value={form.email}
+                    className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
                     onChange={(e) => onChange({ ...form, email: e.target.value })}
                 />
+                {errors.email && (
+                    <p className="text-sm text-destructive">{errors.name}</p>
+                )}
             </div>
             <div className="flex flex-col gap-1.5">
                 <Label>{isEdit ? "New Password" : "Password"}</Label>
@@ -130,12 +151,20 @@ export default function AccountsPage({ users, roles }: Props) {
                     type="password"
                     placeholder={isEdit ? "Leave blank to keep current" : "Enter password"}
                     value={form.password}
+                    className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
                     onChange={(e) => onChange({ ...form, password: e.target.value })}
                 />
+                {errors.password && (
+                    <p className="text-sm text-destructive">{errors.name}</p>
+                )}
             </div>
             <div className="flex flex-col gap-1.5">
                 <Label>Role</Label>
-                <Select value={form.role} onValueChange={(v) => onChange({ ...form, role: v })}>
+                <Select
+                    value={form.role}
+                    onValueChange={(v) =>
+                        onChange({ ...form, role: v })}
+                >
                     <SelectTrigger>
                         <SelectValue placeholder="Select role" />
                     </SelectTrigger>
