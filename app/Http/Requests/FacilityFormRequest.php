@@ -23,8 +23,8 @@ class FacilityFormRequest extends FormRequest
     {
         return [
             'title' => 'required|string|max:255',
-            'description' => 'string',
-            'priority_level' => 'nullable|integer|in:0,1,2',
+            'description' => 'nullable|string',
+            'priority_level' => 'nullable|integer|in:0,1,2,3',
             'priority_reason' => 'nullable|string|max:512',
             'facility_bookings' => 'required|array|min:1',
             'facility_bookings.*.facility_id' => 'required|exists:facilities,id',

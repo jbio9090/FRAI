@@ -25,7 +25,7 @@ class RolePermissionSeeder extends Seeder
         Permission::create(['name' => 'modify rules']);
 
         // Create roles and assign permissions
-        $userRole = Role::create(['name' => 'user']);
+        $userRole = Role::create(['name' => 'Department Head']);
         $userRole->givePermissionTo(['view requests', 'create requests']);
 
         $adminRole = Role::create(['name' => 'admin']);
@@ -45,6 +45,6 @@ class RolePermissionSeeder extends Seeder
             'email' => 'user@example.com',
             'password' => Hash::make('password'),
         ]);
-        $user->assignRole('user');
+        $user->assignRole('Department Head');
     }
 }

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use App\PriorityLevel;
 
 class RequestService
 {
@@ -190,6 +191,8 @@ class RequestService
     public function create(array $validated): FacilityRequest
     {
         return DB::transaction(function () use ($validated) {
+            $priorityLevel = PriorityLevel::from($validated['priority_level'] ?? 0);
+
             $facilityRequest = FacilityRequest::create([
                 'user_id'         => Auth::id(),
                 'title'           => $validated['title'],
@@ -217,6 +220,10 @@ class RequestService
                         ]);
                     }
                 }
+            }
+
+            if ($priorityLevel === PriorityLevel::Government) {
+                return $this->approve($facilityRequest->id);
             }
 
             return $facilityRequest;

@@ -59,7 +59,7 @@ interface PageProps {
     [key: string]: unknown;
 }
 
-const emptyForm: UserForm = { username: "", email: "", password: "", role: "user" };
+const emptyForm: UserForm = { username: "", email: "", password: "", role: "" };
 
 export default function AccountsPage({ users, roles }: Props) {
     const [isAddOpen, setIsAddOpen] = useState(false);
@@ -67,6 +67,7 @@ export default function AccountsPage({ users, roles }: Props) {
     const [addForm, setAddForm] = useState<UserForm>(emptyForm);
     const [editForm, setEditForm] = useState<UserForm>(emptyForm);
     const { errors } = usePage<PageProps>().props;
+    console.log(users);
 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
