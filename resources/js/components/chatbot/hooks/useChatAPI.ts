@@ -10,7 +10,8 @@ export function useChatAPI(csrfToken?: string) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const sendMessage = useCallback(async (messages: Message[], participantCount?: number) => {
+    const sendMessage = useCallback(async (messages: Message[], participantCount?: number, bookingContext?: string
+    ) => {
         setIsLoading(true);
         setError(null);
 
@@ -18,6 +19,9 @@ export function useChatAPI(csrfToken?: string) {
             const payload: ChatRequest = { messages };
             if (participantCount) {
                 payload.participant_count = participantCount;
+            }
+            if (bookingContext) {
+                payload.booking_context = bookingContext;
             }
 
             const data = await sendChatMessage(payload, csrfToken);

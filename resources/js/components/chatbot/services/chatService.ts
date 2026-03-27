@@ -1,11 +1,9 @@
-import { Message, ChatRequest } from '../types';
+import { ChatRequest } from '../types';
 import { getCsrfToken } from '../utils/csrfToken';
 
 export async function sendChatMessage(
-    payload: ChatRequest,
-    csrfToken?: string
+    payload: ChatRequest
 ): Promise<{ message?: { content: string }; response?: string }> {
-    const token = csrfToken || getCsrfToken();
 
     const response = await fetch(route('api.chat'), {
         method: 'POST',
@@ -13,14 +11,19 @@ export async function sendChatMessage(
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': token,          // fixed casing
+            'X-CSRF-TOKEN': getCsrfToken(), // always read fresh from DOM
         },
         credentials: 'same-origin',
         body: JSON.stringify(payload),
     });
 
+    if (response.status === 419) {
+        window.location.reload(); // token expired, reload to get a fresh one
+        return {};
+    }
+
     if (!response.ok) {
-        const text = await response.text();  // safe for HTML or JSON errors
+        const text = await response.text();
         throw new Error(`HTTP error ${response.status}: ${text.substring(0, 200)}`);
     }
 

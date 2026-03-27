@@ -6,6 +6,7 @@ export interface Message {
 export interface ChatRequest {
     messages: Message[];
     participant_count?: number;
+    booking_context?: string;
 }
 
 export interface CreateRequestPayload {
