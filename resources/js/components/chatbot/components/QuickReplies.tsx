@@ -42,14 +42,21 @@ export { QUICK_REPLIES };
 export default function QuickReplies({ onSelect }: QuickRepliesProps) {
     return (
         <div className="mt-6 w-full max-w-sm mx-auto flex flex-col gap-2">
-            <p className="text-xs uppercase tracking-widest text-gray-400 font-mono text-center mb-1">
+            <p className="text-xs uppercase tracking-widest text-gray-400 dark:text-gray-500 font-mono text-center mb-1">
                 Quick Actions
             </p>
             {QUICK_REPLIES.map((option) => (
                 <button
                     key={option.id}
                     onClick={() => onSelect(option)}
-                    className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-400 text-sm text-gray-700 font-medium transition-all duration-150 shadow-sm hover:shadow active:scale-[0.98]"
+                    className="w-full text-left px-4 py-3 rounded-lg border
+                    border-gray-200 bg-white text-gray-700
+                    hover:bg-gray-50 hover:border-gray-400
+                    
+                    dark:bg-gray-900 dark:border-white dark:text-white
+                    dark:hover:bg-gray-800 dark:hover:border-white
+                    
+                    text-sm font-medium transition-all duration-150 shadow-sm hover:shadow active:scale-[0.98]"
                 >
                     {option.label}
                 </button>

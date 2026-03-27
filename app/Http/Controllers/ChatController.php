@@ -24,9 +24,7 @@ class ChatController extends Controller
         $this->ollamaUrl  = config("ollama-laravel.url");
         $this->model = config("ollama-laravel.model", "FRAI");
     }
-    /**
-     * Filter facilities by participant count
-     */
+    // Filter facilities by participant count
     private function filterFacilitiesByCapacity($facilities, $participants)
     {
         return $facilities->filter(function ($facility) use ($participants) {
@@ -35,17 +33,16 @@ class ChatController extends Controller
         });
     }
 
-    /**
-     * Handle chat messages - simple non-streaming version
-     */
+    //Handle chat messages
     public function chat(Request $request): JsonResponse
     {
         try {
             set_time_limit(300); // 5 minutes
             $messages = $request->input('messages', []);
             $participantCount = $request->input('participant_count'); // Optional: for capacity-based filtering
+            $bookingContext = $request->input('booking_context'); 
 
-            // Always inject current requests from DB as context (for priority override awareness)
+            // Always inject current requests from DB as context 
             try {
                 $allRequests = RequestModel::with(['user', 'requestFacilities', 'facilities'])
                     ->whereIn('status', ['pending', 'approved'])
@@ -194,6 +191,12 @@ class ChatController extends Controller
                     'content' => "You MUST follow rules stored in the system database. If a user request would violate any configured rule, you MUST refuse and explain which rule would be violated. Do NOT provide prohibited content."
                 ]);
             }
+            if (!empty($bookingContext)) {
+                array_unshift($messages, [
+                    'role' => 'system',
+                    'content' => "BOOKING FLOW CONTEXT (HIGHEST PRIORITY):\n" . $bookingContext . "\n\nIMPORTANT: The user is currently in the middle of a structured booking process. Do NOT restart the process. Only assist based on the collected data and current step.",
+                ]);
+            }
             if (empty($messages)) {
                 return response()->json([
                     'error' => 'No messages provided'
@@ -311,9 +314,7 @@ class ChatController extends Controller
         }
     }
 
-    /**
-     * Test endpoint to verify connection to Ollama
-     */
+    //Test connection to Ollama
     public function testCsrf(): JsonResponse
     {
         try {
@@ -337,9 +338,7 @@ class ChatController extends Controller
         }
     }
 
-    /**
-     * Get available models from Ollama
-     */
+    // git mudel fr ollama
     public function models(): JsonResponse
     {
         try {
@@ -361,9 +360,7 @@ class ChatController extends Controller
         }
     }
 
-    /**
-     * Return a small, sanitized list of recent requests from the database.
-     */
+    // return req
     public function latestRequests(Request $request): JsonResponse
     {
         try {
@@ -393,9 +390,7 @@ class ChatController extends Controller
         }
     }
 
-    /**
-     * Return sanitized list of rules from the database.
-     */
+    //return rules
     public function rulesList(Request $request): JsonResponse
     {
         try {
@@ -422,9 +417,7 @@ class ChatController extends Controller
         }
     }
 
-    /**
-     * Return sanitized list of facilities from the database.
-     */
+    //return facility list
     public function facilitiesList(Request $request): JsonResponse
     {
         try {
@@ -453,9 +446,7 @@ class ChatController extends Controller
         }
     }
 
-    /**
-     * Return sanitized list of equipment from the database.
-     */
+    //return equipment list
     public function equipmentList(Request $request): JsonResponse
     {
         try {

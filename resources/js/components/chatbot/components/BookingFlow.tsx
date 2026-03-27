@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useBookingFlow, Facility } from '../hooks/useBookingFlow';
+import { useBookingFlow } from '../hooks/useBookingFlow';
 import DatePicker from './DatePicker';
 
 interface BookingFlowProps {
-    facilities: Facility[];
-    csrfToken: string;
+    bookingFlow: ReturnType<typeof useBookingFlow>;
     onComplete: (message: string) => void;
     onCancel: () => void;
 }
@@ -14,18 +13,15 @@ interface FlowMessage {
     text: string;
 }
 
-export default function BookingFlow({ facilities, csrfToken, onComplete, onCancel }: BookingFlowProps) {
-    const { step, isSubmitting, submitResult, getStepConfig, handleInput, reset } = useBookingFlow(facilities, csrfToken);
+export default function BookingFlow({ bookingFlow, onComplete, onCancel }: BookingFlowProps) {
+    const { step, isSubmitting, submitResult, getStepConfig, handleInput, reset } = bookingFlow;
     const [textInput, setTextInput] = useState('');
     const [history, setHistory] = useState<FlowMessage[]>([]);
 
     const config = getStepConfig();
 
-    const pushHistory = (userText: string, botNext?: string) => {
-        setHistory(prev => {
-            const next: FlowMessage[] = [...prev, { from: 'user', text: userText }];
-            return next;
-        });
+    const pushHistory = (userText: string) => {
+        setHistory(prev => [...prev, { from: 'user', text: userText }]);
     };
 
     const handleQuickReply = (value: string) => {
@@ -41,39 +37,46 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
         handleInput(val);
     };
 
-    const handleKeyPress = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleTextSubmit();
         }
     };
 
-    // Done state
     if (step === 'done' && submitResult) {
         return (
             <div className="flex gap-4 justify-start animate-in fade-in">
                 <BotAvatar />
-                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900">
-                    <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">assistant</div>
+                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-white">
+                    <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">
+                        assistant
+                    </div>
                     <p className={`text-sm font-medium ${submitResult.success ? 'text-green-700' : 'text-red-600'}`}>
                         {submitResult.message}
                     </p>
-                    {submitResult.success && (
+                    <div className="mt-3 flex gap-4">
+                        {submitResult.success && (
+                            <button
+                                onClick={() => onComplete(submitResult.message)}
+                                className="text-xs text-gray-500 hover:text-gray-700 underline"
+                            >
+                                Continue to chat
+                            </button>
+                        )}
                         <button
-                            onClick={() => { reset(); onComplete(submitResult.message); }}
-                            className="mt-3 text-xs text-gray-500 hover:text-gray-700 underline"
+                            onClick={() => reset()}
+                            className="text-xs text-gray-500 hover:text-gray-700 underline"
                         >
-                            Start a new request
+                            {submitResult.success ? 'Submit another request' : 'Try again'}
                         </button>
-                    )}
-                    {!submitResult.success && (
                         <button
-                            onClick={reset}
-                            className="mt-3 text-xs text-gray-500 hover:text-gray-700 underline"
+                            onClick={onCancel}
+                            className="text-xs text-gray-500 hover:text-gray-700 underline"
                         >
-                            Try again
+                            Cancel
                         </button>
-                    )}
+                    </div>
                 </div>
             </div>
         );
@@ -83,15 +86,24 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
         <div className="space-y-4">
             {/* Conversation history */}
             {history.map((msg, i) => (
-                <div key={i} className={`flex gap-4 animate-in fade-in ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    {msg.from === 'bot' ? <BotAvatar /> : null}
+                <div
+                    key={i}
+                    className={`flex gap-4 animate-in fade-in ${
+                        msg.from === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
+                >
+                    {msg.from === 'bot' && <BotAvatar />}
                     <div className={`flex gap-3 max-w-[70%] ${msg.from === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                         {msg.from === 'user' && (
                             <div className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-gray-400">
                                 U
                             </div>
                         )}
-                        <div className={`px-5 py-3 rounded-lg border ${msg.from === 'user' ? 'bg-gray-100 border-gray-300 text-gray-900' : 'bg-gray-50 border-gray-200 text-gray-900'}`}>
+                        <div className={`px-5 py-3 rounded-lg border ${
+                            msg.from === 'user'
+                                ? 'bg-gray-100 border-gray-300 text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white'
+                                : 'bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-white'
+                        }`}>
                             <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">
                                 {msg.from === 'user' ? 'user' : 'assistant'}
                             </div>
@@ -101,15 +113,16 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
                 </div>
             ))}
 
-            {/* Current bot prompt */}
+            {/* Current step prompt */}
             {config.botMessage && (
                 <div className="flex gap-4 justify-start animate-in fade-in">
                     <BotAvatar />
-                    <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900">
-                        <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">assistant</div>
+                    <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-white">
+                        <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">
+                            assistant
+                        </div>
                         <div className="text-sm whitespace-pre-wrap">{config.botMessage}</div>
 
-                        {/* Quick reply buttons */}
                         {config.quickReplies.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {config.quickReplies.map(option => (
@@ -117,27 +130,32 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
                                         key={option}
                                         onClick={() => handleQuickReply(option)}
                                         disabled={isSubmitting}
-                                        className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white hover:bg-gray-50 hover:border-gray-400 text-gray-700 font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
-                                    >
+                                        className="px-3 py-1.5 text-xs rounded-lg border
+                                        border-gray-300 bg-white text-gray-700
+                                        hover:bg-gray-50 hover:border-gray-400
+
+                                        dark:bg-gray-900 dark:border-white dark:text-white
+                                        dark:hover:bg-gray-800 dark:hover:border-white
+
+                                        font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
+                                                                        >
                                         {option}
                                     </button>
                                 ))}
                             </div>
                         )}
 
-                        {/* Date picker */}
                         {config.showDatePicker && (
                             <DatePicker onSelect={(iso) => handleQuickReply(iso)} />
                         )}
 
-                        {/* Text input for free-text steps */}
                         {config.isTextInput && (
                             <div className="mt-3 flex gap-2">
                                 <input
                                     type="text"
                                     value={textInput}
                                     onChange={e => setTextInput(e.target.value)}
-                                    onKeyDown={handleKeyPress}
+                                    onKeyDown={handleKeyDown}
                                     placeholder="Type your answer..."
                                     autoFocus
                                     className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
@@ -158,7 +176,7 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
             {isSubmitting && (
                 <div className="flex gap-4 justify-start">
                     <BotAvatar />
-                    <div className="space-x-2 flex items-center">
+                    <div className="flex items-center space-x-2">
                         <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse"></div>
                         <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse delay-200"></div>
                         <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse delay-400"></div>
