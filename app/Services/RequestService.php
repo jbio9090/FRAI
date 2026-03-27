@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\Facility;
+use App\Models\Equipment;
 use App\RequestStatus;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,6 @@ use App\PriorityLevel;
 
 class RequestService
 {
-
     public function get(
         RequestStatus $status,
         string $filter = 'this_week',
@@ -85,7 +85,37 @@ class RequestService
 
     public function getDetail(int $request_id)
     {
-        return FacilityRequest::with(["user", "facilities", "equipment", "requestFacilities"])->where("id", $request_id)->firstOrFail();
+        return FacilityRequest::with([
+            "user",
+            "facilities",
+            "requestFacilities",
+            "equipment" => fn($q) => $q->withPivot('quantity_needed'),
+            "equipment.facilities", 
+        ])->where("id", $request_id)->firstOrFail();
+    }
+
+    public function create(array $validated): FacilityRequest
+    {
+        return DB::transaction(function () use ($validated) {
+            $priorityLevel = PriorityLevel::from($validated['priority_level'] ?? 0);
+
+            $facilityRequest = FacilityRequest::create([
+                'user_id'         => Auth::id(),
+                'title'           => $validated['title'],
+                'description'     => $validated['description'],
+                'status'          => RequestStatus::PENDING,
+                'priority_level'  => $validated['priority_level'] ?? 0,
+                'priority_reason' => $validated['priority_reason'] ?? null,
+            ]);
+
+            $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
+
+            if ($priorityLevel === PriorityLevel::Government) {
+                return $this->approve($facilityRequest->id);
+            }
+
+            return $facilityRequest;
+        });
     }
 
     public function update(array $validated, int $requestId): FacilityRequest
@@ -104,50 +134,67 @@ class RequestService
                 'priority_reason' => $validated['priority_reason'] ?? null,
             ]);
 
+            // Wipe old bookings and equipment, then re-attach fresh
             $facilityRequest->equipment()->detach();
             $facilityRequest->requestFacilities()->delete();
 
-            foreach ($validated['facility_bookings'] as $booking) {
-                $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
-
-                $facilityRequest->requestFacilities()->create([
-                    'facility_id'        => $booking['facility_id'],
-                    'date_requested'     => $dateOnly,
-                    'time_start'         => $booking['time_start'],
-                    'time_end'           => $booking['time_end'],
-                    'external_equipment' => $booking['external_equipment'],
-                ]);
-
-                if (!empty($booking['equipment'])) {
-                    foreach ($booking['equipment'] as $equipment) {
-                        $facilityRequest->equipment()->attach($equipment['equipment_id'], [
-                            'quantity_needed' => $equipment['quantity_needed'],
-                        ]);
-                    }
-                }
-            }
+            $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
 
             return $facilityRequest;
         });
     }
 
+    /**
+     * Creates request_facility records and attaches equipment for each booking.
+     * Equipment across bookings is merged and summed — same equipment appearing
+     * in multiple bookings adds up to a single pivot row with combined quantity.
+     */
+    private function syncBookingsAndEquipment(FacilityRequest $facilityRequest, array $bookings): void
+    {
+        // Accumulate equipment quantities across all bookings
+        // so we don't create duplicate pivot rows for the same equipment_id
+        $equipmentMap = []; // [equipment_id => quantity_needed]
 
-    public function checkForConflicts(array $bookings): array
+        foreach ($bookings as $booking) {
+            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+
+            $facilityRequest->requestFacilities()->create([
+                'facility_id'        => $booking['facility_id'],
+                'date_requested'     => $dateOnly,
+                'time_start'         => $booking['time_start'],
+                'time_end'           => $booking['time_end'],
+                'external_equipment' => $booking['external_equipment'] ?? null,
+            ]);
+
+            foreach ($booking['equipment'] ?? [] as $equipment) {
+                $id = $equipment['equipment_id'];
+                $equipmentMap[$id] = ($equipmentMap[$id] ?? 0) + $equipment['quantity_needed'];
+            }
+        }
+
+        // Attach once per equipment_id with the summed quantity
+        foreach ($equipmentMap as $equipmentId => $totalQuantity) {
+            $facilityRequest->equipment()->attach($equipmentId, [
+                'quantity_needed' => $totalQuantity,
+            ]);
+        }
+    }
+
+    public function checkForConflicts(array $bookings, ?int $excludeRequestId = null): array
     {
         $conflicts = [];
 
-        foreach ($bookings as $index => $booking) {
-            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+        foreach ($bookings as $booking) {
+            $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
             $requestedStart = Carbon::parse($booking['time_start']);
-            $requestedEnd = Carbon::parse($booking['time_end']);
+            $requestedEnd   = Carbon::parse($booking['time_end']);
 
-            // Get all approved bookings for this facility on this date
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
-                ->whereHas('request', function ($query) {
+                ->whereHas('request', function ($query) use ($excludeRequestId) {
                     $query->whereIn('status', [RequestStatus::APPROVED])
                         ->where('on_hold', false)
-                        ->where('id', '!=', $excludeRequestId ?? 0);
+                        ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId));
                 })
                 ->get();
 
@@ -155,22 +202,8 @@ class RequestService
                 $existingStart = Carbon::parse($existing->time_start);
                 $existingEnd   = Carbon::parse($existing->time_end);
 
-                Log::debug('Conflict check', [
-                    'requestedStart' => $requestedStart->toTimeString(),
-                    'requestedEnd'   => $requestedEnd->toTimeString(),
-                    'existingStart'  => $existingStart->toTimeString(),
-                    'existingEnd'    => $existingEnd->toTimeString(),
-                    'overlaps'       => $requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart),
-                ]);
-            }
-
-            foreach ($existingBookings as $existing) {
-                $existingStart = Carbon::parse($existing->time_start);
-                $existingEnd = Carbon::parse($existing->time_end);
-
-                // Check if times overlap
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
-                    $facility = Facility::find($booking['facility_id']);
+                    $facility   = Facility::find($booking['facility_id']);
                     $conflicts[] = sprintf(
                         'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing approved booking (%s - %s)',
                         $facility->name ?? 'Unknown Facility',
@@ -187,58 +220,13 @@ class RequestService
         return $conflicts;
     }
 
-
-    public function create(array $validated): FacilityRequest
+    public function recommendAction($validated, $saved_request): void
     {
-        return DB::transaction(function () use ($validated) {
-            $priorityLevel = PriorityLevel::from($validated['priority_level'] ?? 0);
-
-            $facilityRequest = FacilityRequest::create([
-                'user_id'         => Auth::id(),
-                'title'           => $validated['title'],
-                'description'     => $validated['description'],
-                'status'          => RequestStatus::PENDING,
-                'priority_level'  => $validated['priority_level'] ?? 0,
-                'priority_reason' => $validated['priority_reason'] ?? null,
-            ]);
-
-            foreach ($validated['facility_bookings'] as $booking) {
-                $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
-
-                $facilityRequest->requestFacilities()->create([
-                    'facility_id'        => $booking['facility_id'],
-                    'date_requested'     => $dateOnly,
-                    'time_start'         => $booking['time_start'],
-                    'time_end'           => $booking['time_end'],
-                    'external_equipment' => $booking['external_equipment'],
-                ]);
-
-                if (!empty($booking['equipment'])) {
-                    foreach ($booking['equipment'] as $equipment) {
-                        $facilityRequest->equipment()->attach($equipment['equipment_id'], [
-                            'quantity_needed' => $equipment['quantity_needed'],
-                        ]);
-                    }
-                }
-            }
-
-            if ($priorityLevel === PriorityLevel::Government) {
-                return $this->approve($facilityRequest->id);
-            }
-
-            return $facilityRequest;
-        });
-    }
-
-
-    public function recommendAction($validated, $saved_request)
-    {
-        $externalEquipment = false;
-        $recommended_action = RequestStatus::APPROVED;
+        $externalEquipment      = false;
+        $recommended_action     = RequestStatus::APPROVED;
         $recommended_action_reason = null;
 
-        $conflicts = $this->checkForConflicts($validated['facility_bookings']);
-        Log::debug('Conflicts found', ['conflicts' => $conflicts]);
+        $conflicts = $this->checkForConflicts($validated['facility_bookings'], $saved_request->id);
 
         foreach ($validated['facility_bookings'] as $booking) {
             if (!empty($booking['external_equipment'])) {
@@ -248,20 +236,22 @@ class RequestService
         }
 
         if (!empty($conflicts)) {
-            $recommended_action = RequestStatus::DENIED;
+            $recommended_action        = RequestStatus::DENIED;
             $recommended_action_reason = "Time conflict with events";
-        } else if ($externalEquipment) {
-            $recommended_action = RequestStatus::CONDITIONALLY_APPROVED;
+        } elseif ($externalEquipment) {
+            $recommended_action        = RequestStatus::CONDITIONALLY_APPROVED;
             $recommended_action_reason = "Approved request along with the external equipment";
         }
 
-        $saved_request->update(["recommended_action" => $recommended_action, "recommended_action_reason" => $recommended_action_reason]);
+        $saved_request->update([
+            'recommended_action'        => $recommended_action,
+            'recommended_action_reason' => $recommended_action_reason,
+        ]);
     }
 
     public function approve(int $request_id): FacilityRequest
     {
         return DB::transaction(function () use ($request_id) {
-            // Lock the row so concurrent approvals can't read stale data
             $request = FacilityRequest::with(['requestFacilities'])
                 ->lockForUpdate()
                 ->findOrFail($request_id);
@@ -319,7 +309,6 @@ class RequestService
         });
     }
 
-
     private function getConflictingApprovedRequests(array $bookings, int $excludeRequestId): Collection
     {
         $conflictingIds = collect();
@@ -336,7 +325,7 @@ class RequestService
                         ->where('id', '!=', $excludeRequestId);
                 })
                 ->with('request')
-                ->lockForUpdate() // prevent concurrent approvals from reading stale state
+                ->lockForUpdate()
                 ->get();
 
             foreach ($existingBookings as $existing) {

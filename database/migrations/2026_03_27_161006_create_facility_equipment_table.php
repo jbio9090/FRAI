@@ -11,12 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('request_equipment', function (Blueprint $table) {
+        Schema::create('facility_equipment', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('request_id')->constrained()->onDelete('cascade');
+            $table->foreignId('facility_id')->constrained()->onDelete('cascade');
             $table->foreignId('equipment_id')->constrained('equipments')->onDelete('cascade');
-            $table->integer('quantity_needed')->default(1);
+            $table->integer('quantity'); // how many this facility holds
             $table->timestamps();
+            
+            $table->unique(['facility_id', 'equipment_id']);
         });
     }
 
@@ -25,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('request_equipment');
+        Schema::dropIfExists('facility_equipment');
     }
 };

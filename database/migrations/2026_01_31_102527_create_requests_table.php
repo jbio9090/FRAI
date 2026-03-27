@@ -24,6 +24,7 @@ return new class extends Migration
             $table->string("recommended_action_reason", 512)->nullable();
         });
     }
+    
 
     /**
      * Reverse the migrations.

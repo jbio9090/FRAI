@@ -19,7 +19,7 @@ class RequestSeeder extends Seeder
         $admin = User::role('admin')->firstOrFail();
         $user  = User::role('Department Head')->firstOrFail();
 
-        $facilities = Facility::pluck('id')->toArray();
+        $facilities = Facility::pluck('id', 'name');
 
         // ---- REQUESTS ----
         $request1 = Request::create([
@@ -61,7 +61,7 @@ class RequestSeeder extends Seeder
         // ---- REQUEST FACILITIES ----
         RequestFacility::create([
             'request_id'         => $request1->id,
-            'facility_id'        => $facilities[2],
+            'facility_id'        => $facilities['COED AVR'],
             'date_requested'     => Carbon::now()->addDays(10)->toDateString(),
             'time_start'         => '09:00:00',
             'time_end'           => '12:00:00',
@@ -70,7 +70,7 @@ class RequestSeeder extends Seeder
 
         RequestFacility::create([
             'request_id'         => $request2->id,
-            'facility_id'        => $facilities[3],
+            'facility_id'        => $facilities['CEIT Lecture Hall'],
             'date_requested'     => Carbon::now()->addDays(15)->toDateString(),
             'time_start'         => '10:00:00',
             'time_end'           => '16:00:00',
@@ -79,7 +79,7 @@ class RequestSeeder extends Seeder
 
         RequestFacility::create([
             'request_id'         => $request2->id,
-            'facility_id'        => $facilities[3],
+            'facility_id'        => $facilities['CEIT Lecture Hall'],
             'date_requested'     => Carbon::now()->addDays(16)->toDateString(),
             'time_start'         => '10:00:00',
             'time_end'           => '16:00:00',
@@ -88,7 +88,7 @@ class RequestSeeder extends Seeder
 
         RequestFacility::create([
             'request_id'         => $request3->id,
-            'facility_id'        => $facilities[0],
+            'facility_id'        => $facilities['Main Auditorium'],
             'date_requested'     => Carbon::now()->addDays(20)->toDateString(),
             'time_start'         => '08:00:00',
             'time_end'           => '17:00:00',
@@ -97,7 +97,7 @@ class RequestSeeder extends Seeder
 
         RequestFacility::create([
             'request_id'         => $request4->id,
-            'facility_id'        => $facilities[5],
+            'facility_id'        => $facilities['MPH 6D (CEIT Small room)'],
             'date_requested'     => Carbon::now()->addDays(7)->toDateString(),
             'time_start'         => '18:00:00',
             'time_end'           => '22:00:00',
@@ -105,24 +105,30 @@ class RequestSeeder extends Seeder
         ]);
 
         // ---- EQUIPMENT (via request_equipment pivot) ----
-        $coed_avr_equipment   = Equipment::where('facility_id', $facilities[2])->get();
-        $ceit_hall_equipment  = Equipment::where('facility_id', $facilities[3])->get();
-        $main_audit_equipment = Equipment::where('facility_id', $facilities[0])->get();
+        // Load equipment that belongs to each facility through the pivot
+        $coedAvrEquipment  = Facility::find($facilities['COED AVR'])
+            ->equipment()->take(2)->get();
+
+        $ceitHallEquipment = Facility::find($facilities['CEIT Lecture Hall'])
+            ->equipment()->take(3)->get();
+
+        $mainAuditEquipment = Facility::find($facilities['Main Auditorium'])
+            ->equipment()->take(2)->get();
 
         $request1->equipment()->attach(
-            $coed_avr_equipment->take(2)->mapWithKeys(fn($e) => [
+            $coedAvrEquipment->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 1]
             ])->all()
         );
 
         $request2->equipment()->attach(
-            $ceit_hall_equipment->take(3)->mapWithKeys(fn($e) => [
+            $ceitHallEquipment->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 2]
             ])->all()
         );
 
         $request3->equipment()->attach(
-            $main_audit_equipment->take(2)->mapWithKeys(fn($e) => [
+            $mainAuditEquipment->mapWithKeys(fn($e) => [
                 $e->id => ['quantity_needed' => 1]
             ])->all()
         );

@@ -45,7 +45,7 @@ class RequestController extends Controller
             'requesters' => User::select('id', 'name')->orderBy('name')->get(),
         ]);
     }
-    // Admin-only: Approve request
+
     public function approve(Request $request, $id)
     {
         $comment = $request->input("comment", "Your request has been approved");
@@ -63,54 +63,48 @@ class RequestController extends Controller
         return redirect()->back()->with('success', $message);
     }
 
-    // Admin-only: Reject request
     public function reject(Request $request, $id)
     {
         $comment = $request->input("comment", "Your request has been approved");
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::DENIED,  "comment" => $comment]);
+        $facilityRequest->update(['status' => RequestStatus::DENIED, "comment" => $comment]);
 
         $this->notification->notifyUser($facilityRequest);
 
         return redirect()->back()->with('success', 'Request rejected successfully');
     }
 
-    // Admin laang
     public function conditionally_approve(Request $request, $id)
     {
         $comment = $request->input("comment", "Your request has been conditionally approved");
         $facilityRequest = FacilityRequest::findOrFail($id);
-        $facilityRequest->update(['status' => RequestStatus::CONDITIONALLY_APPROVED,  "comment" => $comment]);
+        $facilityRequest->update(['status' => RequestStatus::CONDITIONALLY_APPROVED, "comment" => $comment]);
 
         $this->notification->notifyUser($facilityRequest);
 
         return redirect()->back()->with('success', 'Request conditionally approved successfully');
     }
 
-
     public function createPage()
     {
         return Inertia::render("requests/create", [
-            'facilities' => Facility::with('equipments')->get(),
+            // Each facility now carries its own equipment list via facility_equipment pivot
+            'facilities' => Facility::with([
+                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                    ->orderBy('equipments.name')
+            ])->select('id', 'name', 'capacity', 'building')->get(),
         ]);
     }
-
 
     public function detail(int $request_id)
     {
         $requestDetail = $this->service->getDetail($request_id);
         return Inertia::render("requests/detail", [
-            'request' => $requestDetail,
+            'request'           => $requestDetail,
             'labeledBreadcrumb' => $requestDetail['title'],
         ]);
     }
 
-    /**
-     * Store the form request to database
-     * 
-     * @param FacilityFormRequest
-     * @return RedirectResponse
-     */
     public function store(FacilityFormRequest $request)
     {
         $validated = $request->validated();
@@ -125,7 +119,6 @@ class RequestController extends Controller
             ->with('success', 'Request created successfully');
     }
 
-
     public function hold($id)
     {
         $facilityRequest = \App\Models\Request::findOrFail($id);
@@ -136,29 +129,28 @@ class RequestController extends Controller
         return back()->with('success', $facilityRequest->on_hold ? 'Request placed on hold.' : 'Request removed from hold.');
     }
 
-
     public function bulkAction(Request $request)
     {
         $validated = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['integer', 'exists:requests,id'],
-            'action' => ['required', 'string', 'in:approve,reject,conditionally_approve'],
+            'ids'     => ['required', 'array', 'min:1'],
+            'ids.*'   => ['integer', 'exists:requests,id'],
+            'action'  => ['required', 'string', 'in:approve,reject,conditionally_approve'],
             'comment' => ['nullable', 'string'],
         ]);
 
-        $ids = $validated['ids'];
-        $action = $validated['action'];
+        $ids     = $validated['ids'];
+        $action  = $validated['action'];
         $comment = $validated['comment'] ?? null;
 
         $statusMap = [
-            'approve' => RequestStatus::APPROVED,
-            'reject' => RequestStatus::DENIED,
+            'approve'               => RequestStatus::APPROVED,
+            'reject'                => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
         ];
 
         $defaultCommentMap = [
-            'approve' => 'Your request has been approved.',
-            'reject' => 'Your request has been denied.',
+            'approve'               => 'Your request has been approved.',
+            'reject'                => 'Your request has been denied.',
             'conditionally_approve' => 'Your request has been conditionally approved.',
         ];
 
@@ -166,7 +158,7 @@ class RequestController extends Controller
 
         foreach ($facilityRequests as $facilityRequest) {
             $facilityRequest->update([
-                'status' => $statusMap[$action],
+                'status'  => $statusMap[$action],
                 'comment' => $comment ?? $defaultCommentMap[$action],
             ]);
 
@@ -184,7 +176,11 @@ class RequestController extends Controller
         $detail = $this->service->getDetail($request->id);
 
         return Inertia::render("requests/create", [
-            'facilities' => Facility::with('equipments')->get(),
+            // Same as createPage — facilities carry their own equipment
+            'facilities' => Facility::with([
+                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                    ->orderBy('equipments.name')
+            ])->select('id', 'name', 'capacity', 'building')->get(),
             'existingRequest' => [
                 'id'               => $detail->id,
                 'title'            => $detail->title,
@@ -200,18 +196,25 @@ class RequestController extends Controller
                     'external_equipment' => $detail->requestFacilities
                         ->firstWhere('facility_id', $facility->id)
                         ?->external_equipment ?? '',
+                    // Map equipment that belongs to this facility via facility_equipment
                     'equipment' => $detail->equipment
-                        ->where('facility_id', $facility->id)
+                        ->filter(
+                            fn($eq) => $eq->facilities
+                                ->contains('id', $facility->id)
+                        )
                         ->map(fn($eq) => [
                             'equipment_id'    => $eq->id,
                             'equipment_name'  => $eq->name,
                             'quantity_needed' => $eq->pivot->quantity_needed,
-                            'max_quantity'    => $eq->quantity,
+                            // max_quantity is what this facility holds, not the global total
+                            'max_quantity'    => $eq->facilities
+                                ->firstWhere('id', $facility->id)
+                                ?->pivot->quantity ?? $eq->quantity,
                         ])->values(),
                     'conflicts' => [],
                 ]),
             ],
-            'labeledBreadcrumb' => "Edit Request"
+            'labeledBreadcrumb' => "Edit Request",
         ]);
     }
 

@@ -13,10 +13,9 @@ return new class extends Migration
     {
         Schema::create('equipments', function (Blueprint $table) {
             $table->id();
+            $table->string('name');
+            $table->integer('quantity'); // Total available globally, e.g. 1500
             $table->timestamps();
-            $table->string("name");
-            $table->integer("quantity")->default(1);
-            $table->foreignId("facility_id")->references("id")->on("facilities")->onDelete("cascade");
         });
     }
 

@@ -18,7 +18,7 @@ import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
 import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { Facility } from '@/types/facility';
-import { Equipment } from '@/types/equipment';
+import { FacilityEquipment } from '@/types/equipment';
 import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from "sonner";
 
@@ -200,8 +200,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setShowDraftBanner(false);
     };
 
-    const availableEquipment = selectedFacility
-        ? facilities.find(f => f.id === selectedFacility)?.equipments || []
+    // Equipment is scoped to the selected facility via facility_equipment pivot
+    const availableEquipment: FacilityEquipment[] = selectedFacility
+        ? facilities.find(f => f.id === selectedFacility)?.equipment ?? []
         : [];
 
     function formatTime(time: string): string {
@@ -235,7 +236,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     function handleFacilityChange(value: string) {
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
-        setSelectedEquipment([]);
+        setSelectedEquipment([]); // reset — different facility has different equipment
         if (currentDate) loadSchedule(facilityId, currentDate);
     }
 
@@ -254,12 +255,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setSelectedEquipment(availableEquipment.map((equipment) => ({
             equipment_id: equipment.id,
             equipment_name: equipment.name,
-            quantity_needed: equipment.quantity,
-            max_quantity: equipment.quantity,
+            quantity_needed: equipment.pivot.quantity, // facility's held quantity, not global
+            max_quantity: equipment.pivot.quantity,
         })));
     }
 
-    function handleEquipmentToggle(equipment: Equipment) {
+    function handleEquipmentToggle(equipment: FacilityEquipment) {
         const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
         if (exists) {
             setSelectedEquipment(selectedEquipment.filter(e => e.equipment_id !== equipment.id));
@@ -267,8 +268,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             setSelectedEquipment([...selectedEquipment, {
                 equipment_id: equipment.id,
                 equipment_name: equipment.name,
-                quantity_needed: equipment.quantity,
-                max_quantity: equipment.quantity,
+                quantity_needed: equipment.pivot.quantity, // default to max the facility holds
+                max_quantity: equipment.pivot.quantity,
             }]);
         }
     }
@@ -509,7 +510,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                         {equipment.name}
                                                                     </Label>
                                                                     <Label className="text-xs text-muted-foreground">
-                                                                        Available: {equipment.quantity}
+                                                                        Available in facility: {equipment.pivot.quantity}
                                                                     </Label>
                                                                 </div>
                                                             </div>
@@ -519,11 +520,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                     <Input
                                                                         type="number"
                                                                         min="1"
-                                                                        max={equipment.quantity}
+                                                                        max={equipment.pivot.quantity} // capped to what facility holds
                                                                         value={selected.quantity_needed}
                                                                         onChange={(e) => updateEquipmentQuantity(
                                                                             equipment.id,
-                                                                            Math.min(Number(e.target.value), equipment.quantity)
+                                                                            Math.min(Number(e.target.value), equipment.pivot.quantity)
                                                                         )}
                                                                         className="w-20 text-sm p-2"
                                                                     />

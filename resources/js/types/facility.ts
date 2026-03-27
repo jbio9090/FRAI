@@ -1,4 +1,4 @@
-import { Equipment } from "@/types/equipment";
+import { FacilityEquipment } from "@/types/equipment";
 
 export interface Facility {
     id: number;
@@ -6,5 +6,5 @@ export interface Facility {
     description?: string;
     capacity: number;
     building: string;
-    equipments?: Equipment[];
+    equipments?: FacilityEquipment[];
 }

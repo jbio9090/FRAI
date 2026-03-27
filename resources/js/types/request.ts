@@ -1,6 +1,3 @@
-import { GraduationCap, Landmark } from "lucide-react";
-
-
 export interface Request {
     id: number;
     title: string;
@@ -14,13 +11,24 @@ export interface Request {
     on_hold: boolean;
     held_by_request_id: number | null;
     user: {
+        id: number; // was missing — needed for canEdit check
         name: string;
         email: string;
     };
+    equipment: RequestEquipment[]; // no longer has facility_id
     request_facilities: RequestFacility[];
     facilities: Facility[];
     created_at: string;
     updated_at: string;
+}
+
+export interface RequestEquipment {
+    id: number;
+    name: string;
+    quantity: number; // global total
+    pivot: {
+        quantity_needed: number;
+    };
 }
 
 export const PRIORITY_LABELS: Record<0 | 1 | 2 | 3, string> = {
