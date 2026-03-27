@@ -17,7 +17,7 @@ class RequestSeeder extends Seeder
     public function run(): void
     {
         $admin = User::role('admin')->firstOrFail();
-        $user  = User::role('user')->firstOrFail();
+        $user  = User::role('Department Head')->firstOrFail();
 
         $facilities = Facility::pluck('id')->toArray();
 
