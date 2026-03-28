@@ -109,6 +109,12 @@ class RequestController extends Controller
     {
         $validated = $request->validated();
 
+        dd([
+            'has_files' => $request->hasFile('files'),
+            'files'     => $request->file('files'),
+            'validated_files' => $validated['files'] ?? 'none',
+        ]);
+
         $saved_request = $this->service->create($validated);
 
         $this->service->recommendAction($validated, $saved_request);

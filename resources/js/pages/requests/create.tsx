@@ -1,6 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Paperclip, FileText, ImageIcon, File } from "lucide-react";
 import { motion } from "motion/react"
 import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -86,6 +86,11 @@ interface DraftData {
     savedAt: number; // unix timestamp
 }
 
+interface AttachedFile {
+    file: File;
+    preview?: string; // for images
+}
+
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 
 function getDraftKey(existingId?: number) {
@@ -152,6 +157,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [openCollapsible, setCollapsibleState] = useState(false);
     const [borrowingEquipmentId, setBorrowingEquipmentId] = useState<number | null>(null);
     const [selectedBorrowedEquipment, setSelectedBorrowedEquipment] = useState<BorrowedEquipmentRequest[]>([]);
+    const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
     const allBorrowableEquipment = facilities
         .filter(f => f.id !== selectedFacility)
@@ -173,6 +179,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         facility_bookings: existingRequest?.facility_bookings ?? [] as FacilityBooking[],
         priority_level: existingRequest?.priority_level ?? 0,
         priority_reason: existingRequest?.priority_reason ?? '',
+        files: [] as File[],
     });
 
     useEffect(() => {
@@ -378,6 +385,38 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setExternalEquipment('');
     }
 
+    function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+        const selected = Array.from(e.target.files ?? []);
+        const newFiles: AttachedFile[] = selected.map(file => ({
+            file,
+            preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+        }));
+        setAttachedFiles(prev => [...prev, ...newFiles]);
+        // reset input so same file can be re-added if removed
+        e.target.value = '';
+    }
+
+    function removeFile(index: number) {
+        setAttachedFiles(prev => {
+            const updated = [...prev];
+            if (updated[index].preview) URL.revokeObjectURL(updated[index].preview!);
+            updated.splice(index, 1);
+            return updated;
+        });
+    }
+
+    function getFileIcon(file: File) {
+        if (file.type.startsWith('image/')) return <ImageIcon size={16} className="text-blue-500" />;
+        if (file.type === 'application/pdf') return <FileText size={16} className="text-red-500" />;
+        return <File size={16} className="text-muted-foreground" />;
+    }
+
+    function formatFileSize(bytes: number): string {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
     function removeBooking(index: number) {
         const updatedBookings = facilityBookings.filter((_, i) => i !== index);
         setFacilityBookings(updatedBookings);
@@ -386,12 +425,17 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     function submit(e: React.FormEvent) {
         e.preventDefault();
+
+        setData('files', attachedFiles.map(f => f.file));
+
         if (isEditing) {
             put(route('requests.update', existingRequest!.id), {
+                forceFormData: true,
                 onSuccess: () => clearDraft(existingRequest?.id),
             });
         } else {
             post(route('requests.store'), {
+                forceFormData: true,
                 onSuccess: () => clearDraft(),
             });
         }
@@ -432,10 +476,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         {errors.description && <li>{errors.description}</li>}
                                         {errors.priority_level && <li>{errors.priority_level}</li>}
                                         {errors.priority_reason && <li>{errors.priority_reason}</li>}
-                                        {/* facility_bookings can be a string or an object with nested keys */}
+                                        {errors.files && <li>{errors.files}</li>}
+
                                         {typeof errors.facility_bookings === 'string' && (
                                             <li>{errors.facility_bookings}</li>
                                         )}
+
                                         {typeof errors.facility_bookings === 'object' && errors.facility_bookings !== null &&
                                             Object.values(errors.facility_bookings).map((msg, i) => (
                                                 <li key={i}>{msg}</li>
@@ -491,6 +537,81 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                </div>
+
+                                {/* File Attachments */}
+                                <div className="space-y-3">
+                                    <Label>Attachments</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Attach supporting documents, images, or files (max 10MB each).
+                                    </p>
+
+                                    {/* Drop zone / file picker */}
+                                    <label
+                                        htmlFor="file-upload"
+                                        className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 hover:bg-muted/20 transition-colors"
+                                    >
+                                        <Paperclip size={20} className="text-muted-foreground mb-2" />
+                                        <span className="text-sm text-muted-foreground">
+                                            Click to attach files
+                                        </span>
+                                        <span className="text-xs text-muted-foreground mt-1">
+                                            JPG, PNG, PDF, DOC, XLSX, PPTX up to 10MB
+                                        </span>
+                                        <input
+                                            id="file-upload"
+                                            type="file"
+                                            multiple
+                                            accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.pptx"
+                                            onChange={handleFileSelect}
+                                            className="hidden"
+                                        />
+                                    </label>
+
+                                    {/* File list */}
+                                    {attachedFiles.length > 0 && (
+                                        <div className="space-y-2">
+                                            {attachedFiles.map((attached, index) => (
+                                                <div
+                                                    key={index}
+                                                    className="flex items-center gap-3 p-2 border rounded-md bg-muted/20"
+                                                >
+                                                    {/* Image preview or file icon */}
+                                                    {attached.preview ? (
+                                                        <img
+                                                            src={attached.preview}
+                                                            alt={attached.file.name}
+                                                            className="w-10 h-10 object-cover rounded-sm flex-shrink-0"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-10 h-10 flex items-center justify-center bg-muted rounded-sm flex-shrink-0">
+                                                            {getFileIcon(attached.file)}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium truncate">{attached.file.name}</p>
+                                                        <p className="text-xs text-muted-foreground">{formatFileSize(attached.file.size)}</p>
+                                                    </div>
+
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => removeFile(index)}
+                                                        className="text-muted-foreground hover:text-destructive flex-shrink-0"
+                                                    >
+                                                        <X size={14} />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* File errors */}
+                                    {errors.files && (
+                                        <p className="text-sm text-destructive">{errors.files}</p>
+                                    )}
                                 </div>
                             </TabsContent>
 

@@ -90,6 +90,11 @@ class Request extends Model
         return $this->hasMany(Request::class, 'held_by_request_id');
     }
 
+    public function files()
+    {
+        return $this->hasMany(RequestFile::class);
+    }
+
     /* SCOPES */
 
     public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)
@@ -98,11 +103,11 @@ class Request extends Model
             ->where('date', $date)
             ->where(function ($q) use ($start, $end) {
                 $q->whereBetween('start_time', [$start, $end])
-                  ->orWhereBetween('end_time', [$start, $end])
-                  ->orWhere(function ($inner) use ($start, $end) {
-                      $inner->where('start_time', '<=', $start)
+                    ->orWhereBetween('end_time', [$start, $end])
+                    ->orWhere(function ($inner) use ($start, $end) {
+                        $inner->where('start_time', '<=', $start)
                             ->where('end_time', '>=', $end);
-                  });
+                    });
             })
             ->whereIn('status', ['Pending', 'Approved']);
     }
@@ -127,7 +132,6 @@ class Request extends Model
                 $existing->status = 'On Hold';
                 $existing->overridden_by_request_id = $this->id;
                 $existing->save();
-
             } elseif ($this->priority_level < $existing->priority_level) {
 
                 $this->status = 'On Hold';

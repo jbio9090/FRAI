@@ -9,6 +9,7 @@ use App\Models\Facility;
 use App\Models\Equipment;
 use App\RequestStatus;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -108,6 +109,10 @@ class RequestService
                 'priority_reason' => $validated['priority_reason'] ?? null,
             ]);
 
+            if (!empty($validated['files'])) {
+                $this->handleFileUploads($facilityRequest, $validated['files']);
+            }
+
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
 
             if ($priorityLevel === PriorityLevel::Government) {
@@ -138,13 +143,18 @@ class RequestService
             $facilityRequest->equipment()->detach();
             $facilityRequest->requestFacilities()->delete();
 
+            $this->deleteFiles($facilityRequest);
+            if (!empty($validated['files'])) {
+                $this->handleFileUploads($facilityRequest, $validated['files']);
+            }
+
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
 
             return $facilityRequest;
         });
     }
 
-    
+
     private function syncBookingsAndEquipment(FacilityRequest $facilityRequest, array $bookings): void
     {
         $equipmentMap = []; // [key => [equipment_id, quantity_needed, is_borrowed, source_facility_id]]
@@ -355,5 +365,27 @@ class RequestService
         }
 
         return FacilityRequest::whereIn('id', $conflictingIds->unique())->get();
+    }
+
+    public function handleFileUploads(FacilityRequest $facilityRequest, array $files): void
+    {
+        foreach ($files as $file) {
+            $path = $file->store('request-files', 'public');
+
+            $facilityRequest->files()->create([
+                'path'          => $path,
+                'original_name' => $file->getClientOriginalName(),
+                'mime_type'     => $file->getMimeType(),
+                'size'          => $file->getSize(),
+            ]);
+        }
+    }
+
+    public function deleteFiles(FacilityRequest $facilityRequest): void
+    {
+        foreach ($facilityRequest->files as $file) {
+            Storage::disk('local')->delete($file->path);
+        }
+        $facilityRequest->files()->delete();
     }
 }
