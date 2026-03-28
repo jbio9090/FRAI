@@ -45,7 +45,29 @@ class Equipment extends Model
                     ->wherePivot('time_end', '>', $timeStart);
             })
             ->when($excludeRequestId, fn($q) => $q->where('requests.id', '!=', $excludeRequestId))
-            ->sum('request_equipment.quantity_needed');
+            ->sum('request_equipment.quantity_needed'); // counts both borrowed and normal
+    }
+
+    // Available from a specific facility (owned quantity)
+    public function quantityAvailableInFacility(int $facilityId, string $date, string $timeStart, string $timeEnd, ?int $excludeRequestId = null): int
+    {
+        $facilityHolds   = $this->quantityInFacility($facilityId);
+        $globalAvailable = $this->quantityAvailable($date, $timeStart, $timeEnd, $excludeRequestId);
+
+        return min($facilityHolds, max(0, $globalAvailable));
+    }
+
+    // Available to borrow FROM a specific source facility
+    // (respects global pool minus what's already committed)
+    public function quantityAvailableToBorrowFrom(int $sourceFacilityId, string $date, string $timeStart, string $timeEnd, ?int $excludeRequestId = null): int
+    {
+        return $this->quantityAvailableInFacility(
+            $sourceFacilityId,
+            $date,
+            $timeStart,
+            $timeEnd,
+            $excludeRequestId
+        );
     }
 
     public function quantityAvailable(string $date, string $timeStart, string $timeEnd, ?int $excludeRequestId = null): int
@@ -59,13 +81,5 @@ class Equipment extends Model
         return FacilityEquipment::where('facility_id', $facilityId)
             ->where('equipment_id', $this->id)
             ->value('quantity') ?? 0;
-    }
-
-    public function quantityAvailableInFacility(int $facilityId, string $date, string $timeStart, string $timeEnd, ?int $excludeRequestId = null): int
-    {
-        $facilityHolds  = $this->quantityInFacility($facilityId);
-        $globalAvailable = $this->quantityAvailable($date, $timeStart, $timeEnd, $excludeRequestId);
-
-        return min($facilityHolds, max(0, $globalAvailable));
     }
 }

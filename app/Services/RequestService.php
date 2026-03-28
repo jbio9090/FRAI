@@ -90,7 +90,7 @@ class RequestService
             "facilities",
             "requestFacilities",
             "equipment" => fn($q) => $q->withPivot('quantity_needed'),
-            "equipment.facilities", 
+            "equipment.facilities",
         ])->where("id", $request_id)->firstOrFail();
     }
 
@@ -144,16 +144,10 @@ class RequestService
         });
     }
 
-    /**
-     * Creates request_facility records and attaches equipment for each booking.
-     * Equipment across bookings is merged and summed — same equipment appearing
-     * in multiple bookings adds up to a single pivot row with combined quantity.
-     */
+    
     private function syncBookingsAndEquipment(FacilityRequest $facilityRequest, array $bookings): void
     {
-        // Accumulate equipment quantities across all bookings
-        // so we don't create duplicate pivot rows for the same equipment_id
-        $equipmentMap = []; // [equipment_id => quantity_needed]
+        $equipmentMap = []; // [key => [equipment_id, quantity_needed, is_borrowed, source_facility_id]]
 
         foreach ($bookings as $booking) {
             $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
@@ -166,16 +160,34 @@ class RequestService
                 'external_equipment' => $booking['external_equipment'] ?? null,
             ]);
 
+            // Regular equipment
             foreach ($booking['equipment'] ?? [] as $equipment) {
-                $id = $equipment['equipment_id'];
-                $equipmentMap[$id] = ($equipmentMap[$id] ?? 0) + $equipment['quantity_needed'];
+                $key = "own_{$equipment['equipment_id']}";
+                $equipmentMap[$key] = [
+                    'equipment_id'       => $equipment['equipment_id'],
+                    'quantity_needed'    => ($equipmentMap[$key]['quantity_needed'] ?? 0) + $equipment['quantity_needed'],
+                    'is_borrowed'        => false,
+                    'source_facility_id' => null,
+                ];
+            }
+
+            // Borrowed equipment — keyed by equipment + source facility so different sources stay separate
+            foreach ($booking['borrowed_equipment'] ?? [] as $equipment) {
+                $key = "borrow_{$equipment['equipment_id']}_{$equipment['source_facility_id']}";
+                $equipmentMap[$key] = [
+                    'equipment_id'       => $equipment['equipment_id'],
+                    'quantity_needed'    => ($equipmentMap[$key]['quantity_needed'] ?? 0) + $equipment['quantity_needed'],
+                    'is_borrowed'        => true,
+                    'source_facility_id' => $equipment['source_facility_id'],
+                ];
             }
         }
 
-        // Attach once per equipment_id with the summed quantity
-        foreach ($equipmentMap as $equipmentId => $totalQuantity) {
-            $facilityRequest->equipment()->attach($equipmentId, [
-                'quantity_needed' => $totalQuantity,
+        foreach ($equipmentMap as $item) {
+            $facilityRequest->equipment()->attach($item['equipment_id'], [
+                'quantity_needed'    => $item['quantity_needed'],
+                'is_borrowed'        => $item['is_borrowed'],
+                'source_facility_id' => $item['source_facility_id'],
             ]);
         }
     }

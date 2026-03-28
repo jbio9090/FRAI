@@ -132,5 +132,35 @@ class RequestSeeder extends Seeder
                 $e->id => ['quantity_needed' => 1]
             ])->all()
         );
+
+        $request1->equipment()->attach(
+            $coedAvrEquipment->mapWithKeys(fn($e) => [
+                $e->id => [
+                    'quantity_needed'    => 1,
+                    'is_borrowed'        => false,
+                    'source_facility_id' => null,
+                ]
+            ])->all()
+        );
+
+        $request2->equipment()->attach(
+            $ceitHallEquipment->mapWithKeys(fn($e) => [
+                $e->id => [
+                    'quantity_needed'    => 2,
+                    'is_borrowed'        => false,
+                    'source_facility_id' => null,
+                ]
+            ])->all()
+        );
+
+        $request3->equipment()->attach(
+            $mainAuditEquipment->mapWithKeys(fn($e) => [
+                $e->id => [
+                    'quantity_needed'    => 1,
+                    'is_borrowed'        => false,
+                    'source_facility_id' => null,
+                ]
+            ])->all()
+        );
     }
 }
