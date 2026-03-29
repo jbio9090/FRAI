@@ -1,4 +1,4 @@
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import { format } from "date-fns";
 import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Paperclip, FileText, ImageIcon, File } from "lucide-react";
 import { motion } from "motion/react"
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
+import { AttachedFileList } from '@/components/attached-file-list';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import DefaultLayout from '@/layout.tsx/default.';
@@ -158,6 +159,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [borrowingEquipmentId, setBorrowingEquipmentId] = useState<number | null>(null);
     const [selectedBorrowedEquipment, setSelectedBorrowedEquipment] = useState<BorrowedEquipmentRequest[]>([]);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const allBorrowableEquipment = facilities
         .filter(f => f.id !== selectedFacility)
@@ -425,19 +427,37 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     function submit(e: React.FormEvent) {
         e.preventDefault();
+        setIsSubmitting(true);
 
-        setData('files', attachedFiles.map(f => f.file));
+        const payload: Record<string, unknown> = {
+            title: data.title,
+            description: data.description,
+            facility_bookings: data.facility_bookings,
+            priority_level: data.priority_level,
+            priority_reason: data.priority_reason,
+            files: attachedFiles.map(f => f.file),
+        };
 
         if (isEditing) {
-            put(route('requests.update', existingRequest!.id), {
-                forceFormData: true,
-                onSuccess: () => clearDraft(existingRequest?.id),
-            });
+            router.post(
+                route('requests.update', existingRequest!.id),
+                { ...payload, _method: 'PUT' },
+                {
+                    forceFormData: true,
+                    onSuccess: () => { clearDraft(existingRequest?.id); setIsSubmitting(false); },
+                    onError: () => setIsSubmitting(false),
+                }
+            );
         } else {
-            post(route('requests.store'), {
-                forceFormData: true,
-                onSuccess: () => clearDraft(),
-            });
+            router.post(
+                route('requests.store'),
+                payload,
+                {
+                    forceFormData: true,
+                    onSuccess: () => { clearDraft(); setIsSubmitting(false); },
+                    onError: () => setIsSubmitting(false),
+                }
+            );
         }
     }
 
@@ -568,45 +588,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         />
                                     </label>
 
-                                    {/* File list */}
-                                    {attachedFiles.length > 0 && (
-                                        <div className="space-y-2">
-                                            {attachedFiles.map((attached, index) => (
-                                                <div
-                                                    key={index}
-                                                    className="flex items-center gap-3 p-2 border rounded-md bg-muted/20"
-                                                >
-                                                    {/* Image preview or file icon */}
-                                                    {attached.preview ? (
-                                                        <img
-                                                            src={attached.preview}
-                                                            alt={attached.file.name}
-                                                            className="w-10 h-10 object-cover rounded-sm flex-shrink-0"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-10 h-10 flex items-center justify-center bg-muted rounded-sm flex-shrink-0">
-                                                            {getFileIcon(attached.file)}
-                                                        </div>
-                                                    )}
-
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium truncate">{attached.file.name}</p>
-                                                        <p className="text-xs text-muted-foreground">{formatFileSize(attached.file.size)}</p>
-                                                    </div>
-
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => removeFile(index)}
-                                                        className="text-muted-foreground hover:text-destructive flex-shrink-0"
-                                                    >
-                                                        <X size={14} />
-                                                    </Button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                    <AttachedFileList
+                                        files={attachedFiles}
+                                        onRemove={removeFile}
+                                    />
 
                                     {/* File errors */}
                                     {errors.files && (
