@@ -31,8 +31,8 @@ class RequestService
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
         $query = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities'])->where("requests.status", $status)
-            : FacilityRequest::with(["user", 'facilities', 'requestFacilities'])
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files'])->where("requests.status", $status)
+            : FacilityRequest::with(["user", 'facilities', 'requestFacilities', 'files'])
             ->where('requests.user_id', $user->id)
             ->where("requests.status", $status);
 

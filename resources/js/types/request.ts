@@ -20,6 +20,11 @@ export interface Request {
     facilities: Facility[];
     created_at: string;
     updated_at: string;
+    files: [
+        {
+            path: string
+        }
+    ]
 }
 
 export interface RequestEquipment {
