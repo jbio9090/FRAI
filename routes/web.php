@@ -34,7 +34,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
         Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
-        Route::patch('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
+        Route::post('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
     });
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");

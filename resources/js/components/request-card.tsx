@@ -50,8 +50,15 @@ export default function RequestCard({
         setComment(e.target.value);
     }
 
-    const handleAction = (route_name: string) => {
-        router.post(route(route_name, request.id), { comment: (comment.length > 0) ? comment : null });
+    const handleAction = (action: string) => {
+        if (action === 'hold') {
+            router.post(route('requests.hold', request.id));
+            return;
+        }
+        router.post(route('requests.updateStatus', request.id), {
+            action,
+            comment: comment.length > 0 ? comment : null,
+        });
     }
 
     return (
@@ -135,10 +142,10 @@ export default function RequestCard({
                             </div>
 
                             <div className="flex justify-end gap-2 w-content ml-auto">
-                                <Button onClick={() => handleAction("requests.approve")} variant="default" className='hidden xs:block'>
+                                <Button onClick={() => handleAction("approve")} variant="default" className='hidden xs:block'>
                                     Approve
                                 </Button>
-                                <Button onClick={() => handleAction("requests.reject")} variant="outline" className='hidden xs:block hover:border-destructive hover:text-destructive hover:bg-destructive/4'>
+                                <Button onClick={() => handleAction("reject")} variant="outline" className='hidden xs:block hover:border-destructive hover:text-destructive hover:bg-destructive/4'>
                                     Deny
                                 </Button>
 
@@ -155,7 +162,7 @@ export default function RequestCard({
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
                                         <DropdownMenuGroup>
-                                            <DropdownMenuItem onClick={() => handleAction("requests.conditionally_approve")}>
+                                            <DropdownMenuItem onClick={() => handleAction("conditionally_approve")}>
                                                 <CheckLine size={16} />
                                                 <span>Conditionally Approve</span>
                                             </DropdownMenuItem>
@@ -163,15 +170,15 @@ export default function RequestCard({
                                                 {isCommentInputOpen ? <MessageCircleOff size={16} /> : <MessageCirclePlus size={16} />}
                                                 <span>{isCommentInputOpen ? "Cancel Comment" : "Add Comment"}</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleAction("requests.hold")}>
+                                            <DropdownMenuItem onClick={() => handleAction("hold")}>
                                                 <CirclePause size={16} />
                                                 <span>{request.on_hold ? "Unhold Request" : "Hold Request"}</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleAction("requests.approve")} className="flex items-center xs:hidden">
+                                            <DropdownMenuItem onClick={() => handleAction("approve")} className="flex items-center xs:hidden">
                                                 <Check size={16} />
                                                 <span>Approve</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleAction("requests.reject")} className="flex items-center xs:hidden">
+                                            <DropdownMenuItem onClick={() => handleAction("reject")} className="flex items-center xs:hidden">
                                                 <X size={16} />
                                                 <span>Deny</span>
                                             </DropdownMenuItem>
