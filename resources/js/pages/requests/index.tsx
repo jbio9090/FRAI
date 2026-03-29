@@ -55,6 +55,14 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const [facilityFilter, setFacilityFilter] = useState<string[]>([]);
     const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
     const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>("");
+    const [statusFilter, setStatusFilter] = useState<string>("");
+
+    const statusOptions = [
+        { label: "Pending", value: "pending" },
+        { label: "Approved", value: "approved" },
+        { label: "Denied", value: "denied" },
+        { label: "Conditionally Approved", value: "conditionally_approved" },
+    ];
 
     useEffect(() => {
         if (!isMounted.current) {
@@ -108,6 +116,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const getParams = (overrides = {}) => ({
         filter: filterMap[currentActiveFitler],
         search: searchQuery,
+        ...(statusFilter && { status: statusFilter }),
         ...(requesterFilter.length && { requester: requesterFilter.join(',') }),
         ...(facilityFilter.length && { facility: facilityFilter.join(',') }),
         ...(externalEquipmentFilter && { has_external_equipment: externalEquipmentFilter }),
@@ -123,6 +132,14 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const toggleRequester = (id: string) => {
         setRequesterFilter(prev =>
             prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
+        );
+    };
+
+    const handleStatusFilterClick = (status: string | undefined) => {
+        router.get(
+            route(route().current(), { status }),
+            getParams(),
+            { preserveState: true, preserveScroll: true }
         );
     };
 
@@ -269,7 +286,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         )}
                                     >
                                         <SlidersHorizontal size={16} />
-                                        {(requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0)) > 0 && (
+                                        {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + (statusFilter ? 1 : 0) > 0 && (
                                             <span className="text-xs font-semibold">
                                                 {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0)}
                                             </span>
@@ -313,6 +330,28 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                             onChange={() => toggleFacility(String(f.id))}
                                                         />
                                                         {f.name}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs text-muted-foreground font-semibold">Status</p>
+                                            <div className="flex flex-col gap-1">
+                                                {statusOptions.map((opt) => (
+                                                    <label
+                                                        key={opt.value}
+                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="accent-primary"
+                                                            checked={statusFilter === opt.value}
+                                                            onChange={() =>
+                                                                setStatusFilter(prev => prev === opt.value ? "" : opt.value)
+                                                            }
+                                                        />
+                                                        {opt.label}
                                                     </label>
                                                 ))}
                                             </div>
@@ -470,6 +509,29 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         </div>
                                     </div>
 
+                                    {/* Request Status */}
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-xs text-muted-foreground font-semibold">Status</p>
+                                        <div className="flex flex-col gap-1">
+                                            {statusOptions.map((opt) => (
+                                                <label
+                                                    key={opt.value}
+                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="accent-primary"
+                                                        checked={statusFilter === opt.value}
+                                                        onChange={() =>
+                                                            setStatusFilter(prev => prev === opt.value ? "" : opt.value)
+                                                        }
+                                                    />
+                                                    {opt.label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
                                     {/* Facilities */}
                                     <div className="flex flex-col gap-2">
                                         <div className="flex items-center justify-between">
@@ -580,6 +642,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 setRequesterFilter([]);
                                                 setFacilityFilter([]);
                                                 setExternalEquipmentFilter("");
+                                                setStatusFilter("");
                                                 router.get(
                                                     route(route().current(), { status: route().params.status }),
                                                     { filter: filterMap[currentActiveFitler], search: searchQuery },
