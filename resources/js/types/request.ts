@@ -50,6 +50,7 @@ export interface RequestFacility {
     time_start: string,
     date_requested: string;
     external_equipment: string;
+    expected_capacity: number;
 }
 
 export interface Facility {

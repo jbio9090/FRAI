@@ -193,6 +193,7 @@ class RequestController extends Controller
                     'date'               => $facility->pivot->date_requested,
                     'time_start'         => $facility->pivot->time_start,
                     'time_end'           => $facility->pivot->time_end,
+                    'expected_capacity'  => $detail->requestFacilities,
                     'external_equipment' => $detail->requestFacilities
                         ->firstWhere('facility_id', $facility->id)
                         ?->external_equipment ?? '',

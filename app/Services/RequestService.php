@@ -168,6 +168,7 @@ class RequestService
                 'time_start'         => $booking['time_start'],
                 'time_end'           => $booking['time_end'],
                 'external_equipment' => $booking['external_equipment'] ?? null,
+                'expected_capacity'  => $booking['expected_capacity'] ?? null, 
             ]);
 
             // Regular equipment

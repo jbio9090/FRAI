@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGro
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { usePermission } from '@/hooks/use-permission';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause } from 'lucide-react';
 import { PRIORITY_LABELS } from '@/types/request';
 import { motion } from 'motion/react';
 import { Request } from '@/types/request';
@@ -53,9 +53,6 @@ export default function RequestCard({
     const handleAction = (route_name: string) => {
         router.post(route(route_name, request.id), { comment: (comment.length > 0) ? comment : null });
     }
-
-    console.log(request);
-    
 
     return (
         <motion.div
@@ -217,6 +214,13 @@ function RequestDetails({ request }: { request: Request }) {
                                 <Link href={route("facility.detail", [rf.facility_id])} className='mr-auto ml-0 hover:underline'>
                                     <span className='font-semibold'>{facility?.name}</span>
                                 </Link>
+                                {facility?.capacity < rf.expected_capacity && (
+                                    <div className="flex self-start py-1 px-2 text-xs border-1 my-2 rounded-full bg-secondary">
+                                        <span>
+                                            Capacity Exceeded
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="flex items-center flex-wrap text-foreground/70 font-medium">
                                     <div className="flex gap-1 items-center">
                                         <Calendar size={12} />
@@ -226,6 +230,13 @@ function RequestDetails({ request }: { request: Request }) {
                                         <Clock size={12} />
                                         <span className='text-sm'>{formatTime(rf.time_start)} - {formatTime(rf.time_end)}</span>
                                     </div>
+                                    {rf.expected_capacity && (
+                                        <div className="flex gap-1 items-center">
+                                            <User size={12} />
+                                            <span className='text-sm'>{rf.expected_capacity} attendees</span>
+                                        </div>
+                                    )}
+
                                 </div>
                             </div>
                         );

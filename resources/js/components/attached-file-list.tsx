@@ -6,6 +6,7 @@ import { FileViewer } from "./file-viewer";
 interface LocalAttachedFile {
     file: File;
     preview?: string;
+    original_name: string;
 }
 
 interface ServerAttachedFile {
@@ -57,6 +58,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
         mime_type: f.file.type,
         size: f.file.size,
         isLocal: true as const,
+        original_name: f.original_name,
     }));
 
     const serverViewable = serverFiles.map(f => ({
@@ -65,6 +67,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
         mime_type: getMimeTypeFromPath(f.path),
         size: null as number | null,
         isLocal: false as const,
+        original_name: f.original_name,
     }));
 
     const allViewable = [...localViewable, ...serverViewable];

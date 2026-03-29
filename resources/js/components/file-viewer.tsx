@@ -8,12 +8,13 @@ interface ViewableFile {
     url: string;
     mime_type: string;
     size?: number;
+    original_name: string;
 }
 
 interface FileViewerProps {
     files: ViewableFile[];
     initialIndex?: number;
-    onClose: () => void;
+    onClose: () => void | null;
 }
 
 export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps) {
@@ -42,16 +43,16 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
         >
             {/* Header */}
             <div
-                className="flex items-center justify-between px-4 py-3 bg-background/90 backdrop-blur border-b flex-shrink-0"
+                className="flex items-center justify-between px-4 py-3 bg-foreground/90 text-background/90 dark:bg-background/90 dark:text-foreground/90 backdrop-blur flex-shrink-0"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-sm font-medium truncate">{current.name}</span>
                     {files.length > 1 && (
                         <span className="text-xs text-muted-foreground flex-shrink-0">
                             {currentIndex + 1} / {files.length}
                         </span>
                     )}
+                    <span className="text-sm font-medium truncate text-background">{current.original_name}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                     <a href={current.url} download={current.name} target="_blank" rel="noreferrer">
@@ -124,7 +125,7 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
             {/* Thumbnail strip — shown when multiple files */}
             {files.length > 1 && (
                 <div
-                    className="flex gap-2 px-4 py-3 bg-background/90 backdrop-blur border-t overflow-x-auto flex-shrink-0"
+                    className="flex gap-2 px-4 py-3 bg-foreground/90 text-background/90 dark:bg-background/90 dark:text-foreground/90 backdrop-blur border-t overflow-x-auto flex-shrink-0"
                     onClick={e => e.stopPropagation()}
                 >
                     {files.map((f, i) => (

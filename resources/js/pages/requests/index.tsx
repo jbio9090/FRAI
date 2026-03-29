@@ -714,7 +714,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                     />
                 )}
 
-                <div className="gap-4 mt-6 flex flex-col xl:grid grid-cols-[1fr_1fr]">
+                <div className="gap-4 mt-6 flex flex-col items-start xl:grid grid-cols-[1fr_1fr]">
                     {requests.data.length > 0 ? requests.data.map((request) => (
                         <RequestCard
                             request={request}

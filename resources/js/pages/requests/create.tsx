@@ -44,7 +44,9 @@ interface FacilityBooking {
     borrowed_equipment: BorrowedEquipmentRequest[];
     conflicts: BookingSchedule[];
     external_equipment: string;
+    expected_capacity: number | null;
 }
+
 interface EquipmentRequest {
     equipment_id: number;
     equipment_name: string;
@@ -160,6 +162,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [selectedBorrowedEquipment, setSelectedBorrowedEquipment] = useState<BorrowedEquipmentRequest[]>([]);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [expectedCapacity, setExpectedCapacity] = useState<number | ''>('');
 
     const allBorrowableEquipment = facilities
         .filter(f => f.id !== selectedFacility)
@@ -369,6 +372,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             borrowed_equipment: selectedBorrowedEquipment,
             conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
             external_equipment: externalEquipment,
+            expected_capacity: expectedCapacity === '' ? null : expectedCapacity
         };
 
         const updatedBookings = [...facilityBookings, newBooking];
@@ -385,6 +389,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setFacilitySchedule(null);
         setHasTimeConflict(false);
         setExternalEquipment('');
+        setExpectedCapacity('');
     }
 
     function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1015,6 +1020,19 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         </div>
                                     </div>
 
+                                    <div className="space-y-2">
+                                        <Label htmlFor="expected_capacity">Expected Attendees</Label>
+                                        <Input
+                                            id="expected_capacity"
+                                            type="number"
+                                            min="1"
+                                            value={expectedCapacity}
+                                            onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
+                                            placeholder="Input expected attendees for this facility at this time"
+                                            className="text-sm"
+                                        />
+                                    </div>
+
                                     {hasTimeConflict && (
                                         <Alert variant="destructive" className="border-destructive bg-destructive/4">
                                             <AlertCircleIcon />
@@ -1054,6 +1072,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                     <Clock className="text-foreground" size={16} />
                                                                     <span>{formatTime(booking.time_start)} - {formatTime(booking.time_end)}</span>
                                                                 </div>
+                                                                {booking.expected_capacity && (
+                                                                    <div className="flex items-center gap-1">
+                                                                        <User size={16} />
+                                                                        <span>{booking.expected_capacity} expected attendees</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
 
                                                             {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
