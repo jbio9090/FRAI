@@ -20,16 +20,18 @@ class RequestController extends Controller
         protected NotificationService $notification,
     ) {}
 
-    public function index(Request $request, string $status)
+    public function index(Request $request)
     {
-        $requestStatus = collect(RequestStatus::cases())
-            ->firstWhere(fn($case) => strtolower($case->name) === $status);
+        $status = $request->input('status'); // now dynamic
 
-        abort_if(!$requestStatus, 404);
+        $requestStatus = $status
+            ? collect(RequestStatus::cases())
+            ->firstWhere(fn($case) => strtolower($case->name) === strtolower($status))
+            : null;
 
         $requests = $this->service->get(
             $requestStatus,
-            $request->input("filter") ?? "this_week",
+            $request->input("filter", "this_week"),
             $request->input("search"),
             $request->input("sort"),
             $request->input("order", "asc"),
@@ -40,12 +42,54 @@ class RequestController extends Controller
 
         return Inertia::render('requests/index', [
             'requests'   => $requests,
-            'page_title' => $requestStatus->value,
+            'page_title' => $requestStatus?->value ?? 'All Requests',
+            'filters'    => [
+                'status' => $status,
+            ],
             'facilities' => Facility::select('id', 'name')->orderBy('name')->get(),
             'requesters' => User::select('id', 'name')->orderBy('name')->get(),
         ]);
     }
 
+    public function updateStatus(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'action'  => ['required', 'in:approve,reject,conditionally_approve'],
+            'comment' => ['nullable', 'string'],
+        ]);
+
+        $facilityRequest = FacilityRequest::findOrFail($id);
+
+        $statusMap = [
+            'approve'               => RequestStatus::APPROVED,
+            'reject'                => RequestStatus::DENIED,
+            'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
+        ];
+
+        $defaultCommentMap = [
+            'approve'               => 'Your request has been approved.',
+            'reject'                => 'Your request has been denied.',
+            'conditionally_approve' => 'Your request has been conditionally approved.',
+        ];
+
+        $action = $validated['action'];
+        $comment = $validated['comment'] ?? $defaultCommentMap[$action];
+
+        if ($action === 'approve') {
+            $facilityRequest->update(['comment' => $comment]);
+            $facilityRequest = $this->service->approve($id);
+        } else {
+            $facilityRequest->update([
+                'status'  => $statusMap[$action],
+                'comment' => $comment,
+            ]);
+        }
+
+        $this->notification->notifyUser($facilityRequest);
+
+        return back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' successful');
+    }
+    
     public function approve(Request $request, $id)
     {
         $comment = $request->input("comment", "Your request has been approved");

@@ -59,26 +59,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     navMenu: [
       {
         title: "Pending",
-        url: route("requests.index", ["pending"]),
-        status: 'pending',
+        url: route("requests.index", { status: "pending" }),
+        status: "pending",
         icon: FileClock
       },
       {
         title: "Approved",
-        url: route("requests.index", ["approved"]),
-        status: 'approved',
+        url: route("requests.index", { status: "approved" }),
+        status: "approved",
         icon: Check
       },
       {
         title: "Conditionally Approved",
-        url: route("requests.index", ["conditionally_approved"]),
-        status: 'conditionally_approved',
+        url: route("requests.index", { status: "conditionally_approved" }),
+        status: "conditionally_approved",
         icon: CheckLine
       },
       {
         title: "Denied",
-        url: route("requests.index", ["denied"]),
-        status: 'denied',
+        url: route("requests.index", { status: "denied" }),
+        status: "denied",
         icon: X
       },
     ]
@@ -92,6 +92,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const checkRoute = (routeName: string) => {
     return route().current(routeName);
   }
+
+  const currentStatus = route().params?.status || new URLSearchParams(window.location.search).get("status");
 
   return (
     <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100]">
@@ -143,7 +145,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           {data.navMenu.map((item) => (
             <SidebarMenuItem key={item.title} className="px-4">
-              <SidebarMenuButton asChild isActive={route().current('requests.index') && route().params.status === item.status}>
+              <SidebarMenuButton asChild
+                isActive={
+                  route().current("requests.index") &&
+                  currentStatus === item.status
+                }>
                 <Link href={item.url}>
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>

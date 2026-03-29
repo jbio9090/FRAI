@@ -31,10 +31,9 @@ class RequestService
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
         $query = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files'])->where("requests.status", $status)
-            : FacilityRequest::with(["user", 'facilities', 'requestFacilities', 'files'])
-            ->where('requests.user_id', $user->id)
-            ->where("requests.status", $status);
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files'])
+            : FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files'])
+            ->where('requests.user_id', $user->id);
 
         $query = match ($filter) {
             'today'      => $query->whereDate('requests.updated_at', Carbon::today()),
@@ -42,6 +41,10 @@ class RequestService
             'this_month' => $query->where('requests.updated_at', '>=', Carbon::now()->subMonth()),
             default      => $query,
         };
+
+        if ($status) {
+            $query->where("requests.status", $status);
+        }
 
         if ($search) {
             $query->where('title', 'like', "%{$search}%");
@@ -168,7 +171,7 @@ class RequestService
                 'time_start'         => $booking['time_start'],
                 'time_end'           => $booking['time_end'],
                 'external_equipment' => $booking['external_equipment'] ?? null,
-                'expected_capacity'  => $booking['expected_capacity'] ?? null, 
+                'expected_capacity'  => $booking['expected_capacity'] ?? null,
             ]);
 
             // Regular equipment

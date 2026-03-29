@@ -21,7 +21,7 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
-    Route::get('/requests/{status}', [RequestController::class, 'index'])->name('requests.index');
+    Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
     Route::get('/requests/{request}/edit', [RequestController::class, 'edit'])->name('requests.edit');
     Route::put('/requests/{request}', [RequestController::class, 'update'])->name('requests.update');
@@ -34,6 +34,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
         Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
+        Route::patch('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
     });
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
