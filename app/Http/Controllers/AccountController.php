@@ -16,7 +16,7 @@ class AccountController extends Controller
             'id'    => $user->id,
             'name'  => $user->name,
             'email' => $user->email,
-            'role'  => $user->roles->first()?->name ?? 'user',
+            'role'  => $user->roles->first()?->name,
         ]);
 
         return Inertia::render("accounts/index", [

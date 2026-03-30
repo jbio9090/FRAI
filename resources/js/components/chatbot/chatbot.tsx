@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import { Message } from './types';
 import { useMessages } from './hooks/useMessages';
 import { useParticipantCount } from './hooks/useParticipantCount';
@@ -10,20 +11,21 @@ import MessageList from './components/MessageList';
 import LoadingIndicator from './components/LoadingIndicator';
 import ChatInput from './components/ChatInput';
 import BookingFlow from './components/BookingFlow';
-import { getCsrfToken } from './utils/csrfToken';
 
 type ChatMode = 'idle' | 'booking' | 'ai';
 
 export default function Chatbot() {
+    const page = usePage();
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const [input, setInput] = React.useState('');
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
 
-    const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
-    const { isLoading, sendMessage, submitRequest } = useChatAPI();
+    const { messages, addMessage, getMessagesText } = useMessages();
     const { extractAndSet, getCurrentCount } = useParticipantCount();
-    const bookingFlow = useBookingFlow(facilities);
+    const csrfToken = (page.props as any).csrf_token || '';
+    const { isLoading, sendMessage, detectAndSubmitRequest } = useChatAPI(csrfToken);
+    const bookingFlow = useBookingFlow(facilities, csrfToken);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,98 +44,35 @@ export default function Chatbot() {
             .catch(() => {});
     }, []);
 
-    useEffect(() => {
-        fetch(route('chat.session.get'), {
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': getCsrfToken(),
-            },
-            credentials: 'same-origin',
-        })
-            .then(res => res.json())
-            .then(json => {
-                if (json.messages && json.messages.length > 0) {
-                    addMessages(json.messages); 
-                    setMode('ai');
-                }
-            })
-            .catch(() => {});
-    }, []);
-
     const processAndSend = async (userMessage: Message, contextNote?: string) => {
         addMessage(userMessage);
-
-        // Add an empty assistant message as a placeholder for incoming tokens
-        addMessage({ role: 'assistant', content: '' });
-
         try {
             extractAndSet(userMessage.content);
 
             const allMessages: Message[] = [
-                ...(contextNote ? [{ role: 'system' as const, content: contextNote }] : []),
+                ...(contextNote
+                    ? [{ role: 'system' as const, content: contextNote }]
+                    : []),
                 ...messages,
                 userMessage,
             ];
 
             const currentCount = getCurrentCount(getMessagesText()) ?? undefined;
+            const responseContent = await sendMessage(allMessages, currentCount, contextNote);
+            addMessage({ role: 'assistant', content: responseContent });
 
-            let accumulatedContent = '';
-
-            await sendMessage(
-                allMessages,
-                currentCount,
-                contextNote,
-
-                // onToken — append each token to the last message in state
-                (token) => {
-                    accumulatedContent += token;
-
-                    const jsonMatch = accumulatedContent.match(/\{[\s\S]*\}/);
-
-                    if (jsonMatch) {
-                        const jsonString = jsonMatch[0];
-
-                        onBookingPayload?.(jsonString);
-
-                        accumulatedContent = accumulatedContent.replace(jsonString, '');
-                    }
-
-                    setMessages(prev => {
-                        const updated = [...prev];
-                        const last = updated[updated.length - 1];
-
-                        const displayContent = accumulatedContent.trimEnd();
-
-                        updated[updated.length - 1] = {
-                            role: 'assistant',
-                            content: displayContent || last.content,
-                        };
-
-                        return updated;
+            try {
+                const result = await detectAndSubmitRequest(responseContent);
+                if (result) {
+                    addMessage({
+                        role: 'assistant',
+                        content: `Request #${result.request_id} has been created successfully.`,
                     });
-                },
-
-                // onBookingPayload — silently submit JSON without showing it to the user
-                async (json) => {
-                    try {
-                        const payload = JSON.parse(json);
-                        if (payload.title && payload.facility_bookings) {
-                            const result = await submitRequest(payload);
-                            if (result) {
-                                addMessage({
-                                    role: 'assistant',
-                                    content: `Request #${result.request_id} has been created successfully.`,
-                                });
-                            }
-                        }
-                    } catch (err) {
-                        const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
-                        addMessage({ role: 'assistant', content: `Failed to create request: ${errorMsg}` });
-                    }
-                },
-            );
-
+                }
+            } catch (err) {
+                const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
+                addMessage({ role: 'assistant', content: `Failed to create request: ${errorMsg}` });
+            }
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
             addMessage({ role: 'assistant', content: `Error: ${errorMsg}` });
@@ -146,16 +85,23 @@ export default function Chatbot() {
             return;
         }
         setMode('ai');
-        const isBookingActive = bookingFlow.step !== 'title' && bookingFlow.step !== 'done';
-        const context = isBookingActive ? bookingFlow.buildContextSummary() : option.context;
+        const isBookingActive =
+        bookingFlow.step !== 'title' &&
+        bookingFlow.step !== 'done';
+
+        const context = isBookingActive
+            ? bookingFlow.buildContextSummary()
+            : option.context;
+
         processAndSend({ role: 'user', content: option.message }, context);
-    };
+            };
 
     const handleSendMessage = async () => {
         const message = input.trim();
         if (!message || isLoading) return;
         setInput('');
 
+        // When typing during or after booking, carry booking context into the AI
         const isBookingActive = bookingFlow.step !== 'title' && bookingFlow.step !== 'done';
 
         if (isBookingActive) {

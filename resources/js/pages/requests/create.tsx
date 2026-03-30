@@ -415,7 +415,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="priority">Priority Level</Label>
+                            <Label htmlFor="priority">Event Type</Label>
                             <Select
                                 value={data.priority_level.toString()}
                                 onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}

@@ -1,75 +1,46 @@
 import { useState, useCallback } from 'react';
 import { Message, ChatRequest, CreateRequestPayload } from '../types';
-import { sendChatMessageStream } from '../services/chatService';
+import { sendChatMessage } from '../services/chatService';
 import { createRequest } from '../services/requestService';
 
-export function useChatAPI() {
+/**
+ * Custom hook for managing chat API interactions
+ */
+export function useChatAPI(csrfToken?: string) {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const sendMessage = useCallback(async (
-        messages: Message[],
-        participantCount?: number,
-        bookingContext?: string,
-        onToken?: (token: string) => void,
-        onBookingPayload?: (json: string) => void,
+    const sendMessage = useCallback(async (messages: Message[], participantCount?: number, bookingContext?: string
     ) => {
         setIsLoading(true);
         setError(null);
 
-        return new Promise<string>((resolve, reject) => {
+        try {
             const payload: ChatRequest = { messages };
-            if (participantCount) payload.participant_count = participantCount;
-            if (bookingContext)   payload.booking_context   = bookingContext;
+            if (participantCount) {
+                payload.participant_count = participantCount;
+            }
+            if (bookingContext) {
+                payload.booking_context = bookingContext;
+            }
 
-            let fullContent = '';
-
-            sendChatMessageStream(
-                payload,
-
-                (token) => {
-                    fullContent += token;
-                    onToken?.(token);
-                },
-
-                (json) => {
-                    try {
-                        const parsed = JSON.parse(json);
-
-                        submitRequest(parsed);
-
-                        onBookingPayload?.(json);
-
-                    } catch (e) {
-                        console.log('Invalid booking payload:', e);
-                    }
-                },
-
-                (message) => {
-                    fullContent = message;
-                    onToken?.(message);
-                },
-
-                () => {
-                    setIsLoading(false);
-                    resolve(fullContent);
-                },
-
-                (message) => {
-                    setIsLoading(false);
-                    setError(message);
-                    reject(new Error(message));
-                },
-            );
-        });
-    }, []); 
+            const data = await sendChatMessage(payload, csrfToken);
+            return data.message?.content || data.response || 'No response received';
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
+            setError(errorMsg);
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }, [csrfToken]);
 
     const submitRequest = useCallback(async (payload: CreateRequestPayload) => {
         setIsLoading(true);
         setError(null);
 
         try {
-            const result = await createRequest(payload); 
+            const result = await createRequest(payload, csrfToken);
             return result;
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -78,10 +49,10 @@ export function useChatAPI() {
         } finally {
             setIsLoading(false);
         }
-    }, []); 
+    }, [csrfToken]);
 
     const detectAndSubmitRequest = useCallback(async (content: string, userConfirmed: boolean = false) => {
-        if (!userConfirmed) return null;
+        if (!userConfirmed) return null;  // <-- don't auto-submit
 
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (!jsonMatch) return null;

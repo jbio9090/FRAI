@@ -4,24 +4,27 @@ namespace App;
 
 enum PriorityLevel: int
 {
-    case Normal     = 0;
-    case School     = 1;
-    case Government = 2;
+    case Academic = 0;
+    case Organization = 1;
+    case University = 2;
+    case Government = 3;
 
     public function label(): string
     {
         return match ($this) {
-            self::Normal     => 'Normal',
-            self::School     => 'School Event',
-            self::Government => 'Government / High Authority',
+            self::Academic => 'Academic',
+            self::Organization => 'Organization',
+            self::University => 'University',
+            self::Government => 'Government',
         };
     }
 
     public function icon(): ?string
     {
         return match ($this) {
-            self::Normal     => null,
-            self::School     => 'GraduationCap',
+            self::Academic => 'BookMarked',
+            self::Organization => 'UsersRound',
+            self::University => 'GraduationCap',
             self::Government => 'Landmark',
         };
     }
