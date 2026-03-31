@@ -23,10 +23,11 @@ export interface Request {
     updated_at: string;
 }
 
-export const PRIORITY_LABELS: Record<0 | 1 | 2, string> = {
-    0: 'Normal',
-    1: 'School Event',
-    2: 'Government / High Authority',
+export const PRIORITY_LABELS: Record<0 | 1 | 2 | 3, string> = {
+    0: 'Academic',
+    1: 'Organization',
+    2: 'University',
+    3: 'Government',
 };
 
 export interface RequestFacility {

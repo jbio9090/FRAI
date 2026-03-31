@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Request as FacilityRequest;
 use Inertia\Inertia;
 use App\Models\Facility;
+use App\Models\User;
 use App\RequestStatus;
 use App\Services\RequestService;
 use App\Services\NotificationService;
@@ -40,8 +41,8 @@ class RequestController extends Controller
         return Inertia::render('requests/index', [
             'requests'   => $requests,
             'page_title' => $requestStatus->value,
-            'facilities' => \App\Models\Facility::select('id', 'name')->orderBy('name')->get(),
-            'requesters' => \App\Models\User::select('id', 'name')->orderBy('name')->get(),
+            'facilities' => Facility::select('id', 'name')->orderBy('name')->get(),
+            'requesters' => User::select('id', 'name')->orderBy('name')->get(),
         ]);
     }
     // Admin-only: Approve request
