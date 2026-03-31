@@ -392,4 +392,50 @@ class RequestService
         }
         $facilityRequest->files()->delete();
     }
+
+    public function findConflictingLowerPriorityRequests(array $bookings, int $priorityLevel): Collection
+    {
+        $conflictingIds = collect();
+
+        foreach ($bookings as $booking) {
+            $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
+            $requestedStart = Carbon::parse($booking['time_start']);
+            $requestedEnd   = Carbon::parse($booking['time_end']);
+
+            $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
+                ->where('date_requested', $dateOnly)
+                ->whereHas('request', function ($query) use ($priorityLevel) {
+                    $query->whereIn('status', [RequestStatus::APPROVED, RequestStatus::PENDING])
+                        ->where('on_hold', false)
+                        ->whereRaw('priority_level < ?', [$priorityLevel]);
+                })
+                ->with('request')
+                ->get();
+
+            foreach ($existingBookings as $existing) {
+                $existingStart = Carbon::parse($existing->time_start);
+                $existingEnd   = Carbon::parse($existing->time_end);
+
+                if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
+                    $conflictingIds->push($existing->request_id);
+                }
+            }
+        }
+
+        if ($conflictingIds->isEmpty()) {
+            return collect();
+        }
+
+        return FacilityRequest::whereIn('id', $conflictingIds->unique())->get();
+    }
+
+    public function putOnHold(FacilityRequest $target, FacilityRequest $heldBy, string $reason): void
+    {
+        $target->update([
+            'on_hold'                   => true,
+            'held_by_request_id'        => $heldBy->id,
+            'recommended_action'        => RequestStatus::DENIED,
+            'recommended_action_reason' => $reason,
+        ]);
+    }
 }

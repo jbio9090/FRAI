@@ -74,7 +74,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
         Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
-
+    // chatbot
     Route::get("/chatbot", function () {
         return Inertia::render("chatbot/chatbot");
     })->name("chatbot");
@@ -87,6 +87,9 @@ Route::middleware("auth")->group(function () {
         Route::get("/facilities", [ChatController::class, "facilitiesList"])->name("chat.facilities");
         Route::get("/equipment", [ChatController::class, "equipmentList"])->name("chat.equipment");
         Route::post("/create-request", [ChatController::class, "createRequestApi"])->name("api.db.create.request")->middleware(["throttle:10,1"]);
+        Route::post('/stream',  [ChatController::class, 'stream'])->name('chat.stream')->middleware(['throttle:60,1']);
+        Route::get('/session',  [ChatController::class, 'getSession'])->name('chat.session.get');
+        Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
 });
 

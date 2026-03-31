@@ -130,7 +130,7 @@ function addHours(time: string, hours: number): string {
     return `${displayH}:${String(m).padStart(2, '0')} ${newModifier}`;
 }
 
-export function useBookingFlow(facilities: Facility[], csrfToken: string) {
+export function useBookingFlow(facilities: Facility[]) {
     const [step, setStep] = useState<BookingStep>('title');
     const [data, setData] = useState<BookingData>({ ...INITIAL_DATA });
     const [isSubmitting, setIsSubmitting] = useState(false);

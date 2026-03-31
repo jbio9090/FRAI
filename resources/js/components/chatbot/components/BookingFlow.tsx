@@ -48,31 +48,31 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
         return (
             <div className="flex gap-4 justify-start animate-in fade-in">
                 <BotAvatar />
-                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-white">
-                    <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">
+                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-muted border-border text-foreground">
+                    <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                         assistant
                     </div>
-                    <p className={`text-sm font-medium ${submitResult.success ? 'text-green-700' : 'text-red-600'}`}>
+                    <p className={`text-sm font-medium ${submitResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {submitResult.message}
                     </p>
                     <div className="mt-3 flex gap-4">
                         {submitResult.success && (
                             <button
                                 onClick={() => onComplete(submitResult.message)}
-                                className="text-xs text-gray-500 hover:text-gray-700 underline"
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
                             >
                                 Continue to chat
                             </button>
                         )}
                         <button
                             onClick={() => reset()}
-                            className="text-xs text-gray-500 hover:text-gray-700 underline"
+                            className="text-xs text-muted-foreground hover:text-foreground underline"
                         >
                             {submitResult.success ? 'Submit another request' : 'Try again'}
                         </button>
                         <button
                             onClick={onCancel}
-                            className="text-xs text-gray-500 hover:text-gray-700 underline"
+                            className="text-xs text-muted-foreground hover:text-foreground underline"
                         >
                             Cancel
                         </button>
@@ -95,16 +95,16 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
                     {msg.from === 'bot' && <BotAvatar />}
                     <div className={`flex gap-3 max-w-[70%] ${msg.from === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                         {msg.from === 'user' && (
-                            <div className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-gray-400">
+                            <div className="h-10 w-10 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0 bg-muted text-muted-foreground">
                                 U
                             </div>
                         )}
                         <div className={`px-5 py-3 rounded-lg border ${
                             msg.from === 'user'
-                                ? 'bg-gray-100 border-gray-300 text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-white'
-                                : 'bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-white'
+                                ? 'bg-primary/5 border-border text-foreground'
+                                : 'bg-muted border-border text-foreground'
                         }`}>
-                            <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">
+                            <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                                 {msg.from === 'user' ? 'user' : 'assistant'}
                             </div>
                             <div className="text-sm whitespace-pre-wrap">{msg.text}</div>
@@ -117,8 +117,8 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
             {config.botMessage && (
                 <div className="flex gap-4 justify-start animate-in fade-in">
                     <BotAvatar />
-                    <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900 dark:bg-gray-900 dark:border-gray-700 dark:text-white">
-                        <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">
+                    <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-muted border-border text-foreground">
+                        <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                             assistant
                         </div>
                         <div className="text-sm whitespace-pre-wrap">{config.botMessage}</div>
@@ -131,14 +131,12 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
                                         onClick={() => handleQuickReply(option)}
                                         disabled={isSubmitting}
                                         className="px-3 py-1.5 text-xs rounded-lg border
-                                        border-gray-300 bg-white text-gray-700
-                                        hover:bg-gray-50 hover:border-gray-400
-
-                                        dark:bg-gray-900 dark:border-white dark:text-white
-                                        dark:hover:bg-gray-800 dark:hover:border-white
-
-                                        font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
-                                                                        >
+                                            border-border bg-background text-foreground
+                                            hover:bg-muted hover:border-ring
+                                            dark:border-white/20 dark:bg-transparent dark:text-white
+                                            dark:hover:bg-white/10 dark:hover:border-white/60
+                                            font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
+                                    >
                                         {option}
                                     </button>
                                 ))}
@@ -158,12 +156,12 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
                                     onKeyDown={handleKeyDown}
                                     placeholder="Type your answer..."
                                     autoFocus
-                                    className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                                    className="flex-1 text-sm border border-input bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
                                 />
                                 <button
                                     onClick={handleTextSubmit}
                                     disabled={!textInput.trim()}
-                                    className="px-4 py-2 text-xs bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed font-semibold uppercase tracking-wide transition-colors"
+                                    className="px-4 py-2 text-xs bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed font-semibold uppercase tracking-wide transition-colors"
                                 >
                                     Next
                                 </button>
@@ -177,9 +175,9 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
                 <div className="flex gap-4 justify-start">
                     <BotAvatar />
                     <div className="flex items-center space-x-2">
-                        <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse"></div>
-                        <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse delay-200"></div>
-                        <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse delay-400"></div>
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground animate-pulse"></div>
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground animate-pulse delay-200"></div>
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground animate-pulse delay-400"></div>
                     </div>
                 </div>
             )}
@@ -189,7 +187,7 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
 
 function BotAvatar() {
     return (
-        <div className="bg-gray-300 h-10 w-10 rounded-lg flex items-center justify-center font-bold text-white flex-shrink-0 text-sm">
+        <div className="bg-muted h-10 w-10 rounded-lg flex items-center justify-center font-bold text-muted-foreground flex-shrink-0 text-sm">
             AI
         </div>
     );
