@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { router, Link } from '@inertiajs/react';
+import { usePermission } from '@/hooks/use-permission';
 import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
-import { usePermission } from '@/hooks/use-permission';
 import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause } from 'lucide-react';
 import { PRIORITY_LABELS } from '@/types/request';
 import { motion } from 'motion/react';
@@ -22,6 +22,17 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     2: <GraduationCap size={14} />,
     3: <Landmark size={14} />,
 };
+
+const wtc = (status: string) => {
+    let statusColor;
+    switch (status) {
+        case 'Approved': statusColor = "bg-primary/50 border-primary"; break;
+        case 'Pending': statusColor = ""; break;
+        case 'Denied': statusColor = "bg-destructive/50 border-destructive"; break;
+        case 'Conditionally Approved': statusColor = "bg-primary/30 border-primary/70"; break;
+    }
+    return statusColor;
+}
 
 
 export default function RequestCard({
@@ -82,6 +93,12 @@ export default function RequestCard({
                         <h3 className="font-bold">{request.title}</h3>
 
                         <div className="flex gap-2 flex-wrap">
+                            <div className={cn("flex gap-1 px-2 py-1 font-semibold text-xs border-border border-1 rounded-full ", wtc(request.status))}>
+                                <span>
+                                    {request.status}
+                                </span>
+                            </div>
+
                             {(request.priority_level > 0) && (
                                 <div className="flex gap-1 px-2 py-1 font-semibold text-xs border-border border-1 rounded-full">
                                     {PRIORITY_ICONS[request.priority_level as 0 | 1 | 2]}

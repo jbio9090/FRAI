@@ -18,7 +18,7 @@ use App\PriorityLevel;
 class RequestService
 {
     public function get(
-        RequestStatus $status,
+        ?RequestStatus $status,
         string $filter = 'this_week',
         ?string $search = null,
         ?string $sort = null,
