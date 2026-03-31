@@ -1,92 +1,146 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { usePage } from '@inertiajs/react';
+import { Message, CreateRequestPayload } from './types';
 import { useMessages } from './hooks/useMessages';
 import { useParticipantCount } from './hooks/useParticipantCount';
 import { useChatAPI } from './hooks/useChatAPI';
-import { Message } from './types';
 import { QuickReply } from './components/QuickReplies';
-import { Facility } from './hooks/useBookingFlow';
+import { Facility, useBookingFlow } from './hooks/useBookingFlow';
 import WelcomeMessage from './components/WelcomeMessage';
 import MessageList from './components/MessageList';
 import LoadingIndicator from './components/LoadingIndicator';
 import ChatInput from './components/ChatInput';
 import BookingFlow from './components/BookingFlow';
+import { getCsrfToken } from './utils/csrfToken';
 
 type ChatMode = 'idle' | 'booking' | 'ai';
 
 export default function Chatbot() {
-    const page = usePage();
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const [input, setInput] = React.useState('');
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
 
-    const { messages, addMessage, getMessagesText } = useMessages();
+    const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
+    const { isLoading, sendMessage, submitRequest } = useChatAPI();
     const { extractAndSet, getCurrentCount } = useParticipantCount();
-    const csrfToken = (page.props as any).csrf_token || '';
-    const { isLoading, sendMessage } = useChatAPI(csrfToken);
-    const [pendingPayload, setPendingPayload] = useState(null);
+    const bookingFlow = useBookingFlow(facilities);
+    const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
 
-    // Auto-scroll to bottom when messages change or mode changes
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, mode]);
 
-    // Fetch facilities for the booking flow
     useEffect(() => {
-        fetch('/chat/facilities', {
-            headers: { 'X-CSRF-TOKEN': csrfToken },
+        fetch(route('chat.facilities'), {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+        })
+            .then(res => res.json())
+            .then(json => { if (json.data) setFacilities(json.data); })
+            .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        fetch(route('chat.session.get'), {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': getCsrfToken(),
+            },
+            credentials: 'same-origin',
         })
             .then(res => res.json())
             .then(json => {
-                if (json.data) setFacilities(json.data);
+                if (json.messages && json.messages.length > 0) {
+                    addMessages(json.messages); 
+                    setMode('ai');
+                }
             })
-            .catch(() => { });
+            .catch(() => {});
     }, []);
 
     const processAndSend = async (userMessage: Message, contextNote?: string) => {
         addMessage(userMessage);
 
-        // Check if user is confirming a pending request
-        const isConfirming = pendingPayload && /\b(yes|proceed|confirm|ok)\b/i.test(userMessage.content);
-
-        if (isConfirming && pendingPayload) {
-            try {
-                const result = await submitRequest(pendingPayload);
-                setPendingPayload(null);
-                addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
-            } catch (err) {
-                const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
-                addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
-            }
-            return; // don't send to AI again
-        }
+        // Add an empty assistant message as a placeholder for incoming tokens
+        addMessage({ role: 'assistant', content: '' });
 
         try {
             extractAndSet(userMessage.content);
 
             const allMessages: Message[] = [
-                ...(contextNote ? [{ role: 'system' as const, content: `QUICK REPLY CONTEXT: ${contextNote}` }] : []),
+                ...(contextNote ? [{ role: 'system' as const, content: contextNote }] : []),
                 ...messages,
                 userMessage,
             ];
 
             const currentCount = getCurrentCount(getMessagesText()) ?? undefined;
-            const responseContent = await sendMessage(allMessages, currentCount);
-            addMessage({ role: 'assistant', content: responseContent });
 
-            // Detect JSON payload in AI response and stage it — don't submit yet
-            const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                try {
-                    const payload = JSON.parse(jsonMatch[0]);
-                    if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
-                        setPendingPayload(payload); // stage for confirmation
+            let accumulatedContent = '';
+            let capturedJson = '';
+
+            await sendMessage(
+                allMessages,
+                currentCount,
+                contextNote,
+
+                // onToken — append each token to the last message in state, but skip JSON
+                (token) => {
+                    accumulatedContent += token;
+
+                    // Check if we've captured a complete JSON object
+                    const jsonMatch = accumulatedContent.match(/\{[\s\S]*\}/);
+                    if (jsonMatch && !capturedJson) {
+                        capturedJson = jsonMatch[0];
+                        // Remove JSON from display content
+                        accumulatedContent = accumulatedContent.replace(capturedJson, '').trimEnd();
                     }
-                } catch (_) { 
-                    console.log("eyy");
-                }
-            }
+
+                    setMessages(prev => {
+                        const updated = [...prev];
+                        const last = updated[updated.length - 1];
+
+                        const displayContent = accumulatedContent.trimEnd();
+
+                        updated[updated.length - 1] = {
+                            role: 'assistant',
+                            content: displayContent || last.content,
+                        };
+
+                        return updated;
+                    });
+                },
+
+                // onBookingPayload — store payload for confirmation, don't auto-submit
+                async (json) => {
+                    try {
+                        console.log('Received booking payload (raw):', json);
+                        // Handle both string and already-parsed objects
+                        const payload = typeof json === 'string' 
+                            ? JSON.parse(json) as CreateRequestPayload 
+                            : json as CreateRequestPayload;
+                        console.log('Parsed booking payload:', payload);
+                        if (payload.title && payload.facility_bookings) {
+                            setPendingPayload(payload);
+                            console.log('Set pending payload, showing confirmation');
+                            // Show confirmation prompt with summary
+                            const summary = buildRequestSummary(payload);
+                            addMessage({
+                                role: 'assistant',
+                                content: summary,
+                            });
+                        } else {
+                            console.log('Payload missing required fields:', { title: payload.title, bookings: payload.facility_bookings });
+                        }
+                    } catch (err) {
+                        console.error('Invalid booking payload:', err);
+                        console.error('Raw JSON was:', json);
+                    }
+                },
+            );
 
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -94,21 +148,92 @@ export default function Chatbot() {
         }
     };
 
+    const buildRequestSummary = (payload: CreateRequestPayload): string => {
+        const bookings = payload.facility_bookings.map((b, i) => {
+            const facility = facilities.find(f => f.id === b.facility_id);
+            const facilityName = facility?.name || `Facility #${b.facility_id}`;
+            const equipment = b.equipment?.map(e => {
+                return `${e.quantity_needed}x equipment`;
+            }).join(', ') || 'None';
+            return `${i + 1}. ${facilityName} on ${b.date} from ${b.time_start} to ${b.time_end} (Equipment: ${equipment})`;
+        }).join('\n');
+
+        return `📋 **Booking Summary**\n\n` +
+            `**Title:** ${payload.title}\n` +
+            `**Description:** ${payload.description || 'N/A'}\n` +
+            `**Priority:** ${payload.priority_level === 2 ? 'High (Government/Authority)' : payload.priority_level === 1 ? 'School Event' : 'Normal'}\n\n` +
+            `**Bookings:**\n${bookings}\n\n` +
+            `Reply "confirm" to submit this request, or "cancel" to discard it.`;
+    };
+
+    const handleConfirmRequest = async () => {
+        if (!pendingPayload) return;
+        const payload = pendingPayload;
+        setPendingPayload(null);
+
+        addMessage({ role: 'user', content: 'Confirm' });
+
+        try {
+            const result = await submitRequest(payload);
+            if (result) {
+                addMessage({
+                    role: 'assistant',
+                    content: `✅ Request #${result.request_id} has been created successfully!`,
+                });
+            }
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
+            addMessage({ role: 'assistant', content: `❌ Failed to create request: ${errorMsg}` });
+        }
+    };
+
+    const handleCancelRequest = () => {
+        setPendingPayload(null);
+        addMessage({ role: 'user', content: 'Cancel' });
+        addMessage({
+            role: 'assistant',
+            content: 'Request cancelled. Is there anything else I can help you with?',
+        });
+    };
+
     const handleQuickReply = (option: QuickReply) => {
         if (option.id === 'book_facility') {
-            // Enter structured booking flow — no AI needed
             setMode('booking');
             return;
         }
-        // All other quick replies go to AI mode
         setMode('ai');
-        processAndSend({ role: 'user', content: option.message }, option.context);
+        const isBookingActive = bookingFlow.step !== 'title' && bookingFlow.step !== 'done';
+        const context = isBookingActive ? bookingFlow.buildContextSummary() : option.context;
+        processAndSend({ role: 'user', content: option.message }, context);
     };
 
     const handleSendMessage = async () => {
         const message = input.trim();
         if (!message || isLoading) return;
         setInput('');
+
+        // Check if user is responding to a confirmation prompt
+        if (pendingPayload) {
+            const lowerMessage = message.toLowerCase();
+            if (lowerMessage === 'confirm' || lowerMessage === 'yes' || lowerMessage === 'proceed' || lowerMessage === 'submit') {
+                await handleConfirmRequest();
+                return;
+            }
+            if (lowerMessage === 'cancel' || lowerMessage === 'no' || lowerMessage === 'discard') {
+                handleCancelRequest();
+                return;
+            }
+        }
+
+        const isBookingActive = bookingFlow.step !== 'title' && bookingFlow.step !== 'done';
+
+        if (isBookingActive) {
+            const context = bookingFlow.buildContextSummary();
+            setMode('ai');
+            await processAndSend({ role: 'user', content: message }, context);
+            return;
+        }
+
         if (mode === 'idle') setMode('ai');
         await processAndSend({ role: 'user', content: message });
     };
@@ -121,33 +246,35 @@ export default function Chatbot() {
     };
 
     const handleBookingComplete = (resultMessage: string) => {
-        setMode('ai');
         addMessage({ role: 'assistant', content: resultMessage });
+        setMode('ai');
     };
 
     return (
-        <div className="w-full h-full flex flex-col bg-white">
+        <div className="w-full h-full flex flex-col bg-background">
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
 
-                {/* Idle — show welcome + quick reply buttons */}
                 {mode === 'idle' && (
                     <WelcomeMessage onQuickReply={handleQuickReply} />
                 )}
 
-                {/* Booking flow — fully structured, no AI */}
                 {mode === 'booking' && (
                     <BookingFlow
-                        facilities={facilities}
-                        csrfToken={csrfToken}
+                        bookingFlow={bookingFlow}
                         onComplete={handleBookingComplete}
                         onCancel={() => setMode('idle')}
                     />
                 )}
 
-                {/* AI chat mode */}
                 {mode === 'ai' && (
                     <>
-                        <MessageList messages={messages} messagesEndRef={messagesEndRef} />
+                        <MessageList 
+                            messages={messages} 
+                            messagesEndRef={messagesEndRef} 
+                            showConfirmationButtons={!!pendingPayload}
+                            onConfirm={handleConfirmRequest}
+                            onCancel={handleCancelRequest}
+                        />
                         {isLoading && <LoadingIndicator />}
                     </>
                 )}
@@ -155,16 +282,18 @@ export default function Chatbot() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Input area — hidden during booking flow */}
-            {mode !== 'booking' && (
-                <ChatInput
-                    value={input}
-                    onChange={setInput}
-                    onKeyPress={handleKeyPress}
-                    onSend={handleSendMessage}
-                    disabled={isLoading}
-                />
-            )}
+            <ChatInput
+                value={input}
+                onChange={setInput}
+                onKeyPress={handleKeyPress}
+                onSend={handleSendMessage}
+                disabled={isLoading}
+                placeholder={
+                    mode === 'booking'
+                        ? 'Type here to ask a question or switch to AI chat...'
+                        : 'Type your message...'
+                }
+            />
         </div>
     );
 }

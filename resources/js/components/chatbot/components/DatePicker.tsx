@@ -21,7 +21,6 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
     const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
     const prevMonth = () => {
-        // Don't go before current month
         if (viewYear === today.getFullYear() && viewMonth === today.getMonth()) return;
         if (viewMonth === 0) {
             setViewMonth(11);
@@ -59,22 +58,22 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
     const atCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
 
     return (
-        <div className="mt-3 bg-white border border-gray-200 rounded-xl shadow-sm p-4 w-full max-w-xs mx-auto">
+        <div className="mt-3 bg-background border border-border rounded-xl shadow-sm p-4 w-full max-w-xs mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-3">
                 <button
                     onClick={prevMonth}
                     disabled={atCurrentMonth}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-gray-600"
+                    className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-muted-foreground"
                 >
                     ‹
                 </button>
-                <span className="text-sm font-semibold text-gray-700">
+                <span className="text-sm font-semibold text-foreground">
                     {MONTHS[viewMonth]} {viewYear}
                 </span>
                 <button
                     onClick={nextMonth}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+                    className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
                 >
                     ›
                 </button>
@@ -83,7 +82,7 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
             {/* Day labels */}
             <div className="grid grid-cols-7 mb-1">
                 {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-                    <div key={d} className="text-center text-xs text-gray-400 font-medium py-1">
+                    <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">
                         {d}
                     </div>
                 ))}
@@ -91,7 +90,6 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
 
             {/* Days grid */}
             <div className="grid grid-cols-7 gap-y-1">
-                {/* Empty cells for offset */}
                 {Array.from({ length: firstDay }).map((_, i) => (
                     <div key={`empty-${i}`} />
                 ))}
@@ -106,8 +104,14 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
                             disabled={past}
                             className={`
                                 text-xs rounded-lg py-1.5 transition-all font-medium
-                                ${past ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-100 cursor-pointer text-gray-700'}
-                                ${sel ? 'bg-gray-800 text-white hover:bg-gray-800' : ''}
+                                ${past
+                                    ? 'text-muted-foreground/30 cursor-not-allowed'
+                                    : 'hover:bg-muted cursor-pointer text-foreground'
+                                }
+                                ${sel
+                                    ? 'bg-primary text-primary-foreground hover:bg-primary'
+                                    : ''
+                                }
                             `}
                         >
                             {day}
