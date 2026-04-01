@@ -43,8 +43,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-// icons
 import {
     Plus,
     Search,
@@ -57,6 +55,7 @@ import {
     Hash,
     AlertCircle,
 } from "lucide-react";
+import wordToColor from "@/lib/wordToColor";
 
 interface FacilityPivot {
     equipment_id: number;
@@ -105,7 +104,7 @@ function EquipmentDialog({
         if (open) {
             setName(equipment?.name ?? "");
             setQuantity(equipment?.quantity ?? 1);
-            setErrors({}); // Clear errors when reopening
+            setErrors({});
         }
     }, [equipment, open]);
 
@@ -310,7 +309,6 @@ function AssignDialog({
                                         <Input
                                             type="number"
                                             min={1}
-                                            // Optional: max={equipment.quantity} 
                                             value={a!.quantity}
                                             onClick={(e) => e.stopPropagation()}
                                             onChange={(e) => setQty(f.id, Number(e.target.value))}
@@ -405,15 +403,10 @@ export default function EquipmentsPage({
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* ── Header ── */}
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold tracking-tight">Equipment</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                    Manage inventory and facility assignments
-                </p>
+            <div className="mb-4">
+                <h1 className="text-xl font-bold">Equipments</h1>
             </div>
 
-            {/* ── Stats ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
@@ -452,7 +445,6 @@ export default function EquipmentsPage({
                 </Card>
             </div>
 
-            {/* ── Toolbar ── */}
             <div className="flex items-center gap-3 mb-4">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -464,131 +456,135 @@ export default function EquipmentsPage({
                     />
                 </div>
                 <Button onClick={() => setAddOpen(true)}>
-                    <Plus className="w-4 h-4 mr-1.5" />
+                    <Plus size={16}/>
                     Add Equipment
                 </Button>
             </div>
 
-            {/* ── Table ── */}
-            <Card>
-                <Table>
-                    <TableHeader>
-                        <TableRow className="text-sm">
-                            <TableHead className="w-10 px-4"></TableHead>
-                            <TableHead>Name</TableHead>
-                            <TableHead className="w-52">Quantity</TableHead>
-                            <TableHead>Assigned To Facility</TableHead>
-                            <TableHead className="w-12" />
+            <Table>
+                <TableHeader>
+                    <TableRow className="text-sm">
+                        <TableHead className="w-10 px-4"></TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="w-52">Quantity</TableHead>
+                        <TableHead>Assigned To Facility</TableHead>
+                        <TableHead className="w-12" />
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {filtered.length === 0 ? (
+                        <TableRow>
+                            <TableCell colSpan={5} className="py-16 text-center text-muted-foreground">
+                                <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                                No equipment found
+                            </TableCell>
                         </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filtered.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={5} className="py-16 text-center text-muted-foreground">
-                                    <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                    No equipment found
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filtered.map((eq, i) => {
-                                const assigned = eq.facilities.reduce(
-                                    (s, f) => s + (f.pivot?.quantity ?? 0),
-                                    0
-                                );
-                                const pct =
-                                    eq.quantity > 0
-                                        ? Math.min(100, Math.round((assigned / eq.quantity) * 100))
-                                        : 0;
+                    ) : (
+                        filtered.map((eq, i) => {
+                            const assigned = eq.facilities.reduce(
+                                (s, f) => s + (f.pivot?.quantity ?? 0),
+                                0
+                            );
+                            const pct =
+                                eq.quantity > 0
+                                    ? Math.min(100, Math.round((assigned / eq.quantity) * 100))
+                                    : 0;
 
-                                return (
-                                    <TableRow key={eq.id}>
-                                        <TableCell className="text-muted-foreground text-sm px-4">
-                                            {i + 1}
-                                        </TableCell>
-                                        <TableCell className="font-medium">{eq.name}</TableCell>
-                                        <TableCell>
-                                            <div className="space-y-1">
-                                                <Progress value={pct} className="h-1.5" />
-                                                <p className="text-xs text-muted-foreground">
-                                                    {assigned} of {eq.quantity} assigned
-                                                </p>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-wrap gap-1">
-                                                {eq.facilities.length === 0 ? (
-                                                    <span className="text-xs text-muted-foreground italic">
-                                                        Unassigned
-                                                    </span>
-                                                ) : (
-                                                    eq.facilities.map((f) => (
-                                                        <Badge key={f.id} variant="secondary" className="text-xs">
-                                                            {f.name}
-                                                            {f.pivot?.quantity && f.pivot.quantity > 1
-                                                                ? ` ×${f.pivot.quantity}`
+                            return (
+                                <TableRow key={eq.id}>
+                                    <TableCell className="text-muted-foreground text-sm px-4">
+                                        {i + 1}
+                                    </TableCell>
+                                    <TableCell className="font-medium">{eq.name}</TableCell>
+                                    <TableCell>
+                                        <div className="space-y-1">
+                                            <Progress value={pct} className="h-1.5" />
+                                            <p className="text-xs text-muted-foreground">
+                                                {assigned} of {eq.quantity} assigned
+                                            </p>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-wrap gap-1">
+                                            {eq.facilities.length === 0 ? (
+                                                <span className="text-xs text-muted-foreground italic">
+                                                    Unassigned
+                                                </span>
+                                            ) : (
+                                                eq.facilities.map((f) => {
+                                                    const { text, background } = wordToColor(f.name);
+
+                                                    return (
+                                                        <Badge key={f.id} variant="secondary" className="text-xs flex items-center"
+                                                            style={{ background: background, color: text, border: text, borderWidth: 1, borderStyle: "solid" }}>
+                                                            {(f.pivot?.quantity && f.pivot.quantity > 1)
+                                                                ? (<span className="font-extrabold">{`${f.pivot.quantity} -`}</span>)
                                                                 : ""}
+                                                            <span>
+                                                                {f.name}
+                                                            </span>
                                                         </Badge>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-4 hidden md:block">
-                                                <Button onClick={() => setAssignTarget(eq)} variant={"ghost"}>
-                                                    <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                                </Button>
-                                                <Button onClick={() => setEditTarget(eq)} variant={"ghost"}>
-                                                    <Pencil className="w-4 h-4 mr-2" />
-                                                </Button>
+                                                    )
+                                                })
+                                            )}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-4 hidden md:block">
+                                            <Button onClick={() => setAssignTarget(eq)} variant={"ghost"}>
+                                                <ArrowLeftRight className="w-4 h-4 mr-2" />
+                                            </Button>
+                                            <Button onClick={() => setEditTarget(eq)} variant={"ghost"}>
+                                                <Pencil className="w-4 h-4 mr-2" />
+                                            </Button>
+                                            <Button
+                                                onClick={() => setDeleteTarget(eq)} variant={"ghost"}
+                                                className="text-destructive focus:text-destructive"
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-2" />
+                                            </Button>
+                                        </div>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
                                                 <Button
-                                                    onClick={() => setDeleteTarget(eq)} variant={"ghost"}
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 block md:hidden"
+                                                >
+                                                    <MoreHorizontal className="w-4 h-4" />
+                                                    <span className="sr-only">Open menu</span>
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => setAssignTarget(eq)}>
+                                                    <ArrowLeftRight className="w-4 h-4 mr-2" />
+                                                    Assign Facilities
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setEditTarget(eq)}>
+                                                    <Pencil className="w-4 h-4 mr-2" />
+                                                    Edit
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    onClick={() => setDeleteTarget(eq)}
                                                     className="text-destructive focus:text-destructive"
                                                 >
                                                     <Trash2 className="w-4 h-4 mr-2" />
-                                                </Button>
-                                            </div>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 block md:hidden"
-                                                    >
-                                                        <MoreHorizontal className="w-4 h-4" />
-                                                        <span className="sr-only">Open menu</span>
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => setAssignTarget(eq)}>
-                                                        <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                                        Assign Facilities
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => setEditTarget(eq)}>
-                                                        <Pencil className="w-4 h-4 mr-2" />
-                                                        Edit
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        onClick={() => setDeleteTarget(eq)}
-                                                        className="text-destructive focus:text-destructive"
-                                                    >
-                                                        <Trash2 className="w-4 h-4 mr-2" />
-                                                        Delete
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })
-                        )}
-                    </TableBody>
-                </Table>
-            </Card>
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })
+                    )}
+                </TableBody>
+            </Table>
 
-            <p className="text-xs text-muted-foreground mt-3 text-right">
+            {/* <p className="text-xs text-muted-foreground mt-3 text-right">
                 {filtered.length} of {equipments.length} items
-            </p>
+            </p> */}
         </DefaultLayout>
     );
 }
