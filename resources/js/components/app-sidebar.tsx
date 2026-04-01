@@ -12,6 +12,7 @@ import {
   Check,
   User,
   Sparkles,
+  Cable,
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -47,6 +48,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         title: "Facilities",
         url: "facilities",
         icon: Box,
+      },
+      {
+        title: "Equipments",
+        url: "equipments",
+        icon: Cable,
       },
       ...(hasPermission("manage users")
         ? [{

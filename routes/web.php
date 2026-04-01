@@ -9,6 +9,7 @@ use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\EquipmentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -55,6 +56,14 @@ Route::middleware("auth")->group(function () {
     Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");
+
+    Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');
+    Route::middleware('permission:manage facilities')->group(function () {
+        Route::post('/equipments', [EquipmentController::class, 'store'])->name('equipments.store');
+        Route::put('/equipments/{equipment}', [EquipmentController::class, 'update'])->name('equipments.update');
+        Route::delete('/equipments/{equipment}', [EquipmentController::class, 'destroy'])->name('equipments.destroy');
+        Route::post('/equipments/{equipment}/sync-facilities', [EquipmentController::class, 'syncFacilities'])->name('equipments.sync-facilities');
+    });
 
     Route::prefix("/push")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
