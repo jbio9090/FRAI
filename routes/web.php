@@ -62,7 +62,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/equipments', [EquipmentController::class, 'store'])->name('equipments.store');
         Route::put('/equipments/{equipment}', [EquipmentController::class, 'update'])->name('equipments.update');
         Route::delete('/equipments/{equipment}', [EquipmentController::class, 'destroy'])->name('equipments.destroy');
-        Route::post('/equipments/{equipment}/sync-facilities', [EquipmentController::class, 'syncFacilities'])->name('equipments.sync-facilities');
+        Route::post('/equipments/{equipment}/sync-facilities', [EquipmentController::class, 'syncFacilities']);
     });
 
     Route::prefix("/push")->group(function () {
