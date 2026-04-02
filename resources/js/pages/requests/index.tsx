@@ -221,8 +221,6 @@ export default function RequestsPage({ requests, page_title, facilities, request
             },
         });
     };
-
-    console.log(requests);
     
 
     return (

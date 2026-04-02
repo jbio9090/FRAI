@@ -6,15 +6,13 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\Facility;
-use App\Models\Equipment;
 use App\RequestStatus;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use App\PriorityLevel;
-use SpomkyLabs\Pki\ASN1\Component\Length;
+
 
 class RequestService
 {
