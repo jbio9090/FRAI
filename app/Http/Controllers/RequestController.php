@@ -22,7 +22,7 @@ class RequestController extends Controller
 
     public function index(Request $request)
     {
-        $status = $request->input('status');
+        $status = $request->input('status', RequestStatus::PENDING->value);
 
         $requestStatus = $status
             ? collect(RequestStatus::cases())

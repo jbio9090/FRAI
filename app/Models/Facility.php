@@ -20,7 +20,7 @@ class Facility extends Model
         return $this->belongsToMany(Equipment::class, 'facility_equipment')
             ->withPivot('quantity')
             ->withTimestamps()
-            ->using(FacilityEquipment::class); // use our model for the pivot
+            ->using(FacilityEquipment::class);
     }
 
     public function facilityEquipments()

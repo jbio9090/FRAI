@@ -68,11 +68,13 @@ export default function RequestDetail({ request }: DetailProps) {
                 </div>
 
                 <Tabs defaultValue="overview" className="mt-4">
-                    <TabsList>
+                    <TabsList variant={"line"}>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="facilities">
-                            Facilities
-                            <span className="ml-1.5 text-xs text-muted-foreground">
+                            <span>
+                                Facilities
+                            </span>
+                            <span className="font-bold">
                                 ({request.facilities.length})
                             </span>
                         </TabsTrigger>

@@ -22,9 +22,11 @@ class FacilityController extends Controller
 
     public function detail(int $facility_id)
     {
-        $facility = Facility::where("id", $facility_id)->firstOrFail();
+        $facility = Facility::where("id", $facility_id)
+            ->with("facilityEquipments.equipment")
+            ->firstOrFail();
 
-        $facilities = Facility::all();
+        $facilities = Facility::with("facilityEquipments")->get();
 
         $start = now()->startOfMonth()->format('Y-m-d');
         $end = now()->endOfMonth()->format('Y-m-d');
@@ -68,6 +70,12 @@ class FacilityController extends Controller
         ]);
 
         $facility->update($validated);
+
+        if (!empty($request->input("from"))) {
+            if ($request->input("from") == "facilities_page") {
+                return redirect()->route('facilities');
+            }
+        }
 
         return redirect()->route('facility.detail', $facility->id);
     }
