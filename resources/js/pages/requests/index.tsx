@@ -222,6 +222,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
         });
     };
 
+    console.log(requests);
+    
+
     return (
         <DefaultLayout>
             <div className="max-w-6xl mx-auto w-full">

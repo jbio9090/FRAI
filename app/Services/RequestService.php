@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use App\PriorityLevel;
+use SpomkyLabs\Pki\ASN1\Component\Length;
 
 class RequestService
 {
@@ -266,7 +267,10 @@ class RequestService
             $recommended_action_reason = "Time conflict with events";
         } elseif ($externalEquipment) {
             $recommended_action        = RequestStatus::CONDITIONALLY_APPROVED;
-            $recommended_action_reason = "Approved request along with the external equipment";
+            $recommended_action_reason = "Approve request along with the external equipment";
+        } else {
+            $word = count($validated['facility_bookings']) > 1 ? "facilities": "facility";
+            $recommended_action_reason = "No conflicting shedule found for all the requested $word";
         }
 
         $saved_request->update([

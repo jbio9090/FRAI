@@ -5,17 +5,17 @@ export interface Request {
     status: string;
     comment: string;
     recommended_action: string;
-    recommended_action_reason: string;
+    recommended_action_reason: string | null;
     priority_level: 0 | 1 | 2;
     priority_reason: string | null;
     on_hold: boolean;
     held_by_request_id: number | null;
     user: {
-        id: number; // was missing — needed for canEdit check
+        id: number; 
         name: string;
         email: string;
     };
-    equipment: RequestEquipment[]; // no longer has facility_id
+    equipment: RequestEquipment[]; 
     request_facilities: RequestFacility[];
     facilities: Facility[];
     created_at: string;
@@ -30,7 +30,7 @@ export interface Request {
 export interface RequestEquipment {
     id: number;
     name: string;
-    quantity: number; // global total
+    quantity: number;
     pivot: {
         quantity_needed: number;
     };
