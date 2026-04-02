@@ -26,9 +26,9 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
 const wtc = (status: string) => {
     let statusColor;
     switch (status) {
-        case 'Approved': statusColor = "bg-primary/50 border-primary"; break;
+        case 'Approved': statusColor = "bg-primary/30 border-primary text-primary"; break;
         case 'Pending': statusColor = ""; break;
-        case 'Denied': statusColor = "bg-destructive/50 border-destructive"; break;
+        case 'Denied': statusColor = "bg-destructive/30 border-destructive text-destructive"; break;
         case 'Conditionally Approved': statusColor = "bg-primary/30 border-primary/70"; break;
     }
     return statusColor;

@@ -7,20 +7,27 @@ interface LocalAttachedFile {
     file: File;
     preview?: string;
     original_name: string;
+    mime_type: string;
+    size: number;
+    url: string;
 }
 
 interface ServerAttachedFile {
     path: string;
     original_name: string;
+    mime_type: string;
+    size: number;
+    url: string;
 }
 
 interface AttachedFileListProps {
     files?: LocalAttachedFile[];
     serverFiles?: ServerAttachedFile[];
     onRemove?: (index: number) => void | null;
+    onRemoveServer?: (index: number) => void;  
 }
 
-export function AttachedFileList({ files = [], serverFiles = [], onRemove }: AttachedFileListProps) {
+export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRemoveServer }: AttachedFileListProps) {
     const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
     if (files.length === 0 && serverFiles.length === 0) return null;

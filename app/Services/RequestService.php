@@ -143,11 +143,16 @@ class RequestService
                 'priority_reason' => $validated['priority_reason'] ?? null,
             ]);
 
-            // Wipe old bookings and equipment, then re-attach fresh
             $facilityRequest->equipment()->detach();
             $facilityRequest->requestFacilities()->delete();
 
-            $this->deleteFiles($facilityRequest);
+            $keptIds = array_map('intval', $validated['existing_file_ids'] ?? []);
+            foreach ($facilityRequest->files as $file) {
+                if (!in_array($file->id, $keptIds)) {
+                    Storage::disk('public')->delete($file->path);
+                    $file->delete();
+                }
+            };
             if (!empty($validated['files'])) {
                 $this->handleFileUploads($facilityRequest, $validated['files']);
             }
@@ -269,7 +274,7 @@ class RequestService
             $recommended_action        = RequestStatus::CONDITIONALLY_APPROVED;
             $recommended_action_reason = "Approve request along with the external equipment";
         } else {
-            $word = count($validated['facility_bookings']) > 1 ? "facilities": "facility";
+            $word = count($validated['facility_bookings']) > 1 ? "facilities" : "facility";
             $recommended_action_reason = "No conflicting shedule found for all the requested $word";
         }
 
@@ -441,5 +446,80 @@ class RequestService
             'recommended_action'        => RequestStatus::DENIED,
             'recommended_action_reason' => $reason,
         ]);
+    }
+
+    public function getEditData(int $requestId): array
+    {
+        $detail = FacilityRequest::with([
+            'user',
+            'requestFacilities',
+            'requestFacilities.facility',
+            'equipment' => fn($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
+            'equipment.facilities',
+            'files',
+        ])->where('id', $requestId)->firstOrFail();
+
+        $sourceFacilities = $detail->equipment
+            ->flatMap(fn($eq) => $eq->facilities)
+            ->keyBy('id');
+
+        return [
+            'id'               => $detail->id,
+            'title'            => $detail->title,
+            'description'      => $detail->description,
+            'priority_level'   => $detail->priority_level,
+            'priority_reason'  => $detail->priority_reason,
+            'existing_files' => $detail->files->map(fn($f) => [
+                'id'            => $f->id,
+                'original_name' => $f->original_name,
+                'mime_type'     => $f->mime_type,
+                'size'          => $f->size,
+                'url'           => $f->url,
+                'path'          => $f->path,
+            ]),
+            'facility_bookings' => $detail->requestFacilities->map(
+                function ($rf) use ($detail, $sourceFacilities) {
+
+                    $ownEquipment = $detail->equipment
+                        ->filter(
+                            fn($eq) =>
+                            !$eq->pivot->is_borrowed &&
+                                $eq->facilities->contains('id', $rf->facility_id)
+                        )
+                        ->map(fn($eq) => [
+                            'equipment_id'    => $eq->id,
+                            'equipment_name'  => $eq->name,
+                            'quantity_needed' => $eq->pivot->quantity_needed,
+                            'max_quantity'    => $eq->facilities
+                                ->firstWhere('id', $rf->facility_id)
+                                ?->pivot->quantity ?? $eq->quantity,
+                        ])->values();
+
+                    $borrowedEquipment = $detail->equipment
+                        ->filter(fn($eq) => $eq->pivot->is_borrowed)
+                        ->map(fn($eq) => [
+                            'equipment_id'         => $eq->id,
+                            'equipment_name'       => $eq->name,
+                            'source_facility_id'   => $eq->pivot->source_facility_id,
+                            'source_facility_name' => $sourceFacilities->get($eq->pivot->source_facility_id)?->name ?? '',
+                            'quantity_needed'      => $eq->pivot->quantity_needed,
+                            'max_quantity'         => $eq->pivot->quantity_needed,
+                        ])->values();
+
+                    return [
+                        'facility_id'        => $rf->facility_id,
+                        'facility_name'      => $rf->facility->name ?? '',
+                        'date'               => $rf->date_requested,
+                        'time_start'         => $rf->time_start,
+                        'time_end'           => $rf->time_end,
+                        'expected_capacity'  => $rf->expected_capacity,
+                        'external_equipment' => $rf->external_equipment ?? '',
+                        'equipment'          => $ownEquipment,
+                        'borrowed_equipment' => $borrowedEquipment,
+                        'conflicts'          => [],
+                    ];
+                },
+            )->values(),
+        ];
     }
 }

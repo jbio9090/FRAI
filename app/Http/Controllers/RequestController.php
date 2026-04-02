@@ -89,7 +89,7 @@ class RequestController extends Controller
 
         return back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' successful');
     }
-    
+
     public function approve(Request $request, $id)
     {
         $comment = $request->input("comment", "Your request has been approved");
@@ -217,49 +217,12 @@ class RequestController extends Controller
         abort_if($request->user_id !== auth()->id(), 403);
         abort_if($request->status !== RequestStatus::PENDING, 403);
 
-        $detail = $this->service->getDetail($request->id);
-
-        return Inertia::render("requests/create", [
-            // Same as createPage — facilities carry their own equipment
+        return Inertia::render('requests/create', [
             'facilities' => Facility::with([
                 'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name')
             ])->select('id', 'name', 'capacity', 'building')->get(),
-            'existingRequest' => [
-                'id'               => $detail->id,
-                'title'            => $detail->title,
-                'description'      => $detail->description,
-                'priority_level'   => $detail->priority_level,
-                'priority_reason'  => $detail->priority_reason,
-                'facility_bookings' => $detail->facilities->map(fn($facility) => [
-                    'facility_id'        => $facility->id,
-                    'facility_name'      => $facility->name,
-                    'date'               => $facility->pivot->date_requested,
-                    'time_start'         => $facility->pivot->time_start,
-                    'time_end'           => $facility->pivot->time_end,
-                    'expected_capacity'  => $detail->requestFacilities,
-                    'external_equipment' => $detail->requestFacilities
-                        ->firstWhere('facility_id', $facility->id)
-                        ?->external_equipment ?? '',
-                    // Map equipment that belongs to this facility via facility_equipment
-                    'equipment' => $detail->equipment
-                        ->filter(
-                            fn($eq) => $eq->facilities
-                                ->contains('id', $facility->id)
-                        )
-                        ->map(fn($eq) => [
-                            'equipment_id'    => $eq->id,
-                            'equipment_name'  => $eq->name,
-                            'quantity_needed' => $eq->pivot->quantity_needed,
-                            // max_quantity is what this facility holds, not the global total
-                            'max_quantity'    => $eq->facilities
-                                ->firstWhere('id', $facility->id)
-                                ?->pivot->quantity ?? $eq->quantity,
-                        ])->values(),
-                    'conflicts' => [],
-                ]),
-            ],
-            'labeledBreadcrumb' => "Edit Request",
+            'existingRequest'   => $this->service->getEditData($request->id),
         ]);
     }
 

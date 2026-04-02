@@ -73,6 +73,16 @@ interface ExistingRequest {
     priority_level: 0 | 1 | 2;
     priority_reason: string;
     facility_bookings: FacilityBooking[];
+    existing_files: ExistingFile[];
+}
+
+interface ExistingFile {
+    id: number;
+    original_name: string;
+    mime_type: string;
+    size: number;
+    url: string;
+    path: string;
 }
 
 interface CreateRequestProps {
@@ -91,7 +101,7 @@ interface DraftData {
 
 interface AttachedFile {
     file: File;
-    preview?: string; // for images
+    preview?: string;
 }
 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
@@ -163,6 +173,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [expectedCapacity, setExpectedCapacity] = useState<number | ''>('');
+    const [existingFiles, setExistingFiles] = useState<ExistingFile[]>(
+        existingRequest?.existing_files ?? []
+    );
+    const [deletedFileIds, setDeletedFileIds] = useState<number[]>([]);
 
     const allBorrowableEquipment = facilities
         .filter(f => f.id !== selectedFacility)
@@ -412,16 +426,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         });
     }
 
-    function getFileIcon(file: File) {
-        if (file.type.startsWith('image/')) return <ImageIcon size={16} className="text-blue-500" />;
-        if (file.type === 'application/pdf') return <FileText size={16} className="text-red-500" />;
-        return <File size={16} className="text-muted-foreground" />;
-    }
 
-    function formatFileSize(bytes: number): string {
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    function removeExistingFile(index: number) {
+        setExistingFiles(prev => prev.filter((_, i) => i !== index));
     }
 
     function removeBooking(index: number) {
@@ -437,10 +444,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         const payload: Record<string, unknown> = {
             title: data.title,
             description: data.description,
-            facility_bookings: data.facility_bookings,
+            facility_bookings: JSON.stringify(data.facility_bookings), 
             priority_level: data.priority_level,
             priority_reason: data.priority_reason,
             files: attachedFiles.map(f => f.file),
+            existing_file_ids: existingFiles.map(f => f.id),
         };
 
         if (isEditing) {
@@ -450,7 +458,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                 {
                     forceFormData: true,
                     onSuccess: () => { clearDraft(existingRequest?.id); setIsSubmitting(false); },
-                    onError: () => setIsSubmitting(false),
+                    onError: (errors) => { console.log('validation errors:', errors); setIsSubmitting(false); },
                 }
             );
         } else {
@@ -595,7 +603,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
                                     <AttachedFileList
                                         files={attachedFiles}
+                                        serverFiles={existingFiles}
                                         onRemove={removeFile}
+                                        onRemoveServer={removeExistingFile}
                                     />
 
                                     {/* File errors */}
@@ -1182,7 +1192,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     );
 }
 
-// FacilityInfo unchanged
 interface FacilityInfoProps {
     selectedFacility: number | null;
     facilities: Facility[];

@@ -36,7 +36,24 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.expected_capacity' => 'nullable|integer|min:1',
             'files'   => 'nullable|array|max:10',
             'files.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
+            'existing_file_ids'   => ['nullable', 'array'],
+            'existing_file_ids.*' => ['integer'],
         ];
+    }
+    
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('facility_bookings') && is_string($this->facility_bookings)) {
+            $this->merge([
+                'facility_bookings' => json_decode($this->facility_bookings, true) ?? [],
+            ]);
+        }
+
+        if ($this->has('existing_file_ids') && is_string($this->existing_file_ids)) {
+            $this->merge([
+                'existing_file_ids' => json_decode($this->existing_file_ids, true) ?? [],
+            ]);
+        }
     }
 
     public function withValidator(Validator $validator): void
