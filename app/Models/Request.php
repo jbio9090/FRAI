@@ -31,12 +31,15 @@ class Request extends Model
         'on_hold',
         'priority_reason',
         'held_by_request_id',
+        "processed_by",
+        "processed_at",
     ];
 
     protected $casts = [
         'status'         => RequestStatus::class,
         'on_hold'        => 'boolean',
         'priority_level' => PriorityLevel::class,
+        'processed_at'   => 'datetime',
     ];
 
     /* =========================================

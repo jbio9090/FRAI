@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { usePage } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen } from "lucide-react";
 import DefaultLayout from "@/layout.tsx/default.";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { router } from "@inertiajs/react";
+import AvatarWithInitials from "@/components/avatar-with-initials";
 import {
     Table,
     TableBody,
@@ -28,13 +29,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog";
-
-interface User {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-}
+import { User } from "@/types";
 
 interface Props {
     users: User[];
@@ -46,6 +41,8 @@ interface UserForm {
     email: string;
     password: string;
     role: string;
+    profile: File | null;
+    preview?: string;
 }
 
 interface AccountForm {
@@ -59,23 +56,21 @@ interface PageProps {
     [key: string]: unknown;
 }
 
-const emptyForm: UserForm = { username: "", email: "", password: "", role: "" };
+const emptyForm: UserForm = { username: "", email: "", password: "", role: "", profile: null };
 
 export default function AccountsPage({ users, roles }: Props) {
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [addForm, setAddForm] = useState<UserForm>(emptyForm);
     const [editForm, setEditForm] = useState<UserForm>(emptyForm);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const { errors } = usePage<PageProps>().props;
-    console.log(users);
 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
         router.post(route("accounts.store"), {
+            ...addForm,
             name: addForm.username,
-            email: addForm.email,
-            password: addForm.password,
-            role: addForm.role,
         }, {
             onSuccess: () => {
                 setIsAddOpen(false);
@@ -86,17 +81,27 @@ export default function AccountsPage({ users, roles }: Props) {
 
     const openEdit = (user: User) => {
         setEditingUser(user);
-        setEditForm({ username: user.name, email: user.email, password: "", role: user.role });
+        setEditForm({
+            username: user.name,
+            email: user.email,
+            password: "",
+            role: user.role,
+            profile: null,
+            preview: undefined
+        });
     };
 
     const handleEdit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingUser) return;
-        router.put(route("accounts.update", editingUser.id), {
+
+        router.post(route("accounts.update", editingUser.id), {
+            _method: 'put',
             name: editForm.username,
             email: editForm.email,
             password: editForm.password || undefined,
             role: editForm.role,
+            profile: editForm.profile,
         }, {
             onSuccess: () => setEditingUser(null),
         });
@@ -116,21 +121,51 @@ export default function AccountsPage({ users, roles }: Props) {
         isEdit?: boolean;
     }) => (
         <>
+            <div className="flex flex-col items-center gap-4 mb-4">
+                <AvatarWithInitials
+                    username={form.username || "User"}
+                    avatarSrc={isEdit ? editingUser?.profile : undefined}
+                    previewSrc={form.preview}
+                    size="lg"
+                />
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                >
+                    Change Photo
+                </Button>
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                            onChange({
+                                ...form,
+                                profile: file,
+                                preview: URL.createObjectURL(file)
+                            });
+                        }
+                    }}
+                />
+            </div>
             <div className="flex flex-col gap-1.5">
                 <Label>
-                    <span>
-                        Username
-                    </span>
+                    <span>Username</span>
                 </Label>
                 <Input
                     type="text"
                     placeholder="Enter username"
                     value={form.username}
-                    className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
+                    className={errors.username ? "border-destructive focus-visible:ring-destructive" : ""}
                     onChange={(e) => onChange({ ...form, username: e.target.value })}
                 />
                 {errors.username && (
-                    <p className="text-sm text-destructive">{errors.name}</p>
+                    <p className="text-sm text-destructive">{errors.username}</p>
                 )}
             </div>
             <div className="flex flex-col gap-1.5">
@@ -139,11 +174,11 @@ export default function AccountsPage({ users, roles }: Props) {
                     type="email"
                     placeholder="Enter email"
                     value={form.email}
-                    className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
+                    className={errors.email ? "border-destructive focus-visible:ring-destructive" : ""}
                     onChange={(e) => onChange({ ...form, email: e.target.value })}
                 />
                 {errors.email && (
-                    <p className="text-sm text-destructive">{errors.name}</p>
+                    <p className="text-sm text-destructive">{errors.email}</p>
                 )}
             </div>
             <div className="flex flex-col gap-1.5">
@@ -152,19 +187,18 @@ export default function AccountsPage({ users, roles }: Props) {
                     type="password"
                     placeholder={isEdit ? "Leave blank to keep current" : "Enter password"}
                     value={form.password}
-                    className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
+                    className={errors.password ? "border-destructive focus-visible:ring-destructive" : ""}
                     onChange={(e) => onChange({ ...form, password: e.target.value })}
                 />
                 {errors.password && (
-                    <p className="text-sm text-destructive">{errors.name}</p>
+                    <p className="text-sm text-destructive">{errors.password}</p>
                 )}
             </div>
             <div className="flex flex-col gap-1.5">
                 <Label>Role</Label>
                 <Select
                     value={form.role}
-                    onValueChange={(v) =>
-                        onChange({ ...form, role: v })}
+                    onValueChange={(v) => onChange({ ...form, role: v })}
                 >
                     <SelectTrigger>
                         <SelectValue placeholder="Select role" />
@@ -248,6 +282,8 @@ export default function AccountsPage({ users, roles }: Props) {
                 <Table>
                     <TableHeader>
                         <TableRow>
+                            {/* --- New Profile Column Header --- */}
+                            <TableHead className="w-[50px]">Profile</TableHead>
                             <TableHead>Name</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead>Role</TableHead>
@@ -257,7 +293,14 @@ export default function AccountsPage({ users, roles }: Props) {
                     <TableBody>
                         {users.map((user) => (
                             <TableRow key={user.id}>
-                                <TableCell>{user.name}</TableCell>
+                                <TableCell>
+                                    <AvatarWithInitials
+                                        username={user.name}
+                                        avatarSrc={user.profile}
+                                        size="sm"
+                                    />
+                                </TableCell>
+                                <TableCell className="font-medium">{user.name}</TableCell>
                                 <TableCell>{user.email}</TableCell>
                                 <TableCell className="capitalize">{user.role}</TableCell>
                                 <TableCell className="flex gap-1">

@@ -21,9 +21,11 @@ return new class extends Migration
             $table->foreignId("user_id")->references("id")->on("users");
             $table->string("recommended_action")->default(RequestStatus::APPROVED);
             $table->string("recommended_action_reason", 512)->nullable();
+            $table->foreignId('processed_by')->nullable()->constrained('users');
+            $table->timestamp('processed_at')->nullable();
         });
     }
-    
+
 
     /**
      * Reverse the migrations.

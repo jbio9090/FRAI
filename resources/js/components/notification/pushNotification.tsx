@@ -140,7 +140,7 @@ export default function PushNotifications() {
                     size={"sm"}
                     variant={"outline"}
                 >
-                    <span className='text-xs'>
+                    <span className='text-sm'>
                         Enable Browser Notifications
                     </span>
                 </Button>
@@ -153,7 +153,7 @@ export default function PushNotifications() {
                     size={"sm"}
                     variant={"outline"}
                 >
-                    <span className='text-xs'>
+                    <span className='text-sm'>
                         {loading ? 'Subscribing...' : 'Subscribe to Notifications'}
                     </span>
                 </Button>
@@ -165,7 +165,7 @@ export default function PushNotifications() {
                     disabled={loading}
                     size={"sm"}
                 >
-                    <span className='text-xs'>
+                    <span className='text-sm'>
                         {loading ? 'Unsubscribing...' : 'Unsubscribe'}
                     </span>
                 </Button>

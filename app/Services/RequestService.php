@@ -305,6 +305,8 @@ class RequestService
                     'status'             => RequestStatus::APPROVED,
                     'on_hold'            => false,
                     'held_by_request_id' => null,
+                    'processed_by'       => Auth::id(),
+                    'processed_at'       => Carbon::now(),
                 ]);
 
                 return $request;
@@ -317,6 +319,8 @@ class RequestService
                     'status'             => RequestStatus::APPROVED,
                     'on_hold'            => false,
                     'held_by_request_id' => null,
+                    'processed_by'       => Auth::id(),
+                    'processed_at'       => Carbon::now(),
                 ]);
 
                 foreach ($conflictingRequests as $conflicting) {
@@ -326,6 +330,8 @@ class RequestService
                         'held_by_request_id'        => $request->id,
                         'recommended_action'        => RequestStatus::DENIED,
                         'recommended_action_reason' => 'Superseded by higher priority request: "' . $request->title . '"',
+                        'processed_by'              => null,
+                        'processed_at'              => null,
                     ]);
 
                     $conflicting->comments()->create([
@@ -342,6 +348,8 @@ class RequestService
                     'held_by_request_id'        => $winner->id,
                     'recommended_action'        => RequestStatus::DENIED,
                     'recommended_action_reason' => 'Time conflict with higher priority approved request: "' . $winner->title . '"',
+                    'processed_by'              => null,
+                    'processed_at'              => null,
                 ]);
 
                 $request->comments()->create([
@@ -455,6 +463,8 @@ class RequestService
             'held_by_request_id'        => $heldBy->id,
             'recommended_action'        => RequestStatus::DENIED,
             'recommended_action_reason' => $reason,
+            'processed_by'              => null,
+            'processed_at'              => null,
         ]);
     }
 
