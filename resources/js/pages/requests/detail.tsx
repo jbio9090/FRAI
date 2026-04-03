@@ -1,4 +1,4 @@
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, SendHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -13,9 +13,15 @@ import { Request } from '@/types/request';
 import { Link, usePage } from '@inertiajs/react';
 import { Separator } from '@/components/ui/separator';
 import moment from 'moment';
-import { Avatar, AvatarImage } from '@/components/ui/avatar';
+import AvatarWithInitials from '@/components/avatar-with-initials';
 import { Pen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+import { router } from '@inertiajs/react';
+import { Field, FieldDescription } from '@/components/ui/field';
+import { Textarea } from '@/components/ui/textarea';
+import Comment from '@/components/comment';
+
 
 interface DetailProps {
     children: React.ReactNode;
@@ -70,12 +76,18 @@ export default function RequestDetail({ request }: DetailProps) {
                 <Tabs defaultValue="overview" className="mt-4">
                     <TabsList variant={"line"}>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
-                        <TabsTrigger value="facilities">
-                            <span>
-                                Facilities
+
+                        <TabsTrigger value="facilities" className="flex items-center gap-2">
+                            <span>Facilities</span>
+                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                {request.facilities.length}
                             </span>
-                            <span className="font-bold">
-                                ({request.facilities.length})
+                        </TabsTrigger>
+
+                        <TabsTrigger value="comments" className="flex items-center gap-2">
+                            <span>Comments</span>
+                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                {request.comments.length}
                             </span>
                         </TabsTrigger>
                     </TabsList>
@@ -84,41 +96,22 @@ export default function RequestDetail({ request }: DetailProps) {
                     <TabsContent value="overview" className="flex flex-col gap-6 mt-6">
                         <div className="flex flex-col w-md max-w-full">
                             <p className='font-semibold mb-2 text-muted-foreground'>Description</p>
-                            <p>{request.description}</p>
+                            <p>{request.description ? request.description : "No Description Provided"}</p>
                         </div>
 
                         <div className="flex flex-wrap gap-12">
                             <div className="flex flex-col">
                                 <p className='font-semibold mb-2 text-muted-foreground'>Requested by</p>
-                                <p>{request.user.name}</p>
+                                <div className="flex gap-2 items-center">
+                                    <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.profile} size='sm'/>
+                                    <p>{request.user.name}</p>
+                                </div>
                             </div>
                             <div className="flex flex-col">
                                 <p className='font-semibold mb-2 text-muted-foreground'>Date Submitted</p>
                                 <p>{moment(request.created_at).format("MMMM D, YYYY")}</p>
                             </div>
                         </div>
-
-                        {request.comments?.length > 0 && (
-                            <div className="flex flex-col w-full max-w-2xl gap-3">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Comments</p>
-                                {request.comments.map((comment) => (
-                                    <div key={comment.id} className="flex gap-3 px-4 py-5 border border-border rounded-sm">
-                                        <Avatar size="sm">
-                                            <AvatarImage src='/profile/default.png' />
-                                        </Avatar>
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-semibold text-sm">{comment.user.name}</span>
-                                                <span className="text-xs text-muted-foreground">
-                                                    {moment(comment.created_at).format("MMMM D, YYYY h:mm A")}
-                                                </span>
-                                            </div>
-                                            <p>{comment.body}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </TabsContent>
 
                     {/* Facilities Tab */}
@@ -191,8 +184,61 @@ export default function RequestDetail({ request }: DetailProps) {
                             );
                         })}
                     </TabsContent>
+
+                    <TabsContent value="comments" className="flex flex-col gap-6 mt-6">
+                        <div className="flex flex-col w-full max-w-2xl gap-3 justify-center">
+                            {request.comments?.length > 0 ? (
+                                request.comments.map((comment) => (
+                                    <Comment
+                                        key={comment.id}
+                                        comment={comment}
+                                    />
+                                ))
+                            ) : (
+                                <p className="text-muted-foreground text-sm">No comments yet.</p>
+                            )}
+                        </div>
+
+                        <Separator className="max-w-2xl" />
+
+                        <CommentForm requestId={request.id} />
+                    </TabsContent>
                 </Tabs>
             </div>
         </DefaultLayout>
+    );
+}
+
+function CommentForm({ requestId }: { requestId: number }) {
+    const [body, setBody] = useState("");
+
+    const submit = () => {
+        router.post(route('requests.comment', requestId), { body }, {
+            onSuccess: () => setBody(""),
+            preserveScroll: true,
+        });
+    };
+
+    return (
+        <div className="flex flex-col gap-3 w-full max-w-2xl">
+            <p className="font-semibold text-muted-foreground">Add a comment</p>
+            <Textarea
+                rows={3}
+                className="w-full"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Write a comment..."
+            />
+            <Button
+                size="sm"
+                variant="secondary"
+                className="self-start"
+                disabled={body.trim().length === 0}
+                onClick={submit}
+            >
+                <SendHorizontal size={16} />
+                <span>Send</span>
+            </Button>
+        </div>
     );
 }

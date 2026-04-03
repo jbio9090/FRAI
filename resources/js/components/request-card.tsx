@@ -16,6 +16,7 @@ import { Textarea } from './ui/textarea';
 import moment from 'moment';
 import { AttachedFileList } from './attached-file-list';
 import AvatarWithInitials from './avatar-with-initials';
+import Comment from './comment';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -291,22 +292,10 @@ function RequestDetails({ request }: { request: Request }) {
             content: request.comments?.length > 0 ? (
                 <div className='flex flex-col gap-3 mt-4'>
                     {request.comments.map((comment) => (
-                        <div key={comment.id} className='flex gap-3 pl-4'>
-                            <AvatarWithInitials
-                                username={comment.user.name}
-                                avatarSrc={comment.user.profile}
-                                size='sm'
-                            />
-                            <div className='flex flex-col gap-1'>
-                                <div className='flex items-center gap-2'>
-                                    <span className='font-semibold text-sm'>{comment.user.name}</span>
-                                    <span className='text-xs text-muted-foreground'>
-                                        {moment(comment.created_at).fromNow()}
-                                    </span>
-                                </div>
-                                <p className='text-sm'>{comment.body}</p>
-                            </div>
-                        </div>
+                        <Comment
+                            comment={comment}
+                            key={comment.id}
+                        />
                     ))}
                 </div>
             ) : (
@@ -336,7 +325,7 @@ function RequestDetails({ request }: { request: Request }) {
                             {tab.icon}
                             <span>{tab.label}</span>
                             {tab.badge !== undefined && (
-                                <span className='font-bold text-xs bg-muted-foreground text-background rounded-full w-4 h-4'>{tab.badge}</span>
+                                <span className='flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium'>{tab.badge}</span>
                             )}
                         </TabsTrigger>
                     ))}
