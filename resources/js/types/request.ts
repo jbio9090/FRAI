@@ -14,6 +14,7 @@ export interface Request {
         id: number; 
         name: string;
         email: string;
+        profile: string;
     };
     equipment: RequestEquipment[]; 
     request_facilities: RequestFacility[];

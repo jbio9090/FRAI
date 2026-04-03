@@ -125,7 +125,7 @@ export default function PushNotifications() {
     }
 
     return (
-        <div className="flex gap-12 justify-between items-center">
+        <div className="flex gap-12 justify-between items-center text-sm">
             <span className='text-sm font-semibold'>Notifications</span>
 
             {error && (

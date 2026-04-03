@@ -65,6 +65,9 @@ Route::middleware("auth")->group(function () {
         Route::post('/equipments/{equipment}/sync-facilities', [EquipmentController::class, 'syncFacilities']);
     });
 
+    Route::post('/settings/profile-picture', [SettingsController::class, 'updateProfilePicture'])->name('settings.profile-picture');
+    Route::delete('/settings/profile-picture', [SettingsController::class, 'removeProfilePicture'])->name('settings.profile-picture.remove');
+
     Route::prefix("/push")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
         Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");

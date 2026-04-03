@@ -15,6 +15,7 @@ import { Field, FieldDescription } from './ui/field';
 import { Textarea } from './ui/textarea';
 import moment from 'moment';
 import { AttachedFileList } from './attached-file-list';
+import AvatarWithInitials from './avatar-with-initials';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -26,10 +27,10 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
 const wtc = (status: string) => {
     let statusColor;
     switch (status) {
-        case 'Approved': statusColor = "bg-primary/30 border-primary text-primary"; break;
+        case 'Approved': statusColor = "bg-primary/20 border-primary text-primary"; break;
         case 'Pending': statusColor = ""; break;
-        case 'Denied': statusColor = "bg-destructive/30 border-destructive text-destructive"; break;
-        case 'Conditionally Approved': statusColor = "bg-primary/30 border-primary/70"; break;
+        case 'Denied': statusColor = "bg-destructive/20 border-destructive text-destructive"; break;
+        case 'Conditionally Approved': statusColor = "bg-primary/20 border-primary/70"; break;
     }
     return statusColor;
 }
@@ -122,9 +123,11 @@ export default function RequestCard({
                         <p className="mt-2 text-foreground/70 text-sm">{request.description}</p>
 
                         <div className="text-sm mt-4 flex gap-2 items-center">
-                            <Avatar size='sm'>
-                                <AvatarImage src='/profile/default.png' />
-                            </Avatar>
+                            <AvatarWithInitials
+                                username={request.user.name}
+                                avatarSrc={request.user.profile}
+                                size='sm'
+                            />
                             <span className='text-sm'>{request.user.name}</span>
                             <p className="text-sm text-muted-foreground">
                                 Submitted {moment(request.updated_at).fromNow()}
