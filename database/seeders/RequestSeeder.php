@@ -8,7 +8,7 @@ use App\Models\User;
 use App\Models\Facility;
 use App\Models\Request;
 use App\Models\RequestFacility;
-use App\Models\Equipment;
+use App\Models\Comment;
 use App\RequestStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -27,7 +27,6 @@ class RequestSeeder extends Seeder
             'title'       => 'Student Organization General Assembly',
             'description' => 'General assembly meeting for all members',
             'status'      => RequestStatus::PENDING->value,
-            'comment'     => null,
         ]);
         DB::table('requests')->where('id', $request1->id)->update(['updated_at' => Carbon::now()->subDays(2)]);
 
@@ -36,8 +35,8 @@ class RequestSeeder extends Seeder
             'title'       => 'Department Seminar',
             'description' => 'Guest speaker seminar for CEIT students',
             'status'      => RequestStatus::APPROVED->value,
-            'comment'     => 'Approved request',
         ]);
+        Comment::create(['request_id' => $request2->id, 'user_id' => $admin->id, 'body' => 'Approved request']);
         DB::table('requests')->where('id', $request2->id)->update(['updated_at' => Carbon::now()->subDays(5)]);
 
         $request3 = Request::create([
@@ -45,8 +44,8 @@ class RequestSeeder extends Seeder
             'title'       => 'University-wide Orientation',
             'description' => 'Orientation event for incoming students',
             'status'      => RequestStatus::APPROVED->value,
-            'comment'     => 'Approved Request',
         ]);
+        Comment::create(['request_id' => $request3->id, 'user_id' => $admin->id, 'body' => 'Approved Request']);
         DB::table('requests')->where('id', $request3->id)->update(['updated_at' => Carbon::now()->subDays(8)]);
 
         $request4 = Request::create([
@@ -54,8 +53,8 @@ class RequestSeeder extends Seeder
             'title'       => 'End-of-Semester Party',
             'description' => 'Celebration event for graduating students',
             'status'      => RequestStatus::DENIED->value,
-            'comment'     => 'Day is unavailable due to upcoming storm',
         ]);
+        Comment::create(['request_id' => $request4->id, 'user_id' => $admin->id, 'body' => 'Day is unavailable due to upcoming storm']);
         DB::table('requests')->where('id', $request4->id)->update(['updated_at' => Carbon::now()->subDays(1)]);
 
         // ---- REQUEST FACILITIES ----

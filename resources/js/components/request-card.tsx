@@ -67,6 +67,18 @@ export default function RequestCard({
             router.post(route('requests.hold', request.id));
             return;
         }
+        if (action === 'comment') {
+            router.post(route('requests.updateStatus', request.id), {
+                action: 'comment',
+                comment: comment.trim(),
+            }, {
+                onSuccess: () => {
+                    setComment("");
+                    setCommentInputState(false);
+                },
+            });
+            return;
+        }
         router.post(route('requests.updateStatus', request.id), {
             action,
             comment: comment.length > 0 ? comment : null,
@@ -274,16 +286,31 @@ function RequestDetails({ request }: { request: Request }) {
         {
             value: "comment",
             icon: <MessageCircleWarning size={16} />,
-            label: "Comment",
-            content: request.comment ? (
-                <div className='flex gap-3 mt-4 pl-4'>
-                    <Avatar size="sm">
-                        <AvatarImage src='/profile/default.png' />
-                    </Avatar>
-                    <p className='text-sm'>{request.comment}</p>
+            label: "Comments",
+            badge: request.comments?.length || undefined,
+            content: request.comments?.length > 0 ? (
+                <div className='flex flex-col gap-3 mt-4'>
+                    {request.comments.map((comment) => (
+                        <div key={comment.id} className='flex gap-3 pl-4'>
+                            <AvatarWithInitials
+                                username={comment.user.name}
+                                avatarSrc={comment.user.profile}
+                                size='sm'
+                            />
+                            <div className='flex flex-col gap-1'>
+                                <div className='flex items-center gap-2'>
+                                    <span className='font-semibold text-sm'>{comment.user.name}</span>
+                                    <span className='text-xs text-muted-foreground'>
+                                        {moment(comment.created_at).fromNow()}
+                                    </span>
+                                </div>
+                                <p className='text-sm'>{comment.body}</p>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             ) : (
-                <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comment from admin</p>
+                <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comments yet</p>
             ),
         },
         ...(isPending ? [{

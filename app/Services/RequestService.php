@@ -30,8 +30,8 @@ class RequestService
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
         $query = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files'])
-            : FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files'])
+            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files', 'comments.user'])
+            : FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files', 'comments.user'])
             ->where('requests.user_id', $user->id);
 
         $query = match ($filter) {
@@ -92,6 +92,8 @@ class RequestService
             "user",
             "facilities",
             "requestFacilities",
+            "comments",
+            "comments.user",
             "equipment" => fn($q) => $q->withPivot('quantity_needed'),
             "equipment.facilities",
         ])->where("id", $request_id)->firstOrFail();
@@ -325,6 +327,11 @@ class RequestService
                         'recommended_action'        => RequestStatus::DENIED,
                         'recommended_action_reason' => 'Superseded by higher priority request: "' . $request->title . '"',
                     ]);
+
+                    $conflicting->comments()->create([
+                        'user_id' => Auth::id(),
+                        'body'    => 'Placed on hold — superseded by higher priority request: "' . $request->title . '"',
+                    ]);
                 }
             } else {
                 $winner = $conflictingRequests->sortByDesc('priority_level')->first();
@@ -335,6 +342,11 @@ class RequestService
                     'held_by_request_id'        => $winner->id,
                     'recommended_action'        => RequestStatus::DENIED,
                     'recommended_action_reason' => 'Time conflict with higher priority approved request: "' . $winner->title . '"',
+                ]);
+
+                $request->comments()->create([
+                    'user_id' => Auth::id(),
+                    'body'    => 'Placed on hold — time conflict with higher priority approved request: "' . $winner->title . '"',
                 ]);
             }
 

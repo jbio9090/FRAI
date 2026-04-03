@@ -19,7 +19,6 @@ return new class extends Migration
             $table->string("title", 256)->nullable();
             $table->string("description", 512)->nullable();
             $table->foreignId("user_id")->references("id")->on("users");
-            $table->string("comment", 512)->nullable();
             $table->string("recommended_action")->default(RequestStatus::APPROVED);
             $table->string("recommended_action_reason", 512)->nullable();
         });

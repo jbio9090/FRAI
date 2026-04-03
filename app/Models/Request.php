@@ -24,7 +24,6 @@ class Request extends Model
         'priority_level',
         'recommended_action',
         'recommended_action_reason',
-        'comment',
         'status',
         'overridden_by_request_id',
         'title',
@@ -52,6 +51,11 @@ class Request extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function comments()
+    {
+        return $this->hasMany(Comment::class);
     }
 
     public function requestFacilities()

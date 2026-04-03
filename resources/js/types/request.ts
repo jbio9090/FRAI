@@ -3,20 +3,15 @@ export interface Request {
     title: string;
     description: string;
     status: string;
-    comment: string;
+    comments: Comment[];
     recommended_action: string;
     recommended_action_reason: string | null;
     priority_level: 0 | 1 | 2;
     priority_reason: string | null;
     on_hold: boolean;
     held_by_request_id: number | null;
-    user: {
-        id: number; 
-        name: string;
-        email: string;
-        profile: string;
-    };
-    equipment: RequestEquipment[]; 
+    user: User;
+    equipment: RequestEquipment[];
     request_facilities: RequestFacility[];
     facilities: Facility[];
     created_at: string;
@@ -26,6 +21,21 @@ export interface Request {
             path: string
         }
     ]
+}
+
+export interface Comment {
+    id: number;
+    user: User;
+    body: string;
+    request_id: number;
+    created_at: string;
+}
+
+export interface User {
+    id: number;
+    name: string;
+    email: string;
+    profile: string;
 }
 
 export interface RequestEquipment {

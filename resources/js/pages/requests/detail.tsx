@@ -98,15 +98,25 @@ export default function RequestDetail({ request }: DetailProps) {
                             </div>
                         </div>
 
-                        {request.comment && (
-                            <div className="flex flex-col w-full max-w-2xl">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Admin Comment</p>
-                                <div className="flex gap-3 px-4 py-5 border border-border border-1 rounded-sm">
-                                    <Avatar size="sm">
-                                        <AvatarImage src='/profile/default.png' />
-                                    </Avatar>
-                                    <p>{request.comment}</p>
-                                </div>
+                        {request.comments?.length > 0 && (
+                            <div className="flex flex-col w-full max-w-2xl gap-3">
+                                <p className='font-semibold mb-2 text-muted-foreground'>Comments</p>
+                                {request.comments.map((comment) => (
+                                    <div key={comment.id} className="flex gap-3 px-4 py-5 border border-border rounded-sm">
+                                        <Avatar size="sm">
+                                            <AvatarImage src='/profile/default.png' />
+                                        </Avatar>
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold text-sm">{comment.user.name}</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {moment(comment.created_at).format("MMMM D, YYYY h:mm A")}
+                                                </span>
+                                            </div>
+                                            <p>{comment.body}</p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </TabsContent>

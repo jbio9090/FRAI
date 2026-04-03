@@ -27,6 +27,7 @@ Route::middleware("auth")->group(function () {
     Route::get('/requests/{request}/edit', [RequestController::class, 'edit'])->name('requests.edit');
     Route::put('/requests/{request}', [RequestController::class, 'update'])->name('requests.update');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
+    Route::post('requests/{id}/comment', [RequestController::class, 'addComment'])->name('requests.comment');
 
     // Admin only routes
     Route::middleware(['permission:approve requests'])->group(function () {

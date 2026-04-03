@@ -211,7 +211,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
         router.post(route('bulk.action'), {
             ids: selected,
             action,
-            comment: bulkComment.length > 0 ? bulkComment : null,
+            comment: isBulkCommentOpen && bulkComment.trim().length > 0
+                ? bulkComment.trim()
+                : null,
         }, {
             onSuccess: () => {
                 setSelected([]);
@@ -221,7 +223,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
             },
         });
     };
-    
+
 
     return (
         <DefaultLayout>
@@ -763,6 +765,28 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                 onChange={(e) => setBulkComment(e.target.value)}
                             />
                         </Field>
+                        <div className="flex gap-2 mt-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={bulkComment.trim().length === 0}
+                                onClick={() => {
+                                    router.post(route('bulk.action'), {
+                                        ids: selected,
+                                        action: 'comment',
+                                        comment: bulkComment.trim(),
+                                    }, {
+                                        onSuccess: () => {
+                                            setBulkComment("");
+                                            setIsBulkCommentOpen(false);
+                                        },
+                                    });
+                                }}
+                            >
+                                <MessageCirclePlus size={16} />
+                                <span>Submit Comment</span>
+                            </Button>
+                        </div>
                     </div>
                 )}
 
