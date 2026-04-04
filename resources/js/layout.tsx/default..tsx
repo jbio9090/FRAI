@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import { AppSidebar } from "@/components/app-sidebar"
 import {
     Breadcrumb,
@@ -29,11 +30,17 @@ interface PageProps {
     labeledBreadcrumb: string;
 }
 
+const isMobile = () => window.innerWidth < 768; 
+
 export default function DefaultLayout({ children, hasPadding = true }: DashboardProps) {
     const page = usePage<PageProps>();
     const breadcrumbs = page.props.breadcrumbs;
     const labeledBreadcrumb = page.props.labeledBreadcrumb;
     const flash = (page.props as any).flash as { success?: string; error?: string } | undefined;
+
+    const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+    const lastScrollY = useRef(0);
+    const ticking = useRef(false);
 
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
@@ -46,12 +53,70 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
         );
     }, [flash?.success, flash?.error]);
 
+    useEffect(() => {
+        const SCROLL_THRESHOLD = 8;
+
+        const handleScroll = () => {
+            if (!isMobile()) {
+                setIsHeaderVisible(true);
+                return;
+            }
+
+            if (ticking.current) return;
+
+            ticking.current = true;
+            requestAnimationFrame(() => {
+                const currentScrollY = window.scrollY;
+                const delta = currentScrollY - lastScrollY.current;
+
+                if (Math.abs(delta) > SCROLL_THRESHOLD) {
+                    if (delta > 0 && currentScrollY > 64) {
+                        setIsHeaderVisible(false);
+                    } else if (delta < 0) {
+                        setIsHeaderVisible(true);
+                    }
+                    lastScrollY.current = currentScrollY;
+                }
+
+                ticking.current = false;
+            });
+        };
+
+        const handleResize = () => {
+            if (!isMobile()) setIsHeaderVisible(true);
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        window.addEventListener('resize', handleResize, { passive: true });
+
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            window.removeEventListener('resize', handleResize);
+        };
+    }, []);
 
     return (
         <SidebarProvider>
             <AppSidebar />
-            <SidebarInset>
-                <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+            <SidebarInset className='relative'>
+                <motion.header
+                    className="flex h-16 shrink-0 items-center gap-2 border-b px-4 top-0 right-0 fixed z-25 w-full md:static bg-background"
+                    animate={{
+                        y: isHeaderVisible ? 0 : -64,
+                        opacity: isHeaderVisible ? 1 : 0,
+                    }}
+                    transition={{
+                        y: {
+                            type: 'spring',
+                            stiffness: 300,
+                            damping: 30,
+                        },
+                        opacity: {
+                            duration: 0.2,
+                            ease: 'easeInOut',
+                        },
+                    }}
+                >
                     <SidebarTrigger className="-ml-1" />
                     <Separator
                         orientation="vertical"
@@ -61,7 +126,6 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                     <Breadcrumb>
                         <BreadcrumbList>
                             {breadcrumbs && breadcrumbs.map((breadcrumb, index) => {
-                                // Build the path up to this breadcrumb
                                 const path = '/' + breadcrumbs.slice(0, index + 1).join('/');
                                 const isLast = index === breadcrumbs.length - 1;
 
@@ -100,9 +164,9 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                             )}
                         </BreadcrumbList>
                     </Breadcrumb>
-                </header>
+                </motion.header>
 
-                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible" + ((hasPadding) ? " p-6 md:p-8" : "")}>
+                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible mt-16 md:mt-0" + ((hasPadding) ? " p-6 md:p-8" : "")}>
                     {children}
                 </div>
 

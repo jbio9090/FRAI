@@ -55,7 +55,7 @@ export default function RequestDetail({ request }: DetailProps) {
 
     return (
         <DefaultLayout>
-            <div className="flex flex-col w-full max-w-4xl gap-4 *:text-sm">
+            <div className="flex flex-col w-full gap-4 *:text-sm">
                 {/* Header — always visible */}
                 <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
@@ -73,7 +73,7 @@ export default function RequestDetail({ request }: DetailProps) {
                     </Badge>
                 </div>
 
-                <Tabs defaultValue="overview" className="mt-4">
+                <Tabs defaultValue="overview" className="mt-4 w-full">
                     <TabsList variant={"line"}>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
 
@@ -103,7 +103,7 @@ export default function RequestDetail({ request }: DetailProps) {
                             <div className="flex flex-col">
                                 <p className='font-semibold mb-2 text-muted-foreground'>Requested by</p>
                                 <div className="flex gap-2 items-center">
-                                    <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.profile} size='sm'/>
+                                    <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.profile} size='sm' />
                                     <p>{request.user.name}</p>
                                 </div>
                             </div>
@@ -185,7 +185,7 @@ export default function RequestDetail({ request }: DetailProps) {
                         })}
                     </TabsContent>
 
-                    <TabsContent value="comments" className="flex flex-col gap-6 mt-6">
+                    <TabsContent value="comments" className="flex flex-col gap-6 mt-6 items-center w-full lg:grid lg:gap-1 grid-cols-[2fr_1fr]">
                         <div className="flex flex-col w-full max-w-2xl gap-3 justify-center">
                             {request.comments?.length > 0 ? (
                                 request.comments.map((comment) => (
@@ -199,9 +199,11 @@ export default function RequestDetail({ request }: DetailProps) {
                             )}
                         </div>
 
-                        <Separator className="max-w-2xl" />
+                        <div className="flex flex-col self-start w-full gap-6">
+                            <Separator className="max-w-2xl lg:hidden" />
+                            <CommentForm requestId={request.id} />
+                        </div>
 
-                        <CommentForm requestId={request.id} />
                     </TabsContent>
                 </Tabs>
             </div>

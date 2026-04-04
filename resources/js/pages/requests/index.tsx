@@ -1,10 +1,11 @@
-import { router, Link } from '@inertiajs/react';
-import { CheckLine, MessageCirclePlus, SlidersHorizontal, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, GraduationCap, Landmark, ArrowUp, Download, FolderOpen } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { usePermission } from '@/hooks/use-permission';
+import { CheckLine, MessageCirclePlus, ListFilter, MessageCircleOff, MousePointer2, X, Check, Search, ArrowDownUp, GraduationCap, Landmark, ArrowUp, Download, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DefaultLayout from '@/layout.tsx/default.';
 import moment from 'moment';
 import { Request } from '@/types/request';
-import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { useState, useEffect, useRef } from 'react';
 import { Field, FieldDescription } from '@/components/ui/field';
@@ -12,10 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { toast } from 'sonner';
 import { downloadRequestsCSV } from '@/lib/downloadCSV';
-import { motion } from 'motion/react';
-import { ButtonGroup } from '@/components/ui/button-group';
+import { motion, AnimatePresence } from 'motion/react';
 import SmartPagination from '@/components/SmartPagination';
-import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger, } from "@/components/ui/sheet"
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Facility } from '@/types/facility';
 import RequestCard from '@/components/request-card';
 
@@ -57,6 +57,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>("");
     const [statusFilter, setStatusFilter] = useState<string>("");
 
+    const { hasRole } = usePermission();
+    const isAdmin = hasRole('admin');
+
     const statusOptions = [
         { label: "Pending", value: "pending" },
         { label: "Approved", value: "approved" },
@@ -84,19 +87,11 @@ export default function RequestsPage({ requests, page_title, facilities, request
     }, [searchQuery]);
 
     const commonFilterOptions = [
-        {
-            title: "Today",
-        },
-        {
-            title: "This Week",
-        },
-        {
-            title: "This Month",
-        },
-        {
-            title: "All",
-        },
-    ]
+        { title: "Today" },
+        { title: "This Week" },
+        { title: "This Month" },
+        { title: "All" },
+    ];
 
     const sortOptions = [
         { label: "Date Submitted", value: "created_at" },
@@ -132,14 +127,6 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const toggleRequester = (id: string) => {
         setRequesterFilter(prev =>
             prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
-        );
-    };
-
-    const handleStatusFilterClick = (status: string | undefined) => {
-        router.get(
-            route(route().current(), { status }),
-            getParams(),
-            { preserveState: true, preserveScroll: true }
         );
     };
 
@@ -189,23 +176,18 @@ export default function RequestsPage({ requests, page_title, facilities, request
         setSortOrder(newOrder);
         router.get(
             route(route().current(), { status: route().params.status }),
-            getParams({ sort: field, order: newOrder }),  // <-- was missing getParams
+            getParams({ sort: field, order: newOrder }),
             { preserveState: true, preserveScroll: true }
         );
     };
 
-    const clearAllSelection = () => {
-        setSelected([]);
-    }
-
-    const selectAllSelection = () => {
-        setSelected(requests.data.map((req) => req.id));
-    }
+    const clearAllSelection = () => setSelected([]);
+    const selectAllSelection = () => setSelected(requests.data.map((req) => req.id));
 
     const toggleSelection = () => {
         setSelectState(!isSelecting);
         if (isSelecting) setSelected([]);
-    }
+    };
 
     const bulkAction = (action: string) => {
         router.post(route('bulk.action'), {
@@ -224,12 +206,13 @@ export default function RequestsPage({ requests, page_title, facilities, request
         });
     };
 
-
     return (
         <DefaultLayout>
             <div className="max-w-6xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
+
                 <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">
+                    {/* Top bar: search + controls */}
                     <div className="flex gap-2">
                         <InputGroup className='max-w-xs sm:max-w-sm md:max-w-md'>
                             <InputGroupAddon>
@@ -242,11 +225,13 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             />
                         </InputGroup>
 
+                        {/* Desktop controls */}
                         <div className="hidden sm:flex gap-2">
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline">
                                         <ArrowDownUp />
+                                        <span>Sort By</span>
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="p-0 w-48">
@@ -259,9 +244,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         {sortOptions.map((option) => (
                                             <Button
                                                 key={option.value || "none"}
-                                                onClick={() => {
-                                                    handleSort(option.value);
-                                                }}
+                                                onClick={() => handleSort(option.value)}
                                                 variant={sortField === option.value || (option.value === "" && !sortField) ? "secondary" : "ghost"}
                                                 className='justify-between w-full px-2'
                                                 size="sm"
@@ -288,7 +271,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                             "border-primary text-primary bg-primary/5"
                                         )}
                                     >
-                                        <SlidersHorizontal size={16} />
+                                        <ListFilter size={16} />
+                                        <span>Filters</span>
                                         {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + (statusFilter ? 1 : 0) > 0 && (
                                             <span className="text-xs font-semibold">
                                                 {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0)}
@@ -297,13 +281,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="p-0 w-72" align="start">
-                                    <PopoverHeader>
-                                        <PopoverTitle className="px-3 pt-3 text-muted-foreground font-semibold">
-                                            Filters
-                                        </PopoverTitle>
-                                    </PopoverHeader>
                                     <div className="flex flex-col gap-4 p-3 max-h-96 overflow-y-auto">
-
                                         <div className="flex flex-col gap-2">
                                             <div className="flex items-center justify-between">
                                                 <p className="text-xs text-muted-foreground font-semibold">Facility</p>
@@ -322,16 +300,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                             </div>
                                             <div className="flex flex-col gap-1">
                                                 {facilities.map((f) => (
-                                                    <label
-                                                        key={f.id}
-                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
-                                                            checked={facilityFilter.includes(String(f.id))}
-                                                            onChange={() => toggleFacility(String(f.id))}
-                                                        />
+                                                    <label key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                        <input type="checkbox" className="accent-primary" checked={facilityFilter.includes(String(f.id))} onChange={() => toggleFacility(String(f.id))} />
                                                         {f.name}
                                                     </label>
                                                 ))}
@@ -342,18 +312,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                             <p className="text-xs text-muted-foreground font-semibold">Status</p>
                                             <div className="flex flex-col gap-1">
                                                 {statusOptions.map((opt) => (
-                                                    <label
-                                                        key={opt.value}
-                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
-                                                            checked={statusFilter === opt.value}
-                                                            onChange={() =>
-                                                                setStatusFilter(prev => prev === opt.value ? "" : opt.value)
-                                                            }
-                                                        />
+                                                    <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                        <input type="checkbox" className="accent-primary" checked={statusFilter === opt.value} onChange={() => setStatusFilter(prev => prev === opt.value ? "" : opt.value)} />
                                                         {opt.label}
                                                     </label>
                                                 ))}
@@ -378,16 +338,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                             </div>
                                             <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
                                                 {requesters.map((r) => (
-                                                    <label
-                                                        key={r.id}
-                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
-                                                            checked={requesterFilter.includes(String(r.id))}
-                                                            onChange={() => toggleRequester(String(r.id))}
-                                                        />
+                                                    <label key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                        <input type="checkbox" className="accent-primary" checked={requesterFilter.includes(String(r.id))} onChange={() => toggleRequester(String(r.id))} />
                                                         {r.name}
                                                     </label>
                                                 ))}
@@ -401,30 +353,17 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     { label: "Has external equipment", value: "yes" },
                                                     { label: "No external equipment", value: "no" },
                                                 ].map((opt) => (
-                                                    <label
-                                                        key={opt.value}
-                                                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
-                                                            checked={externalEquipmentFilter === opt.value}
-                                                            onChange={() =>
-                                                                setExternalEquipmentFilter(prev => prev === opt.value ? "" : opt.value)
-                                                            }
-                                                        />
+                                                    <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                        <input type="checkbox" className="accent-primary" checked={externalEquipmentFilter === opt.value} onChange={() => setExternalEquipmentFilter(prev => prev === opt.value ? "" : opt.value)} />
                                                         {opt.label}
                                                     </label>
                                                 ))}
                                             </div>
                                         </div>
-
                                     </div>
 
                                     <div className="flex gap-2 p-3 border-t">
-                                        <Button size="sm" className="flex-1" onClick={applyAdvancedFilters}>
-                                            Apply
-                                        </Button>
+                                        <Button size="sm" className="flex-1" onClick={applyAdvancedFilters}>Apply</Button>
                                         <Button
                                             size="sm"
                                             variant="outline"
@@ -446,20 +385,24 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                 </PopoverContent>
                             </Popover>
 
-                            <Button
-                                variant={"outline"}
-                                onClick={toggleSelection}
-                                className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
-                            >
-                                <MousePointer2 size={16} />
-                                <span>{!isSelecting ? "Bulk" : "Stop"}</span>
-                            </Button>
+                            {isAdmin && (
+                                <Button
+                                    variant={"outline"}
+                                    onClick={toggleSelection}
+                                    className={cn(isSelecting ? "text-primary border-primary bg-primary/5" : "")}
+                                >
+                                    <MousePointer2 size={16} />
+                                    <span>{!isSelecting ? "Bulk" : "Stop"}</span>
+                                </Button>
+                            )}
                         </div>
 
+                        {/* Mobile sheet */}
                         <Sheet>
                             <SheetTrigger asChild>
                                 <Button variant="outline" className="sm:hidden">
-                                    <SlidersHorizontal />
+                                    <ListFilter />
+                                    <span>Filters</span>
                                 </Button>
                             </SheetTrigger>
                             <SheetContent side="right" className="sm:hidden overflow-y-auto flex flex-col" showCloseButton={false}>
@@ -468,19 +411,23 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                 </SheetHeader>
 
                                 <div className="flex flex-col gap-6 px-4">
-                                    <div className="flex flex-col gap-2">
-                                        <p className="text-xs font-semibold text-muted-foreground pt-4">Actions</p>
-                                        <SheetClose asChild>
-                                            <Button
-                                                variant={"outline"}
-                                                onClick={toggleSelection}
-                                                className={cn("w-full", isSelecting ? "text-primary border-primary bg-primary/5" : "")}
-                                            >
-                                                <MousePointer2 size={16} />
-                                                <span>{!isSelecting ? "Bulk Select" : "Stop Selecting"}</span>
-                                            </Button>
-                                        </SheetClose>
-                                    </div>
+                                    {isAdmin && (
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs font-semibold text-muted-foreground pt-4">Actions</p>
+
+                                            <SheetClose asChild>
+                                                <Button
+                                                    variant={"outline"}
+                                                    onClick={toggleSelection}
+                                                    className={cn("w-full", isSelecting ? "text-primary border-primary bg-primary/5" : "")}
+                                                >
+                                                    <MousePointer2 size={16} />
+                                                    <span>{!isSelecting ? "Bulk Select" : "Stop Selecting"}</span>
+                                                </Button>
+                                            </SheetClose>
+
+                                        </div>
+                                    )}
 
                                     <div className="flex flex-col gap-2">
                                         <p className="text-xs font-semibold text-muted-foreground pt-4">Sort By</p>
@@ -512,30 +459,18 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         </div>
                                     </div>
 
-                                    {/* Request Status */}
                                     <div className="flex flex-col gap-2">
                                         <p className="text-xs text-muted-foreground font-semibold">Status</p>
                                         <div className="flex flex-col gap-1">
                                             {statusOptions.map((opt) => (
-                                                <label
-                                                    key={opt.value}
-                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
-                                                        checked={statusFilter === opt.value}
-                                                        onChange={() =>
-                                                            setStatusFilter(prev => prev === opt.value ? "" : opt.value)
-                                                        }
-                                                    />
+                                                <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                    <input type="checkbox" className="accent-primary" checked={statusFilter === opt.value} onChange={() => setStatusFilter(prev => prev === opt.value ? "" : opt.value)} />
                                                     {opt.label}
                                                 </label>
                                             ))}
                                         </div>
                                     </div>
 
-                                    {/* Facilities */}
                                     <div className="flex flex-col gap-2">
                                         <div className="flex items-center justify-between">
                                             <p className="text-xs font-semibold text-muted-foreground">Facility</p>
@@ -554,23 +489,14 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         </div>
                                         <div className="flex flex-col gap-1">
                                             {facilities.map((f) => (
-                                                <label
-                                                    key={f.id}
-                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
-                                                        checked={facilityFilter.includes(String(f.id))}
-                                                        onChange={() => toggleFacility(String(f.id))}
-                                                    />
+                                                <label key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                    <input type="checkbox" className="accent-primary" checked={facilityFilter.includes(String(f.id))} onChange={() => toggleFacility(String(f.id))} />
                                                     {f.name}
                                                 </label>
                                             ))}
                                         </div>
                                     </div>
 
-                                    {/* Requesters */}
                                     <div className="flex flex-col gap-2">
                                         <div className="flex items-center justify-between">
                                             <p className="text-xs font-semibold text-muted-foreground pt-4">Requester</p>
@@ -589,23 +515,14 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         </div>
                                         <div className="flex flex-col gap-1">
                                             {requesters.map((r) => (
-                                                <label
-                                                    key={r.id}
-                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
-                                                        checked={requesterFilter.includes(String(r.id))}
-                                                        onChange={() => toggleRequester(String(r.id))}
-                                                    />
+                                                <label key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                    <input type="checkbox" className="accent-primary" checked={requesterFilter.includes(String(r.id))} onChange={() => toggleRequester(String(r.id))} />
                                                     {r.name}
                                                 </label>
                                             ))}
                                         </div>
                                     </div>
 
-                                    {/* External Equipment */}
                                     <div className="flex flex-col gap-2">
                                         <p className="text-xs font-semibold text-muted-foreground pt-4">External Equipment</p>
                                         <div className="flex flex-col gap-1">
@@ -613,18 +530,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 { label: "Has external equipment", value: "yes" },
                                                 { label: "No external equipment", value: "no" },
                                             ].map((opt) => (
-                                                <label
-                                                    key={opt.value}
-                                                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
-                                                        checked={externalEquipmentFilter === opt.value}
-                                                        onChange={() =>
-                                                            setExternalEquipmentFilter(prev => prev === opt.value ? "" : opt.value)
-                                                        }
-                                                    />
+                                                <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
+                                                    <input type="checkbox" className="accent-primary" checked={externalEquipmentFilter === opt.value} onChange={() => setExternalEquipmentFilter(prev => prev === opt.value ? "" : opt.value)} />
                                                     {opt.label}
                                                 </label>
                                             ))}
@@ -633,9 +540,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
 
                                     <div className="flex gap-2 py-4 bg-background sticky bottom-0">
                                         <SheetClose asChild>
-                                            <Button size="sm" className="flex-1" onClick={applyAdvancedFilters}>
-                                                Apply
-                                            </Button>
+                                            <Button size="sm" className="flex-1" onClick={applyAdvancedFilters}>Apply</Button>
                                         </SheetClose>
                                         <Button
                                             size="sm"
@@ -656,12 +561,12 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                             Clear
                                         </Button>
                                     </div>
-
                                 </div>
                             </SheetContent>
                         </Sheet>
                     </div>
 
+                    {/* Date filter pills */}
                     <div className="flex max-w-full gap-2 overflow-x-scroll [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                         {commonFilterOptions.map((filter) => (
                             <Button
@@ -676,119 +581,60 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap mt-2">
-                        {(!(selected.length >= requests.data.length) && (isSelecting)) && (
-                            <Button
-                                size={"sm"}
-                                variant={"outline"}
-                                onClick={selectAllSelection}
-                            >
+                    {/* Select all / deselect hint — only shown while selecting with nothing yet chosen */}
+                    {isAdmin && isSelecting && selected.length < requests.data.length && (
+                        <div className="flex items-center gap-2 mt-2">
+                            <Button size={"sm"} variant={"outline"} onClick={selectAllSelection}>
                                 <MousePointer2 size={16} />
                                 <span>Select All</span>
                             </Button>
-                        )}
-
-                        {(selected.length > 0 && (
-                            <Button
-                                size={"sm"}
-                                variant={"outline"}
-                                onClick={clearAllSelection}
-                                className='items-center'
-                            >
-                                <span>{selected.length} selected</span>
-                                <X size={16} />
-                            </Button>
-                        ))}
-                    </div>
-
-
-                    <ButtonGroup className="flex items-center flex-wrap my-4">
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => bulkAction('approve')}>
-                                <Check size={16} />
-                                <span>Approve</span>
-                            </Button>
-                        )}
-
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => bulkAction('reject')}>
-                                <X size={16} />
-                                <span>Deny</span>
-                            </Button>
-                        )}
-
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
-                                <CheckLine size={16} />
-                                <span>Conditionally Approve</span>
-                            </Button>
-                        )}
-
-                        {selected.length > 0 && (
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                    const selectedRequests = requests.data.filter((r) =>
-                                        selected.includes(r.id)
-                                    );
-                                    downloadRequestsCSV(
-                                        selectedRequests,
-                                        `Requests Report-${moment().format("YYYY-MM-DD")}.csv`
-                                    );
-                                    toast.success(`Exported ${selectedRequests.length} request(s) to CSV`);
-                                }}
-                            >
-                                <Download size={16} />
-                                <span>CSV</span>
-                            </Button>
-                        )}
-
-                        {selected.length > 0 && (
-                            <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
-                                {isBulkCommentOpen ? <MessageCircleOff className="mr-2 h-4 w-4" /> : <MessageCirclePlus className="mr-2 h-4 w-4" />}
-                                <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
-                            </Button>
-                        )}
-                    </ButtonGroup>
-
+                        </div>
+                    )}
                 </div>
 
-                {selected.length > 0 && isBulkCommentOpen && (
-                    <div className="w-full mt-2 mb-6">
-                        <Field>
-                            <FieldDescription>Comment to attach to all selected requests</FieldDescription>
-                            <Textarea
-                                rows={3}
-                                className="w-full"
-                                value={bulkComment}
-                                onChange={(e) => setBulkComment(e.target.value)}
-                            />
-                        </Field>
-                        <div className="flex gap-2 mt-2">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={bulkComment.trim().length === 0}
-                                onClick={() => {
-                                    router.post(route('bulk.action'), {
-                                        ids: selected,
-                                        action: 'comment',
-                                        comment: bulkComment.trim(),
-                                    }, {
-                                        onSuccess: () => {
-                                            setBulkComment("");
-                                            setIsBulkCommentOpen(false);
-                                        },
-                                    });
-                                }}
-                            >
-                                <MessageCirclePlus size={16} />
-                                <span>Submit Comment</span>
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                {/* Bulk comment box — shown above the list when open */}
+                <AnimatePresence>
+                    {selected.length > 0 && isBulkCommentOpen && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="w-full mt-4 mb-2 overflow-hidden"
+                        >
+                            <Field>
+                                <FieldDescription>Comment to attach to all selected requests</FieldDescription>
+                                <Textarea
+                                    rows={3}
+                                    className="w-full"
+                                    value={bulkComment}
+                                    onChange={(e) => setBulkComment(e.target.value)}
+                                />
+                            </Field>
+                            <div className="flex gap-2 mt-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={bulkComment.trim().length === 0}
+                                    onClick={() => {
+                                        router.post(route('bulk.action'), {
+                                            ids: selected,
+                                            action: 'comment',
+                                            comment: bulkComment.trim(),
+                                        }, {
+                                            onSuccess: () => {
+                                                setBulkComment("");
+                                                setIsBulkCommentOpen(false);
+                                            },
+                                        });
+                                    }}
+                                >
+                                    <MessageCirclePlus size={16} />
+                                    <span>Submit Comment</span>
+                                </Button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {requests.data.length > 0 && (
                     <SmartPagination
@@ -812,25 +658,18 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             isSelected={selected.includes(request.id)}
                             handleSelection={handleSelection}
                         />
-                    )) :
-                        (
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{
-                                    duration: 0.4,
-                                    scale: { type: "tween", visualDuration: 0.4, bounce: 0.5 },
-                                }}
-                                className='m-auto items-center mt-8 flex flex-col text-center col-span-full gap-2'>
-                                <FolderOpen size={32} />
-                                <h1 className='font-bold text-2xl'>
-                                    No Requests
-                                </h1>
-                                <p>
-                                    Nothing to see here
-                                </p>
-                            </motion.div>
-                        )}
+                    )) : (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.4, scale: { type: "tween", visualDuration: 0.4, bounce: 0.5 } }}
+                            className='m-auto items-center mt-8 flex flex-col text-center col-span-full gap-2'
+                        >
+                            <FolderOpen size={32} />
+                            <h1 className='font-bold text-2xl'>No Requests</h1>
+                            <p>Nothing to see here</p>
+                        </motion.div>
+                    )}
                 </div>
 
                 {requests.data.length > 9 && (
@@ -844,9 +683,68 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         )}
                     />
                 )}
-
             </div>
+
+            {/* Sticky bulk action toolbar — admin only, slides up when items are selected */}
+            <AnimatePresence>
+                {isAdmin && selected.length > 0 && (
+                    <motion.div
+                        initial={{ y: 80, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 80, opacity: 0 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                        className="fixed bottom-0 left-0 right-0 z-50 flex items-center md:justify-center gap-2 border-t bg-background/95 backdrop-blur-sm px-4 py-3 shadow-lg flex-wrap"
+                    >
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={clearAllSelection}
+                            className="flex items-center gap-1.5"
+                        >
+                            <span className="text-sm font-medium">{selected.length} selected</span>
+                            <X size={13} className="text-muted-foreground" />
+                        </Button>
+
+                        <div className="w-px h-5 bg-border shrink-0" />
+
+                        <Button size="sm" variant="outline" className=" hover:bg-green-50" onClick={() => bulkAction('approve')}>
+                            <Check size={14} />
+                            <span>Approve</span>
+                        </Button>
+
+                        <Button size="sm" variant="outline" className="hover:bg-red-50" onClick={() => bulkAction('reject')}>
+                            <X size={14} />
+                            <span>Deny</span>
+                        </Button>
+
+                        <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
+                            <CheckLine size={14} />
+                            <span>Conditionally Approve</span>
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                                const selectedRequests = requests.data.filter((r) => selected.includes(r.id));
+                                downloadRequestsCSV(selectedRequests, `Requests Report-${moment().format("YYYY-MM-DD")}.csv`);
+                                toast.success(`Exported ${selectedRequests.length} request(s) to CSV`);
+                            }}
+                        >
+                            <Download size={14} />
+                            <span>CSV</span>
+                        </Button>
+
+                        <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen(p => !p)}>
+                            {isBulkCommentOpen
+                                ? <MessageCircleOff size={14} />
+                                : <MessageCirclePlus size={14} />
+                            }
+                            <span>{isBulkCommentOpen ? "Cancel Comment" : "Add Comment"}</span>
+                        </Button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </DefaultLayout>
     );
 }
-
