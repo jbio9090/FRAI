@@ -54,7 +54,9 @@ import {
     Building2,
     Hash,
     AlertCircle,
+    ArrowDownUp, ArrowUp
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import wordToColor from "@/lib/wordToColor";
 
 interface FacilityPivot {
@@ -334,6 +336,7 @@ function AssignDialog({
     );
 }
 
+type SortValue = "name-asc" | "name-desc" | "quantity-asc" | "quantity-desc" | "assigned-asc" | "assigned-desc";
 
 export default function EquipmentsPage({
     equipments,
@@ -348,6 +351,17 @@ export default function EquipmentsPage({
     const [assignTarget, setAssignTarget] = useState<Equipment | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [sortValue, setSortValue] = useState<SortValue | "">("");
+
+    const SORT_OPTIONS: { label: string; value: SortValue | "" }[] = [
+        { label: "None", value: "" },
+        { label: "Name (A–Z)", value: "name-asc" },
+        { label: "Name (Z–A)", value: "name-desc" },
+        { label: "Quantity (Low)", value: "quantity-asc" },
+        { label: "Quantity (High)", value: "quantity-desc" },
+        { label: "Assigned (Low)", value: "assigned-asc" },
+        { label: "Assigned (High)", value: "assigned-desc" },
+    ];
 
     const filtered = equipments.filter((e) =>
         e.name.toLowerCase().includes(search.toLowerCase())
@@ -363,6 +377,22 @@ export default function EquipmentsPage({
             onError: () => setDeleting(false),
         });
     };
+
+    const sorted = [...filtered].sort((a, b) => {
+        if (!sortValue) return 0;
+        const [key, dir] = sortValue.split("-") as [string, "asc" | "desc"];
+        let cmp = 0;
+        if (key === "name") {
+            cmp = a.name.localeCompare(b.name);
+        } else if (key === "quantity") {
+            cmp = a.quantity - b.quantity;
+        } else if (key === "assigned") {
+            const aAssigned = a.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
+            const bAssigned = b.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
+            cmp = aAssigned - bAssigned;
+        }
+        return dir === "asc" ? cmp : -cmp;
+    });
 
     return (
         <DefaultLayout>
@@ -455,8 +485,43 @@ export default function EquipmentsPage({
                         className="pl-9"
                     />
                 </div>
+
+                {/* Sort Popover */}
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon">
+                            <ArrowDownUp className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0 w-48">
+                        <p className="px-3 py-1 pt-4 text-xs text-muted-foreground font-semibold">
+                            Sort By
+                        </p>
+                        <div className="flex flex-col p-1">
+                            {SORT_OPTIONS.map((opt) => (
+                                <Button
+                                    key={opt.value || "none"}
+                                    onClick={() => setSortValue(opt.value)}
+                                    variant={sortValue === opt.value ? "secondary" : "ghost"}
+                                    className="justify-between w-full px-2"
+                                    size="sm"
+                                >
+                                    <span>{opt.label}</span>
+                                    {opt.value !== "" && (
+                                        sortValue === opt.value
+                                            ? sortValue.endsWith("asc")
+                                                ? <ArrowUp size={14} className="rotate-180" />
+                                                : <ArrowUp size={14} />
+                                            : <ArrowUp size={14} className="opacity-0" />
+                                    )}
+                                </Button>
+                            ))}
+                        </div>
+                    </PopoverContent>
+                </Popover>
+
                 <Button onClick={() => setAddOpen(true)}>
-                    <Plus size={16}/>
+                    <Plus size={16} />
                     Add Equipment
                 </Button>
             </div>
@@ -480,7 +545,7 @@ export default function EquipmentsPage({
                             </TableCell>
                         </TableRow>
                     ) : (
-                        filtered.map((eq, i) => {
+                        sorted.map((eq, i) => {
                             const assigned = eq.facilities.reduce(
                                 (s, f) => s + (f.pivot?.quantity ?? 0),
                                 0
