@@ -685,34 +685,33 @@ export default function RequestsPage({ requests, page_title, facilities, request
                 )}
             </div>
 
-            {/* Sticky bulk action toolbar — admin only, slides up when items are selected */}
             <AnimatePresence>
-                {isAdmin && selected.length > 0 && (
+                {isAdmin && isSelecting && (
                     <motion.div
                         initial={{ y: 80, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 80, opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        className="fixed bottom-0 left-0 right-0 z-50 flex items-center md:justify-center gap-2 border-t bg-background/95 backdrop-blur-sm px-4 py-3 shadow-lg flex-wrap"
+                        transition={{ type: "spring", stiffness: 200, damping: 30 }}
+                        className="fixed bottom-0 left-0 right-0 z-50 flex items-center md:justify-center gap-2 border-t bg-secondary backdrop-blur-sm px-4 py-3 shadow-lg flex-wrap"
                     >
                         <Button
                             size="sm"
                             variant="outline"
                             onClick={clearAllSelection}
-                            className="flex items-center gap-1.5"
+                            className="flex items-center gap-1.5 hover:text-primary"
                         >
                             <span className="text-sm font-medium">{selected.length} selected</span>
-                            <X size={13} className="text-muted-foreground" />
+                            <X size={12}/>
                         </Button>
 
                         <div className="w-px h-5 bg-border shrink-0" />
 
-                        <Button size="sm" variant="outline" className=" hover:bg-green-50" onClick={() => bulkAction('approve')}>
+                        <Button size="sm" variant="outline" className="hover:text-green-500 dark:hover:text-green-500" onClick={() => bulkAction('approve')}>
                             <Check size={14} />
                             <span>Approve</span>
                         </Button>
 
-                        <Button size="sm" variant="outline" className="hover:bg-red-50" onClick={() => bulkAction('reject')}>
+                        <Button size="sm" variant="outline" className="hover:text-destructive dark:hover:text-destructive" onClick={() => bulkAction('reject')}>
                             <X size={14} />
                             <span>Deny</span>
                         </Button>

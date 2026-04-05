@@ -325,7 +325,7 @@
 
     body {
         @apply bg-background text-foreground font-sans;
-    letter-spacing: var(--tracking-normal);
+        letter-spacing: var(--tracking-normal);
     }
 }
 
@@ -368,4 +368,18 @@
 
 [data-description] {
     color: var(--foreground) !important;
+}
+
+:root {
+    --badge-l: 0.95;
+    --badge-c: 0.03;
+    --badge-text-l: 0.35;
+    --badge-text-c: 0.08;
+}
+
+.dark {
+    --badge-l: 0.25;
+    --badge-c: 0.03;
+    --badge-text-l: 0.85;
+    --badge-text-c: 0.04;
 }

@@ -59,7 +59,7 @@ class AccountController extends Controller
         ]);
 
         if ($request->hasFile('profile')) {
-            // Delete old profile if it exists
+
             if ($user->profile && $user->profile !== 'default.png') {
                 Storage::disk('public')->delete('profiles/' . $user->profile);
             }
@@ -67,11 +67,16 @@ class AccountController extends Controller
             $user->profile = basename($path);
         }
 
-        $user->update([
+        $updateData = [
             'name'  => $validated['name'],
             'email' => $validated['email'],
-            ...($validated['password'] ? ['password' => bcrypt($validated['password'])] : []),
-        ]);
+        ];
+
+        if (!empty($validated['password'])) {
+            $updateData['password'] = bcrypt($validated['password']);
+        }
+
+        $user->update($updateData);
 
         $user->syncRoles([$validated['role']]);
 

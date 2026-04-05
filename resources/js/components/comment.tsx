@@ -23,7 +23,7 @@ export default function Comment({ comment }: {
                         {moment(comment.created_at).fromNow()}
                     </span>
                 </div>
-                <p className='text-sm'>{comment.body}</p>
+                <p className='text-sm whitespace-pre-wrap'>{comment.body}</p>
             </div>
         </div>
     )

@@ -187,11 +187,11 @@ export default function Facilities({ facilities }: FacilityProps) {
                     </Button>
                 )}
 
-                {/* Sort Dropdown */}
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="outline" size="icon">
+                        <Button variant="outline">
                             <ArrowDownUp className="h-4 w-4" />
+                            <span>Sort By</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="p-0 w-48">
@@ -222,7 +222,6 @@ export default function Facilities({ facilities }: FacilityProps) {
                 </Popover>
             </div>
 
-            {/* Add Dialog */}
             <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) setAddForm(emptyForm); }}>
                 <DialogContent>
                     <DialogHeader>
@@ -238,7 +237,6 @@ export default function Facilities({ facilities }: FacilityProps) {
                 </DialogContent>
             </Dialog>
 
-            {/* Edit Dialog */}
             <Dialog open={!!editingFacility} onOpenChange={(open) => { if (!open) { setEditingFacility(null); setEditForm(emptyForm); } }}>
                 <DialogContent>
                     <DialogHeader>
@@ -254,7 +252,6 @@ export default function Facilities({ facilities }: FacilityProps) {
                 </DialogContent>
             </Dialog>
 
-            {/* Data Table */}
             <Table>
                 <TableHeader>
                     <TableRow>

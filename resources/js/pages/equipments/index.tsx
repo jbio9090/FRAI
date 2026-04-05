@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { router } from "@inertiajs/react";
 import DefaultLayout from "@/layout.tsx/default.";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,8 @@ import {
     Building2,
     Hash,
     AlertCircle,
-    ArrowDownUp, ArrowUp
+    ArrowDownUp,
+    ArrowUp,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import wordToColor from "@/lib/wordToColor";
@@ -101,7 +102,6 @@ function EquipmentDialog({
     const [errors, setErrors] = useState<{ name?: string; quantity?: string }>({});
     const [processing, setProcessing] = useState(false);
 
-    // 2. Sync state when the 'equipment' or 'open' prop changes
     useEffect(() => {
         if (open) {
             setName(equipment?.name ?? "");
@@ -120,10 +120,7 @@ function EquipmentDialog({
             });
         } else {
             router.post("/equipments", data, {
-                onSuccess: () => {
-                    setProcessing(false);
-                    onClose();
-                },
+                onSuccess: () => { setProcessing(false); onClose(); },
                 onError: (e) => { setErrors(e as any); setProcessing(false); },
             });
         }
@@ -214,14 +211,18 @@ function AssignDialog({
         }
     }, [equipment, open]);
 
-    if (!equipment) return null;
+    const { totalAssigned, remaining, overAllocated, pct } = useMemo(() => {
+        if (!equipment) return { totalAssigned: 0, remaining: 0, overAllocated: false, pct: 0 };
+        const totalAssigned = assignments.reduce((s, a) => s + a.quantity, 0);
+        const remaining = equipment.quantity - totalAssigned;
+        const overAllocated = remaining < 0;
+        const pct = equipment.quantity > 0
+            ? Math.min(100, Math.round((totalAssigned / equipment.quantity) * 100))
+            : 0;
+        return { totalAssigned, remaining, overAllocated, pct };
+    }, [assignments, equipment]);
 
-    const totalAssigned = assignments.reduce((s, a) => s + a.quantity, 0);
-    const remaining = equipment.quantity - totalAssigned;
-    const overAllocated = remaining < 0;
-    const pct = equipment.quantity > 0
-        ? Math.min(100, Math.round((totalAssigned / equipment.quantity) * 100))
-        : 0;
+    if (!equipment) return null;
 
     const toggle = (fid: number, checked: boolean) => {
         setAssignments((prev) =>
@@ -243,10 +244,7 @@ function AssignDialog({
             `/equipments/${equipment.id}/sync-facilities`,
             { assignments },
             {
-                onSuccess: () => {
-                    setSaving(false);
-                    onClose();
-                },
+                onSuccess: () => { setSaving(false); onClose(); },
                 onError: () => setSaving(false),
             }
         );
@@ -260,7 +258,6 @@ function AssignDialog({
                     <DialogDescription>{equipment.name}</DialogDescription>
                 </DialogHeader>
 
-                {/* allocation bar */}
                 <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
                     <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Assigned</span>
@@ -338,6 +335,16 @@ function AssignDialog({
 
 type SortValue = "name-asc" | "name-desc" | "quantity-asc" | "quantity-desc" | "assigned-asc" | "assigned-desc";
 
+const SORT_OPTIONS: { label: string; value: SortValue | "" }[] = [
+    { label: "None", value: "" },
+    { label: "Name (A–Z)", value: "name-asc" },
+    { label: "Name (Z–A)", value: "name-desc" },
+    { label: "Quantity (Low)", value: "quantity-asc" },
+    { label: "Quantity (High)", value: "quantity-desc" },
+    { label: "Assigned (Low)", value: "assigned-asc" },
+    { label: "Assigned (High)", value: "assigned-desc" },
+];
+
 export default function EquipmentsPage({
     equipments,
     facilities,
@@ -353,21 +360,35 @@ export default function EquipmentsPage({
     const [deleting, setDeleting] = useState(false);
     const [sortValue, setSortValue] = useState<SortValue | "">("");
 
-    const SORT_OPTIONS: { label: string; value: SortValue | "" }[] = [
-        { label: "None", value: "" },
-        { label: "Name (A–Z)", value: "name-asc" },
-        { label: "Name (Z–A)", value: "name-desc" },
-        { label: "Quantity (Low)", value: "quantity-asc" },
-        { label: "Quantity (High)", value: "quantity-desc" },
-        { label: "Assigned (Low)", value: "assigned-asc" },
-        { label: "Assigned (High)", value: "assigned-desc" },
-    ];
-
-    const filtered = equipments.filter((e) =>
-        e.name.toLowerCase().includes(search.toLowerCase())
+    const totalUnits = useMemo(
+        () => equipments.reduce((s, e) => s + e.quantity, 0),
+        [equipments]
     );
 
-    const totalUnits = equipments.reduce((s, e) => s + e.quantity, 0);
+    const filtered = useMemo(
+        () => equipments.filter((e) =>
+            e.name.toLowerCase().includes(search.toLowerCase())
+        ),
+        [equipments, search]
+    );
+
+    const sorted = useMemo(() => {
+        if (!sortValue) return filtered;
+        const [key, dir] = sortValue.split("-") as [string, "asc" | "desc"];
+        return [...filtered].sort((a, b) => {
+            let cmp = 0;
+            if (key === "name") {
+                cmp = a.name.localeCompare(b.name);
+            } else if (key === "quantity") {
+                cmp = a.quantity - b.quantity;
+            } else if (key === "assigned") {
+                const aAssigned = a.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
+                const bAssigned = b.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
+                cmp = aAssigned - bAssigned;
+            }
+            return dir === "asc" ? cmp : -cmp;
+        });
+    }, [filtered, sortValue]);
 
     const confirmDelete = () => {
         if (!deleteTarget) return;
@@ -378,25 +399,8 @@ export default function EquipmentsPage({
         });
     };
 
-    const sorted = [...filtered].sort((a, b) => {
-        if (!sortValue) return 0;
-        const [key, dir] = sortValue.split("-") as [string, "asc" | "desc"];
-        let cmp = 0;
-        if (key === "name") {
-            cmp = a.name.localeCompare(b.name);
-        } else if (key === "quantity") {
-            cmp = a.quantity - b.quantity;
-        } else if (key === "assigned") {
-            const aAssigned = a.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
-            const bAssigned = b.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
-            cmp = aAssigned - bAssigned;
-        }
-        return dir === "asc" ? cmp : -cmp;
-    });
-
     return (
         <DefaultLayout>
-            {/* ── Dialogs ── */}
             <EquipmentDialog open={addOpen} onClose={() => setAddOpen(false)} />
             <EquipmentDialog
                 open={!!editTarget}
@@ -486,11 +490,11 @@ export default function EquipmentsPage({
                     />
                 </div>
 
-                {/* Sort Popover */}
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="outline" size="icon">
+                        <Button variant="outline">
                             <ArrowDownUp className="h-4 w-4" />
+                            <span>Sort By</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="p-0 w-48">
@@ -537,7 +541,7 @@ export default function EquipmentsPage({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {filtered.length === 0 ? (
+                    {sorted.length === 0 ? (
                         <TableRow>
                             <TableCell colSpan={5} className="py-16 text-center text-muted-foreground">
                                 <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -578,32 +582,34 @@ export default function EquipmentsPage({
                                             ) : (
                                                 eq.facilities.map((f) => {
                                                     const { text, background } = wordToColor(f.name);
-
                                                     return (
-                                                        <Badge key={f.id} variant="secondary" className="text-xs flex items-center"
-                                                            style={{ background: background, color: text, border: text, borderWidth: 1, borderStyle: "solid" }}>
+                                                        <Badge
+                                                            key={f.id}
+                                                            variant="secondary"
+                                                            className="text-xs flex items-center"
+                                                            style={{ background, color: text, border: text, borderWidth: 1, borderStyle: "solid" }}
+                                                        >
                                                             {(f.pivot?.quantity && f.pivot.quantity > 1)
                                                                 ? (<span className="font-extrabold">{`${f.pivot.quantity} -`}</span>)
                                                                 : ""}
-                                                            <span>
-                                                                {f.name}
-                                                            </span>
+                                                            <span>{f.name}</span>
                                                         </Badge>
-                                                    )
+                                                    );
                                                 })
                                             )}
                                         </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-4 hidden md:block">
-                                            <Button onClick={() => setAssignTarget(eq)} variant={"ghost"}>
+                                            <Button onClick={() => setAssignTarget(eq)} variant="ghost">
                                                 <ArrowLeftRight className="w-4 h-4 mr-2" />
                                             </Button>
-                                            <Button onClick={() => setEditTarget(eq)} variant={"ghost"}>
+                                            <Button onClick={() => setEditTarget(eq)} variant="ghost">
                                                 <Pencil className="w-4 h-4 mr-2" />
                                             </Button>
                                             <Button
-                                                onClick={() => setDeleteTarget(eq)} variant={"ghost"}
+                                                onClick={() => setDeleteTarget(eq)}
+                                                variant="ghost"
                                                 className="text-destructive focus:text-destructive"
                                             >
                                                 <Trash2 className="w-4 h-4 mr-2" />
@@ -646,10 +652,6 @@ export default function EquipmentsPage({
                     )}
                 </TableBody>
             </Table>
-
-            {/* <p className="text-xs text-muted-foreground mt-3 text-right">
-                {filtered.length} of {equipments.length} items
-            </p> */}
         </DefaultLayout>
     );
 }

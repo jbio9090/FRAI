@@ -30,7 +30,7 @@ interface PageProps {
     labeledBreadcrumb: string;
 }
 
-const isMobile = () => window.innerWidth < 768; 
+const isMobile = () => window.innerWidth < 768;
 
 export default function DefaultLayout({ children, hasPadding = true }: DashboardProps) {
     const page = usePage<PageProps>();
@@ -45,13 +45,30 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
         if (flash?.error) toast.error(flash.error);
-
-        document.documentElement.classList.toggle(
-            "dark",
-            localStorage.getItem("theme") === "dark" ||
-            (!("theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches),
-        );
     }, [flash?.success, flash?.error]);
+
+    useEffect(() => {
+        const applyTheme = () => {
+            const theme = localStorage.getItem("theme");
+            const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+            const isDark = theme === "dark" || (!theme && systemPrefersDark);
+
+            document.documentElement.classList.toggle("dark", isDark);
+        };
+
+        applyTheme();
+
+        const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        const handleChange = () => {
+            if (!localStorage.getItem("theme")) {
+                applyTheme();
+            }
+        };
+
+        mediaQuery.addEventListener("change", handleChange);
+        return () => mediaQuery.removeEventListener("change", handleChange);
+    }, []);
 
     useEffect(() => {
         const SCROLL_THRESHOLD = 8;
