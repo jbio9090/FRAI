@@ -16,31 +16,32 @@ class FacilityFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'priority_level' => 'nullable|integer|in:0,1,2,3',
-            'priority_reason' => 'nullable|string|max:512',
-            'facility_bookings' => 'required|array|min:1',
-            'facility_bookings.*.facility_id' => 'required|exists:facilities,id',
-            'facility_bookings.*.date' => 'required|date',
-            'facility_bookings.*.time_start' => 'required',
-            'facility_bookings.*.time_end' => 'required',
-            'facility_bookings.*.equipment' => 'array',
-            'facility_bookings.*.equipment.*.equipment_id' => 'required|exists:equipments,id',
-            'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
-            'facility_bookings.*.external_equipment' => 'nullable|string|max:1000',
-            'facility_bookings.*.borrowed_equipment' => 'array',
-            'facility_bookings.*.borrowed_equipment.*.equipment_id' => 'required|exists:equipments,id',
+            'title'                                                        => 'required|string|max:255',
+            'description'                                                  => 'nullable|string',
+            'priority_level'                                               => 'nullable|integer|in:0,1,2,3',
+            'priority_reason'                                              => 'nullable|string|max:512',
+            'facility_bookings'                                            => 'required|array|min:1',
+            'facility_bookings.*.facility_id'                             => 'required|exists:facilities,id',
+            'facility_bookings.*.date'                                     => 'required|date',
+            'facility_bookings.*.time_start'                              => 'required',
+            'facility_bookings.*.time_end'                                => 'required',
+            'facility_bookings.*.equipment'                               => 'array',
+            'facility_bookings.*.equipment.*.equipment_id'                => 'required|exists:equipments,id',
+            'facility_bookings.*.equipment.*.quantity_needed'             => 'required|integer|min:1',
+            'facility_bookings.*.external_equipment'                      => 'nullable|array',       
+            'facility_bookings.*.external_equipment.*.name'               => 'required|string|max:255',
+            'facility_bookings.*.borrowed_equipment'                      => 'array',
+            'facility_bookings.*.borrowed_equipment.*.equipment_id'       => 'required|exists:equipments,id',
             'facility_bookings.*.borrowed_equipment.*.source_facility_id' => 'required|exists:facilities,id',
-            'facility_bookings.*.borrowed_equipment.*.quantity_needed' => 'required|integer|min:1',
-            'facility_bookings.*.expected_capacity' => 'nullable|integer|min:1',
-            'files'   => 'nullable|array|max:10',
-            'files.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
-            'existing_file_ids'   => ['nullable', 'array'],
-            'existing_file_ids.*' => ['integer'],
+            'facility_bookings.*.borrowed_equipment.*.quantity_needed'    => 'required|integer|min:1',
+            'facility_bookings.*.expected_capacity'                       => 'nullable|integer|min:1',
+            'files'                                                        => 'nullable|array|max:10',
+            'files.*'                                                      => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
+            'existing_file_ids'                                            => ['nullable', 'array'],
+            'existing_file_ids.*'                                          => ['integer'],
         ];
     }
-    
+
     protected function prepareForValidation(): void
     {
         if ($this->has('facility_bookings') && is_string($this->facility_bookings)) {

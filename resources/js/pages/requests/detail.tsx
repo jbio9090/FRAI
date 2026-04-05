@@ -169,12 +169,14 @@ export default function RequestDetail({ request }: DetailProps) {
                                             </CardContent>
                                         )}
 
-                                        {facilityRequest?.external_equipment && (
+                                        {facilityRequest?.external_equipment && facilityRequest.external_equipment.length > 0 && (
                                             <CardContent>
                                                 <Separator />
                                                 <CardTitle className="font-semibold text-muted-foreground mt-4 mb-4">External Equipment</CardTitle>
                                                 <CardDescription className='space-y-2 text-foreground'>
-                                                    {facilityRequest.external_equipment}
+                                                    {facilityRequest.external_equipment.map((item, i) => (
+                                                        <div key={i} className="text-sm">{item.name}</div>
+                                                    ))}
                                                 </CardDescription>
                                             </CardContent>
                                         )}

@@ -166,21 +166,25 @@ class RequestService
 
     private function syncBookingsAndEquipment(FacilityRequest $facilityRequest, array $bookings): void
     {
-        $equipmentMap = []; // [key => [equipment_id, quantity_needed, is_borrowed, source_facility_id]]
+        $equipmentMap = [];
 
         foreach ($bookings as $booking) {
             $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
 
-            $facilityRequest->requestFacilities()->create([
-                'facility_id'        => $booking['facility_id'],
-                'date_requested'     => $dateOnly,
-                'time_start'         => $booking['time_start'],
-                'time_end'           => $booking['time_end'],
-                'external_equipment' => $booking['external_equipment'] ?? null,
-                'expected_capacity'  => $booking['expected_capacity'] ?? null,
+            $requestFacility = $facilityRequest->requestFacilities()->create([
+                'facility_id'       => $booking['facility_id'],
+                'date_requested'    => $dateOnly,
+                'time_start'        => $booking['time_start'],
+                'time_end'          => $booking['time_end'],
+                'expected_capacity' => $booking['expected_capacity'] ?? null,
             ]);
 
-            // Regular equipment
+            foreach ($booking['external_equipment'] ?? [] as $externalItem) {
+                $requestFacility->externalEquipments()->create([
+                    'name' => $externalItem['name'],
+                ]);
+            }
+
             foreach ($booking['equipment'] ?? [] as $equipment) {
                 $key = "own_{$equipment['equipment_id']}";
                 $equipmentMap[$key] = [
@@ -191,7 +195,6 @@ class RequestService
                 ];
             }
 
-            // Borrowed equipment — keyed by equipment + source facility so different sources stay separate
             foreach ($booking['borrowed_equipment'] ?? [] as $equipment) {
                 $key = "borrow_{$equipment['equipment_id']}_{$equipment['source_facility_id']}";
                 $equipmentMap[$key] = [
@@ -235,7 +238,7 @@ class RequestService
                 $existingEnd   = Carbon::parse($existing->time_end);
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
-                    $facility   = Facility::find($booking['facility_id']);
+                    $facility    = Facility::find($booking['facility_id']);
                     $conflicts[] = sprintf(
                         'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing approved booking (%s - %s)',
                         $facility->name ?? 'Unknown Facility',
@@ -254,15 +257,15 @@ class RequestService
 
     public function recommendAction($validated, $saved_request): void
     {
-        $externalEquipment      = false;
-        $recommended_action     = RequestStatus::APPROVED;
+        $hasExternalEquipment      = false;
+        $recommended_action        = RequestStatus::APPROVED;
         $recommended_action_reason = null;
 
         $conflicts = $this->checkForConflicts($validated['facility_bookings'], $saved_request->id);
 
         foreach ($validated['facility_bookings'] as $booking) {
             if (!empty($booking['external_equipment'])) {
-                $externalEquipment = true;
+                $hasExternalEquipment = true;
                 break;
             }
         }
@@ -270,12 +273,12 @@ class RequestService
         if (!empty($conflicts)) {
             $recommended_action        = RequestStatus::DENIED;
             $recommended_action_reason = "Time conflict with events";
-        } elseif ($externalEquipment) {
+        } elseif ($hasExternalEquipment) {
             $recommended_action        = RequestStatus::CONDITIONALLY_APPROVED;
             $recommended_action_reason = "Approve request along with the external equipment";
         } else {
-            $word = count($validated['facility_bookings']) > 1 ? "facilities" : "facility";
-            $recommended_action_reason = "No conflicting shedule found for all the requested $word";
+            $word                      = count($validated['facility_bookings']) > 1 ? "facilities" : "facility";
+            $recommended_action_reason = "No conflicting schedule found for all the requested $word";
         }
 
         $saved_request->update([
@@ -474,6 +477,7 @@ class RequestService
             'user',
             'requestFacilities',
             'requestFacilities.facility',
+            'requestFacilities.externalEquipments', 
             'equipment' => fn($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
             'equipment.facilities',
             'files',
@@ -484,12 +488,12 @@ class RequestService
             ->keyBy('id');
 
         return [
-            'id'               => $detail->id,
-            'title'            => $detail->title,
-            'description'      => $detail->description,
-            'priority_level'   => $detail->priority_level,
-            'priority_reason'  => $detail->priority_reason,
-            'existing_files' => $detail->files->map(fn($f) => [
+            'id'              => $detail->id,
+            'title'           => $detail->title,
+            'description'     => $detail->description,
+            'priority_level'  => $detail->priority_level,
+            'priority_reason' => $detail->priority_reason,
+            'existing_files'  => $detail->files->map(fn($f) => [
                 'id'            => $f->id,
                 'original_name' => $f->original_name,
                 'mime_type'     => $f->mime_type,
@@ -533,7 +537,7 @@ class RequestService
                         'time_start'         => $rf->time_start,
                         'time_end'           => $rf->time_end,
                         'expected_capacity'  => $rf->expected_capacity,
-                        'external_equipment' => $rf->external_equipment ?? '',
+                        'external_equipment' => $rf->externalEquipments->map(fn($e) => ['name' => $e->name])->values(),
                         'equipment'          => $ownEquipment,
                         'borrowed_equipment' => $borrowedEquipment,
                         'conflicts'          => [],

@@ -43,7 +43,7 @@ interface FacilityBooking {
     equipment: EquipmentRequest[];
     borrowed_equipment: BorrowedEquipmentRequest[];
     conflicts: BookingSchedule[];
-    external_equipment: string;
+    external_equipment: { name: string }[];
     expected_capacity: number | null;
 }
 
@@ -162,7 +162,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
-    const [externalEquipment, setExternalEquipment] = useState<string>('');
+    const [externalEquipment, setExternalEquipment] = useState<{ name: string }[]>([]);
+    const [externalEquipmentInput, setExternalEquipmentInput] = useState<string>('');
     const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
@@ -402,7 +403,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setBorrowingEquipmentId(null);
         setFacilitySchedule(null);
         setHasTimeConflict(false);
-        setExternalEquipment('');
+        setExternalEquipment([]);
+        setExternalEquipmentInput('');
         setExpectedCapacity('');
     }
 
@@ -444,7 +446,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         const payload: Record<string, unknown> = {
             title: data.title,
             description: data.description,
-            facility_bookings: JSON.stringify(data.facility_bookings), 
+            facility_bookings: JSON.stringify(data.facility_bookings),
             priority_level: data.priority_level,
             priority_reason: data.priority_reason,
             files: attachedFiles.map(f => f.file),
@@ -802,18 +804,73 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
                                             <Plus size={16} />
                                             <span>Add external equipment</span>
+                                            {externalEquipment.length > 0 && (
+                                                <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                                                    {externalEquipment.length}
+                                                </span>
+                                            )}
                                         </Button>
                                     </CollapsibleTrigger>
                                     <CollapsibleContent>
-                                        <div className="mt-3 space-y-4">
-                                            <Label htmlFor="external_equipment">External Equipment</Label>
-                                            <Textarea
-                                                id="external_equipment"
-                                                placeholder="Describe any external equipment you'll be bringing (e.g., 2 portable speakers, 1 projector stand)"
-                                                rows={3}
-                                                value={externalEquipment}
-                                                onChange={(e) => setExternalEquipment(e.target.value)}
-                                            />
+                                        <div className="mt-3 space-y-3">
+                                            <Label>External Equipment</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                List equipment you'll be bringing that isn't in our inventory.
+                                            </p>
+
+                                            {/* Input row */}
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    placeholder="e.g., Portable speaker"
+                                                    value={externalEquipmentInput}
+                                                    onChange={(e) => setExternalEquipmentInput(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            const trimmed = externalEquipmentInput.trim();
+                                                            if (!trimmed) return;
+                                                            setExternalEquipment(prev => [...prev, { name: trimmed }]);
+                                                            setExternalEquipmentInput('');
+                                                        }
+                                                    }}
+                                                    className="text-sm"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    onClick={() => {
+                                                        const trimmed = externalEquipmentInput.trim();
+                                                        if (!trimmed) return;
+                                                        setExternalEquipment(prev => [...prev, { name: trimmed }]);
+                                                        setExternalEquipmentInput('');
+                                                    }}
+                                                >
+                                                    Add
+                                                </Button>
+                                            </div>
+
+                                            {/* Added items list */}
+                                            {externalEquipment.length > 0 && (
+                                                <div className="space-y-1.5">
+                                                    {externalEquipment.map((item, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-muted/20"
+                                                        >
+                                                            <span>{item.name}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setExternalEquipment(prev => prev.filter((_, idx) => idx !== i))
+                                                                }
+                                                                className="text-muted-foreground hover:text-destructive transition-colors"
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </CollapsibleContent>
                                 </Collapsible>
@@ -1140,10 +1197,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                 </div>
                                                             )}
 
-                                                            {booking.external_equipment && (
-                                                                <div className="mt-4 flex flex-col">
-                                                                    <span className="text-muted-foreground">External Equipment: </span>
-                                                                    <span className="">{booking.external_equipment}</span>
+                                                            {booking.external_equipment.length > 0 && (
+                                                                <div className="mt-4 space-y-1">
+                                                                    <div className="text-muted-foreground">External Equipment:</div>
+                                                                    {booking.external_equipment.map((item, i) => (
+                                                                        <div key={i} className="text-sm">{item.name}</div>
+                                                                    ))}
                                                                 </div>
                                                             )}
                                                         </div>
