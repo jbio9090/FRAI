@@ -60,9 +60,9 @@ class RequestService
         }
 
         if ($hasExternalEquipment === 'yes') {
-            $query->whereHas('requestFacilities', fn($q) => $q->whereNotNull('external_equipment')->where('external_equipment', '!=', ''));
+            $query->whereHas('requestFacilities.externalEquipments');
         } elseif ($hasExternalEquipment === 'no') {
-            $query->whereDoesntHave('requestFacilities', fn($q) => $q->whereNotNull('external_equipment')->where('external_equipment', '!=', ''));
+            $query->whereDoesntHave('requestFacilities.externalEquipments');
         }
 
         $sortMap = [
@@ -92,7 +92,8 @@ class RequestService
             "user",
             "facilities",
             "requestFacilities",
-            "comments",
+            "requestFacilities.externalEquipments",
+            "comments" => fn ($q) => $q->latest(),
             "comments.user",
             "equipment" => fn($q) => $q->withPivot('quantity_needed'),
             "equipment.facilities",
@@ -477,7 +478,7 @@ class RequestService
             'user',
             'requestFacilities',
             'requestFacilities.facility',
-            'requestFacilities.externalEquipments', 
+            'requestFacilities.externalEquipments',
             'equipment' => fn($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
             'equipment.facilities',
             'files',

@@ -52,11 +52,12 @@ export default function RequestDetail({ request }: DetailProps) {
     }
 
     const hasEquipment = request.equipment.length > 0;
+    console.log(request);
+
 
     return (
         <DefaultLayout>
             <div className="flex flex-col w-full gap-4 *:text-sm">
-                {/* Header — always visible */}
                 <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
                         <h1 className='font-bold text-xl'>{request.title}</h1>
@@ -115,97 +116,105 @@ export default function RequestDetail({ request }: DetailProps) {
                     </TabsContent>
 
                     {/* Facilities Tab */}
-                    <TabsContent value="facilities" className="flex flex-col gap-6 mt-6">
-                        {request.facilities.map((facility) => {
-                            const facilityRequest = request.request_facilities.find(
-                                (rf) => rf.facility_id === facility.id &&
-                                    facility.pivot.date_requested === rf.date_requested &&
-                                    facility.pivot.time_start === rf.time_start &&
-                                    facility.pivot.time_end === rf.time_end
+                    <TabsContent value="facilities" className="flex flex-col gap-4 mt-6">
+                        {request.request_facilities.map((rf) => {
+                            const facility = request.facilities.find(f => f.id === rf.facility_id);
+                            if (!facility) return null;
+
+                            const facilityEquipment = request.equipment.filter(eq =>
+                                eq.facilities?.some(f => f.id === rf.facility_id)
                             );
 
-                            const date = new Date(facility.pivot.date_requested).toLocaleDateString();
+                            const date = new Date(rf.date_requested).toLocaleDateString('en-US', {
+                                month: 'long', day: 'numeric', year: 'numeric'
+                            });
 
                             return (
                                 <div
-                                    key={`${facility.id}-${facility.pivot.date_requested}-${facility.pivot.time_start}`}
-                                    className="flex flex-col gap-3"
+                                    key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
+                                    className="rounded-xl border border-border bg-card overflow-hidden"
                                 >
-                                    {/* Facility card */}
-                                    <Card className='py-8 px-4'>
-                                        <CardHeader>
-                                            <Link href={route("facility.detail", [facility.id])}>
-                                                <h2 className='font-bold hover:underline text-lg w-auto'>{facility.name}</h2>
-                                            </Link>
-                                            <CardDescription className='flex items-center flex-wrap text-sm gap-2 justify-between'>
-                                                <div className="flex items-center gap-1">
-                                                    <Calendar size={16} />
-                                                    <span className='font-medium'>{date}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <Clock size={16} />
-                                                    <span className='font-medium'>
-                                                        {formatTime(facility.pivot.time_start)} to {formatTime(facility.pivot.time_end)}
-                                                    </span>
-                                                </div>
-                                            </CardDescription>
-                                        </CardHeader>
+                                    {/* Header */}
+                                    <div className="px-5 py-4 border-b border-border">
+                                        <Link href={route("facility.detail", [facility.id])}>
+                                            <h2 className="text-[15px] font-medium hover:underline mb-2">
+                                                {facility.name}
+                                            </h2>
+                                        </Link>
+                                        <div className="flex flex-wrap gap-3">
+                                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-1">
+                                                <Calendar size={12} />
+                                                {date}
+                                            </span>
+                                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-1">
+                                                <Clock size={12} />
+                                                {formatTime(rf.time_start)} – {formatTime(rf.time_end)}
+                                            </span>
+                                        </div>
+                                    </div>
 
-                                        {hasEquipment && (
-                                            <CardContent className='pt-2'>
-                                                <CardTitle className='text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide'>
-                                                    Equipment
-                                                </CardTitle>
-                                                <CardDescription className='flex flex-col gap-3'>
-                                                    {request.equipment.map((eq) => (
-                                                        <div key={eq.id} className="flex justify-between text-foreground">
-                                                            <span>{eq.name}</span>
-                                                            <span className='text-muted-foreground'>
-                                                                Qty: {eq.pivot.quantity_needed}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </CardDescription>
-                                            </CardContent>
-                                        )}
+                                    {/* Equipment */}
+                                    {facilityEquipment.length > 0 && (
+                                        <div className="px-5 py-4">
+                                            <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
+                                                Equipment
+                                            </p>
+                                            <div className="flex flex-col divide-y divide-border">
+                                                {facilityEquipment.map((eq) => (
+                                                    <div key={eq.id} className="flex justify-between items-center py-2 text-sm">
+                                                        <span>{eq.name}</span>
+                                                        <span className="text-xs text-muted-foreground bg-muted rounded px-2 py-0.5">
+                                                            Qty: {eq.pivot.quantity_needed}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
-                                        {facilityRequest?.external_equipment && facilityRequest.external_equipment.length > 0 && (
-                                            <CardContent>
-                                                <Separator />
-                                                <CardTitle className="font-semibold text-muted-foreground mt-4 mb-4">External Equipment</CardTitle>
-                                                <CardDescription className='space-y-2 text-foreground'>
-                                                    {facilityRequest.external_equipment.map((item, i) => (
-                                                        <div key={i} className="text-sm">{item.name}</div>
-                                                    ))}
-                                                </CardDescription>
-                                            </CardContent>
-                                        )}
-
-                                    </Card>
+                                    {/* External Equipment */}
+                                    {rf.external_equipments?.length > 0 && (
+                                        <div className="px-5 py-4 border-t border-border">
+                                            <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
+                                                External equipment
+                                            </p>
+                                            <div className="flex flex-col divide-y divide-border">
+                                                {rf.external_equipments.map((item, i) => (
+                                                    <div key={i} className="text-sm py-2">{item.name}</div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </TabsContent>
-
-                    <TabsContent value="comments" className="flex flex-col gap-6 mt-6 items-center w-full lg:grid lg:gap-1 grid-cols-[2fr_1fr]">
-                        <div className="flex flex-col w-full max-w-2xl gap-3 justify-center">
-                            {request.comments?.length > 0 ? (
-                                request.comments.map((comment) => (
-                                    <Comment
-                                        key={comment.id}
-                                        comment={comment}
-                                    />
-                                ))
-                            ) : (
-                                <p className="text-muted-foreground text-sm">No comments yet.</p>
-                            )}
+                    
+                    <TabsContent
+                        value="comments"
+                        className="mt-6 w-full relative flex flex-col items-start md:grid md:grid-cols-[3fr_4fr] gap-4"
+                    >
+                        <div className="order-1 md:order-2 w-full max-w-2xl h-full overflow-y-auto pr-2 pb-32 md:pb-0">
+                            <div className="flex flex-col gap-3">
+                                {request.comments?.length > 0 ? (
+                                    request.comments.map((comment) => (
+                                        <Comment key={comment.id} comment={comment} />
+                                    ))
+                                ) : (
+                                    <p className="text-muted-foreground text-sm">
+                                        No comments yet.
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
-                        <div className="flex flex-col self-start w-full gap-6">
-                            <Separator className="max-w-2xl lg:hidden" />
-                            <CommentForm requestId={request.id} />
+                        <div
+                            className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t p-4 md:sticky md:top-4 md:z-auto md:p-0 md:border-0"
+                        >
+                            <div className="max-w-2xl mx-auto flex flex-col gap-3">
+                                <CommentForm requestId={request.id} />
+                            </div>
                         </div>
-
                     </TabsContent>
                 </Tabs>
             </div>

@@ -54,14 +54,15 @@ export const PRIORITY_LABELS: Record<0 | 1 | 2 | 3, string> = {
     3: 'Government',
 };
 
-export interface RequestFacility {
+interface RequestFacility {
+    id: number;
+    request_id: number;
     facility_id: number;
-    id: number,
-    time_end: string,
-    time_start: string,
     date_requested: string;
-    external_equipment: string;
-    expected_capacity: number;
+    time_start: string;
+    time_end: string;
+    expected_capacity: number | null;
+    external_equipments: { id: number; name: string }[]; 
 }
 
 export interface Facility {
