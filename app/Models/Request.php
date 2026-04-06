@@ -33,6 +33,8 @@ class Request extends Model
         'held_by_request_id',
         "processed_by",
         "processed_at",
+        'pending_conflict_rf_ids',
+        'approved_conflict_rf_ids',
     ];
 
     protected $casts = [
@@ -40,6 +42,8 @@ class Request extends Model
         'on_hold'        => 'boolean',
         'priority_level' => PriorityLevel::class,
         'processed_at'   => 'datetime',
+        'pending_conflict_rf_ids' => 'array',
+        'approved_conflict_rf_ids' => 'array',
     ];
 
     /* =========================================

@@ -192,12 +192,11 @@ class RequestController extends Controller
         $validated = $request->validate([
             'ids'     => ['required', 'array', 'min:1'],
             'ids.*'   => ['integer', 'exists:requests,id'],
-            'action' => ['required', 'string', 'in:approve,reject,conditionally_approve,comment'],
+            'action'  => ['required', 'string', 'in:approve,reject,conditionally_approve,comment'],
             'comment' => ['nullable', 'string'],
         ]);
 
         $statusMap = [
-            'approve'               => RequestStatus::APPROVED,
             'reject'                => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
         ];
@@ -209,19 +208,30 @@ class RequestController extends Controller
         ];
 
         $action      = $validated['action'];
-        $commentBody = $validated['comment'] ?? $defaultCommentMap[$action];
+        $commentBody = $validated['comment'] ?? null;
 
         $facilityRequests = FacilityRequest::whereIn('id', $validated['ids'])->get();
 
         foreach ($facilityRequests as $facilityRequest) {
-            if ($action !== 'comment') {
+            if ($action === 'approve') {
+                $facilityRequest = $this->service->approve($facilityRequest->id);
+
+                $body = $commentBody ?? (
+                    $facilityRequest->on_hold
+                    ? 'Request placed on hold due to a higher-priority conflict.'
+                    : 'Your request has been approved.'
+                );
+            } elseif ($action !== 'comment') {
                 $facilityRequest->update(['status' => $statusMap[$action]]);
+                $body = $commentBody ?? $defaultCommentMap[$action];
+            } else {
+                $body = $commentBody;
             }
 
-            if ($commentBody) {
+            if ($body) {
                 $facilityRequest->comments()->create([
                     'user_id' => auth()->id(),
-                    'body'    => $commentBody,
+                    'body'    => $body,
                 ]);
             }
 

@@ -21,6 +21,10 @@ export interface Request {
             path: string
         }
     ]
+    pending_conflict_rf_ids: number[] | null;
+    approved_conflict_rf_ids: number[] | null;
+    pending_conflicts?: ConflictingBooking[];
+    approved_conflicts?: ConflictingBooking[];
 }
 
 export interface Comment {
@@ -62,7 +66,7 @@ interface RequestFacility {
     time_start: string;
     time_end: string;
     expected_capacity: number | null;
-    external_equipments: { id: number; name: string }[]; 
+    external_equipments: { id: number; name: string }[];
 }
 
 export interface Facility {
@@ -75,4 +79,21 @@ export interface Facility {
 export interface RequestsPageProps {
     requests: Request[];
     page_title: string;
+}
+
+export interface ConflictingBooking {
+    id: number;
+    facility_id: number;
+    date_requested: string;
+    time_start: string;
+    time_end: string;
+    request: {
+        id: number;
+        title: string;
+        user: { name: string };
+    };
+    facility: {
+        id: number;
+        name: string;
+    };
 }

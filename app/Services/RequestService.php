@@ -88,16 +88,46 @@ class RequestService
 
     public function getDetail(int $request_id)
     {
-        return FacilityRequest::with([
+        $request = FacilityRequest::with([
             "user",
             "facilities",
             "requestFacilities",
             "requestFacilities.externalEquipments",
-            "comments" => fn ($q) => $q->latest(),
+            "comments" => fn($q) => $q->latest(),
             "comments.user",
             "equipment" => fn($q) => $q->withPivot('quantity_needed'),
             "equipment.facilities",
         ])->where("id", $request_id)->firstOrFail();
+
+        $allRfIds = array_unique(array_merge(
+            $request->pending_conflict_rf_ids ?? [],
+            $request->approved_conflict_rf_ids ?? [],
+        ));
+
+        $conflictRfs = $allRfIds
+            ? RequestFacility::whereIn('id', $allRfIds)
+            ->with(['request.user', 'facility'])
+            ->get()
+            ->keyBy('id')
+            : collect();
+
+        $request->setRelation(
+            'pending_conflicts',
+            collect($request->pending_conflict_rf_ids ?? [])
+                ->map(fn($id) => $conflictRfs->get($id))
+                ->filter()
+                ->values()
+        );
+
+        $request->setRelation(
+            'approved_conflicts',
+            collect($request->approved_conflict_rf_ids ?? [])
+                ->map(fn($id) => $conflictRfs->get($id))
+                ->filter()
+                ->values()
+        );
+
+        return $request;
     }
 
     public function create(array $validated): FacilityRequest
@@ -216,39 +246,53 @@ class RequestService
         }
     }
 
-    public function checkForConflicts(array $bookings, ?int $excludeRequestId = null): array
+    public function checkForConflicts(array $bookings, array $statuses = [RequestStatus::APPROVED], ?int $excludeRequestId = null): array
     {
         $conflicts = [];
 
+        $facilityIds = collect($bookings)->pluck('facility_id')->unique();
+        $dates = collect($bookings)->pluck('date')->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))->unique();
+
+        $existingBookings = RequestFacility::whereIn('facility_id', $facilityIds)
+            ->whereIn('date_requested', $dates)
+            ->whereHas('request', function ($query) use ($excludeRequestId, $statuses) {
+                $query->whereIn('status', $statuses)
+                    ->where('on_hold', false)
+                    ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId));
+            })
+            ->with(['facility', 'request'])
+            ->get();
+
         foreach ($bookings as $booking) {
-            $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
+            $requestedDate  = Carbon::parse($booking['date'])->format('Y-m-d');
             $requestedStart = Carbon::parse($booking['time_start']);
             $requestedEnd   = Carbon::parse($booking['time_end']);
 
-            $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
-                ->where('date_requested', $dateOnly)
-                ->whereHas('request', function ($query) use ($excludeRequestId) {
-                    $query->whereIn('status', [RequestStatus::APPROVED])
-                        ->where('on_hold', false)
-                        ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId));
-                })
-                ->get();
-
             foreach ($existingBookings as $existing) {
+                if ($existing->facility_id != $booking['facility_id'] || $existing->date_requested != $requestedDate) {
+                    continue;
+                }
+
                 $existingStart = Carbon::parse($existing->time_start);
                 $existingEnd   = Carbon::parse($existing->time_end);
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
-                    $facility    = Facility::find($booking['facility_id']);
-                    $conflicts[] = sprintf(
-                        'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing approved booking (%s - %s)',
-                        $facility->name ?? 'Unknown Facility',
-                        Carbon::parse($dateOnly)->format('F j, Y'),
-                        $requestedStart->format('g:i A'),
-                        $requestedEnd->format('g:i A'),
-                        $existingStart->format('g:i A'),
-                        $existingEnd->format('g:i A')
-                    );
+                    $status = $existing->request->status;
+                    $conflicts[] = [
+                        'request_id' => $existing->request_id,
+                        'request_facility_id' => $existing->id,
+                        'status'     => $status,
+                        'message'    => sprintf(
+                            'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing %s booking (%s - %s)',
+                            $existing->facility->name,
+                            Carbon::parse($requestedDate)->format('F j, Y'),
+                            $requestedStart->format('g:i A'),
+                            $requestedEnd->format('g:i A'),
+                            strtolower($status->value),
+                            $existingStart->format('g:i A'),
+                            $existingEnd->format('g:i A')
+                        ),
+                    ];
                 }
             }
         }
@@ -256,13 +300,24 @@ class RequestService
         return $conflicts;
     }
 
-    public function recommendAction($validated, $saved_request): void
+    public function recommendAction(array $validated, FacilityRequest $saved_request): array
     {
         $hasExternalEquipment      = false;
         $recommended_action        = RequestStatus::APPROVED;
         $recommended_action_reason = null;
 
-        $conflicts = $this->checkForConflicts($validated['facility_bookings'], $saved_request->id);
+        $conflicts = $this->checkForConflicts(
+            $validated['facility_bookings'],
+            [RequestStatus::PENDING, RequestStatus::APPROVED],
+            $saved_request->id
+        );
+
+        $hasApprovedConflict = collect($conflicts)->contains(fn($c) => $c['status'] === RequestStatus::APPROVED);
+        $pendingConflicts    = collect($conflicts)->filter(fn($c) => $c['status'] === RequestStatus::PENDING)->values();
+        $approvedConflicts   = collect($conflicts)->filter(fn($c) => $c['status'] === RequestStatus::APPROVED)->values();
+
+        $pendingConflictRfIds  = $pendingConflicts->pluck('request_facility_id')->unique()->values()->toArray();
+        $approvedConflictRfIds = $approvedConflicts->pluck('request_facility_id')->unique()->values()->toArray();
 
         foreach ($validated['facility_bookings'] as $booking) {
             if (!empty($booking['external_equipment'])) {
@@ -271,9 +326,12 @@ class RequestService
             }
         }
 
-        if (!empty($conflicts)) {
+        if ($hasApprovedConflict) {
             $recommended_action        = RequestStatus::DENIED;
-            $recommended_action_reason = "Time conflict with events";
+            $recommended_action_reason = "Time conflict with approved events";
+        } elseif ($pendingConflicts->isNotEmpty()) {
+            $recommended_action        = RequestStatus::APPROVED;
+            $recommended_action_reason = "Time conflict with pending requests";
         } elseif ($hasExternalEquipment) {
             $recommended_action        = RequestStatus::CONDITIONALLY_APPROVED;
             $recommended_action_reason = "Approve request along with the external equipment";
@@ -285,7 +343,14 @@ class RequestService
         $saved_request->update([
             'recommended_action'        => $recommended_action,
             'recommended_action_reason' => $recommended_action_reason,
+            'pending_conflict_rf_ids'   => $pendingConflictRfIds ?: [],
+            'approved_conflict_rf_ids'  => $approvedConflictRfIds ?: [],
         ]);
+
+        return [
+            'pending'  => $pendingConflictRfIds,
+            'approved' => $approvedConflictRfIds,
+        ];
     }
 
     public function approve(int $request_id): FacilityRequest
