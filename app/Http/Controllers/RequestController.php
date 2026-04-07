@@ -153,7 +153,6 @@ class RequestController extends Controller
     public function createPage()
     {
         return Inertia::render("requests/create", [
-            // Each facility now carries its own equipment list via facility_equipment pivot
             'facilities' => Facility::with([
                 'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name')

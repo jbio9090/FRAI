@@ -204,12 +204,55 @@ class RequestService
             abort_if($facilityRequest->status !== RequestStatus::PENDING, 403);
             abort_if($facilityRequest->on_hold, 403);
 
+            $original = $facilityRequest->only([
+                'title',
+                'description',
+                'priority_level',
+                'priority_reason',
+            ]);
+
+            $originalFacilities = $facilityRequest->requestFacilities()
+                ->pluck('facility_id')
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray();
+
+            $newFacilities = collect($validated['facility_bookings'])
+                ->pluck('facility_id')
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray();
+
+            if ($originalFacilities !== $newFacilities) {
+                $facilityMap = Facility::whereIn('id', array_merge($originalFacilities, $newFacilities))
+                    ->pluck('name', 'id');
+
+                $changes['facilities'] = [
+                    'old' => collect($originalFacilities)->map(fn($id) => $facilityMap[$id] ?? $id),
+                    'new' => collect($newFacilities)->map(fn($id) => $facilityMap[$id] ?? $id),
+                ];
+            }
+
             $facilityRequest->update([
                 'title'           => $validated['title'],
                 'description'     => $validated['description'],
                 'priority_level'  => $validated['priority_level'] ?? 0,
                 'priority_reason' => $validated['priority_reason'] ?? null,
             ]);
+
+            $changes = [];
+            foreach ($original as $key => $oldValue) {
+                $newValue = $facilityRequest->{$key};
+
+                if ($oldValue != $newValue) {
+                    $changes[$key] = [
+                        'old' => $oldValue,
+                        'new' => $newValue,
+                    ];
+                }
+            }
 
             $facilityRequest->equipment()->detach();
             $facilityRequest->requestFacilities()->delete();
@@ -226,8 +269,7 @@ class RequestService
             }
 
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
-
-            $this->auditLogger::requestUpdated($facilityRequest);
+            $this->auditLogger::requestUpdated($facilityRequest, $changes);
             return $facilityRequest;
         });
     }
@@ -461,6 +503,7 @@ class RequestService
                     'processed_at'       => Carbon::now(),
                 ]);
 
+                $this->auditLogger::requestApproved($request);
                 return $request;
             }
 
@@ -474,6 +517,8 @@ class RequestService
                     'processed_by'       => Auth::id(),
                     'processed_at'       => Carbon::now(),
                 ]);
+
+                $this->auditLogger::requestApproved($request);
 
                 foreach ($conflictingRequests as $conflicting) {
                     $conflicting->update([

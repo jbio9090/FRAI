@@ -24,6 +24,9 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
     let statusColor = "";
     const auth = usePage().props.auth;
 
+    console.log(auditLogs);
+    
+
     const canEdit = request.status === 'Pending'
         && !request.on_hold
         && request.user.id === auth.user.id;
