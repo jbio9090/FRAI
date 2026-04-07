@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import wordToColor from "@/lib/wordToColor";
+import useDarkMode from "@/hooks/use-darkMode";
 
 interface FacilityPivot {
     equipment_id: number;
@@ -359,6 +360,7 @@ export default function EquipmentsPage({
     const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [sortValue, setSortValue] = useState<SortValue | "">("");
+    const isDark = useDarkMode();
 
     const totalUnits = useMemo(
         () => equipments.reduce((s, e) => s + e.quantity, 0),
@@ -581,7 +583,7 @@ export default function EquipmentsPage({
                                                 </span>
                                             ) : (
                                                 eq.facilities.map((f) => {
-                                                    const { text, background } = wordToColor(f.name);
+                                                    const { text, background } = wordToColor(f.name, isDark);
                                                     return (
                                                         <Badge
                                                             key={f.id}

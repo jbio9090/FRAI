@@ -183,7 +183,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                     </Breadcrumb>
                 </motion.header>
 
-                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible mt-16 md:mt-0" + ((hasPadding) ? " p-6 md:p-8" : "")}>
+                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible mt-16 md:mt-0 max-w-7xl mx-auto w-full " + ((hasPadding) ? " p-6 md:p-8" : "")}>
                     {children}
                 </div>
 

@@ -210,7 +210,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
 
     return (
         <DefaultLayout>
-            <div className="max-w-6xl mx-auto w-full">
+            <div className="max-w-7xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
 
                 <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">

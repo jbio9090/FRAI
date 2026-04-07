@@ -1,8 +1,7 @@
 import chroma from "chroma-js";
 import randomColor from "randomcolor";
 
-export default function wordToColor(word: string) {
-    const isDark = document.documentElement.classList.contains("dark");
+export default function wordToColor(word: string, isDark: boolean) {
     const base = chroma(randomColor({ seed: word, luminosity: "bright" }));
 
     if (isDark) {
