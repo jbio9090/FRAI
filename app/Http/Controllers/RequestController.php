@@ -12,13 +12,15 @@ use App\RequestStatus;
 use App\Services\RequestService;
 use App\Services\NotificationService;
 use App\Jobs\ProcessRequestRecommendation;
-
+use App\Services\AuditLogger;
+use App\Models\AuditLog;
 
 class RequestController extends Controller
 {
     public function __construct(
         protected RequestService $service,
         protected NotificationService $notification,
+        protected AuditLogger $auditLogger,
     ) {}
 
     public function index(Request $request)
@@ -78,6 +80,12 @@ class RequestController extends Controller
             $facilityRequest = $this->service->approve($id);
         } else {
             $facilityRequest->update(['status' => $statusMap[$action]]);
+
+            match ($action) {
+                'reject'                => $this->auditLogger::requestDenied($facilityRequest),
+                'conditionally_approve' => $this->auditLogger::requestConditionallyApproved($facilityRequest),
+                default                 => null,
+            };
         }
 
         $facilityRequest->comments()->create([
@@ -155,10 +163,20 @@ class RequestController extends Controller
 
     public function detail(int $request_id)
     {
+        $requestModel = FacilityRequest::findOrFail($request_id);
+
         $requestDetail = $this->service->getDetail($request_id);
+
+        $auditLogs = AuditLog::query()
+            ->forSubject($requestModel)
+            ->with('user')
+            ->latest()
+            ->get();
+
         return Inertia::render("requests/detail", [
-            'request'           => $requestDetail,
+            'request' => $requestDetail,
             'labeledBreadcrumb' => $requestDetail['title'],
+            'auditLogs' => $auditLogs,
         ]);
     }
 

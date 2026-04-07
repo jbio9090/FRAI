@@ -16,6 +16,10 @@ use App\PriorityLevel;
 
 class RequestService
 {
+    public function __construct(
+        protected AuditLogger $auditLogger
+    ) {}
+
     public function get(
         ?RequestStatus $status,
         string $filter = 'this_week',
@@ -186,6 +190,7 @@ class RequestService
                 return $this->approve($facilityRequest->id);
             }
 
+            $this->auditLogger::requestCreated($facilityRequest);
             return $facilityRequest;
         });
     }
@@ -222,6 +227,7 @@ class RequestService
 
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
 
+            $this->auditLogger::requestUpdated($facilityRequest);
             return $facilityRequest;
         });
     }
@@ -504,6 +510,7 @@ class RequestService
                 ]);
             }
 
+            $this->auditLogger::requestApproved($request);
             return $request->fresh();
         });
     }

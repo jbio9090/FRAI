@@ -17,9 +17,10 @@ import Comment from '@/components/comment';
 interface DetailProps {
     children: React.ReactNode;
     request: Request;
+    auditLogs: any[];
 }
 
-export default function RequestDetail({ request }: DetailProps) {
+export default function RequestDetail({ request, auditLogs }: DetailProps) {
     let statusColor = "";
     const auth = usePage().props.auth;
 
@@ -41,9 +42,6 @@ export default function RequestDetail({ request }: DetailProps) {
         case 'Denied': statusColor = "destructive"; break;
         case 'Conditionally Approved': statusColor = "secondary"; break;
     }
-
-    const hasEquipment = request.equipment.length > 0;
-    console.log(request);
 
 
     return (
@@ -80,6 +78,13 @@ export default function RequestDetail({ request }: DetailProps) {
                             <span>Comments</span>
                             <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
                                 {request.comments.length}
+                            </span>
+                        </TabsTrigger>
+
+                        <TabsTrigger value="activity" className="flex items-center gap-2">
+                            <span>Activity</span>
+                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                {auditLogs.length}
                             </span>
                         </TabsTrigger>
                     </TabsList>
@@ -291,6 +296,68 @@ export default function RequestDetail({ request }: DetailProps) {
                             </div>
                         </div>
                     </TabsContent>
+
+                    <TabsContent value="activity" className="flex flex-col gap-0 mt-6">
+                        {auditLogs.length > 0 ? (
+                            <div className="relative">
+                                <div className="absolute left-[19px] top-2 bottom-2 w-px bg-border" />
+
+                                <div className="flex flex-col gap-0">
+                                    {auditLogs.map((log, index) => (
+                                        <div key={log.id} className="flex gap-4 relative pb-6 last:pb-0">
+                                            <div className="shrink-0 z-10">
+                                                <AvatarWithInitials
+                                                    avatarSrc={log.user?.profile}
+                                                    username={log.user?.name || "System"}
+                                                    size="sm"
+                                                />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1.5 pt-0.5 min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="font-medium text-sm">
+                                                        {log.user?.name || "System"}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {moment(log.created_at).fromNow()}
+                                                    </span>
+                                                </div>
+
+                                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                                    {log.description || log.event}
+                                                </p>
+
+                                                {log.properties && Object.keys(log.properties).length > 0 && (
+                                                    <div className="mt-1 rounded-lg border border-border bg-muted/50 overflow-hidden">
+                                                        <table className="w-full text-xs">
+                                                            <tbody>
+                                                                {Object.entries(log.properties).map(([key, value]) => (
+                                                                    <tr key={key} className="border-b border-border last:border-0">
+                                                                        <td className="px-3 py-2 font-medium text-muted-foreground w-1/3 capitalize">
+                                                                            {key.replace(/_/g, ' ')}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 font-mono text-foreground break-all">
+                                                                            {typeof value === 'object'
+                                                                                ? JSON.stringify(value)
+                                                                                : String(value)
+                                                                            }
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-muted-foreground text-sm">No activity yet.</p>
+                        )}
+                    </TabsContent>
+
                 </Tabs>
             </div>
         </DefaultLayout>
