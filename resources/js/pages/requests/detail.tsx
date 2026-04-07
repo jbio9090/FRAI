@@ -1,24 +1,15 @@
 import { Calendar, Clock, SendHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import DefaultLayout from '@/layout.tsx/default.';
 import { Request } from '@/types/request';
 import { Link, usePage } from '@inertiajs/react';
-import { Separator } from '@/components/ui/separator';
 import moment from 'moment';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import { Pen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { Field, FieldDescription } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import Comment from '@/components/comment';
 
@@ -171,7 +162,6 @@ export default function RequestDetail({ request }: DetailProps) {
                                             </div>
                                         </div>
                                     )}
-
                                     {/* External Equipment */}
                                     {rf.external_equipments?.length > 0 && (
                                         <div className="px-5 py-4 border-t border-border">
@@ -185,11 +175,55 @@ export default function RequestDetail({ request }: DetailProps) {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* ✅ ADD THIS BLOCK */}
+                                    {request.pending_conflicts?.filter(c => c.facility_id === rf.facility_id).length > 0 && (
+                                        <div className="px-5 py-4 border-t border-border">
+                                            <p className="text-[11px] font-medium uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-3">
+                                                Pending conflicts
+                                            </p>
+                                            <div className="flex flex-col divide-y divide-border">
+                                                {request.pending_conflicts
+                                                    .filter(c => c.facility_id === rf.facility_id)
+                                                    .map((conflict) => (
+                                                        <div key={conflict.id} className="flex flex-col gap-1 py-2.5 text-sm">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <Link
+                                                                    href={route("requests.detail", conflict.request.id)}
+                                                                    className="font-medium hover:underline truncate"
+                                                                >
+                                                                    {conflict.request.title}
+                                                                </Link>
+                                                                <Badge variant="outline" className="shrink-0 text-[10px]">
+                                                                    {conflict.request.status}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                                <span className="flex items-center gap-1">
+                                                                    <Calendar size={11} />
+                                                                    {new Date(conflict.date_requested).toLocaleDateString('en-US', {
+                                                                        month: 'long', day: 'numeric', year: 'numeric'
+                                                                    })}
+                                                                </span>
+                                                                <span className="flex items-center gap-1">
+                                                                    <Clock size={11} />
+                                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                By {conflict.request.user.name}
+                                                            </p>
+                                                        </div>
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </TabsContent>
-                    
+
                     <TabsContent
                         value="comments"
                         className="mt-6 w-full relative flex flex-col items-start md:grid md:grid-cols-[3fr_4fr] gap-4"

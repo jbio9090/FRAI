@@ -83,6 +83,7 @@ export interface RequestsPageProps {
 
 export interface ConflictingBooking {
     id: number;
+    request_id: number;
     facility_id: number;
     date_requested: string;
     time_start: string;
@@ -90,7 +91,8 @@ export interface ConflictingBooking {
     request: {
         id: number;
         title: string;
-        user: { name: string };
+        status: string;
+        user: { id: number; name: string };
     };
     facility: {
         id: number;

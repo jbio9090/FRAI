@@ -347,10 +347,55 @@ class RequestService
             'approved_conflict_rf_ids'  => $approvedConflictRfIds ?: [],
         ]);
 
+        $savedRequestRfIds = $saved_request->requestFacilities()->pluck('id')->toArray();
+
+        $pendingConflicts
+            ->pluck('request_id')
+            ->unique()
+            ->each(function ($conflictingRequestId) use ($savedRequestRfIds) {
+                $conflictingRequest = FacilityRequest::find($conflictingRequestId);
+                if (!$conflictingRequest) return;
+
+                $existing = $conflictingRequest->pending_conflict_rf_ids ?? [];
+                $merged   = array_values(array_unique(array_merge($existing, $savedRequestRfIds)));
+
+                $conflictingRequest->update([
+                    'pending_conflict_rf_ids'   => $merged,
+                    'recommended_action'        => RequestStatus::APPROVED,
+                    'recommended_action_reason' => 'Time conflict with pending requests',
+                ]);
+            });
+
+        $this->removeStalePendingConflictRefs($saved_request, $pendingConflictRfIds);
+
         return [
             'pending'  => $pendingConflictRfIds,
             'approved' => $approvedConflictRfIds,
         ];
+    }
+
+    private function removeStalePendingConflictRefs(FacilityRequest $saved_request, array $currentPendingRfIds): void
+    {
+        $savedRfIds = $saved_request->requestFacilities()->pluck('id')->toArray();
+
+        $candidateRequests = FacilityRequest::where('id', '!=', $saved_request->id)
+            ->whereNotNull('pending_conflict_rf_ids')
+            ->get()
+            ->filter(fn($r) => !empty(array_intersect($r->pending_conflict_rf_ids ?? [], $savedRfIds)));
+
+        foreach ($candidateRequests as $candidate) {
+            $isStillConflicting = in_array($candidate->id, collect($currentPendingRfIds)->toArray())
+                || RequestFacility::whereIn('id', $currentPendingRfIds)
+                ->where('request_id', $candidate->id)
+                ->exists();
+
+            if ($isStillConflicting) continue;
+            $cleaned = array_values(array_diff($candidate->pending_conflict_rf_ids ?? [], $savedRfIds));
+
+            $candidate->update([
+                'pending_conflict_rf_ids' => $cleaned,
+            ]);
+        }
     }
 
     public function approve(int $request_id): FacilityRequest
