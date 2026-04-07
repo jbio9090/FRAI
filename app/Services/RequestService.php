@@ -83,7 +83,39 @@ class RequestService
             $query->latest();
         }
 
-        return $query->paginate(20);
+        $paginated = $query->paginate(20);
+
+        $paginated->getCollection()->transform(function ($request) {
+            $allRfIds = array_unique(array_merge(
+                $request->pending_conflict_rf_ids ?? [],
+                $request->approved_conflict_rf_ids ?? [],
+            ));
+
+            $conflictRfs = $allRfIds
+                ? RequestFacility::whereIn('id', $allRfIds)
+                ->with(['request.user', 'facility'])
+                ->get()
+                ->keyBy('id')
+                : collect();
+
+            $request->setRelation(
+                'pending_conflicts',
+                collect($request->pending_conflict_rf_ids ?? [])
+                    ->map(fn($id) => $conflictRfs->get($id))
+                    ->filter()->values()
+            );
+
+            $request->setRelation(
+                'approved_conflicts',
+                collect($request->approved_conflict_rf_ids ?? [])
+                    ->map(fn($id) => $conflictRfs->get($id))
+                    ->filter()->values()
+            );
+
+            return $request;
+        });
+
+        return $paginated;
     }
 
     public function getDetail(int $request_id)

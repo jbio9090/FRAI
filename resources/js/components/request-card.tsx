@@ -246,38 +246,94 @@ function RequestDetails({ request }: { request: Request }) {
             label: "Facilities",
             badge: request.facilities.length,
             content: (
-                <div className='flex flex-wrap gap-2 md:grid grid-cols-[1fr_1fr] w-auto'>
+                <div className='flex flex-col gap-3 mt-4'>
                     {request.request_facilities.map((rf) => {
                         const facility = request.facilities.find(f => f.id === rf.facility_id);
+
+                        const pendingConflicts = request.pending_conflicts?.filter(
+                            c => c.facility_id === rf.facility_id
+                        ) ?? [];
+                        const approvedConflicts = request.approved_conflicts?.filter(
+                            c => c.facility_id === rf.facility_id
+                        ) ?? [];
+
                         return (
-                            <div className='flex flex-col items-center text-sm max-w-40 text-foreground mt-4' key={rf.date_requested + rf.time_start}>
-                                <Link href={route("facility.detail", [rf.facility_id])} className='mr-auto ml-0 hover:underline'>
-                                    <span className='font-semibold'>{facility?.name}</span>
-                                </Link>
-                                {facility?.capacity < rf.expected_capacity && (
-                                    <div className="flex self-start py-1 px-2 text-xs border-1 my-2 rounded-full bg-secondary">
-                                        <span>
+                            <div
+                                className='flex flex-col text-sm border border-border rounded-lg overflow-hidden'
+                                key={rf.date_requested + rf.time_start}
+                            >
+                                <div className="px-3 py-2.5 flex flex-col gap-1">
+                                    <Link href={route("facility.detail", [rf.facility_id])} className='hover:underline'>
+                                        <span className='font-semibold'>{facility?.name}</span>
+                                    </Link>
+
+                                    {facility?.capacity < rf.expected_capacity && (
+                                        <div className="self-start py-0.5 px-2 text-xs border rounded-full text-amber-600 border-amber-600 dark:border-amber-400 dark:text-amber-400 bg-amber-500/10">
                                             Capacity Exceeded
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="flex items-center flex-wrap text-foreground/70 font-medium">
-                                    <div className="flex gap-1 items-center">
-                                        <Calendar size={12} />
-                                        <span className='text-sm'>{moment(rf.date_requested).format("MMM D, YYYY")}</span>
-                                    </div>
-                                    <div className="flex gap-1 items-center">
-                                        <Clock size={12} />
-                                        <span className='text-sm'>{formatTime(rf.time_start)} - {formatTime(rf.time_end)}</span>
-                                    </div>
-                                    {rf.expected_capacity && (
-                                        <div className="flex gap-1 items-center">
-                                            <User size={12} />
-                                            <span className='text-sm'>{rf.expected_capacity} attendees</span>
                                         </div>
                                     )}
 
+                                    <div className="flex items-center flex-wrap gap-x-2 text-foreground/70 font-medium">
+                                        <div className="flex gap-1 items-center">
+                                            <Calendar size={12} />
+                                            <span>{moment(rf.date_requested).format("MMM D, YYYY")}</span>
+                                        </div>
+                                        <div className="flex gap-1 items-center">
+                                            <Clock size={12} />
+                                            <span>{formatTime(rf.time_start)} – {formatTime(rf.time_end)}</span>
+                                        </div>
+                                        {rf.expected_capacity && (
+                                            <div className="flex gap-1 items-center">
+                                                <User size={12} />
+                                                <span>{rf.expected_capacity} attendees</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
+
+                                {pendingConflicts.length > 0 && (
+                                    <div className="border-t border-border px-3 py-2 flex flex-col gap-1.5">
+                                        <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                            Pending conflicts
+                                        </p>
+                                        {pendingConflicts.map((conflict) => (
+                                            <div key={conflict.id} className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+                                                <Link
+                                                    href={route("requests.detail", conflict.request.id)}
+                                                    className="hover:underline truncate font-medium text-foreground"
+                                                >
+                                                    {conflict.request.title}
+                                                </Link>
+                                                <span className="shrink-0 flex items-center gap-1">
+                                                    <Clock size={10} />
+                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {approvedConflicts.length > 0 && (
+                                    <div className="border-t border-border px-3 py-2 flex flex-col gap-1.5">
+                                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                                            Approved conflicts
+                                        </p>
+                                        {approvedConflicts.map((conflict) => (
+                                            <div key={conflict.id} className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+                                                <Link
+                                                    href={route("requests.detail", conflict.request.id)}
+                                                    className="hover:underline truncate font-medium text-foreground"
+                                                >
+                                                    {conflict.request.title}
+                                                </Link>
+                                                <span className="shrink-0 flex items-center gap-1">
+                                                    <Clock size={10} />
+                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}

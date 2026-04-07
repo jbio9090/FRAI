@@ -18,6 +18,8 @@ import SmartPagination from '@/components/SmartPagination';
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Facility } from '@/types/facility';
 import RequestCard from '@/components/request-card';
+import { Deferred } from '@inertiajs/react';
+import RequestsSkeleton from '@/components/skeleton/RequestIndexSkeleton';
 
 
 export interface PaginatedRequests {
@@ -29,7 +31,7 @@ export interface PaginatedRequests {
 }
 
 export interface RequestsPageProps {
-    requests: PaginatedRequests;
+    requests?: PaginatedRequests;
     page_title: string;
     filter: string;
     facilities: Facility[];
@@ -182,7 +184,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     };
 
     const clearAllSelection = () => setSelected([]);
-    const selectAllSelection = () => setSelected(requests.data.map((req) => req.id));
+    const selectAllSelection = () => setSelected((requests?.data ?? []).map((req) => req.id));
 
     const toggleSelection = () => {
         setSelectState(!isSelecting);
@@ -212,7 +214,6 @@ export default function RequestsPage({ requests, page_title, facilities, request
                 <h1 className="text-xl font-bold mb-6">{page_title} Requests</h1>
 
                 <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4">
-                    {/* Top bar: search + controls */}
                     <div className="flex gap-2">
                         <InputGroup className='max-w-xs sm:max-w-sm md:max-w-md'>
                             <InputGroupAddon>
@@ -225,7 +226,6 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             />
                         </InputGroup>
 
-                        {/* Desktop controls */}
                         <div className="hidden sm:flex gap-2">
                             <Popover>
                                 <PopoverTrigger asChild>
@@ -397,7 +397,6 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             )}
                         </div>
 
-                        {/* Mobile sheet */}
                         <Sheet>
                             <SheetTrigger asChild>
                                 <Button variant="outline" className="sm:hidden">
@@ -566,7 +565,6 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         </Sheet>
                     </div>
 
-                    {/* Date filter pills */}
                     <div className="flex max-w-full gap-2 overflow-x-scroll [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                         {commonFilterOptions.map((filter) => (
                             <Button
@@ -581,8 +579,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         ))}
                     </div>
 
-                    {/* Select all / deselect hint — only shown while selecting with nothing yet chosen */}
-                    {isAdmin && isSelecting && selected.length < requests.data.length && (
+                    {isAdmin && isSelecting && (requests?.data?.length ?? 0) > selected.length && (
                         <div className="flex items-center gap-2 mt-2">
                             <Button size={"sm"} variant={"outline"} onClick={selectAllSelection}>
                                 <MousePointer2 size={16} />
@@ -592,7 +589,6 @@ export default function RequestsPage({ requests, page_title, facilities, request
                     )}
                 </div>
 
-                {/* Bulk comment box — shown above the list when open */}
                 <AnimatePresence>
                     {selected.length > 0 && isBulkCommentOpen && (
                         <motion.div
@@ -636,53 +632,59 @@ export default function RequestsPage({ requests, page_title, facilities, request
                     )}
                 </AnimatePresence>
 
-                {requests.data.length > 0 && (
-                    <SmartPagination
-                        currentPage={requests.current_page}
-                        lastPage={requests.last_page}
-                        onPageChange={(page) => router.get(
-                            route(route().current(), { status: route().params.status }),
-                            { page, filter: filterMap[currentActiveFitler], search: searchQuery },
-                            { preserveState: true, preserveScroll: true }
+                <Deferred data="requests" fallback={<RequestsSkeleton />}>
+                    <>
+                        {requests && requests.data.length > 9 && (
+                            <SmartPagination
+                                currentPage={requests.current_page}
+                                lastPage={requests.last_page}
+                                onPageChange={(page) => router.get(
+                                    route(route().current(), { status: route().params.status }),
+                                    { page, filter: filterMap[currentActiveFitler], search: searchQuery },
+                                    { preserveState: true, preserveScroll: true }
+                                )}
+                            />
                         )}
-                    />
-                )}
 
-                <div className="gap-4 mt-6 flex flex-col items-start xl:grid grid-cols-[1fr_1fr]">
-                    {requests.data.length > 0 ? requests.data.map((request) => (
-                        <RequestCard
-                            request={request}
-                            page_title={page_title}
-                            key={request.id}
-                            isSelecting={isSelecting}
-                            isSelected={selected.includes(request.id)}
-                            handleSelection={handleSelection}
-                        />
-                    )) : (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.4, scale: { type: "tween", visualDuration: 0.4, bounce: 0.5 } }}
-                            className='m-auto items-center mt-8 flex flex-col text-center col-span-full gap-2'
-                        >
-                            <FolderOpen size={32} />
-                            <h1 className='font-bold text-2xl'>No Requests</h1>
-                            <p>Nothing to see here</p>
-                        </motion.div>
-                    )}
-                </div>
+                        <div className="gap-4 mt-6 flex flex-col items-start xl:grid grid-cols-[1fr_1fr]">
+                            {requests && requests.data.length > 0 ? requests.data.map((request) => (
+                                <RequestCard
+                                    request={request}
+                                    page_title={page_title}
+                                    key={request.id}
+                                    isSelecting={isSelecting}
+                                    isSelected={selected.includes(request.id)}
+                                    handleSelection={handleSelection}
+                                />
+                            )) : (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ duration: 0.4, scale: { type: "tween", visualDuration: 0.4, bounce: 0.5 } }}
+                                    className='m-auto items-center mt-8 flex flex-col text-center col-span-full gap-2'
+                                >
+                                    <FolderOpen size={32} />
+                                    <h1 className='font-bold text-2xl'>No Requests</h1>
+                                    <p>Nothing to see here</p>
+                                </motion.div>
+                            )}
 
-                {requests.data.length > 9 && (
-                    <SmartPagination
-                        currentPage={requests.current_page}
-                        lastPage={requests.last_page}
-                        onPageChange={(page) => router.get(
-                            route(route().current(), { status: route().params.status }),
-                            { page, filter: filterMap[currentActiveFitler], search: searchQuery },
-                            { preserveState: true, preserveScroll: true }
-                        )}
-                    />
-                )}
+                            {requests && requests.data.length > 9 && (
+                                <SmartPagination
+                                    currentPage={requests.current_page}
+                                    lastPage={requests.last_page}
+                                    onPageChange={(page) => router.get(
+                                        route(route().current(), { status: route().params.status }),
+                                        { page, filter: filterMap[currentActiveFitler], search: searchQuery },
+                                        { preserveState: true, preserveScroll: true }
+                                    )}
+                                />
+                            )}
+                        </div>
+                    </>
+                </Deferred>
+
+
             </div>
 
             <AnimatePresence>
@@ -701,7 +703,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             className="flex items-center gap-1.5 hover:text-primary"
                         >
                             <span className="text-sm font-medium">{selected.length} selected</span>
-                            <X size={12}/>
+                            <X size={12} />
                         </Button>
 
                         <div className="w-px h-5 bg-border shrink-0" />
@@ -725,7 +727,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                                const selectedRequests = requests.data.filter((r) => selected.includes(r.id));
+                                const selectedRequests = (requests?.data ?? []).filter((r) => selected.includes(r.id));
                                 downloadRequestsCSV(selectedRequests, `Requests Report-${moment().format("YYYY-MM-DD")}.csv`);
                                 toast.success(`Exported ${selectedRequests.length} request(s) to CSV`);
                             }}

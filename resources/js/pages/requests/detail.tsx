@@ -107,7 +107,7 @@ export default function RequestDetail({ request }: DetailProps) {
                     </TabsContent>
 
                     {/* Facilities Tab */}
-                    <TabsContent value="facilities" className="flex flex-col gap-4 mt-6">
+                    <TabsContent value="facilities" className="flex flex-col gap-4 mt-6 lg:grid grid-cols-[1fr_1fr]">
                         {request.request_facilities.map((rf) => {
                             const facility = request.facilities.find(f => f.id === rf.facility_id);
                             if (!facility) return null;
@@ -125,7 +125,6 @@ export default function RequestDetail({ request }: DetailProps) {
                                     key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
                                     className="rounded-xl border border-border bg-card overflow-hidden"
                                 >
-                                    {/* Header */}
                                     <div className="px-5 py-4 border-b border-border">
                                         <Link href={route("facility.detail", [facility.id])}>
                                             <h2 className="text-[15px] font-medium hover:underline mb-2">
@@ -144,7 +143,6 @@ export default function RequestDetail({ request }: DetailProps) {
                                         </div>
                                     </div>
 
-                                    {/* Equipment */}
                                     {facilityEquipment.length > 0 && (
                                         <div className="px-5 py-4">
                                             <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
@@ -162,7 +160,7 @@ export default function RequestDetail({ request }: DetailProps) {
                                             </div>
                                         </div>
                                     )}
-                                    {/* External Equipment */}
+
                                     {rf.external_equipments?.length > 0 && (
                                         <div className="px-5 py-4 border-t border-border">
                                             <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
@@ -176,7 +174,50 @@ export default function RequestDetail({ request }: DetailProps) {
                                         </div>
                                     )}
 
-                                    {/* ✅ ADD THIS BLOCK */}
+
+                                    {request.approved_conflicts?.filter(c => c.facility_id === rf.facility_id).length > 0 && (
+                                        <div className="px-5 py-4 border-t border-border">
+                                            <p className="text-[11px] font-medium uppercase tracking-widest text-red-600 dark:text-red-400 mb-3">
+                                                Approved conflicts
+                                            </p>
+                                            <div className="flex flex-col divide-y divide-border">
+                                                {request.approved_conflicts
+                                                    .filter(c => c.facility_id === rf.facility_id)
+                                                    .map((conflict) => (
+                                                        <div key={conflict.id} className="flex flex-col gap-1 py-2.5 text-sm">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <Link
+                                                                    href={route("requests.detail", conflict.request.id)}
+                                                                    className="font-medium hover:underline truncate"
+                                                                >
+                                                                    {conflict.request.title}
+                                                                </Link>
+                                                                <Badge variant="destructive" className="shrink-0 text-[10px]">
+                                                                    {conflict.request.status}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                                <span className="flex items-center gap-1">
+                                                                    <Calendar size={11} />
+                                                                    {new Date(conflict.date_requested).toLocaleDateString('en-US', {
+                                                                        month: 'long', day: 'numeric', year: 'numeric'
+                                                                    })}
+                                                                </span>
+                                                                <span className="flex items-center gap-1">
+                                                                    <Clock size={11} />
+                                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                By {conflict.request.user.name}
+                                                            </p>
+                                                        </div>
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {request.pending_conflicts?.filter(c => c.facility_id === rf.facility_id).length > 0 && (
                                         <div className="px-5 py-4 border-t border-border">
                                             <p className="text-[11px] font-medium uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-3">

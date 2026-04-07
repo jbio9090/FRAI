@@ -30,19 +30,17 @@ class RequestController extends Controller
             ->firstWhere(fn($case) => strtolower($case->name) === strtolower($status))
             : null;
 
-        $requests = $this->service->get(
-            $requestStatus,
-            $request->input("filter", "this_week"),
-            $request->input("search"),
-            $request->input("sort"),
-            $request->input("order", "asc"),
-            $request->input("requester"),
-            $request->input("facility"),
-            $request->input("has_external_equipment"),
-        );
-
         return Inertia::render('requests/index', [
-            'requests'   => $requests,
+            'requests' => Inertia::defer(fn() => $this->service->get(
+                $requestStatus,
+                $request->input("filter", "this_week"),
+                $request->input("search"),
+                $request->input("sort"),
+                $request->input("order", "asc"),
+                $request->input("requester"),
+                $request->input("facility"),
+                $request->input("has_external_equipment"),
+            )),
             'page_title' => $requestStatus?->value ?? 'All Requests',
             'filters'    => [
                 'status' => $status,
