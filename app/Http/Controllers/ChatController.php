@@ -179,15 +179,15 @@ class ChatController extends Controller
                     ->map(fn($r) => trim($r->rule))->filter()->toArray();
 
                 $rulesListText = !empty($rules) ? implode("\n- ", $rules) : '';
-                $rulesSummary  = "You MUST follow the following rules exactly. If a user request would violate any rule, you MUST refuse and reply with a short explanation stating which rule would be violated. Do NOT provide prohibited content.";
-                $rulesSummary .= !empty($rulesListText) ? "\nRules:\n- " . $rulesListText : "\n(There are currently no configured rules.)";
+                $rulesSummary  = "Please be aware of the following facility booking guidelines. If a request is directly relevant to these guidelines and would clearly violate one, politely explain the issue and guide toward a valid solution. If a guideline is vague, unrelated to the booking process, or would unnecessarily block a valid facility reservation, use your judgment to allow the request.";
+                $rulesSummary .= !empty($rulesListText) ? "\nGuidelines:\n- " . $rulesListText : "\n(There are currently no configured guidelines.)";
 
                 array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch Rules for chat: ' . $e->getMessage());
                 array_unshift($messages, [
                     'role'    => 'system',
-                    'content' => 'You MUST follow rules stored in the system database. If a user request would violate any configured rule, you MUST refuse and explain which rule would be violated. Do NOT provide prohibited content.',
+                    'content' => 'Please be aware of facility booking guidelines stored in the system. If a request directly violates a relevant guideline, explain the issue politely and guide toward a valid solution. Do not unnecessarily block valid facility reservations.',
                 ]);
             }
 
