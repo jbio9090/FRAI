@@ -117,7 +117,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
             <AppSidebar />
             <SidebarInset className='relative'>
                 <motion.header
-                    className="flex h-16 shrink-0 items-center gap-2 border-b px-4 top-0 right-0 fixed z-25 w-full md:static bg-background"
+                    className="flex h-16 shrink-0 items-center gap-2 border-b px-4 top-0 right-0 fixed z-8 w-full md:static bg-background"
                     animate={{
                         y: isHeaderVisible ? 0 : -64,
                         opacity: isHeaderVisible ? 1 : 0,
