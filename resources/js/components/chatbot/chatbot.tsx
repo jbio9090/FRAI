@@ -197,6 +197,12 @@ export default function Chatbot() {
     };
 
     const handleQuickReply = (option: QuickReply) => {
+        // Handle navigation actions
+        if (option.action === 'navigate' && option.href) {
+            window.location.href = option.href;
+            return;
+        }
+
         if (option.id === 'book_facility') {
             setMode('booking');
             return;
