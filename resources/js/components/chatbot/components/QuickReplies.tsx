@@ -3,6 +3,8 @@ interface QuickReply {
     label: string;
     message: string;
     context: string;
+    action?: 'navigate' | 'chat';
+    href?: string;
 }
 
 interface QuickRepliesProps {
@@ -15,24 +17,31 @@ const QUICK_REPLIES: QuickReply[] = [
         label: 'Book a Facility',
         message: 'I would like to book a facility.',
         context: 'User wants to create a facility booking request. Guide them through selecting a facility, date, time, and number of participants.',
+        action: 'chat',
     },
     {
         id: 'check_availability',
         label: 'Check Availability',
-        message: 'I want to check facility availability.',
-        context: 'User wants to check which facilities are currently available. Ask for their preferred date and time range to help narrow it down.',
+        message: 'Check facility availability',
+        context: 'User navigated to the dashboard calendar schedule.',
+        action: 'navigate',
+        href: route('dashboard.calendar'),
     },
     {
         id: 'view_requests',
         label: 'View My Requests',
-        message: 'Can you show me my current facility requests?',
-        context: 'User wants to see a summary of their existing facility requests, including pending and approved ones.',
+        message: 'View my pending requests',
+        context: 'User navigated to their pending requests page.',
+        action: 'navigate',
+        href: route('requests.index'),
     },
     {
         id: 'ask_rules',
         label: 'Facility Rules',
-        message: 'What are the rules for using the facilities?',
-        context: 'User wants to know the rules and policies for facility usage. Summarize the relevant rules clearly.',
+        message: 'View facility rules',
+        context: 'User navigated to the facility rules page.',
+        action: 'navigate',
+        href: route('rules'),
     },
 ];
 

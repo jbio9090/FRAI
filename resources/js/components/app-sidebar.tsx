@@ -28,10 +28,12 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { usePermission } from "@/hooks/use-permission"
+import ChatbotSessionModal from "@/components/ChatbotSessionModal"
 
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { hasPermission } = usePermission();
+  const [isChatbotModalOpen, setIsChatbotModalOpen] = React.useState(false);
   const data = {
     topNav: [
       {
@@ -124,11 +126,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
 
           <SidebarMenuItem key="chatbot" className="px-4">
-            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/80 cursor-pointer">
-              <Link href={route("chatbot")}>
-                <Sparkles className="h-4 w-4" />
-                <span>Chatbot</span>
-              </Link>
+            <SidebarMenuButton className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/80 cursor-pointer" onClick={() => setIsChatbotModalOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+              <span>Chatbot</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
@@ -188,6 +188,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
+      <ChatbotSessionModal 
+        isOpen={isChatbotModalOpen} 
+        onClose={() => setIsChatbotModalOpen(false)} 
+      />
     </Sidebar>
   )
 }
