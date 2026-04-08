@@ -208,32 +208,8 @@ class RequestService
                 'title',
                 'description',
                 'priority_level',
-                'priority_reason',
+                'priority_reason'
             ]);
-
-            $originalFacilities = $facilityRequest->requestFacilities()
-                ->pluck('facility_id')
-                ->unique()
-                ->sort()
-                ->values()
-                ->toArray();
-
-            $newFacilities = collect($validated['facility_bookings'])
-                ->pluck('facility_id')
-                ->unique()
-                ->sort()
-                ->values()
-                ->toArray();
-
-            if ($originalFacilities !== $newFacilities) {
-                $facilityMap = Facility::whereIn('id', array_merge($originalFacilities, $newFacilities))
-                    ->pluck('name', 'id');
-
-                $changes['facilities'] = [
-                    'old' => collect($originalFacilities)->map(fn($id) => $facilityMap[$id] ?? $id),
-                    'new' => collect($newFacilities)->map(fn($id) => $facilityMap[$id] ?? $id),
-                ];
-            }
 
             $facilityRequest->update([
                 'title'           => $validated['title'],
@@ -242,17 +218,16 @@ class RequestService
                 'priority_reason' => $validated['priority_reason'] ?? null,
             ]);
 
-            $changes = [];
-            foreach ($original as $key => $oldValue) {
-                $newValue = $facilityRequest->{$key};
-
-                if ($oldValue != $newValue) {
-                    $changes[$key] = [
-                        'old' => $oldValue,
-                        'new' => $newValue,
-                    ];
-                }
-            }
+            $changes = collect($facilityRequest->only([
+                'title',
+                'description',
+                'priority_level',
+                'priority_reason'
+            ]))->filter(fn($value, $key) => $value != $original[$key])
+                ->map(fn($value, $key) => [
+                    'from' => $original[$key],
+                    'to'   => $value,
+                ])->toArray();
 
             $facilityRequest->equipment()->detach();
             $facilityRequest->requestFacilities()->delete();
@@ -263,12 +238,14 @@ class RequestService
                     Storage::disk('public')->delete($file->path);
                     $file->delete();
                 }
-            };
+            }
+
             if (!empty($validated['files'])) {
                 $this->handleFileUploads($facilityRequest, $validated['files']);
             }
 
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
+
             $this->auditLogger::requestUpdated($facilityRequest, $changes);
             return $facilityRequest;
         });

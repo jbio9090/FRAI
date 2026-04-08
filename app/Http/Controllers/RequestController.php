@@ -55,7 +55,7 @@ class RequestController extends Controller
     public function updateStatus(Request $request, int $id)
     {
         $validated = $request->validate([
-            'action'  => ['required', 'in:approve,reject,conditionally_approve'],
+            'action'  => ['required', 'in:approve,reject,conditionally_approve,for_reschedule'],
             'comment' => ['nullable', 'string'],
         ]);
 
@@ -65,12 +65,14 @@ class RequestController extends Controller
             'approve'               => RequestStatus::APPROVED,
             'reject'                => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
+            'for_reschedule'        => RequestStatus::FOR_RESCHEDULE,
         ];
 
         $defaultCommentMap = [
             'approve'               => 'Your request has been approved.',
             'reject'                => 'Your request has been denied.',
             'conditionally_approve' => 'Your request has been conditionally approved.',
+            'for_reschedule'        => 'Your request has been marked for rescheduling.',
         ];
 
         $action      = $validated['action'];
@@ -84,6 +86,7 @@ class RequestController extends Controller
             match ($action) {
                 'reject'                => $this->auditLogger::requestDenied($facilityRequest),
                 'conditionally_approve' => $this->auditLogger::requestConditionallyApproved($facilityRequest),
+                'for_reschedule'        => $this->auditLogger::requestMarkedForReschedule($facilityRequest),
                 default                 => null,
             };
         }
@@ -208,7 +211,7 @@ class RequestController extends Controller
         $validated = $request->validate([
             'ids'     => ['required', 'array', 'min:1'],
             'ids.*'   => ['integer', 'exists:requests,id'],
-            'action'  => ['required', 'string', 'in:approve,reject,conditionally_approve,comment'],
+            'action' => ['required', 'string', 'in:approve,reject,conditionally_approve,comment,for_reschedule'],
             'comment' => ['nullable', 'string'],
         ]);
 
@@ -298,6 +301,25 @@ class RequestController extends Controller
             'body'    => $validated['body'],
         ]);
 
+        $this->auditLogger::commentAdded($facilityRequest, $validated['body']);
+
         return back()->with('success', 'Comment added.');
+    }
+
+    public function forReschedule(Request $request, $id)
+    {
+        $commentBody     = $request->input('comment', 'Your request has been marked for rescheduling.');
+        $facilityRequest = FacilityRequest::findOrFail($id);
+
+        $facilityRequest->update(['status' => RequestStatus::FOR_RESCHEDULE]);
+        $facilityRequest->comments()->create([
+            'body'    => $commentBody,
+            'user_id' => auth()->id(),
+        ]);
+
+        $this->auditLogger::requestMarkedForReschedule($facilityRequest);
+        $this->notification->notifyUser($facilityRequest);
+
+        return redirect()->back()->with('success', 'Request marked for rescheduling.');
     }
 }

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, CalendarClock } from 'lucide-react';
 import { PRIORITY_LABELS } from '@/types/request';
 import { motion } from 'motion/react';
 import { Request } from '@/types/request';
@@ -17,6 +17,7 @@ import moment from 'moment';
 import { AttachedFileList } from './attached-file-list';
 import AvatarWithInitials from './avatar-with-initials';
 import Comment from './comment';
+import StatusTag from './status-tag';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -24,17 +25,6 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     2: <GraduationCap size={14} />,
     3: <Landmark size={14} />,
 };
-
-const wtc = (status: string) => {
-    let statusColor;
-    switch (status) {
-        case 'Approved': statusColor = "bg-primary/20 border-primary text-primary"; break;
-        case 'Pending': statusColor = ""; break;
-        case 'Denied': statusColor = "bg-destructive/20 border-destructive text-destructive"; break;
-        case 'Conditionally Approved': statusColor = "bg-primary/20 border-primary/70"; break;
-    }
-    return statusColor;
-}
 
 
 export default function RequestCard({
@@ -107,11 +97,7 @@ export default function RequestCard({
                         <h3 className="font-bold">{request.title}</h3>
 
                         <div className="flex gap-2 flex-wrap">
-                            <div className={cn("flex gap-1 px-2 py-1 font-semibold text-xs border-border border-1 rounded-full ", wtc(request.status))}>
-                                <span>
-                                    {request.status}
-                                </span>
-                            </div>
+                            <StatusTag requestStatus={request.status} />
 
                             {(request.priority_level > 0) && (
                                 <div className="flex gap-1 px-2 py-1 font-semibold text-xs border-border border-1 rounded-full">
@@ -194,10 +180,22 @@ export default function RequestCard({
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
-                                        <DropdownMenuGroup>
+                                        <DropdownMenuGroup className='*:cursor-pointer'>
+                                            <DropdownMenuItem onClick={() => handleAction("approve")} className="flex items-center xs:hidden">
+                                                <Check size={16} />
+                                                <span>Approve</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleAction("reject")} className="flex items-center xs:hidden">
+                                                <X size={16} />
+                                                <span>Deny</span>
+                                            </DropdownMenuItem>
                                             <DropdownMenuItem onClick={() => handleAction("conditionally_approve")}>
                                                 <CheckLine size={16} />
                                                 <span>Conditionally Approve</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleAction("for_reschedule")}>
+                                                <CalendarClock size={16} />
+                                                <span>Mark for Reschedule</span>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem onClick={toggleInput}>
                                                 {isCommentInputOpen ? <MessageCircleOff size={16} /> : <MessageCirclePlus size={16} />}
@@ -206,14 +204,6 @@ export default function RequestCard({
                                             <DropdownMenuItem onClick={() => handleAction("hold")}>
                                                 <CirclePause size={16} />
                                                 <span>{request.on_hold ? "Unhold Request" : "Hold Request"}</span>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleAction("approve")} className="flex items-center xs:hidden">
-                                                <Check size={16} />
-                                                <span>Approve</span>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleAction("reject")} className="flex items-center xs:hidden">
-                                                <X size={16} />
-                                                <span>Deny</span>
                                             </DropdownMenuItem>
                                         </DropdownMenuGroup>
                                     </DropdownMenuContent>

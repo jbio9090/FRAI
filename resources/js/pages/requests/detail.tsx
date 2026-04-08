@@ -12,6 +12,8 @@ import { useState } from 'react';
 import { router } from '@inertiajs/react';
 import { Textarea } from '@/components/ui/textarea';
 import Comment from '@/components/comment';
+import StatusTag from '@/components/status-tag';
+import { ActivityFeed } from '@/components/activity-feed';
 
 
 interface DetailProps {
@@ -21,11 +23,7 @@ interface DetailProps {
 }
 
 export default function RequestDetail({ request, auditLogs }: DetailProps) {
-    let statusColor = "";
     const auth = usePage().props.auth;
-
-    console.log(auditLogs);
-    
 
     const canEdit = request.status === 'Pending'
         && !request.on_hold
@@ -37,13 +35,6 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
             minute: '2-digit',
             hour12: true,
         });
-    }
-
-    switch (request.status) {
-        case 'Approved': statusColor = "default"; break;
-        case 'Pending': statusColor = "outline"; break;
-        case 'Denied': statusColor = "destructive"; break;
-        case 'Conditionally Approved': statusColor = "secondary"; break;
     }
 
 
@@ -61,9 +52,8 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             </Link>
                         )}
                     </div>
-                    <Badge variant={statusColor}>
-                        {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                    </Badge>
+
+                    <StatusTag requestStatus={request.status} />
                 </div>
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
@@ -301,64 +291,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                     </TabsContent>
 
                     <TabsContent value="activity" className="flex flex-col gap-0 mt-6">
-                        {auditLogs.length > 0 ? (
-                            <div className="relative">
-                                <div className="absolute left-[19px] top-2 bottom-2 w-px bg-border" />
-
-                                <div className="flex flex-col gap-0">
-                                    {auditLogs.map((log, index) => (
-                                        <div key={log.id} className="flex gap-4 relative pb-6 last:pb-0">
-                                            <div className="shrink-0 z-10">
-                                                <AvatarWithInitials
-                                                    avatarSrc={log.user?.profile}
-                                                    username={log.user?.name || "System"}
-                                                    size="sm"
-                                                />
-                                            </div>
-
-                                            <div className="flex flex-col gap-1.5 pt-0.5 min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="font-medium text-sm">
-                                                        {log.user?.name || "System"}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {moment(log.created_at).fromNow()}
-                                                    </span>
-                                                </div>
-
-                                                <p className="text-sm text-muted-foreground leading-relaxed">
-                                                    {log.description || log.event}
-                                                </p>
-
-                                                {log.properties && Object.keys(log.properties).length > 0 && (
-                                                    <div className="mt-1 rounded-lg border border-border bg-muted/50 overflow-hidden">
-                                                        <table className="w-full text-xs">
-                                                            <tbody>
-                                                                {Object.entries(log.properties).map(([key, value]) => (
-                                                                    <tr key={key} className="border-b border-border last:border-0">
-                                                                        <td className="px-3 py-2 font-medium text-muted-foreground w-1/3 capitalize">
-                                                                            {key.replace(/_/g, ' ')}
-                                                                        </td>
-                                                                        <td className="px-3 py-2 font-mono text-foreground break-all">
-                                                                            {typeof value === 'object'
-                                                                                ? JSON.stringify(value)
-                                                                                : String(value)
-                                                                            }
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : (
-                            <p className="text-muted-foreground text-sm">No activity yet.</p>
-                        )}
+                        <ActivityFeed auditLogs={auditLogs} />
                     </TabsContent>
 
                 </Tabs>

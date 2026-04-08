@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use App\AuditEvent;
 
 return new class extends Migration
 {
@@ -11,10 +12,7 @@ return new class extends Migration
         Schema::create('audit_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
-            // Event type: request.created | request.updated | request.approved |
-            //             request.denied | request.conditionally_approved |
-            //             request.held   | auth.login | auth.logout | auth.login_failed
-            $table->string('event', 64)->index();
+            $table->string('event')->index();
             $table->string('subject_type', 128)->nullable();
             $table->unsignedBigInteger('subject_id')->nullable();
             $table->index(['subject_type', 'subject_id']);

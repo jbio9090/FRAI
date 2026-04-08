@@ -13,6 +13,7 @@ import {
   User,
   Sparkles,
   Cable,
+  IterationCw,
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -70,6 +71,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: route("requests.index", { status: "pending" }),
         status: "pending",
         icon: FileClock
+      },
+      {
+        title: "For Reschedule",
+        url: route("requests.index", { status: "for reschedule" }),
+        status: "for reschedule",
+        icon: IterationCw
       },
       {
         title: "Approved",
@@ -188,9 +195,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
-      <ChatbotSessionModal 
-        isOpen={isChatbotModalOpen} 
-        onClose={() => setIsChatbotModalOpen(false)} 
+      <ChatbotSessionModal
+        isOpen={isChatbotModalOpen}
+        onClose={() => setIsChatbotModalOpen(false)}
       />
     </Sidebar>
   )

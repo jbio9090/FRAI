@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\AuditEvent; // <-- Added the Enum import
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -21,6 +22,7 @@ class AuditLog extends Model
 
     protected $casts = [
         'properties' => 'array',
+        'event' => AuditEvent::class,
     ];
 
     public function user(): BelongsTo
@@ -33,7 +35,7 @@ class AuditLog extends Model
         return $this->morphTo();
     }
 
-    public function scopeForEvent($query, string $event)
+    public function scopeForEvent($query, string|AuditEvent $event)
     {
         return $query->where('event', $event);
     }
