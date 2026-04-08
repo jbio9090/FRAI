@@ -23,9 +23,9 @@ const QUICK_REPLIES: QuickReply[] = [
         id: 'check_availability',
         label: 'Check Availability',
         message: 'Check facility availability',
-        context: 'User navigated to the dashboard calendar schedule.',
+        context: 'User navigated to the dashboard schedule.',
         action: 'navigate',
-        href: route('dashboard.calendar'),
+        href: route('dashboard'),
     },
     {
         id: 'view_requests',
