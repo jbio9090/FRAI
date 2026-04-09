@@ -166,7 +166,7 @@ export default function Chatbot() {
         return `📋 **Booking Summary**\n\n` +
             `**Title:** ${payload.title}\n` +
             `**Description:** ${payload.description || 'N/A'}\n` +
-            `**Priority:** ${payload.priority_level === 2 ? 'High (Government/Authority)' : payload.priority_level === 1 ? 'School Event' : 'Normal'}\n\n` +
+            `**Event Type:** ${payload.priority_level === 2 ? 'Government' : payload.priority_level === 1 ? 'Organizational/University' : 'Academic'}\n\n` +
             `**Bookings:**\n${bookings}\n\n` +
             `Reply "confirm" to submit this request, or "cancel" to discard it.`;
     };
