@@ -25,16 +25,23 @@ class RequestController extends Controller
 
     public function index(Request $request)
     {
-        $status = $request->input('status', RequestStatus::PENDING->value);
+        $statusParam = $request->input('status');
 
-        $requestStatus = $status
-            ? collect(RequestStatus::cases())
-            ->firstWhere(fn($case) => strtolower($case->name) === strtolower($status))
-            : null;
+        $statusValues = $statusParam
+            ? collect(explode(',', $statusParam))
+            ->map(fn($s) => collect(RequestStatus::cases())
+                ->firstWhere(fn($case) => strtolower($case->name) === strtolower(trim($s))))
+            ->filter()
+            ->values()
+            : collect();
+
+        $pageTitle = $statusValues->isNotEmpty()
+            ? $statusValues->map(fn($s) => $s->value)->join(', ')
+            : 'All Requests';
 
         return Inertia::render('requests/index', [
             'requests' => Inertia::defer(fn() => $this->service->get(
-                $requestStatus,
+                $statusValues->isNotEmpty() ? $statusValues->all() : null,
                 $request->input("filter", "this_week"),
                 $request->input("search"),
                 $request->input("sort"),
@@ -43,10 +50,8 @@ class RequestController extends Controller
                 $request->input("facility"),
                 $request->input("has_external_equipment"),
             )),
-            'page_title' => $requestStatus?->value ?? 'All Requests',
-            'filters'    => [
-                'status' => $status,
-            ],
+            'page_title' => $pageTitle,
+            'filters'    => ['status' => $statusParam],
             'facilities' => Facility::select('id', 'name')->orderBy('name')->get(),
             'requesters' => User::select('id', 'name')->orderBy('name')->get(),
         ]);

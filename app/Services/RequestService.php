@@ -21,7 +21,7 @@ class RequestService
     ) {}
 
     public function get(
-        ?RequestStatus $status,
+        ?array $statuses,
         string $filter = 'this_week',
         ?string $search = null,
         ?string $sort = null,
@@ -45,10 +45,10 @@ class RequestService
             default      => $query,
         };
 
-        if ($status) {
-            $query->where("requests.status", $status);
+        if (!empty($statuses)) {
+            $query->whereIn("requests.status", $statuses);
         }
-
+        
         if ($search) {
             $query->where('title', 'like', "%{$search}%");
         }

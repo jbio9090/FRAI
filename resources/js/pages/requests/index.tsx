@@ -57,7 +57,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const [facilityFilter, setFacilityFilter] = useState<string[]>([]);
     const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
     const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>("");
-    const [statusFilter, setStatusFilter] = useState<string>("");
+    const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
     const { hasRole } = usePermission();
     const isAdmin = hasRole('admin');
@@ -67,7 +67,14 @@ export default function RequestsPage({ requests, page_title, facilities, request
         { label: "Approved", value: "approved" },
         { label: "Denied", value: "denied" },
         { label: "Conditionally Approved", value: "conditionally_approved" },
+        { label: "For Reschedule", value: "for_reschedule" }
     ];
+
+    const toggleStatus = (value: string) => {
+        setStatusFilter(prev =>
+            prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]
+        );
+    };
 
     useEffect(() => {
         if (!isMounted.current) {
@@ -113,7 +120,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const getParams = (overrides = {}) => ({
         filter: filterMap[currentActiveFitler],
         search: searchQuery,
-        ...(statusFilter && { status: statusFilter }),
+        ...(statusFilter.length && { status: statusFilter.join(',') }),
         ...(requesterFilter.length && { requester: requesterFilter.join(',') }),
         ...(facilityFilter.length && { facility: facilityFilter.join(',') }),
         ...(externalEquipmentFilter && { has_external_equipment: externalEquipmentFilter }),
@@ -267,15 +274,15 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     <Button
                                         variant="outline"
                                         className={cn(
-                                            (requesterFilter.length || facilityFilter.length || externalEquipmentFilter) &&
+                                            (requesterFilter.length || facilityFilter.length || externalEquipmentFilter || statusFilter.length) &&
                                             "border-primary text-primary bg-primary/5"
                                         )}
                                     >
                                         <ListFilter size={16} />
                                         <span>Filters</span>
-                                        {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + (statusFilter ? 1 : 0) > 0 && (
-                                            <span className="text-xs font-semibold">
-                                                {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0)}
+                                        {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + statusFilter.length > 0 && (
+                                            <span className="flex items-center justify-center bg-primary/12 text-primary h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                                {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + statusFilter.length}
                                             </span>
                                         )}
                                     </Button>
@@ -309,11 +316,30 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         </div>
 
                                         <div className="flex flex-col gap-2">
-                                            <p className="text-xs text-muted-foreground font-semibold">Status</p>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-muted-foreground font-semibold">Status</p>
+                                                <Button
+                                                    className="text-xs text-primary"
+                                                    variant={"ghost"}
+                                                    size={"xs"}
+                                                    onClick={() =>
+                                                        statusFilter.length === statusOptions.length
+                                                            ? setStatusFilter([])
+                                                            : setStatusFilter(statusOptions.map(o => o.value))
+                                                    }
+                                                >
+                                                    {statusFilter.length === statusOptions.length ? "Deselect all" : "Select all"}
+                                                </Button>
+                                            </div>
                                             <div className="flex flex-col gap-1">
                                                 {statusOptions.map((opt) => (
                                                     <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
-                                                        <input type="checkbox" className="accent-primary" checked={statusFilter === opt.value} onChange={() => setStatusFilter(prev => prev === opt.value ? "" : opt.value)} />
+                                                        <input
+                                                            type="checkbox"
+                                                            className="accent-primary"
+                                                            checked={statusFilter.includes(opt.value)}
+                                                            onChange={() => toggleStatus(opt.value)}
+                                                        />
                                                         {opt.label}
                                                     </label>
                                                 ))}
@@ -459,11 +485,30 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     </div>
 
                                     <div className="flex flex-col gap-2">
-                                        <p className="text-xs text-muted-foreground font-semibold">Status</p>
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs text-muted-foreground font-semibold">Status</p>
+                                            <Button
+                                                className="text-xs text-primary"
+                                                variant={"ghost"}
+                                                size={"xs"}
+                                                onClick={() =>
+                                                    statusFilter.length === statusOptions.length
+                                                        ? setStatusFilter([])
+                                                        : setStatusFilter(statusOptions.map(o => o.value))
+                                                }
+                                            >
+                                                {statusFilter.length === statusOptions.length ? "Deselect all" : "Select all"}
+                                            </Button>
+                                        </div>
                                         <div className="flex flex-col gap-1">
                                             {statusOptions.map((opt) => (
                                                 <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm">
-                                                    <input type="checkbox" className="accent-primary" checked={statusFilter === opt.value} onChange={() => setStatusFilter(prev => prev === opt.value ? "" : opt.value)} />
+                                                    <input
+                                                        type="checkbox"
+                                                        className="accent-primary"
+                                                        checked={statusFilter.includes(opt.value)}
+                                                        onChange={() => toggleStatus(opt.value)}
+                                                    />
                                                     {opt.label}
                                                 </label>
                                             ))}
@@ -549,7 +594,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 setRequesterFilter([]);
                                                 setFacilityFilter([]);
                                                 setExternalEquipmentFilter("");
-                                                setStatusFilter("");
+                                                setStatusFilter([]);
                                                 router.get(
                                                     route(route().current(), { status: route().params.status }),
                                                     { filter: filterMap[currentActiveFitler], search: searchQuery },
