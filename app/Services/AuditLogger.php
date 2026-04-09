@@ -153,4 +153,16 @@ class AuditLogger
             subject: $request,
         );
     }
+
+    public static function requestHoldToggled(FacilityRequest $request, bool $onHold): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::RequestHeld,
+            description: $onHold
+                ? "Request manually placed on hold: \"{$request->title}\""
+                : "Request manually removed from hold: \"{$request->title}\"",
+            subject: $request,
+            properties: ['on_hold' => $onHold],
+        );
+    }
 }

@@ -497,7 +497,6 @@ class RequestService
                 ]);
 
                 $this->auditLogger::requestApproved($request);
-
                 foreach ($conflictingRequests as $conflicting) {
                     $conflicting->update([
                         'status'                    => RequestStatus::PENDING,
@@ -513,6 +512,8 @@ class RequestService
                         'user_id' => Auth::id(),
                         'body'    => 'Placed on hold — superseded by higher priority request: "' . $request->title . '"',
                     ]);
+
+                    $this->auditLogger::requestHeld($conflicting, $request);
                 }
             } else {
                 $winner = $conflictingRequests->sortByDesc('priority_level')->first();
@@ -531,6 +532,8 @@ class RequestService
                     'user_id' => Auth::id(),
                     'body'    => 'Placed on hold — time conflict with higher priority approved request: "' . $winner->title . '"',
                 ]);
+
+                $this->auditLogger::requestHeld($request, $winner);
             }
 
             $this->auditLogger::requestApproved($request);
