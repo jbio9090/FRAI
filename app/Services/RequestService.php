@@ -487,7 +487,7 @@ class RequestService
 
             $highestConflictPriority = $conflictingRequests->max(fn($r) => $r->priority_level->value);
 
-            if ($request->priority_level->value > $highestConflictPriority) {
+            if ($request->priority_level->value >= $highestConflictPriority) {
                 $request->update([
                     'status'             => RequestStatus::APPROVED,
                     'on_hold'            => false,
@@ -498,8 +498,10 @@ class RequestService
 
                 $this->auditLogger::requestApproved($request);
                 foreach ($conflictingRequests as $conflicting) {
+                    $isApproved = $conflicting->status === RequestStatus::APPROVED;
+
                     $conflicting->update([
-                        'status'                    => RequestStatus::PENDING,
+                        'status'                    => $isApproved ? RequestStatus::FOR_RESCHEDULE : RequestStatus::PENDING,
                         'on_hold'                   => true,
                         'held_by_request_id'        => $request->id,
                         'recommended_action'        => RequestStatus::DENIED,
@@ -510,7 +512,9 @@ class RequestService
 
                     $conflicting->comments()->create([
                         'user_id' => Auth::id(),
-                        'body'    => 'Placed on hold — superseded by higher priority request: "' . $request->title . '"',
+                        'body'    => $isApproved
+                            ? 'Marked for reschedule — superseded by government-priority request: "' . $request->title . '"'
+                            : 'Placed on hold — superseded by higher priority request: "' . $request->title . '"',
                     ]);
 
                     $this->auditLogger::requestHeld($conflicting, $request);
@@ -553,7 +557,7 @@ class RequestService
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
                 ->whereHas('request', function ($query) use ($excludeRequestId) {
-                    $query->where('status', RequestStatus::APPROVED)
+                    $query->whereIn('status', [RequestStatus::APPROVED, RequestStatus::FOR_RESCHEDULE])
                         ->where('id', '!=', $excludeRequestId);
                 })
                 ->with('request')
