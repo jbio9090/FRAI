@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Message, CreateRequestPayload } from './types';
+import { Message, CreateRequestPayload, AttachedFileInfo } from './types';
 import { useMessages } from './hooks/useMessages';
 import { useParticipantCount } from './hooks/useParticipantCount';
 import { useChatAPI } from './hooks/useChatAPI';
@@ -25,6 +25,11 @@ export default function Chatbot() {
     const { extractAndSet, getCurrentCount } = useParticipantCount();
     const bookingFlow = useBookingFlow(facilities);
     const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
+
+    // File attachment state
+    const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -168,18 +173,26 @@ export default function Chatbot() {
 
     const handleConfirmRequest = async () => {
         if (!pendingPayload) return;
+
         const payload = pendingPayload;
         setPendingPayload(null);
 
         addMessage({ role: 'user', content: 'Confirm' });
 
         try {
-            const result = await submitRequest(payload);
+            const payloadWithFiles: CreateRequestPayload = {
+                ...payload,
+                files: attachedFiles.map(f => f.id),
+            };
+
+            const result = await submitRequest(payloadWithFiles);
             if (result) {
                 addMessage({
                     role: 'assistant',
-                    content: `✅ Request #${result.request_id} has been created successfully!`,
+                    content: `✅ Request #${result.request_id} has been created successfully${attachedFiles.length > 0 ? ` with ${attachedFiles.length} file(s)` : ''}!`,
                 });
+                setAttachedFiles([]);
+                setUploadError(null);
             }
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
@@ -194,6 +207,51 @@ export default function Chatbot() {
             role: 'assistant',
             content: 'Request cancelled. Is there anything else I can help you with?',
         });
+    };
+
+    const handleAttachFiles = async (files: FileList) => {
+        if (!files || files.length === 0) return;
+
+        setUploading(true);
+        setUploadError(null);
+
+        try {
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files[]', files[i]);
+            }
+
+            const response = await fetch(route('chat.upload'), {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                const errorMessage = errorData.messages?.join(', ') || errorData.error || 'File upload failed';
+                setUploadError(errorMessage);
+                return;
+            }
+
+            const data = await response.json();
+            if (data.success && data.files) {
+                setAttachedFiles(prev => [...prev, ...data.files]);
+            }
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : 'Upload failed';
+            setUploadError(errorMsg);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleRemoveFile = (fileId: string) => {
+        setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
     };
 
     const handleQuickReply = (option: QuickReply) => {
@@ -269,6 +327,10 @@ export default function Chatbot() {
                         bookingFlow={bookingFlow}
                         onComplete={handleBookingComplete}
                         onCancel={() => setMode('idle')}
+                        attachedFiles={attachedFiles}
+                        onAttachFile={handleAttachFiles}
+                        uploading={uploading}
+                        uploadError={uploadError}
                     />
                 )}
 
@@ -299,6 +361,11 @@ export default function Chatbot() {
                         ? 'Type here to ask a question or switch to AI chat...'
                         : 'Type your message...'
                 }
+                attachedFiles={attachedFiles}
+                uploading={uploading}
+                uploadError={uploadError}
+                onAttachFile={handleAttachFiles}
+                onRemoveFile={handleRemoveFile}
             />
         </div>
     );

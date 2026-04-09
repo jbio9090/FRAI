@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Http\File as HttpFile;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
 use App\Models\Facility;
@@ -21,7 +24,6 @@ class ChatController extends Controller
     private string $ollamaUrl;
     private string $model;
 
-    //Session expiration
     private const SESSION_TTL_MINUTES = 15;
 
     public function __construct()
@@ -166,7 +168,7 @@ class ChatController extends Controller
 
                 array_unshift($messages, [
                     'role'    => 'system',
-                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information:\n1. Title (brief request name)\n2. Description (detailed explanation)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Priority Level (IMPORTANT - determine from context):\n   - 0 = Normal (default, regular events)\n   - 1 = School Event (department heads, school-wide events, official school activities)\n   - 2 = Government / High Authority (government officials, external government events, high-authority visits)\n9. Priority Reason (brief explanation if priority > 0)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is a school event (priority 1) or government/high-authority event (priority 2), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nAfter collecting all required information, construct the JSON payload exactly as shown below and present it to the user for confirmation:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"priority_reason\": \"...\", \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
+                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information:\n1. Title (brief request name)\n2. Description (detailed explanation)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Priority Level (IMPORTANT - determine from context):\n   - 0 = Normal (default, regular events)\n   - 1 = School Event (department heads, school-wide events, official school activities)\n   - 2 = Government / High Authority (government officials, external government events, high-authority visits)\n9. Priority Reason (brief explanation if priority > 0)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is a school event (priority 1) or government/high-authority event (priority 2), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"priority_reason\": \"...\", \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
                 ]);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
@@ -353,7 +355,7 @@ class ChatController extends Controller
             }
 
             array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. Facilities are recommended based on:\n- Minimum: At least 50% capacity utilization (to avoid empty rooms)\n- Maximum: Can accommodate all participants\nFor example, for 40 participants, recommend rooms with capacity 40-80. Always present the filtered results and explain why those facilities are recommended."]);
-            array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information:\n1. Title (brief request name)\n2. Description (detailed explanation)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Priority Level (IMPORTANT - determine from context):\n   - 0 = Normal (default, regular events)\n   - 1 = School Event (department heads, school-wide events, official school activities)\n   - 2 = Government / High Authority (government officials, external government events, high-authority visits)\n9. Priority Reason (brief explanation if priority > 0)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is a school event (priority 1) or government/high-authority event (priority 2), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nAfter collecting all required information, construct the JSON payload exactly as shown below and present it to the user for confirmation:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"priority_reason\": \"...\", \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
+            array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information:\n1. Title (brief request name)\n2. Description (detailed explanation)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Priority Level (IMPORTANT - determine from context):\n   - 0 = Normal (default, regular events)\n   - 1 = School Event (department heads, school-wide events, official school activities)\n   - 2 = Government / High Authority (government officials, external government events, high-authority visits)\n9. Priority Reason (brief explanation if priority > 0)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is a school event (priority 1) or government/high-authority event (priority 2), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"priority_reason\": \"...\", \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch facilities/equipment: ' . $e->getMessage());
         }
@@ -521,137 +523,207 @@ class ChatController extends Controller
     }
 
     public function testCsrf(): JsonResponse
-{
-    try {
-        $client   = new Client(['timeout' => 10]);
-        $response = $client->get($this->ollamaUrl . '/api/tags');
-        $data     = json_decode($response->getBody(), true);
+    {
+        try {
+            $client   = new Client(['timeout' => 10]);
+            $response = $client->get($this->ollamaUrl . '/api/tags');
+            $data     = json_decode($response->getBody(), true);
 
-        return response()->json([
-            'message'   => 'Connected to Ollama',
-            'models'    => $data['models'] ?? [],
-            'timestamp' => now(),
-        ]);
-    } catch (\Exception $e) {
-        \Log::error('Ollama connection test failed: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Cannot connect to Ollama at ' . $this->ollamaUrl,
-            'message' => config('app.debug') ? $e->getMessage() : 'Connection failed',
-        ], 500);
+            return response()->json([
+                'message'   => 'Connected to Ollama',
+                'models'    => $data['models'] ?? [],
+                'timestamp' => now(),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Ollama connection test failed: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Cannot connect to Ollama at ' . $this->ollamaUrl,
+                'message' => config('app.debug') ? $e->getMessage() : 'Connection failed',
+            ], 500);
+        }
     }
-}
 
-public function models(): JsonResponse
-{
-    try {
-        $client   = new Client(['timeout' => 10]);
-        $response = $client->get($this->ollamaUrl . '/api/tags');
-        $data     = json_decode($response->getBody(), true);
+    public function models(): JsonResponse
+    {
+        try {
+            $client   = new Client(['timeout' => 10]);
+            $response = $client->get($this->ollamaUrl . '/api/tags');
+            $data     = json_decode($response->getBody(), true);
 
-        return response()->json(['models' => $data['models'] ?? []]);
-    } catch (\Exception $e) {
-        \Log::error('Models fetch error: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Failed to fetch models',
-            'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-        ], 500);
+            return response()->json(['models' => $data['models'] ?? []]);
+        } catch (\Exception $e) {
+            \Log::error('Models fetch error: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Failed to fetch models',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        }
     }
-}
 
-public function latestRequests(Request $request): JsonResponse
-{
-    try {
-        $limit = max(1, min(20, (int) $request->input('limit', 5)));
+    public function latestRequests(Request $request): JsonResponse
+    {
+        try {
+            $limit = max(1, min(20, (int) $request->input('limit', 5)));
 
-        $rows = RequestModel::orderBy('created_at', 'desc')
-            ->limit($limit)
-            ->get(['id', 'user_id', 'status', 'created_at'])
-            ->map(fn($r) => [
-                'id'         => $r->id,
-                'user_id'    => $r->user_id,
-                'status'     => $r->status,
-                'created_at' => $r->created_at->toDateTimeString(),
+            $rows = RequestModel::orderBy('created_at', 'desc')
+                ->limit($limit)
+                ->get(['id', 'user_id', 'status', 'created_at'])
+                ->map(fn($r) => [
+                    'id'         => $r->id,
+                    'user_id'    => $r->user_id,
+                    'status'     => $r->status,
+                    'created_at' => $r->created_at->toDateTimeString(),
+                ]);
+
+            return response()->json(['data' => $rows]);
+        } catch (\Exception $e) {
+            \Log::error('Latest requests error: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Failed to fetch latest requests',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        }
+    }
+
+    public function rulesList(Request $request): JsonResponse
+    {
+        try {
+            $limit = max(1, min(200, (int) $request->input('limit', 50)));
+
+            $rows = RuleModel::orderBy('id', 'asc')
+                ->limit($limit)
+                ->get(['id', 'rule'])
+                ->map(fn($r) => ['id' => $r->id, 'rule' => trim($r->rule)]);
+
+            return response()->json(['data' => $rows]);
+        } catch (\Exception $e) {
+            \Log::error('Rules list error: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Failed to fetch rules',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        }
+    }
+
+    public function facilitiesList(Request $request): JsonResponse
+    {
+        try {
+            $limit = max(1, min(200, (int) $request->input('limit', 50)));
+
+            $rows = Facility::orderBy('id', 'asc')
+                ->limit($limit)
+                ->get(['id', 'name', 'building', 'capacity'])
+                ->map(fn($f) => [
+                    'id'       => $f->id,
+                    'name'     => $f->name,
+                    'building' => $f->building,
+                    'capacity' => $f->capacity,
+                ]);
+
+            return response()->json(['data' => $rows]);
+        } catch (\Exception $e) {
+            \Log::error('Facilities list error: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Failed to fetch facilities',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        }
+    }
+
+    public function equipmentList(Request $request): JsonResponse
+    {
+        try {
+            $limit = max(1, min(200, (int) $request->input('limit', 50)));
+
+            $rows = Equipment::orderBy('id', 'asc')
+                ->limit($limit)
+                ->get(['id', 'name', 'quantity', 'facility_id'])
+                ->map(fn($e) => [
+                    'id'       => $e->id,
+                    'name'     => $e->name,
+                    'quantity' => $e->quantity,
+                    'facility' => $e->facility->name ?? $e->facility_id ?? null,
+                ]);
+
+            return response()->json(['data' => $rows]);
+        } catch (\Exception $e) {
+            \Log::error('Equipment list error: ' . $e->getMessage());
+            return response()->json([
+                'error'   => 'Failed to fetch equipment',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        }
+    }
+
+    public function uploadFile(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'files' => 'required|array|min:1',
+                'files.*' => 'required|file|max:10485760|mimes:jpeg,jpg,png,pdf,doc,docx,xls,xlsx,ppt,pptx',
             ]);
 
-        return response()->json(['data' => $rows]);
-    } catch (\Exception $e) {
-        \Log::error('Latest requests error: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Failed to fetch latest requests',
-            'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-        ], 500);
-    }
-}
+            $uploadedFiles = [];
+            $userId = Auth::id();
+            $sessionId = session()->getId();
+            $tempDir = "chat-uploads/{$userId}/{$sessionId}";
 
-public function rulesList(Request $request): JsonResponse
-{
-    try {
-        $limit = max(1, min(200, (int) $request->input('limit', 50)));
+            if (!Storage::disk('public')->exists($tempDir)) {
+                Storage::disk('public')->makeDirectory($tempDir);
+            }
 
-        $rows = RuleModel::orderBy('id', 'asc')
-            ->limit($limit)
-            ->get(['id', 'rule'])
-            ->map(fn($r) => ['id' => $r->id, 'rule' => trim($r->rule)]);
+            foreach ($request->file('files') as $file) {
+                $fileId = Str::uuid();
+                $filename = $fileId . '.' . $file->getClientOriginalExtension();
+                
+                $path = Storage::disk('public')->putFileAs($tempDir, $file, $filename);
+                
+                if ($path) {
+                    $uploadedFiles[] = [
+                        'id' => (string) $fileId,
+                        'name' => $file->getClientOriginalName(),
+                        'size' => $file->getSize(),
+                        'mime_type' => $file->getMimeType(),
+                        'url' => Storage::disk('public')->url($path),
+                    ];
+                }
+            }
 
-        return response()->json(['data' => $rows]);
-    } catch (\Exception $e) {
-        \Log::error('Rules list error: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Failed to fetch rules',
-            'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-        ], 500);
-    }
-}
-
-public function facilitiesList(Request $request): JsonResponse
-{
-    try {
-        $limit = max(1, min(200, (int) $request->input('limit', 50)));
-
-        $rows = Facility::orderBy('id', 'asc')
-            ->limit($limit)
-            ->get(['id', 'name', 'building', 'capacity'])
-            ->map(fn($f) => [
-                'id'       => $f->id,
-                'name'     => $f->name,
-                'building' => $f->building,
-                'capacity' => $f->capacity,
+            return response()->json([
+                'success' => true,
+                'files' => $uploadedFiles,
             ]);
 
-        return response()->json(['data' => $rows]);
-    } catch (\Exception $e) {
-        \Log::error('Facilities list error: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Failed to fetch facilities',
-            'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-        ], 500);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $errorMessages = [];
+            
+            if ($e->has('files.*')) {
+                foreach ($request->file('files') as $index => $file) {
+                    $errors = $e->errors();
+                    if (isset($errors["files.{$index}"])) {
+                        foreach ($errors["files.{$index}"] as $error) {
+                            $errorMessages[] = "{$file->getClientOriginalName()}: {$error}";
+                        }
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => false,
+                'error' => 'File validation failed',
+                'messages' => !empty($errorMessages) ? $errorMessages : $e->errors(),
+            ], 422);
+
+        } catch (\Exception $e) {
+            \Log::error('File upload error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'File upload failed',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        }
     }
-}
 
-public function equipmentList(Request $request): JsonResponse
-{
-    try {
-        $limit = max(1, min(200, (int) $request->input('limit', 50)));
-
-        $rows = Equipment::orderBy('id', 'asc')
-            ->limit($limit)
-            ->get(['id', 'name', 'quantity', 'facility_id'])
-            ->map(fn($e) => [
-                'id'       => $e->id,
-                'name'     => $e->name,
-                'quantity' => $e->quantity,
-                'facility' => $e->facility->name ?? $e->facility_id ?? null,
-            ]);
-
-        return response()->json(['data' => $rows]);
-    } catch (\Exception $e) {
-        \Log::error('Equipment list error: ' . $e->getMessage());
-        return response()->json([
-            'error'   => 'Failed to fetch equipment',
-            'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-        ], 500);
-    }
-}
     public function createRequestApi(Request $request): JsonResponse
     {
         try {
@@ -668,6 +740,8 @@ public function equipmentList(Request $request): JsonResponse
                 'facility_bookings.*.equipment'                   => 'array',
                 'facility_bookings.*.equipment.*.equipment_id'    => 'required|exists:equipments,id',
                 'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
+                'files'                                           => 'nullable|array',
+                'files.*'                                         => 'nullable|string',
             ]);
 
             $priorityLevel  = (int) ($validated['priority_level'] ?? 0);
@@ -697,6 +771,57 @@ public function equipmentList(Request $request): JsonResponse
                             'quantity_needed' => $equipment['quantity_needed'],
                         ]);
                     }
+                }
+            }
+
+            // Handle file uploads - move from temp storage to permanent
+            $userId = Auth::id();
+            $sessionId = session()->getId();
+            $tempDir = "chat-uploads/{$userId}/{$sessionId}";
+            $fileCount = 0;
+
+            if (!empty($validated['files'])) {
+                foreach ($validated['files'] as $fileId) {
+                    try {
+                        $tempFiles = Storage::disk('public')->files($tempDir);
+                        $tempFilePath = null;
+
+                        foreach ($tempFiles as $file) {
+                            if (str_contains($file, $fileId)) {
+                                $tempFilePath = $file;
+                                break;
+                            }
+                        }
+
+                        if ($tempFilePath) {
+                            $originalName = basename($tempFilePath);
+                            $permanentPath = "request-files/{$originalName}";
+                            
+                            $content = Storage::disk('public')->get($tempFilePath);
+                            Storage::disk('public')->put($permanentPath, $content);
+
+                            $facilityRequest->files()->create([
+                                'path'          => $permanentPath,
+                                'original_name' => $originalName,
+                                'mime_type'     => Storage::disk('public')->mimeType($tempFilePath),
+                                'size'          => Storage::disk('public')->size($tempFilePath),
+                            ]);
+
+                            Storage::disk('public')->delete($tempFilePath);
+                            $fileCount++;
+                        }
+                    } catch (\Exception $e) {
+                        \Log::warning("Failed to process file {$fileId}: " . $e->getMessage());
+                    }
+                }
+
+                try {
+                    $remainingFiles = Storage::disk('public')->files($tempDir);
+                    if (empty($remainingFiles)) {
+                        Storage::disk('public')->deleteDirectory($tempDir);
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning("Failed to clean temp directory: " . $e->getMessage());
                 }
             }
 
@@ -734,6 +859,7 @@ public function equipmentList(Request $request): JsonResponse
                 'request_id'     => $facilityRequest->id,
                 'priority_level' => $priorityLevel,
                 'held_count'     => $heldCount,
+                'files_attached' => $fileCount,
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
