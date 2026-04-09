@@ -39,6 +39,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
     const { hasRole } = usePermission();
     const isAdmin = hasRole("admin");
 
+
     const canEdit = request.status === 'Pending'
         && !request.on_hold
         && request.user.id === auth.user.id;
@@ -56,8 +57,6 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
 
     const handleAction = (action: string) => {
         if (action === 'hold') {
-            // Note: If you want to send the admin's comment when putting on hold, 
-            // you might need to update your route/controller here!
             router.post(route('requests.hold', request.id));
             return;
         }
@@ -96,7 +95,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                                 </Button>
                             </Link>
                         )}
-                        
+
                         {canReschedule && (
                             <Link href={route("requests.edit", request.id)}>
                                 <Button variant={"outline"} size={"sm"} className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50">
@@ -225,6 +224,20 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             <div className="flex flex-col">
                                 <p className='font-semibold mb-2 text-muted-foreground'>Date Submitted</p>
                                 <p>{moment(request.created_at).format("MMMM D, YYYY")}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-12">
+                            <div className="flex flex-col">
+                                <p className='font-semibold mb-2 text-muted-foreground'>Proccesed by</p>
+                                {request.processed_by ? (<div className="flex gap-2 items-center">
+                                    <AvatarWithInitials avatarSrc={request.processed_by.profile} username={request.processed_by.name} size='sm' />
+                                    <p>{request.processed_by.name}</p>
+                                </div>) : (<span>None</span>)}
+                            </div>
+                            <div className="flex flex-col">
+                                <p className='font-semibold mb-2 text-muted-foreground'>Processed At</p>
+                                {request.processed_at ? (<p>{moment(request.processed_at).format("MMMM D, YYYY")}</p>) : (<span>None</span>)}
                             </div>
                         </div>
                     </TabsContent>

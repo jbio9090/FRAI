@@ -34,8 +34,8 @@ class RequestService
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
         $query = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files', 'comments.user'])
-            : FacilityRequest::with(['user', 'facilities', 'requestFacilities', 'files', 'comments.user'])
+            ? FacilityRequest::with(['user', 'processedBy', 'facilities', 'requestFacilities', 'files', 'comments.user'])
+            : FacilityRequest::with(['user', 'processedBy', 'facilities', 'requestFacilities', 'files', 'comments.user'])
             ->where('requests.user_id', $user->id);
 
         $query = match ($filter) {
@@ -48,7 +48,7 @@ class RequestService
         if (!empty($statuses)) {
             $query->whereIn("requests.status", $statuses);
         }
-        
+
         if ($search) {
             $query->where('title', 'like', "%{$search}%");
         }
@@ -128,6 +128,7 @@ class RequestService
             "user",
             "facilities",
             "requestFacilities",
+            'processedBy',
             "requestFacilities.externalEquipments",
             "comments" => fn($q) => $q->latest(),
             "comments.user",

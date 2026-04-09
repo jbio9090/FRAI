@@ -106,6 +106,11 @@ class Request extends Model
         return $this->hasMany(RequestFile::class);
     }
 
+    public function processedBy()
+    {
+        return $this->belongsTo(User::class, 'processed_by');
+    }
+
     /* SCOPES */
 
     public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)

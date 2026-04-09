@@ -16,9 +16,9 @@ class DashboardController extends Controller
 
     public function index()
     {
-        $pending = $this->requestService->get(RequestStatus::PENDING);
-        $approved = $this->requestService->get(RequestStatus::APPROVED);
-        $denied = $this->requestService->get(RequestStatus::DENIED);
+        $pending  = $this->requestService->get([RequestStatus::PENDING]);
+        $approved = $this->requestService->get([RequestStatus::APPROVED]);
+        $denied   = $this->requestService->get([RequestStatus::DENIED]);
 
         $start = now()->startOfMonth()->format('Y-m-d');
         $end   = now()->endOfMonth()->format('Y-m-d');

@@ -74,7 +74,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       },
       {
         title: "For Reschedule",
-        url: route("requests.index", { status: "for reschedule" }),
+        url: route("requests.index", { status: "for_reschedule" }),
         status: "for reschedule",
         icon: IterationCw
       },

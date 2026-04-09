@@ -25,6 +25,8 @@ export interface Request {
     approved_conflict_rf_ids: number[] | null;
     pending_conflicts?: ConflictingBooking[];
     approved_conflicts?: ConflictingBooking[];
+    processed_by?: User,
+    processed_at?: string,
 }
 
 export interface Comment {
