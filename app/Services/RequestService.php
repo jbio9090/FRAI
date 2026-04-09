@@ -323,16 +323,16 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $requestedDate  = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::parse($booking['time_start']);
-            $requestedEnd   = Carbon::parse($booking['time_end']);
+            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$booking['time_start']}");
+            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$booking['time_end']}");
 
             foreach ($existingBookings as $existing) {
                 if ($existing->facility_id != $booking['facility_id'] || $existing->date_requested != $requestedDate) {
                     continue;
                 }
 
-                $existingStart = Carbon::parse($existing->time_start);
-                $existingEnd   = Carbon::parse($existing->time_end);
+                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$existing->time_start}");
+                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$existing->time_end}");
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $status = $existing->request->status;
@@ -463,6 +463,12 @@ class RequestService
                 ->lockForUpdate()
                 ->findOrFail($request_id);
 
+            if ($request->recommended_action === RequestStatus::DENIED) {
+                throw new \Exception(
+                    "Cannot approve this request. Recommended action: {$request->recommended_action_reason}"
+                );
+            }
+
             $bookings = $request->requestFacilities->map(fn($rf) => [
                 'facility_id' => $rf->facility_id,
                 'date'        => $rf->date_requested,
@@ -547,8 +553,8 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::parse($booking['time_start']);
-            $requestedEnd   = Carbon::parse($booking['time_end']);
+            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_start']}");
+            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_end']}");
 
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
@@ -561,8 +567,8 @@ class RequestService
                 ->get();
 
             foreach ($existingBookings as $existing) {
-                $existingStart = Carbon::parse($existing->time_start);
-                $existingEnd   = Carbon::parse($existing->time_end);
+                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_start}");
+                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_end}");
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $conflictingIds->push($existing->request_id);
@@ -605,8 +611,8 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::parse($booking['time_start']);
-            $requestedEnd   = Carbon::parse($booking['time_end']);
+            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_start']}");
+            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_end']}");
 
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
@@ -619,8 +625,8 @@ class RequestService
                 ->get();
 
             foreach ($existingBookings as $existing) {
-                $existingStart = Carbon::parse($existing->time_start);
-                $existingEnd   = Carbon::parse($existing->time_end);
+                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_start}");
+                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_end}");
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $conflictingIds->push($existing->request_id);
