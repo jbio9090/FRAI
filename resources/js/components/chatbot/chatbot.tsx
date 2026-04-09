@@ -312,6 +312,14 @@ export default function Chatbot() {
     const handleBookingComplete = (resultMessage: string) => {
         addMessage({ role: 'assistant', content: resultMessage });
         setMode('ai');
+        
+        const bookingContext = bookingFlow.buildContextSummary();
+        const followUpMessage: Message = {
+            role: 'user',
+            content: 'I have completed the booking flow. Can you help me with any additional questions about this request?'
+        };
+        
+        processAndSend(followUpMessage, bookingContext);
     };
 
     return (
