@@ -233,7 +233,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             />
                         </InputGroup>
 
-                        <div className="hidden sm:flex gap-2">
+                        <div className="hidden sm:flex gap-2 ml-auto">
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline">
