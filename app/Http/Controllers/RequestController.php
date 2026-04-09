@@ -263,7 +263,7 @@ class RequestController extends Controller
     public function edit(FacilityRequest $request)
     {
         abort_if($request->user_id !== auth()->id(), 403);
-        abort_if($request->status !== RequestStatus::PENDING, 403);
+        abort_if(!in_array($request->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
 
         return Inertia::render('requests/create', [
             'facilities' => Facility::with([
@@ -277,7 +277,7 @@ class RequestController extends Controller
     public function update(FacilityFormRequest $httpRequest, FacilityRequest $request)
     {
         abort_if($request->user_id !== auth()->id(), 403);
-        abort_if($request->status !== RequestStatus::PENDING, 403);
+        abort_if(!in_array($request->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
 
         $validated = $httpRequest->validated();
 

@@ -201,7 +201,7 @@ class RequestService
             $facilityRequest = FacilityRequest::lockForUpdate()->findOrFail($requestId);
 
             abort_if($facilityRequest->user_id !== Auth::id(), 403);
-            abort_if($facilityRequest->status !== RequestStatus::PENDING, 403);
+            abort_if(!in_array($facilityRequest->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
             abort_if($facilityRequest->on_hold, 403);
 
             $original = $facilityRequest->only([

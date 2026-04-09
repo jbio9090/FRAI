@@ -1,4 +1,15 @@
-import { Calendar, Clock, SendHorizontal } from 'lucide-react';
+import {
+    Calendar,
+    Clock,
+    SendHorizontal,
+    Pen,
+    CheckCircle,
+    XCircle,
+    ClipboardCheck,
+    MessageSquare,
+    ShieldAlert
+} from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import DefaultLayout from '@/layout.tsx/default.';
@@ -6,7 +17,6 @@ import { Request } from '@/types/request';
 import { Link, usePage } from '@inertiajs/react';
 import moment from 'moment';
 import AvatarWithInitials from '@/components/avatar-with-initials';
-import { Pen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
@@ -14,19 +24,26 @@ import { Textarea } from '@/components/ui/textarea';
 import Comment from '@/components/comment';
 import StatusTag from '@/components/status-tag';
 import { ActivityFeed } from '@/components/activity-feed';
-
+import { usePermission } from '@/hooks/use-permission';
 
 interface DetailProps {
-    children: React.ReactNode;
+    children?: React.ReactNode;
     request: Request;
     auditLogs: any[];
 }
 
 export default function RequestDetail({ request, auditLogs }: DetailProps) {
     const auth = usePage().props.auth;
+    const [comment, setComment] = useState("");
+    const [isCommenting, setCommentInputState] = useState(false);
+    const { hasRole } = usePermission();
+    const isAdmin = hasRole("admin");
 
     const canEdit = request.status === 'Pending'
         && !request.on_hold
+        && request.user.id === auth.user.id;
+
+    const canReschedule = request.status === 'For Reschedule'
         && request.user.id === auth.user.id;
 
     function formatTime(time: string): string {
@@ -37,6 +54,34 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
         });
     }
 
+    const handleAction = (action: string) => {
+        if (action === 'hold') {
+            // Note: If you want to send the admin's comment when putting on hold, 
+            // you might need to update your route/controller here!
+            router.post(route('requests.hold', request.id));
+            return;
+        }
+
+        if (action === 'comment') {
+            if (comment.trim().length === 0) return;
+
+            router.post(route('requests.updateStatus', request.id), {
+                action: 'comment',
+                comment: comment.trim(),
+            }, {
+                onSuccess: () => {
+                    setComment("");
+                    setCommentInputState(false);
+                },
+            });
+            return;
+        }
+
+        router.post(route('requests.updateStatus', request.id), {
+            action,
+            comment: comment.trim().length > 0 ? comment.trim() : null,
+        });
+    };
 
     return (
         <DefaultLayout>
@@ -47,13 +92,93 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                         {canEdit && (
                             <Link href={route("requests.edit", request.id)}>
                                 <Button variant={"ghost"} size={"icon-sm"}>
-                                    <Pen />
+                                    <Pen className="h-4 w-4" />
+                                </Button>
+                            </Link>
+                        )}
+                        
+                        {canReschedule && (
+                            <Link href={route("requests.edit", request.id)}>
+                                <Button variant={"outline"} size={"sm"} className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50">
+                                    <Calendar className="h-4 w-4" />
+                                    Reschedule
                                 </Button>
                             </Link>
                         )}
                     </div>
 
                     <StatusTag requestStatus={request.status} />
+
+                    {isAdmin && (
+                        <Accordion
+                            type="single"
+                            collapsible
+                            defaultValue={(request.status === 'Pending' || request.status === 'For Reschedule') ? 'admin-panel' : undefined}
+                            className="mt-2 w-fit"
+                        >
+                            <AccordionItem value="admin-panel" className="border rounded-xl bg-muted/40 px-4">
+                                <AccordionTrigger className="hover:no-underline py-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <ShieldAlert className="h-4 w-4" />
+                                        <h3 className="text-sm font-semibold tracking-tight">Admin Controls</h3>
+                                    </div>
+                                </AccordionTrigger>
+
+                                <AccordionContent className="flex flex-col gap-4 pb-4">
+                                    {isCommenting && (
+                                        <Textarea
+                                            placeholder="Add an optional reason or note for this action..."
+                                            value={comment}
+                                            onChange={(e) => setComment(e.target.value)}
+                                            className="w-full bg-background"
+                                            rows={2}
+                                        />
+                                    )}
+
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button size="sm" className="gap-1.5" onClick={() => handleAction('approve')}>
+                                            <CheckCircle className="h-4 w-4" /> Approve
+                                        </Button>
+
+                                        <Button size="sm" variant="destructive" className="gap-1.5" onClick={() => handleAction('reject')}>
+                                            <XCircle className="h-4 w-4" /> Deny
+                                        </Button>
+
+                                        <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => handleAction('conditionally_approve')}>
+                                            <ClipboardCheck className="h-4 w-4" /> Conditionally Approve
+                                        </Button>
+
+                                        <Button size="sm" variant="outline" className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => handleAction('for_reschedule')}>
+                                            <Calendar className="h-4 w-4" /> Reschedule
+                                        </Button>
+
+                                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => handleAction('hold')}>
+                                            <Clock className="h-4 w-4" /> Hold
+                                        </Button>
+
+                                        <div className="flex-1" />
+
+                                        <Button
+                                            size="sm"
+                                            variant={isCommenting ? "secondary" : "ghost"}
+                                            className="gap-1.5"
+                                            onClick={() => setCommentInputState(p => !p)}
+                                        >
+                                            <MessageSquare className="h-4 w-4" />
+                                            {isCommenting ? 'Cancel Note' : 'Add Note'}
+                                        </Button>
+
+                                        {isCommenting && comment.trim().length > 0 && (
+                                            <Button size="sm" variant="outline" onClick={() => handleAction('comment')}>
+                                                Post Note Only
+                                            </Button>
+                                        )}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    )}
+
                 </div>
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
@@ -93,7 +218,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             <div className="flex flex-col">
                                 <p className='font-semibold mb-2 text-muted-foreground'>Requested by</p>
                                 <div className="flex gap-2 items-center">
-                                    <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.profile} size='sm' />
+                                    <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size='sm' />
                                     <p>{request.user.name}</p>
                                 </div>
                             </div>
@@ -171,7 +296,6 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                                             </div>
                                         </div>
                                     )}
-
 
                                     {request.approved_conflicts?.filter(c => c.facility_id === rf.facility_id).length > 0 && (
                                         <div className="px-5 py-4 border-t border-border">
@@ -263,6 +387,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                         })}
                     </TabsContent>
 
+                    {/* Comments Tab */}
                     <TabsContent
                         value="comments"
                         className="mt-6 w-full relative flex flex-col items-start md:grid md:grid-cols-[3fr_4fr] gap-4"
@@ -290,6 +415,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                         </div>
                     </TabsContent>
 
+                    {/* Activity Tab */}
                     <TabsContent value="activity" className="flex flex-col gap-0 mt-6">
                         <ActivityFeed auditLogs={auditLogs} />
                     </TabsContent>

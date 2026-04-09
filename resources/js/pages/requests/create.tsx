@@ -1,6 +1,6 @@
 import { useForm, router } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Paperclip, FileText, ImageIcon, File } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Paperclip, Pen, ImageIcon, File } from "lucide-react";
 import { motion } from "motion/react"
 import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -152,7 +152,19 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
 
-    const [showDraftBanner, setShowDraftBanner] = useState<boolean>(!!draft);
+    function draftDiffersFromExisting(draft: DraftData, existing: ExistingRequest): boolean {
+        if (draft.title !== existing.title) return true;
+        if (draft.description !== existing.description) return true;
+        if (draft.priority_level !== existing.priority_level) return true;
+        if (draft.priority_reason !== existing.priority_reason) return true;
+        if (JSON.stringify(draft.facility_bookings) !== JSON.stringify(existing.facility_bookings)) return true;
+        return false;
+    }
+
+    const hasMeaningfulDraft =
+        !!draft && (!isEditing || (!!existingRequest && draftDiffersFromExisting(draft, existingRequest)));
+
+    const [showDraftBanner, setShowDraftBanner] = useState<boolean>(hasMeaningfulDraft);
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
     const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>(
@@ -234,6 +246,23 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
         return () => clearTimeout(timeout);
     }, [data.title, data.description, data.priority_level, data.priority_reason, facilityBookings, showDraftBanner]);
+
+    function editBooking(index: number) {
+        const booking = facilityBookings[index];
+
+        setSelectedFacility(booking.facility_id);
+        setCurrentDate(new Date(booking.date));
+        setCurrentTimeStart(booking.time_start);
+        setCurrentTimeEnd(booking.time_end);
+        setSelectedEquipment(booking.equipment);
+        setSelectedBorrowedEquipment(booking.borrowed_equipment ?? []);
+        setExternalEquipment(booking.external_equipment ?? []);
+        setExpectedCapacity(booking.expected_capacity ?? '');
+
+        loadSchedule(booking.facility_id, new Date(booking.date));
+
+        removeBooking(index);
+    }
 
     const restoreDraft = () => {
         if (!draft) return;
@@ -1131,103 +1160,79 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     </Button>
                                 </div>
 
-                                {facilityBookings.length > 0 && (
-                                    <div className="space-y-4 mt-16">
-                                        <Label>{isEditing ? 'Facility Bookings' : 'Added Facility Bookings'}</Label>
-                                        <div className="flex flex-wrap gap-2 lg:grid grid-cols-[1fr_1fr] ">
-                                            {facilityBookings.map((booking, index) => (
-                                                <div key={index} className="py-5 pl-7 pr-2 border border-border border-1 rounded-sm grow-1 bg-secondary/50">
-                                                    <div className="flex items-start justify-between">
-                                                        <div className="text-sm flex-1">
-                                                            <div className="font-bold text-lg">{booking.facility_name}</div>
-                                                            <div className="text-foreground flex flex-wrap items-center">
-                                                                <div className="flex items-center gap-1">
-                                                                    <CalendarIcon size={16} />
-                                                                    <span className='mr-4'>{format(booking.date, "PPP")}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1">
-                                                                    <Clock className="text-foreground" size={16} />
-                                                                    <span>{formatTime(booking.time_start)} - {formatTime(booking.time_end)}</span>
-                                                                </div>
-                                                                {booking.expected_capacity && (
-                                                                    <div className="flex items-center gap-1">
-                                                                        <User size={16} />
-                                                                        <span>{booking.expected_capacity} expected attendees</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
+                                {facilityBookings.map((booking, index) => (
+                                    <div key={index} className="mb-4 overflow-hidden border border-border rounded-lg bg-secondary/30 shadow-sm">
+                                        <div className="p-4">
+                                            <div className="flex items-center justify-between gap-4 mb-2">
+                                                <h3 className="font-bold text-lg text-foreground truncate">
+                                                    {booking.facility_name}
+                                                </h3>
 
-                                                            {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
-                                                                <Alert key={i} variant="destructive" className="my-4 border-destructive bg-destructive/4">
-                                                                    <AlertCircleIcon />
-                                                                    <AlertTitle>Time Conflict Detected</AlertTitle>
-                                                                    <AlertDescription>
-                                                                        Your selected time overlaps with {conflict.request_title}, which is during {formatTime(conflict.time_start)}-{formatTime(conflict.time_end)}
-                                                                    </AlertDescription>
-                                                                </Alert>
-                                                            ))}
+                                                <div className="flex items-center gap-1 bg-background/50 rounded-md p-1 border border-border/50 shrink-0">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 hover:bg-background hover:text-primary transition-colors"
+                                                        onClick={() => editBooking(index)}
+                                                    >
+                                                        <Pen size={14} />
+                                                    </Button>
+                                                    <div className="w-[1px] h-4 bg-border/60" /> {/* Tiny vertical divider */}
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                                        onClick={() => removeBooking(index)}
+                                                    >
+                                                        <X size={14} />
+                                                    </Button>
+                                                </div>
+                                            </div>
 
-                                                            {booking.equipment.length > 0 && (
-                                                                <div className="mt-4 space-y-1">
-                                                                    <div className="text-muted-foreground">Equipment:</div>
-                                                                    {booking.equipment.map((eq, eqIndex) => (
-                                                                        <div key={eqIndex} className="">
-                                                                            {eq.equipment_name} (Qty: {eq.quantity_needed})
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-
-                                                            {booking.borrowed_equipment?.length > 0 && (
-                                                                <div className="mt-4 space-y-1">
-                                                                    <div className="text-muted-foreground">Borrowed Equipment:</div>
-                                                                    {Object.entries(
-                                                                        booking.borrowed_equipment.reduce((groups, eq) => ({
-                                                                            ...groups,
-                                                                            [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq]
-                                                                        }), {} as Record<string, BorrowedEquipmentRequest[]>)
-                                                                    ).map(([equipmentName, items]) => (
-                                                                        <div key={equipmentName} className="text-sm">
-                                                                            <span className="font-medium">{equipmentName}</span>
-                                                                            <span className="text-muted-foreground">
-                                                                                {' '}· total {items.reduce((s, e) => s + e.quantity_needed, 0)}
-                                                                            </span>
-                                                                            <div className="pl-3 mt-0.5 space-y-0.5">
-                                                                                {items.map(eq => (
-                                                                                    <div key={`${eq.equipment_id}-${eq.source_facility_id}`} className="text-xs text-muted-foreground">
-                                                                                        from {eq.source_facility_name} · {eq.quantity_needed}
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-
-                                                            {booking.external_equipment.length > 0 && (
-                                                                <div className="mt-4 space-y-1">
-                                                                    <div className="text-muted-foreground">External Equipment:</div>
-                                                                    {booking.external_equipment.map((item, i) => (
-                                                                        <div key={i} className="text-sm">{item.name}</div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className='cursor-pointer'
-                                                            onClick={() => removeBooking(index)}
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                        </Button>
+                                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                                                <div className="flex items-center gap-2">
+                                                    <CalendarIcon size={15} className="text-primary/70" />
+                                                    <span>{format(booking.date, "PPP")}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Clock size={15} className="text-primary/70" />
+                                                    <span>{formatTime(booking.time_start)} – {formatTime(booking.time_end)}</span>
+                                                </div>
+                                                {booking.expected_capacity && (
+                                                    <div className="flex items-center gap-2">
+                                                        <User size={15} className="text-primary/70" />
+                                                        <span>{booking.expected_capacity} attendees</span>
                                                     </div>
+                                                )}
+                                            </div>
+
+                                            {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
+                                                <div key={i} className="mt-3 flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                                                    <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
+                                                    <span>
+                                                        <strong>Schedule Conflict:</strong> Overlaps with "{conflict.request_title}" ({formatTime(conflict.time_start)}-{formatTime(conflict.time_end)})
+                                                    </span>
                                                 </div>
                                             ))}
                                         </div>
+
+                                        {(booking.equipment.length > 0 || booking.borrowed_equipment?.length > 0) && (
+                                            <div className="bg-background/40 border-t border-border px-4 py-3">
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Requested Equipment</p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {booking.equipment.map((eq, i) => (
+                                                        <div key={i} className="text-sm flex items-center justify-between bg-background/50 px-2 py-1 rounded border border-border/40">
+                                                            <span className="text-foreground/80">{eq.equipment_name}</span>
+                                                            <span className="text-sm font-bold text-primary">x{eq.quantity_needed}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+                                ))}
 
                                 <FacilityInfo
                                     selectedFacility={selectedFacility}
