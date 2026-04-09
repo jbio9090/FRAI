@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useBookingFlow } from '../hooks/useBookingFlow';
 import DatePicker from './DatePicker';
 
@@ -6,6 +6,10 @@ interface BookingFlowProps {
     bookingFlow: ReturnType<typeof useBookingFlow>;
     onComplete: (message: string) => void;
     onCancel: () => void;
+    attachedFiles?: Array<{ id: string; name: string }>;
+    onAttachFile?: (files: FileList) => void;
+    uploading?: boolean;
+    uploadError?: string | null;
 }
 
 interface FlowMessage {
@@ -13,18 +17,25 @@ interface FlowMessage {
     text: string;
 }
 
-export default function BookingFlow({ bookingFlow, onComplete, onCancel }: BookingFlowProps) {
-    const { step, isSubmitting, submitResult, getStepConfig, handleInput, reset } = bookingFlow;
+export default function BookingFlow({ bookingFlow, onComplete, onCancel, attachedFiles = [], onAttachFile, uploading = false, uploadError = null }: BookingFlowProps) {
+    const { step, data, isSubmitting, submitResult, getStepConfig, handleInput, reset, update } = bookingFlow;
     const [textInput, setTextInput] = useState('');
     const [history, setHistory] = useState<FlowMessage[]>([]);
 
     const config = getStepConfig();
+
+    useEffect(() => {
+        update({ attachedFiles });
+    }, [attachedFiles]);
 
     const pushHistory = (userText: string) => {
         setHistory(prev => [...prev, { from: 'user', text: userText }]);
     };
 
     const handleQuickReply = (value: string) => {
+        if (step === 'files' && value === 'Attach files') {
+            return;
+        }
         pushHistory(value);
         handleInput(value);
     };
@@ -41,6 +52,23 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleTextSubmit();
+        }
+    };
+
+    const handleAttachFilesClick = () => {
+        if (onAttachFile) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx';
+            input.onchange = (e) => {
+                const files = (e.target as HTMLInputElement).files;
+                if (files) {
+                    onAttachFile(files);
+                    handleQuickReply('Continue without files');
+                }
+            };
+            input.click();
         }
     };
 
@@ -64,11 +92,27 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
                                 Continue to chat
                             </button>
                         )}
+                        {!submitResult.success && submitResult.shouldRedirectToEdit && (
+                            <button
+                                onClick={() => bookingFlow.goToStep('edit_pick')}
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
+                            >
+                                Edit Request
+                            </button>
+                        )}
+                        {!submitResult.success && !submitResult.shouldRedirectToEdit && (
+                            <button
+                                onClick={() => bookingFlow.goToStep('review')}
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
+                            >
+                                Try again
+                            </button>
+                        )}
                         <button
                             onClick={() => reset()}
                             className="text-xs text-muted-foreground hover:text-foreground underline"
                         >
-                            {submitResult.success ? 'Submit another request' : 'Try again'}
+                            {submitResult.success ? 'Submit another request' : 'Reset'}
                         </button>
                         <button
                             onClick={onCancel}
@@ -128,8 +172,14 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
                                 {config.quickReplies.map(option => (
                                     <button
                                         key={option}
-                                        onClick={() => handleQuickReply(option)}
-                                        disabled={isSubmitting}
+                                        onClick={() => {
+                                            if (step === 'files' && option === 'Attach files') {
+                                                handleAttachFilesClick();
+                                            } else {
+                                                handleQuickReply(option);
+                                            }
+                                        }}
+                                        disabled={isSubmitting || uploading}
                                         className="px-3 py-1.5 text-xs rounded-lg border
                                             border-border bg-background text-foreground
                                             hover:bg-muted hover:border-ring
@@ -137,7 +187,9 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel }: Booki
                                             dark:hover:bg-white/10 dark:hover:border-white/60
                                             font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
                                     >
-                                        {option}
+                                        {step === 'files' && option === 'Attach files' && attachedFiles.length > 0
+                                            ? `${option} (${attachedFiles.length})`
+                                            : option}
                                     </button>
                                 ))}
                             </div>

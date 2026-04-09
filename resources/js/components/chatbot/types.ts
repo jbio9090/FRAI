@@ -3,6 +3,14 @@ export interface Message {
     content: string;
 }
 
+export interface AttachedFileInfo {
+    id: string;
+    name: string;
+    size: number;
+    mime_type: string;
+    url: string;
+}
+
 export interface ChatRequest {
     messages: Message[];
     participant_count?: number;
@@ -24,4 +32,5 @@ export interface CreateRequestPayload {
     description?: string;
     priority_level?: number;
     priority_reason?: string | null;
+    files?: string[];
 }
