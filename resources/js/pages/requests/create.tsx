@@ -167,9 +167,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [showDraftBanner, setShowDraftBanner] = useState<boolean>(hasMeaningfulDraft);
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
-    const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>(
-        existingRequest?.facility_bookings ?? []
-    );
     const [selectedFacility, setSelectedFacility] = useState<number | null>(null);
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
@@ -220,7 +217,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             !data.title.trim() &&
             !data.description.trim() &&
             !data.priority_reason.trim() &&
-            facilityBookings.length === 0 &&
+            data.facility_bookings.length === 0 &&
             data.priority_level === 0;
 
         if (isEmpty) return;
@@ -229,7 +226,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             saveDraft({
                 title: data.title,
                 description: data.description,
-                facility_bookings: facilityBookings,
+                facility_bookings: data.facility_bookings,
                 priority_level: data.priority_level as 0 | 1 | 2,
                 priority_reason: data.priority_reason,
             }, existingRequest?.id);
@@ -245,10 +242,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         }, 2000);
 
         return () => clearTimeout(timeout);
-    }, [data.title, data.description, data.priority_level, data.priority_reason, facilityBookings, showDraftBanner]);
+    }, [data.title, data.description, data.priority_level, data.priority_reason, data.facility_bookings, showDraftBanner]);
 
     function editBooking(index: number) {
-        const booking = facilityBookings[index];
+        const booking = data.facility_bookings[index];
 
         setSelectedFacility(booking.facility_id);
         setCurrentDate(new Date(booking.date));
@@ -271,7 +268,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setData('priority_level', draft.priority_level);
         setData('priority_reason', draft.priority_reason);
         setData('facility_bookings', draft.facility_bookings);
-        setFacilityBookings(draft.facility_bookings);
         setShowDraftBanner(false);
         setLastSavedAt(draft.savedAt);
     };
@@ -416,8 +412,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             expected_capacity: expectedCapacity === '' ? null : expectedCapacity
         };
 
-        const updatedBookings = [...facilityBookings, newBooking];
-        setFacilityBookings(updatedBookings);
+        const updatedBookings = [...data.facility_bookings, newBooking];
         setData('facility_bookings', updatedBookings);
 
         setSelectedFacility(null);
@@ -458,8 +453,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     function removeBooking(index: number) {
-        const updatedBookings = facilityBookings.filter((_, i) => i !== index);
-        setFacilityBookings(updatedBookings);
+        const updatedBookings = data.facility_bookings.filter((_, i) => i !== index);
         setData('facility_bookings', updatedBookings);
     }
 
@@ -1160,7 +1154,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     </Button>
                                 </div>
 
-                                {facilityBookings.map((booking, index) => (
+                                {data.facility_bookings.map((booking, index) => (
                                     <div key={index} className="mb-4 overflow-hidden border border-border rounded-lg bg-secondary/30 shadow-sm">
                                         <div className="p-4">
                                             <div className="flex items-center justify-between gap-4 mb-2">

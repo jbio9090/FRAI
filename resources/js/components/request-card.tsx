@@ -150,7 +150,7 @@ export default function RequestCard({
                     </div>
                 )}
 
-                {(hasPermission('approve requests') && page_title == "Pending") && (
+                {(hasPermission('approve requests') && ["Pending", "For Reschedule"].includes(request.status)) && (
                     <div className="flex flex-col w-full">
                         <div className="flex items-center">
                             <div className="flex flex-col">
