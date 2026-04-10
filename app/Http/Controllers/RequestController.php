@@ -208,6 +208,8 @@ class RequestController extends Controller
         $facilityRequest->on_hold = !$facilityRequest->on_hold;
         $facilityRequest->save();
 
+        $this->auditLogger::requestHoldToggled($facilityRequest, $facilityRequest->on_hold);
+
         return back()->with('success', $facilityRequest->on_hold ? 'Request placed on hold.' : 'Request removed from hold.');
     }
 
