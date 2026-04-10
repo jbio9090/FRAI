@@ -324,7 +324,7 @@ export default function Chatbot() {
 
     return (
         <div className="w-full h-full flex flex-col bg-background">
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:bg-border]">
 
                 {mode === 'idle' && (
                     <WelcomeMessage onQuickReply={handleQuickReply} />
