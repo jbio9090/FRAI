@@ -1,6 +1,6 @@
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Save } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Paperclip, Pen, ImageIcon, File } from "lucide-react";
 import { motion } from "motion/react"
 import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -13,14 +13,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
+import { AttachedFileList } from '@/components/attached-file-list';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
 import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { Facility } from '@/types/facility';
-import { Equipment } from '@/types/equipment';
+import { FacilityEquipment } from '@/types/equipment';
 import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from "sonner";
+
+
+interface BorrowedEquipmentRequest {
+    equipment_id: number;
+    equipment_name: string;
+    source_facility_id: number;
+    source_facility_name: string;
+    quantity_needed: number;
+    max_quantity: number;
+}
 
 interface FacilityBooking {
     facility_id: number;
@@ -29,8 +41,10 @@ interface FacilityBooking {
     time_start: string;
     time_end: string;
     equipment: EquipmentRequest[];
+    borrowed_equipment: BorrowedEquipmentRequest[];
     conflicts: BookingSchedule[];
-    external_equipment: string;
+    external_equipment: { name: string }[];
+    expected_capacity: number | null;
 }
 
 interface EquipmentRequest {
@@ -59,6 +73,16 @@ interface ExistingRequest {
     priority_level: 0 | 1 | 2;
     priority_reason: string;
     facility_bookings: FacilityBooking[];
+    existing_files: ExistingFile[];
+}
+
+interface ExistingFile {
+    id: number;
+    original_name: string;
+    mime_type: string;
+    size: number;
+    url: string;
+    path: string;
 }
 
 interface CreateRequestProps {
@@ -72,10 +96,15 @@ interface DraftData {
     facility_bookings: FacilityBooking[];
     priority_level: 0 | 1 | 2;
     priority_reason: string;
-    savedAt: number; // unix timestamp
+    savedAt: number;
 }
 
-const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
+interface AttachedFile {
+    file: File;
+    preview?: string;
+}
+
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
 function getDraftKey(existingId?: number) {
     return existingId ? `request_draft_edit_${existingId}` : 'request_draft_create';
@@ -102,8 +131,8 @@ function saveDraft(data: Omit<DraftData, 'savedAt'>, existingId?: number) {
             ...data,
             savedAt: Date.now(),
         }));
-    } catch {
-        // localStorage might be full or unavailable
+    } catch (err) {
+        console.error(err);
     }
 }
 
@@ -119,34 +148,78 @@ function timeAgo(ts: number): string {
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
+const approversList = [
+    { id: 1, name: "Faculty" },
+    { id: 3, name: "College Dean" },
+    { id: 4, name: "Chairperson" },
+    { id: 5, name: "OSA" },
+    { id: 6, name: "VP AA" },
+    { id: 7, name: "VP Admin" },
+    { id: 8, name: "President" },
+];
+
+
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
 
-    // If there's a saved draft, we'll prompt to restore it
-    const [showDraftBanner, setShowDraftBanner] = useState<boolean>(!!draft);
-    const [draftRestoredAt] = useState<number | null>(draft?.savedAt ?? null);
+    function draftDiffersFromExisting(draft: DraftData, existing: ExistingRequest): boolean {
+        if (draft.title !== existing.title) return true;
+        if (draft.description !== existing.description) return true;
+        if (draft.priority_level !== existing.priority_level) return true;
+        if (draft.priority_reason !== existing.priority_reason) return true;
+        if (JSON.stringify(draft.facility_bookings) !== JSON.stringify(existing.facility_bookings)) return true;
+        return false;
+    }
+
+    const hasMeaningfulDraft =
+        !!draft && (!isEditing || (!!existingRequest && draftDiffersFromExisting(draft, existingRequest)));
+
+    const [showDraftBanner, setShowDraftBanner] = useState<boolean>(hasMeaningfulDraft);
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
-    // Initialize from draft if restored, otherwise from existingRequest or empty
-    const getInitialBookings = () => {
-        if (draft && showDraftBanner) return draft.facility_bookings;
-        return existingRequest?.facility_bookings ?? [];
-    };
-
-    const [facilityBookings, setFacilityBookings] = useState<FacilityBooking[]>(
-        existingRequest?.facility_bookings ?? []
-    );
     const [selectedFacility, setSelectedFacility] = useState<number | null>(null);
     const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
-    const [externalEquipment, setExternalEquipment] = useState<string>('');
+    const [externalEquipment, setExternalEquipment] = useState<{ name: string }[]>([]);
+    const [externalEquipmentInput, setExternalEquipmentInput] = useState<string>('');
     const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
     const [hasTimeConflict, setHasTimeConflict] = useState(false);
     const [openCollapsible, setCollapsibleState] = useState(false);
+    const [borrowingEquipmentId, setBorrowingEquipmentId] = useState<number | null>(null);
+    const [selectedBorrowedEquipment, setSelectedBorrowedEquipment] = useState<BorrowedEquipmentRequest[]>([]);
+    const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [expectedCapacity, setExpectedCapacity] = useState<number | ''>('');
+    const [existingFiles, setExistingFiles] = useState<ExistingFile[]>(
+        existingRequest?.existing_files ?? []
+    );
+    const [deletedFileIds, setDeletedFileIds] = useState<number[]>([]);
+    const [approvedBy, setApprovedBy] = useState<string[]>([]);
+
+    const handleCheckboxChange = (name: string) => {
+        setApprovedBy((prev) =>
+            prev.includes(name)
+                ? prev.filter((item) => item !== name)
+                : [...prev, name]
+        );
+    };
+
+    const allBorrowableEquipment = facilities
+        .filter(f => f.id !== selectedFacility)
+        .flatMap(f => (f.equipment ?? []).map(eq => ({ ...eq, facilityId: f.id, facilityName: f.name })))
+        .reduce((unique, eq) => {
+            const existing = unique.find(e => e.id === eq.id);
+            if (!existing) {
+                unique.push({ ...eq, sources: [{ facilityId: eq.facilityId, facilityName: eq.facilityName, quantity: eq.pivot.quantity }] });
+            } else {
+                existing.sources.push({ facilityId: eq.facilityId, facilityName: eq.facilityName, quantity: eq.pivot.quantity });
+            }
+            return unique;
+        }, [] as Array<FacilityEquipment & { sources: { facilityId: number; facilityName: string; quantity: number }[] }>);
 
     const { data, setData, post, put, processing, errors } = useForm({
         title: existingRequest?.title ?? '',
@@ -154,16 +227,26 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         facility_bookings: existingRequest?.facility_bookings ?? [] as FacilityBooking[],
         priority_level: existingRequest?.priority_level ?? 0,
         priority_reason: existingRequest?.priority_reason ?? '',
+        files: [] as File[],
     });
 
     useEffect(() => {
         if (showDraftBanner) return;
 
+        const isEmpty =
+            !data.title.trim() &&
+            !data.description.trim() &&
+            !data.priority_reason.trim() &&
+            data.facility_bookings.length === 0 &&
+            data.priority_level === 0;
+
+        if (isEmpty) return;
+
         const timeout = setTimeout(() => {
             saveDraft({
                 title: data.title,
                 description: data.description,
-                facility_bookings: facilityBookings,
+                facility_bookings: data.facility_bookings,
                 priority_level: data.priority_level as 0 | 1 | 2,
                 priority_reason: data.priority_reason,
             }, existingRequest?.id);
@@ -179,9 +262,25 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         }, 2000);
 
         return () => clearTimeout(timeout);
-    }, [data.title, data.description, data.priority_level, data.priority_reason, facilityBookings, showDraftBanner]);
+    }, [data.title, data.description, data.priority_level, data.priority_reason, data.facility_bookings, showDraftBanner]);
 
-    // Restore draft
+    function editBooking(index: number) {
+        const booking = data.facility_bookings[index];
+
+        setSelectedFacility(booking.facility_id);
+        setCurrentDate(new Date(booking.date));
+        setCurrentTimeStart(booking.time_start);
+        setCurrentTimeEnd(booking.time_end);
+        setSelectedEquipment(booking.equipment);
+        setSelectedBorrowedEquipment(booking.borrowed_equipment ?? []);
+        setExternalEquipment(booking.external_equipment ?? []);
+        setExpectedCapacity(booking.expected_capacity ?? '');
+
+        loadSchedule(booking.facility_id, new Date(booking.date));
+
+        removeBooking(index);
+    }
+
     const restoreDraft = () => {
         if (!draft) return;
         setData('title', draft.title);
@@ -189,7 +288,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setData('priority_level', draft.priority_level);
         setData('priority_reason', draft.priority_reason);
         setData('facility_bookings', draft.facility_bookings);
-        setFacilityBookings(draft.facility_bookings);
         setShowDraftBanner(false);
         setLastSavedAt(draft.savedAt);
     };
@@ -199,8 +297,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setShowDraftBanner(false);
     };
 
-    const availableEquipment = selectedFacility
-        ? facilities.find(f => f.id === selectedFacility)?.equipments || []
+    const availableEquipment: FacilityEquipment[] = selectedFacility
+        ? facilities.find(f => f.id === selectedFacility)?.equipment ?? []
         : [];
 
     function formatTime(time: string): string {
@@ -253,12 +351,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setSelectedEquipment(availableEquipment.map((equipment) => ({
             equipment_id: equipment.id,
             equipment_name: equipment.name,
-            quantity_needed: equipment.quantity,
-            max_quantity: equipment.quantity,
+            quantity_needed: equipment.pivot.quantity,
+            max_quantity: equipment.pivot.quantity,
         })));
     }
 
-    function handleEquipmentToggle(equipment: Equipment) {
+    function handleEquipmentToggle(equipment: FacilityEquipment) {
         const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
         if (exists) {
             setSelectedEquipment(selectedEquipment.filter(e => e.equipment_id !== equipment.id));
@@ -266,8 +364,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             setSelectedEquipment([...selectedEquipment, {
                 equipment_id: equipment.id,
                 equipment_name: equipment.name,
-                quantity_needed: equipment.quantity,
-                max_quantity: equipment.quantity,
+                quantity_needed: equipment.pivot.quantity,
+                max_quantity: equipment.pivot.quantity,
             }]);
         }
     }
@@ -328,12 +426,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             time_start: currentTimeStart,
             time_end: currentTimeEnd,
             equipment: selectedEquipment,
+            borrowed_equipment: selectedBorrowedEquipment,
             conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
             external_equipment: externalEquipment,
+            expected_capacity: expectedCapacity === '' ? null : expectedCapacity
         };
 
-        const updatedBookings = [...facilityBookings, newBooking];
-        setFacilityBookings(updatedBookings);
+        const updatedBookings = [...data.facility_bookings, newBooking];
         setData('facility_bookings', updatedBookings);
 
         setSelectedFacility(null);
@@ -341,27 +440,78 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setCurrentTimeStart('');
         setCurrentTimeEnd('');
         setSelectedEquipment([]);
+        setSelectedBorrowedEquipment([]);
+        setBorrowingEquipmentId(null);
         setFacilitySchedule(null);
         setHasTimeConflict(false);
-        setExternalEquipment('');
+        setExternalEquipment([]);
+        setExternalEquipmentInput('');
+        setExpectedCapacity('');
+    }
+
+    function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+        const selected = Array.from(e.target.files ?? []);
+        const newFiles: AttachedFile[] = selected.map(file => ({
+            file,
+            preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+        }));
+        setAttachedFiles(prev => [...prev, ...newFiles]);
+        e.target.value = '';
+    }
+
+    function removeFile(index: number) {
+        setAttachedFiles(prev => {
+            const updated = [...prev];
+            if (updated[index].preview) URL.revokeObjectURL(updated[index].preview!);
+            updated.splice(index, 1);
+            return updated;
+        });
+    }
+
+    function removeExistingFile(index: number) {
+        setExistingFiles(prev => prev.filter((_, i) => i !== index));
     }
 
     function removeBooking(index: number) {
-        const updatedBookings = facilityBookings.filter((_, i) => i !== index);
-        setFacilityBookings(updatedBookings);
+        const updatedBookings = data.facility_bookings.filter((_, i) => i !== index);
         setData('facility_bookings', updatedBookings);
     }
 
     function submit(e: React.FormEvent) {
         e.preventDefault();
+        setIsSubmitting(true);
+
+        const payload: Record<string, unknown> = {
+            title: data.title,
+            description: data.description,
+            facility_bookings: JSON.stringify(data.facility_bookings),
+            priority_level: data.priority_level,
+            priority_reason: data.priority_reason,
+            files: attachedFiles.map(f => f.file),
+            existing_file_ids: existingFiles.map(f => f.id),
+            approved_by: approvedBy,
+        };
+
         if (isEditing) {
-            put(route('requests.update', existingRequest!.id), {
-                onSuccess: () => clearDraft(existingRequest?.id),
-            });
+            router.post(
+                route('requests.update', existingRequest!.id),
+                { ...payload, _method: 'PUT' },
+                {
+                    forceFormData: true,
+                    onSuccess: () => { clearDraft(existingRequest?.id); setIsSubmitting(false); },
+                    onError: (errors) => { console.log('validation errors:', errors); setIsSubmitting(false); },
+                }
+            );
         } else {
-            post(route('requests.store'), {
-                onSuccess: () => clearDraft(),
-            });
+            router.post(
+                route('requests.store'),
+                payload,
+                {
+                    forceFormData: true,
+                    onSuccess: () => { clearDraft(); setIsSubmitting(false); },
+                    onError: () => setIsSubmitting(false),
+                }
+            );
         }
     }
 
@@ -386,53 +536,229 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                 </AlertDialogContent>
             </AlertDialog>
 
-            <div className="w-full lg:grid lg:grid-cols-[5fr_3fr] gap-8">
+            <div className="w-full">
                 <div className="max-w-3xl w-full mx-auto">
-                    <form onSubmit={submit} className="space-y-8 flex flex-col gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="title">Request Title</Label>
-                            <Input
-                                id="title"
-                                type="text"
-                                value={data.title}
-                                onChange={(e) => setData('title', e.target.value)}
-                                placeholder="e.g., Annual Company Meeting"
-                            />
-                            {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
-                        </div>
+                    <form onSubmit={submit} className="space-y-8 flex flex-col gap-6">
 
-                        <div className="space-y-2">
-                            <Label htmlFor="description">Description</Label>
-                            <Textarea
-                                id="description"
-                                value={data.description}
-                                onChange={(e) => setData('description', e.target.value)}
-                                placeholder="Provide details about your request"
-                                rows={4}
-                            />
-                            {errors.description && <p className="text-sm text-destructive">{errors.description}</p>}
-                        </div>
+                        {Object.keys(errors).length > 0 && (
+                            <Alert variant="destructive" className="border-destructive bg-destructive/4 mb-0 mt-0">
+                                <AlertCircleIcon />
+                                <AlertTitle>Error with submition. Please properly fill in all the details.</AlertTitle>
+                                <AlertDescription>
+                                    <ul className="list-disc pl-5 space-y-1 mt-1">
+                                        {errors.title && <li>{errors.title}</li>}
+                                        {errors.description && <li>{errors.description}</li>}
+                                        {errors.priority_level && <li>{errors.priority_level}</li>}
+                                        {errors.priority_reason && <li>{errors.priority_reason}</li>}
+                                        {errors.files && <li>{errors.files}</li>}
 
-                        <div className="space-y-2">
-                            <Label htmlFor="priority">Priority Level</Label>
-                            <Select
-                                value={data.priority_level.toString()}
-                                onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}
-                            >
-                                <SelectTrigger className='w-full'>
-                                    <SelectValue placeholder="Select priority" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {errors.priority_level && <p className="text-sm text-destructive">{errors.priority_level}</p>}
-                        </div>
+                                        {typeof errors.facility_bookings === 'string' && (
+                                            <li>{errors.facility_bookings}</li>
+                                        )}
 
-                        <div className="space-y-4">
-                            <div className="space-y-6">
+                                        {typeof errors.facility_bookings === 'object' && errors.facility_bookings !== null &&
+                                            Object.values(errors.facility_bookings).map((msg, i) => (
+                                                <li key={i}>{msg}</li>
+                                            ))
+                                        }
+                                    </ul>
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
+                        <Tabs defaultValue="details" className="w-full">
+                            <TabsList className="w-full mb-6">
+                                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+                                <TabsTrigger value="facility" className="flex-1">Facility</TabsTrigger>
+                            </TabsList>
+
+                            {/* ── Details Tab ── */}
+                            <TabsContent value="details" className="space-y-6 mt-0">
+                                <div className="space-y-2">
+                                    <Label htmlFor="title">Request Title</Label>
+                                    <Input
+                                        id="title"
+                                        type="text"
+                                        value={data.title}
+                                        onChange={(e) => setData('title', e.target.value)}
+                                        placeholder="e.g., Annual Company Meeting"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="description">Description</Label>
+                                    <Textarea
+                                        id="description"
+                                        value={data.description}
+                                        onChange={(e) => setData('description', e.target.value)}
+                                        placeholder="Provide details about your request"
+                                        rows={4}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="priority">Event Type</Label>
+                                    <Select
+                                        value={data.priority_level.toString()}
+                                        onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}
+                                    >
+                                        <SelectTrigger className='w-full'>
+                                            <SelectValue placeholder="Select priority" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                                                <SelectItem key={value} value={value}>{label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <Label className="font-semibold">Approved By</Label>
+
+                                    <div className="flex flex-wrap gap-4 mt-2">
+                                        {approversList.map((approver) => {
+                                            const isChecked = approvedBy.includes(approver.name)
+
+                                            return (
+                                                <div key={approver.id} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={`approver-${approver.id}`}
+                                                        checked={isChecked}
+                                                        onCheckedChange={() =>
+                                                            handleCheckboxChange(approver.name)
+                                                        }
+                                                    />
+                                                    <Label htmlFor={`approver-${approver.id}`}>
+                                                        {approver.name}
+                                                    </Label>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+
+                                {/* File Attachments */}
+                                <div className="space-y-3">
+                                    <Label>Attachments</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Attach supporting documents, images, or files (max 10MB each).
+                                    </p>
+
+                                    <label
+                                        htmlFor="file-upload"
+                                        className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 hover:bg-muted/20 transition-colors"
+                                    >
+                                        <Paperclip size={20} className="text-muted-foreground mb-2" />
+                                        <span className="text-sm text-muted-foreground">
+                                            Click to attach files
+                                        </span>
+                                        <span className="text-xs text-muted-foreground mt-1">
+                                            JPG, PNG, PDF, DOC, XLSX, PPTX up to 10MB
+                                        </span>
+                                        <input
+                                            id="file-upload"
+                                            type="file"
+                                            multiple
+                                            accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.pptx"
+                                            onChange={handleFileSelect}
+                                            className="hidden"
+                                        />
+                                    </label>
+
+                                    <AttachedFileList
+                                        files={attachedFiles}
+                                        serverFiles={existingFiles}
+                                        onRemove={removeFile}
+                                        onRemoveServer={removeExistingFile}
+                                    />
+
+                                    {errors.files && (
+                                        <p className="text-sm text-destructive">{errors.files}</p>
+                                    )}
+                                </div>
+                            </TabsContent>
+
+                            {/* Facility Tab */}
+                            <TabsContent value="facility" className="space-y-6 mt-0">
+                                <div className="space-y-8">
+                                    <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-6 md:gap-4 w-full">
+                                        <div className="space-y-2 col-span-full md:col-span-1">
+                                            <Label>Date</Label>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className={cn("w-full justify-start text-left font-normal overflow-truncate", !currentDate && "text-muted-foreground")}
+                                                    >
+                                                        <CalendarIcon className="mr-1 h-4 w-4" />
+                                                        {currentDate ? format(currentDate, "PPP") : "Pick a date"}
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0">
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={currentDate}
+                                                        onSelect={handleDateChange}
+                                                        initialFocus
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="time_start">Start Time</Label>
+                                            <Input
+                                                id="time_start"
+                                                type="time"
+                                                value={currentTimeStart}
+                                                onChange={handleTimeStartChange}
+                                                min={"7:00"}
+                                                max={"20:00"}
+                                                className={"text-sm"}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="time_end">End Time</Label>
+                                            <Input
+                                                id="time_end"
+                                                type="time"
+                                                value={currentTimeEnd}
+                                                onChange={handleTimeEndChange}
+                                                min={"7:00"}
+                                                max={"20:00"}
+                                                className={"text-sm"}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="expected_capacity">Expected Attendees</Label>
+                                        <Input
+                                            id="expected_capacity"
+                                            type="number"
+                                            min="1"
+                                            value={expectedCapacity}
+                                            onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
+                                            placeholder="Input expected attendees for this facility at this time"
+                                            className="text-sm"
+                                        />
+                                    </div>
+
+                                    {hasTimeConflict && (
+                                        <Alert variant="destructive" className="border-destructive bg-destructive/4">
+                                            <AlertCircleIcon />
+                                            <AlertTitle>Time Conflict Detected</AlertTitle>
+                                            <AlertDescription>
+                                                Your selected time overlaps with an existing event. Please choose a different time slot.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+                                </div>
+
                                 <div className="space-y-4">
                                     <Label>Select Facility</Label>
                                     <Select
@@ -475,237 +801,491 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 </Collapsible>
 
                                 {selectedFacility && availableEquipment.length > 0 && (
-                                    <>
-                                        <div className="space-y-2">
-                                            <div className="flex justify-around items-end">
-                                                <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
-                                                {selectedEquipment.length < availableEquipment.length && (
-                                                    <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment} className='text-muted-foreground hover:text-foreground'>
-                                                        <span className="text-sm">Select All</span>
-                                                        <SquareMousePointer />
-                                                    </Button>
-                                                )}
-                                                {selectedEquipment.length > 0 && (
-                                                    <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection} className='text-muted-foreground hover:text-foreground'>
-                                                        <span className="text-sm">Clear All</span>
-                                                        <X />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                            <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
-                                                {availableEquipment.map((equipment) => {
-                                                    const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
-                                                    return (
-                                                        <div key={equipment.id} className="flex items-center justify-between gap-4">
-                                                            <div className="flex items-center space-x-3 flex-1">
-                                                                <Checkbox
-                                                                    id={`equipment-${equipment.id}`}
-                                                                    checked={!!selected}
-                                                                    onCheckedChange={() => handleEquipmentToggle(equipment)}
-                                                                />
-                                                                <div className="flex-1">
-                                                                    <Label htmlFor={`equipment-${equipment.id}`} className="text-sm text-foreground font-medium cursor-pointer">
-                                                                        {equipment.name}
-                                                                    </Label>
-                                                                    <Label className="text-xs text-muted-foreground">
-                                                                        Available: {equipment.quantity}
-                                                                    </Label>
-                                                                </div>
-                                                            </div>
-                                                            {selected && (
-                                                                <div className="flex items-center gap-4">
-                                                                    <Label className="text-sm">Qty:</Label>
-                                                                    <Input
-                                                                        type="number"
-                                                                        min="1"
-                                                                        max={equipment.quantity}
-                                                                        value={selected.quantity_needed}
-                                                                        onChange={(e) => updateEquipmentQuantity(
-                                                                            equipment.id,
-                                                                            Math.min(Number(e.target.value), equipment.quantity)
-                                                                        )}
-                                                                        className="w-20 text-sm p-2"
-                                                                    />
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
+                                    <div className="space-y-2">
+                                        <div className="flex justify-around items-end">
+                                            <Label className='ml-0 mt-4 mb-2 mr-auto'>Select Equipment</Label>
+                                            {selectedEquipment.length < availableEquipment.length && (
+                                                <Button variant={"ghost"} size={"sm"} onClick={selectAllEquipment} className='text-muted-foreground hover:text-foreground'>
+                                                    <span className="text-sm">Select All</span>
+                                                    <SquareMousePointer />
+                                                </Button>
+                                            )}
+                                            {selectedEquipment.length > 0 && (
+                                                <Button variant={"ghost"} size={"sm"} onClick={clearEquipmentSelection} className='text-muted-foreground hover:text-foreground'>
+                                                    <span className="text-sm">Clear All</span>
+                                                    <X />
+                                                </Button>
+                                            )}
                                         </div>
-
-                                        <Collapsible>
-                                            <CollapsibleTrigger asChild>
-                                                <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
-                                                    <Plus size={16} />
-                                                    <span>Add external equipment</span>
-                                                </Button>
-                                            </CollapsibleTrigger>
-                                            <CollapsibleContent>
-                                                <div className="mt-3 space-y-4">
-                                                    <Label htmlFor="external_equipment">External Equipment</Label>
-                                                    <Textarea
-                                                        id="external_equipment"
-                                                        placeholder="Describe any external equipment you'll be bringing (e.g., 2 portable speakers, 1 projector stand)"
-                                                        rows={3}
-                                                        value={externalEquipment}
-                                                        onChange={(e) => setExternalEquipment(e.target.value)}
-                                                    />
-                                                </div>
-                                            </CollapsibleContent>
-                                        </Collapsible>
-                                    </>
-                                )}
-
-                                <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-6 md:gap-4 mt-8 w-full">
-                                    <div className="space-y-2 col-span-full md:col-span-1">
-                                        <Label>Date</Label>
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className={cn("w-full justify-start text-left font-normal overflow-truncate", !currentDate && "text-muted-foreground")}
-                                                >
-                                                    <CalendarIcon className="mr-1 h-4 w-4" />
-                                                    {currentDate ? format(currentDate, "PPP") : "Pick a date"}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0">
-                                                <Calendar
-                                                    mode="single"
-                                                    selected={currentDate}
-                                                    onSelect={handleDateChange}
-                                                    initialFocus
-                                                />
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="time_start">Start Time</Label>
-                                        <Input
-                                            id="time_start"
-                                            type="time"
-                                            value={currentTimeStart}
-                                            onChange={handleTimeStartChange}
-                                            min={"7:00"}
-                                            max={"20:00"}
-                                            className={"text-sm"}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="time_end">End Time</Label>
-                                        <Input
-                                            id="time_end"
-                                            type="time"
-                                            value={currentTimeEnd}
-                                            onChange={handleTimeEndChange}
-                                            min={"7:00"}
-                                            max={"20:00"}
-                                            className={"text-sm"}
-                                        />
-                                    </div>
-                                </div>
-
-                                {hasTimeConflict && (
-                                    <Alert variant="destructive" className="border-destructive bg-destructive/4">
-                                        <AlertCircleIcon />
-                                        <AlertTitle>Time Conflict Detected</AlertTitle>
-                                        <AlertDescription>
-                                            Your selected time overlaps with an existing event. Please choose a different time slot.
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={addFacilityBooking}
-                                    disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
-                                    className="w-full"
-                                >
-                                    Add Facility Booking
-                                </Button>
-                            </div>
-
-                            {facilityBookings.length > 0 && (
-                                <div className="space-y-4 mt-8">
-                                    <Label>{isEditing ? 'Facility Bookings' : 'Added Facility Bookings'}</Label>
-                                    <div className="divide-y">
-                                        {facilityBookings.map((booking, index) => (
-                                            <div key={index} className="py-6 px-8 border border-border border-2">
-                                                <div className="flex items-start justify-between">
-                                                    <div className="text-sm flex-1">
-                                                        <div className="font-bold text-lg">{booking.facility_name}</div>
-                                                        <div className="text-muted-foreground flex gap-4 items-center">
-                                                            <CalendarIcon size={16} />
-                                                            <span className='mr-4'>{format(booking.date, "PPP")}</span>
-                                                            <Clock className="text-muted-foreground" size={16} />
-                                                            <span>{formatTime(booking.time_start)} - {formatTime(booking.time_end)}</span>
-                                                        </div>
-
-                                                        {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
-                                                            <Alert key={i} variant="destructive" className="my-4 border-destructive bg-destructive/4">
-                                                                <AlertCircleIcon />
-                                                                <AlertTitle>Time Conflict Detected</AlertTitle>
-                                                                <AlertDescription>
-                                                                    Your selected time overlaps with {conflict.request_title}, which is during {formatTime(conflict.time_start)}-{formatTime(conflict.time_end)}
-                                                                </AlertDescription>
-                                                            </Alert>
-                                                        ))}
-
-                                                        {booking.equipment.length > 0 && (
-                                                            <div className="mt-2 space-y-1">
-                                                                <div className="font-semibold">Equipment:</div>
-                                                                {booking.equipment.map((eq, eqIndex) => (
-                                                                    <div key={eqIndex} className="text-muted-foreground">
-                                                                        • {eq.equipment_name} (Qty: {eq.quantity_needed})
-                                                                    </div>
-                                                                ))}
+                                        <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
+                                            {availableEquipment.map((equipment) => {
+                                                const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
+                                                return (
+                                                    <div key={equipment.id} className="flex items-center justify-between gap-4">
+                                                        <div className="flex items-center space-x-3 flex-1">
+                                                            <Checkbox
+                                                                id={`equipment-${equipment.id}`}
+                                                                checked={!!selected}
+                                                                onCheckedChange={() => handleEquipmentToggle(equipment)}
+                                                            />
+                                                            <div className="flex-1">
+                                                                <Label htmlFor={`equipment-${equipment.id}`} className="text-sm text-foreground font-medium cursor-pointer">
+                                                                    {equipment.name}
+                                                                </Label>
+                                                                <Label className="text-xs text-muted-foreground">
+                                                                    Available in facility: {equipment.pivot.quantity}
+                                                                </Label>
                                                             </div>
-                                                        )}
-
-                                                        {booking.external_equipment && (
-                                                            <div className="mt-2">
-                                                                <span className="font-semibold">External Equipment: </span>
-                                                                <span className="text-muted-foreground">{booking.external_equipment}</span>
+                                                        </div>
+                                                        {selected && (
+                                                            <div className="flex items-center gap-4">
+                                                                <Label className="text-sm">Qty:</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max={equipment.pivot.quantity}
+                                                                    value={selected.quantity_needed}
+                                                                    onChange={(e) => updateEquipmentQuantity(
+                                                                        equipment.id,
+                                                                        Math.min(Number(e.target.value), equipment.pivot.quantity)
+                                                                    )}
+                                                                    className="w-20 text-sm p-2"
+                                                                />
                                                             </div>
                                                         )}
                                                     </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Optional actions group — external equipment + borrow */}
+                                <div className="space-y-2">
+                                    <Collapsible>
+                                        <CollapsibleTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                                            >
+                                                <Plus size={16} />
+                                                <span>Add external equipment</span>
+                                                {externalEquipment.length > 0 && (
+                                                    <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                                                        {externalEquipment.length}
+                                                    </span>
+                                                )}
+                                            </Button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <div className="mt-3 space-y-3 px-1">
+                                                <p className="text-xs text-muted-foreground">
+                                                    List equipment you'll be bringing that isn't in our inventory.
+                                                </p>
+
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        placeholder="e.g., Portable speaker"
+                                                        value={externalEquipmentInput}
+                                                        onChange={(e) => setExternalEquipmentInput(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                const trimmed = externalEquipmentInput.trim();
+                                                                if (!trimmed) return;
+                                                                setExternalEquipment(prev => [...prev, { name: trimmed }]);
+                                                                setExternalEquipmentInput('');
+                                                            }
+                                                        }}
+                                                        className="text-sm"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        onClick={() => {
+                                                            const trimmed = externalEquipmentInput.trim();
+                                                            if (!trimmed) return;
+                                                            setExternalEquipment(prev => [...prev, { name: trimmed }]);
+                                                            setExternalEquipmentInput('');
+                                                        }}
+                                                    >
+                                                        Add
+                                                    </Button>
+                                                </div>
+
+                                                {externalEquipment.length > 0 && (
+                                                    <div className="space-y-1.5">
+                                                        {externalEquipment.map((item, i) => (
+                                                            <div
+                                                                key={i}
+                                                                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-muted/20"
+                                                            >
+                                                                <span>{item.name}</span>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                                    onClick={() =>
+                                                                        setExternalEquipment(prev => prev.filter((_, idx) => idx !== i))
+                                                                    }
+                                                                >
+                                                                    <X size={14} />
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CollapsibleContent>
+                                    </Collapsible>
+
+                                    {selectedFacility && (
+                                        <Collapsible>
+                                            <CollapsibleTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                                                >
+                                                    <Plus size={16} />
+                                                    <span>Borrow equipment from another facility</span>
+                                                    {selectedBorrowedEquipment.length > 0 && (
+                                                        <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                                                            {selectedBorrowedEquipment.length}
+                                                        </span>
+                                                    )}
+                                                </Button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent className="mt-3 space-y-4">
+                                                <div className="border rounded-md p-4 space-y-4 bg-muted/20">
+
+                                                    {/* Step 1 — pick equipment */}
+                                                    <div className="space-y-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                                                Step 1 — Select Equipment
+                                                            </Label>
+                                                            {borrowingEquipmentId && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => setBorrowingEquipmentId(null)}
+                                                                    className="h-auto py-1 px-2 text-xs text-muted-foreground gap-1"
+                                                                >
+                                                                    <X size={12} />
+                                                                    Done configuring
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Click an item to configure which facility to borrow it from. You can configure multiple equipment items.
+                                                        </p>
+                                                        <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+                                                            {allBorrowableEquipment.length === 0 ? (
+                                                                <p className="text-sm text-muted-foreground text-center py-2">
+                                                                    No equipment available to borrow.
+                                                                </p>
+                                                            ) : allBorrowableEquipment.map((equipment) => {
+                                                                const isSelected = borrowingEquipmentId === equipment.id;
+                                                                const alreadyBorrowed = selectedBorrowedEquipment.filter(e => e.equipment_id === equipment.id);
+                                                                return (
+                                                                    <button
+                                                                        key={equipment.id}
+                                                                        type="button"
+                                                                        onClick={() => setBorrowingEquipmentId(isSelected ? null : equipment.id)}
+                                                                        className={cn(
+                                                                            "w-full text-left rounded-md px-3 py-2 text-sm transition-colors",
+                                                                            isSelected
+                                                                                ? "bg-primary/10 border border-primary/30"
+                                                                                : "hover:bg-muted/50 border border-transparent"
+                                                                        )}
+                                                                    >
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="font-medium">{equipment.name}</span>
+                                                                            {alreadyBorrowed.length > 0 && (
+                                                                                <span className="text-xs text-primary font-medium">
+                                                                                    {alreadyBorrowed.reduce((s, e) => s + e.quantity_needed, 0)} borrowed
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                                            Available in {equipment.sources.length} {equipment.sources.length === 1 ? 'facility' : 'facilities'}
+                                                                        </p>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Step 2 */}
+                                                    {borrowingEquipmentId && (() => {
+                                                        const equipment = allBorrowableEquipment.find(e => e.id === borrowingEquipmentId);
+                                                        if (!equipment) return null;
+                                                        return (
+                                                            <div className="space-y-3">
+                                                                <div className="space-y-2">
+                                                                    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                                                        Step 2 — Choose Facility & Quantity for "{equipment.name}"
+                                                                    </Label>
+                                                                    <div className="space-y-2">
+                                                                        {equipment.sources.map(source => {
+                                                                            const borrowed = selectedBorrowedEquipment.find(
+                                                                                e => e.equipment_id === equipment.id && e.source_facility_id === source.facilityId
+                                                                            );
+                                                                            return (
+                                                                                <div
+                                                                                    key={source.facilityId}
+                                                                                    className="flex items-center justify-between gap-4 border rounded-md px-3 py-2 bg-background"
+                                                                                >
+                                                                                    <div className="flex items-center gap-3 flex-1">
+                                                                                        <Checkbox
+                                                                                            id={`borrow-${equipment.id}-${source.facilityId}`}
+                                                                                            checked={!!borrowed}
+                                                                                            onCheckedChange={() => {
+                                                                                                if (borrowed) {
+                                                                                                    setSelectedBorrowedEquipment(prev =>
+                                                                                                        prev.filter(e => !(e.equipment_id === equipment.id && e.source_facility_id === source.facilityId))
+                                                                                                    );
+                                                                                                } else {
+                                                                                                    setSelectedBorrowedEquipment(prev => [...prev, {
+                                                                                                        equipment_id: equipment.id,
+                                                                                                        equipment_name: equipment.name,
+                                                                                                        source_facility_id: source.facilityId,
+                                                                                                        source_facility_name: source.facilityName,
+                                                                                                        quantity_needed: 1,
+                                                                                                        max_quantity: source.quantity,
+                                                                                                    }]);
+                                                                                                }
+                                                                                            }}
+                                                                                        />
+                                                                                        <div>
+                                                                                            <Label htmlFor={`borrow-${equipment.id}-${source.facilityId}`} className="text-sm font-medium cursor-pointer">
+                                                                                                {source.facilityName}
+                                                                                            </Label>
+                                                                                            <p className="text-xs text-muted-foreground">
+                                                                                                Available: {source.quantity}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    {borrowed && (
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <Label className="text-sm">Qty:</Label>
+                                                                                            <Input
+                                                                                                type="number"
+                                                                                                min="1"
+                                                                                                max={source.quantity}
+                                                                                                value={borrowed.quantity_needed}
+                                                                                                onChange={(e) => {
+                                                                                                    const qty = Math.min(Number(e.target.value), source.quantity);
+                                                                                                    setSelectedBorrowedEquipment(prev => prev.map(item =>
+                                                                                                        item.equipment_id === equipment.id && item.source_facility_id === source.facilityId
+                                                                                                            ? { ...item, quantity_needed: qty }
+                                                                                                            : item
+                                                                                                    ));
+                                                                                                }}
+                                                                                                className="w-20 text-sm p-2"
+                                                                                            />
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Other already-configured equipment shown while in Step 2 */}
+                                                                {(() => {
+                                                                    const otherBorrowed = Object.entries(
+                                                                        selectedBorrowedEquipment
+                                                                            .reduce((groups, eq) => ({
+                                                                                ...groups,
+                                                                                [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq]
+                                                                            }), {} as Record<string, BorrowedEquipmentRequest[]>)
+                                                                    );
+                                                                    if (otherBorrowed.length === 0) return null;
+                                                                    return (
+                                                                        <div className="border rounded-md px-3 py-2 bg-muted/10 space-y-2">
+                                                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                                                                Other configured equipment
+                                                                            </p>
+                                                                            {otherBorrowed.map(([equipmentName, items]) => (
+                                                                                <div key={equipmentName} className="text-sm">
+                                                                                    <span className="font-medium">{equipmentName}</span>
+                                                                                    <span className="text-muted-foreground text-xs ml-1">
+                                                                                        · total {items.reduce((s, e) => s + e.quantity_needed, 0)}
+                                                                                    </span>
+                                                                                    <div className="pl-3 mt-0.5 space-y-0.5">
+                                                                                        {items.map(eq => (
+                                                                                            <div key={`${eq.equipment_id}-${eq.source_facility_id}`} className="text-xs text-muted-foreground flex justify-between items-center">
+                                                                                                <span>from {eq.source_facility_name}</span>
+                                                                                                <Button
+                                                                                                    type="button"
+                                                                                                    variant="ghost"
+                                                                                                    size="icon"
+                                                                                                    className="h-5 w-5 text-destructive hover:text-destructive/70"
+                                                                                                    onClick={() => setSelectedBorrowedEquipment(prev =>
+                                                                                                        prev.filter(e => !(e.equipment_id === eq.equipment_id && e.source_facility_id === eq.source_facility_id))
+                                                                                                    )}
+                                                                                                >
+                                                                                                    <X size={10} />
+                                                                                                </Button>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {/* Summary when NOT configuring any specific equipment */}
+                                                    {!borrowingEquipmentId && selectedBorrowedEquipment.length > 0 && (
+                                                        <div className="space-y-3 pt-2 border-t">
+                                                            <p className="text-xs text-muted-foreground font-medium">Selected to borrow:</p>
+                                                            {Object.entries(
+                                                                selectedBorrowedEquipment.reduce((groups, eq) => ({
+                                                                    ...groups,
+                                                                    [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq]
+                                                                }), {} as Record<string, BorrowedEquipmentRequest[]>)
+                                                            ).map(([equipmentName, items]) => (
+                                                                <div key={equipmentName}>
+                                                                    <p className="text-xs font-semibold mb-1">
+                                                                        {equipmentName}
+                                                                        <span className="text-muted-foreground font-normal ml-1">
+                                                                            · total {items.reduce((s, e) => s + e.quantity_needed, 0)}
+                                                                        </span>
+                                                                    </p>
+                                                                    {items.map(eq => (
+                                                                        <div key={`${eq.equipment_id}-${eq.source_facility_id}`} className="flex justify-between items-center text-sm pl-2 text-muted-foreground">
+                                                                            <span>from {eq.source_facility_name} · {eq.quantity_needed}</span>
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-6 w-6 text-destructive hover:text-destructive/70"
+                                                                                onClick={() => setSelectedBorrowedEquipment(prev =>
+                                                                                    prev.filter(e => !(e.equipment_id === eq.equipment_id && e.source_facility_id === eq.source_facility_id))
+                                                                                )}
+                                                                            >
+                                                                                <X size={12} />
+                                                                            </Button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </CollapsibleContent>
+                                        </Collapsible>
+                                    )}
+                                </div>
+
+                                <div className="flex">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={addFacilityBooking}
+                                        disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
+                                        className="w-full"
+                                    >
+                                        Add Facility Booking
+                                    </Button>
+                                </div>
+
+                                {data.facility_bookings.map((booking, index) => (
+                                    <div key={index} className="mb-4 overflow-hidden border border-border rounded-lg bg-secondary/30 shadow-sm">
+                                        <div className="p-4">
+                                            <div className="flex items-center justify-between gap-4 mb-2">
+                                                <h3 className="font-bold text-lg text-foreground truncate">
+                                                    {booking.facility_name}
+                                                </h3>
+
+                                                <div className="flex items-center gap-1 bg-background/50 rounded-md p-1 border border-border/50 shrink-0">
                                                     <Button
                                                         type="button"
                                                         variant="ghost"
-                                                        size="sm"
-                                                        className='cursor-pointer'
+                                                        size="icon"
+                                                        className="h-7 w-7 hover:bg-background hover:text-primary transition-colors"
+                                                        onClick={() => editBooking(index)}
+                                                    >
+                                                        <Pen size={14} />
+                                                    </Button>
+                                                    <div className="w-[1px] h-4 bg-border/60" /> {/* Tiny vertical divider */}
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
                                                         onClick={() => removeBooking(index)}
                                                     >
-                                                        <X className="h-4 w-4" />
+                                                        <X size={14} />
                                                     </Button>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
 
-                            {errors.facility_bookings && (
-                                <Alert variant="destructive" className="border-destructive bg-destructive/4">
-                                    <AlertCircleIcon />
-                                    <AlertTitle>Booking Conflict</AlertTitle>
-                                    <AlertDescription>
-                                        {Array.isArray(errors.facility_bookings) ? (
-                                            <ul className="list-disc pl-5 space-y-1">
-                                                {errors.facility_bookings.map((error, idx) => (
-                                                    <li key={idx}>{error}</li>
-                                                ))}
-                                            </ul>
-                                        ) : errors.facility_bookings}
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-                        </div>
+                                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                                                <div className="flex items-center gap-2">
+                                                    <CalendarIcon size={15} className="text-primary/70" />
+                                                    <span>{format(booking.date, "PPP")}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Clock size={15} className="text-primary/70" />
+                                                    <span>{formatTime(booking.time_start)} – {formatTime(booking.time_end)}</span>
+                                                </div>
+                                                {booking.expected_capacity && (
+                                                    <div className="flex items-center gap-2">
+                                                        <User size={15} className="text-primary/70" />
+                                                        <span>{booking.expected_capacity} attendees</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
+                                                <div key={i} className="mt-3 flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                                                    <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
+                                                    <span>
+                                                        <strong>Schedule Conflict:</strong> Overlaps with "{conflict.request_title}" ({formatTime(conflict.time_start)}-{formatTime(conflict.time_end)})
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {(booking.equipment.length > 0 || booking.borrowed_equipment?.length > 0) && (
+                                            <div className="bg-background/40 border-t border-border px-4 py-3">
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Requested Equipment</p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {booking.equipment.map((eq, i) => (
+                                                        <div key={i} className="text-sm flex items-center justify-between bg-background/50 px-2 py-1 rounded border border-border/40">
+                                                            <span className="text-foreground/80">{eq.equipment_name}</span>
+                                                            <span className="text-sm font-bold text-primary">x{eq.quantity_needed}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+
+                                <FacilityInfo
+                                    selectedFacility={selectedFacility}
+                                    facilities={facilities}
+                                    currentDate={currentDate}
+                                    loadingSchedule={loadingSchedule}
+                                    facilitySchedule={facilitySchedule}
+                                    formatTime={formatTime}
+                                    isForSidebar={true}
+                                />
+                            </TabsContent>
+                        </Tabs>
 
                         <div className="flex justify-end gap-4 mb-16">
                             <Button type="button" variant="outline" onClick={() => window.history.back()}>
@@ -719,22 +1299,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         </div>
                     </form>
                 </div>
-
-                <FacilityInfo
-                    selectedFacility={selectedFacility}
-                    facilities={facilities}
-                    currentDate={currentDate}
-                    loadingSchedule={loadingSchedule}
-                    facilitySchedule={facilitySchedule}
-                    formatTime={formatTime}
-                    isForSidebar={true}
-                />
             </div>
         </DefaultLayout>
     );
 }
 
-// FacilityInfo unchanged
 interface FacilityInfoProps {
     selectedFacility: number | null;
     facilities: Facility[];
@@ -748,7 +1317,7 @@ interface FacilityInfoProps {
 function FacilityInfo({ selectedFacility, facilities, currentDate, loadingSchedule, facilitySchedule, formatTime, isForSidebar }: FacilityInfoProps) {
     return (
         <div className={'space-y-4 ' + ((isForSidebar) ? 'hidden lg:block' : 'block lg:hidden')}>
-            {isForSidebar && <h2 className='font-semibold text-sm text-muted-foreground'>Facility Info</h2>}
+            {isForSidebar && <h2 className='font-semibold text-sm text-foreground'>Facility Info</h2>}
             {selectedFacility ? (
                 <motion.div>
                     {(() => {

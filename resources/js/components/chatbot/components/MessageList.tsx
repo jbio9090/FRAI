@@ -2,13 +2,23 @@ import { Message } from '../types';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 interface MessageListProps {
     messages: Message[];
-    messagesEndRef: React.RefObject<HTMLDivElement>;
+    messagesEndRef: React.RefObject<HTMLDivElement | null>;
+    showConfirmationButtons?: boolean;
+    onConfirm?: () => void;
+    onCancel?: () => void;
 }
 
-export default function MessageList({ messages, messagesEndRef }: MessageListProps) {
+export default function MessageList({ 
+    messages, 
+    messagesEndRef, 
+    showConfirmationButtons = false,
+    onConfirm,
+    onCancel 
+}: MessageListProps) {
     return (
         <>
             {messages.map((msg, index) => (
@@ -55,6 +65,26 @@ export default function MessageList({ messages, messagesEndRef }: MessageListPro
                     </div>
                 </div>
             ))}
+            
+            {/* Confirmation Buttons */}
+            {showConfirmationButtons && onConfirm && onCancel && (
+                <div className="flex gap-3 justify-center mt-4 animate-in fade-in slide-in-from-bottom-2">
+                    <Button 
+                        onClick={onConfirm}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                        ✅ Confirm & Submit
+                    </Button>
+                    <Button 
+                        onClick={onCancel}
+                        variant="outline"
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                    >
+                        ❌ Cancel
+                    </Button>
+                </div>
+            )}
+            
             <div ref={messagesEndRef} />
         </>
     );

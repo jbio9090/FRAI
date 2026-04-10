@@ -1,3 +1,4 @@
+import { Link } from '@inertiajs/react';
 import axios from 'axios'
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import moment from 'moment'
@@ -13,7 +14,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Link } from '@inertiajs/react';
 import wordToColor from '@/lib/wordToColor';
 
 const localizer = momentLocalizer(moment);
@@ -134,8 +134,6 @@ export default function FacilityCalendar({
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(false);
     const [currentView, setCurrentView] = useState<View>('month');
-    const [currentDate, setCurrentDate] = useState<Date>(new Date());
-    const onNavigate = useCallback((newDate) => setCurrentDate(newDate), [currentDate])
 
     useEffect(() => {
         setEvents(initialEvents.map((event) => ({
@@ -197,7 +195,7 @@ export default function FacilityCalendar({
                 view={currentView}
                 onView={(view) => setCurrentView(view)}
                 onRangeChange={handleRangeChange}
-                className={'p-0 md:p-8 ' + (loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : '')}
+                className={(loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : '')}
                 components={{
                     toolbar: CustomToolbar,
                     event: (props) => <CustomEvent {...props} isDashboard={isDashboard} />,

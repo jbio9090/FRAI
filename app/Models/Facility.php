@@ -4,14 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Equipment;
-use App\Models\Request;
 
 class Facility extends Model
 {
-    /** @use HasFactory<\Database\Factories\FacilityFactory> */
     use HasFactory;
-
 
     protected $fillable = [
         'name',
@@ -19,14 +15,23 @@ class Facility extends Model
         'capacity',
     ];
 
-    public function equipments() {
-        return $this->hasMany(Equipment::class);
+    public function equipment()
+    {
+        return $this->belongsToMany(Equipment::class, 'facility_equipment')
+            ->withPivot('quantity')
+            ->withTimestamps()
+            ->using(FacilityEquipment::class);
+    }
+
+    public function facilityEquipments()
+    {
+        return $this->hasMany(FacilityEquipment::class);
     }
 
     public function requests()
     {
-        return $this->belongsToMany(Request::class, "request_facilities")
-            ->withPivot("date_requested", "time_start", "time_end")
+        return $this->belongsToMany(Request::class, 'request_facilities')
+            ->withPivot('date_requested', 'time_start', 'time_end')
             ->withTimestamps();
     }
 }

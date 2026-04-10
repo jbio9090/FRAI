@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import { useBookingFlow, Facility } from '../hooks/useBookingFlow';
+import { useState, useEffect } from 'react';
+import { useBookingFlow } from '../hooks/useBookingFlow';
 import DatePicker from './DatePicker';
 
 interface BookingFlowProps {
-    facilities: Facility[];
-    csrfToken: string;
+    bookingFlow: ReturnType<typeof useBookingFlow>;
     onComplete: (message: string) => void;
     onCancel: () => void;
+    attachedFiles?: Array<{ id: string; name: string }>;
+    onAttachFile?: (files: FileList) => void;
+    uploading?: boolean;
+    uploadError?: string | null;
 }
 
 interface FlowMessage {
@@ -14,21 +17,25 @@ interface FlowMessage {
     text: string;
 }
 
-export default function BookingFlow({ facilities, csrfToken, onComplete, onCancel }: BookingFlowProps) {
-    const { step, isSubmitting, submitResult, getStepConfig, handleInput, reset } = useBookingFlow(facilities, csrfToken);
+export default function BookingFlow({ bookingFlow, onComplete, onCancel, attachedFiles = [], onAttachFile, uploading = false, uploadError = null }: BookingFlowProps) {
+    const { step, data, isSubmitting, submitResult, getStepConfig, handleInput, reset, update } = bookingFlow;
     const [textInput, setTextInput] = useState('');
     const [history, setHistory] = useState<FlowMessage[]>([]);
 
     const config = getStepConfig();
 
-    const pushHistory = (userText: string, botNext?: string) => {
-        setHistory(prev => {
-            const next: FlowMessage[] = [...prev, { from: 'user', text: userText }];
-            return next;
-        });
+    useEffect(() => {
+        update({ attachedFiles });
+    }, [attachedFiles]);
+
+    const pushHistory = (userText: string) => {
+        setHistory(prev => [...prev, { from: 'user', text: userText }]);
     };
 
     const handleQuickReply = (value: string) => {
+        if (step === 'files' && value === 'Attach files') {
+            return;
+        }
         pushHistory(value);
         handleInput(value);
     };
@@ -41,39 +48,79 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
         handleInput(val);
     };
 
-    const handleKeyPress = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleTextSubmit();
         }
     };
 
-    // Done state
+    const handleAttachFilesClick = () => {
+        if (onAttachFile) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx';
+            input.onchange = (e) => {
+                const files = (e.target as HTMLInputElement).files;
+                if (files) {
+                    onAttachFile(files);
+                    handleQuickReply('Continue without files');
+                }
+            };
+            input.click();
+        }
+    };
+
     if (step === 'done' && submitResult) {
         return (
             <div className="flex gap-4 justify-start animate-in fade-in">
                 <BotAvatar />
-                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900">
-                    <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">assistant</div>
-                    <p className={`text-sm font-medium ${submitResult.success ? 'text-green-700' : 'text-red-600'}`}>
+                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-muted border-border text-foreground">
+                    <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
+                        assistant
+                    </div>
+                    <p className={`text-sm font-medium ${submitResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {submitResult.message}
                     </p>
-                    {submitResult.success && (
+                    <div className="mt-3 flex gap-4">
+                        {submitResult.success && (
+                            <button
+                                onClick={() => onComplete(submitResult.message)}
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
+                            >
+                                Continue to chat
+                            </button>
+                        )}
+                        {!submitResult.success && submitResult.shouldRedirectToEdit && (
+                            <button
+                                onClick={() => bookingFlow.goToStep('edit_pick')}
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
+                            >
+                                Edit Request
+                            </button>
+                        )}
+                        {!submitResult.success && !submitResult.shouldRedirectToEdit && (
+                            <button
+                                onClick={() => bookingFlow.goToStep('review')}
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
+                            >
+                                Try again
+                            </button>
+                        )}
                         <button
-                            onClick={() => { reset(); onComplete(submitResult.message); }}
-                            className="mt-3 text-xs text-gray-500 hover:text-gray-700 underline"
+                            onClick={() => reset()}
+                            className="text-xs text-muted-foreground hover:text-foreground underline"
                         >
-                            Start a new request
+                            {submitResult.success ? 'Submit another request' : 'Reset'}
                         </button>
-                    )}
-                    {!submitResult.success && (
                         <button
-                            onClick={reset}
-                            className="mt-3 text-xs text-gray-500 hover:text-gray-700 underline"
+                            onClick={onCancel}
+                            className="text-xs text-muted-foreground hover:text-foreground underline"
                         >
-                            Try again
+                            Cancel
                         </button>
-                    )}
+                    </div>
                 </div>
             </div>
         );
@@ -83,16 +130,25 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
         <div className="space-y-4">
             {/* Conversation history */}
             {history.map((msg, i) => (
-                <div key={i} className={`flex gap-4 animate-in fade-in ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    {msg.from === 'bot' ? <BotAvatar /> : null}
+                <div
+                    key={i}
+                    className={`flex gap-4 animate-in fade-in ${
+                        msg.from === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
+                >
+                    {msg.from === 'bot' && <BotAvatar />}
                     <div className={`flex gap-3 max-w-[70%] ${msg.from === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                         {msg.from === 'user' && (
-                            <div className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-gray-400">
+                            <div className="h-10 w-10 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0 bg-muted text-muted-foreground">
                                 U
                             </div>
                         )}
-                        <div className={`px-5 py-3 rounded-lg border ${msg.from === 'user' ? 'bg-gray-100 border-gray-300 text-gray-900' : 'bg-gray-50 border-gray-200 text-gray-900'}`}>
-                            <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">
+                        <div className={`px-5 py-3 rounded-lg border ${
+                            msg.from === 'user'
+                                ? 'bg-primary/5 border-border text-foreground'
+                                : 'bg-muted border-border text-foreground'
+                        }`}>
+                            <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                                 {msg.from === 'user' ? 'user' : 'assistant'}
                             </div>
                             <div className="text-sm whitespace-pre-wrap">{msg.text}</div>
@@ -101,51 +157,63 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
                 </div>
             ))}
 
-            {/* Current bot prompt */}
+            {/* Current step prompt */}
             {config.botMessage && (
                 <div className="flex gap-4 justify-start animate-in fade-in">
                     <BotAvatar />
-                    <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-gray-50 border-gray-200 text-gray-900">
-                        <div className="text-xs uppercase font-mono text-gray-500 mb-2 tracking-wide">assistant</div>
+                    <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-muted border-border text-foreground">
+                        <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
+                            assistant
+                        </div>
                         <div className="text-sm whitespace-pre-wrap">{config.botMessage}</div>
 
-                        {/* Quick reply buttons */}
                         {config.quickReplies.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {config.quickReplies.map(option => (
                                     <button
                                         key={option}
-                                        onClick={() => handleQuickReply(option)}
-                                        disabled={isSubmitting}
-                                        className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white hover:bg-gray-50 hover:border-gray-400 text-gray-700 font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
+                                        onClick={() => {
+                                            if (step === 'files' && option === 'Attach files') {
+                                                handleAttachFilesClick();
+                                            } else {
+                                                handleQuickReply(option);
+                                            }
+                                        }}
+                                        disabled={isSubmitting || uploading}
+                                        className="px-3 py-1.5 text-xs rounded-lg border
+                                            border-border bg-background text-foreground
+                                            hover:bg-muted hover:border-ring
+                                            dark:border-white/20 dark:bg-transparent dark:text-white
+                                            dark:hover:bg-white/10 dark:hover:border-white/60
+                                            font-medium transition-all duration-150 active:scale-[0.97] disabled:opacity-50"
                                     >
-                                        {option}
+                                        {step === 'files' && option === 'Attach files' && attachedFiles.length > 0
+                                            ? `${option} (${attachedFiles.length})`
+                                            : option}
                                     </button>
                                 ))}
                             </div>
                         )}
 
-                        {/* Date picker */}
                         {config.showDatePicker && (
                             <DatePicker onSelect={(iso) => handleQuickReply(iso)} />
                         )}
 
-                        {/* Text input for free-text steps */}
                         {config.isTextInput && (
                             <div className="mt-3 flex gap-2">
                                 <input
                                     type="text"
                                     value={textInput}
                                     onChange={e => setTextInput(e.target.value)}
-                                    onKeyDown={handleKeyPress}
+                                    onKeyDown={handleKeyDown}
                                     placeholder="Type your answer..."
                                     autoFocus
-                                    className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                                    className="flex-1 text-sm border border-input bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
                                 />
                                 <button
                                     onClick={handleTextSubmit}
                                     disabled={!textInput.trim()}
-                                    className="px-4 py-2 text-xs bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed font-semibold uppercase tracking-wide transition-colors"
+                                    className="px-4 py-2 text-xs bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed font-semibold uppercase tracking-wide transition-colors"
                                 >
                                     Next
                                 </button>
@@ -158,10 +226,10 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
             {isSubmitting && (
                 <div className="flex gap-4 justify-start">
                     <BotAvatar />
-                    <div className="space-x-2 flex items-center">
-                        <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse"></div>
-                        <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse delay-200"></div>
-                        <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse delay-400"></div>
+                    <div className="flex items-center space-x-2">
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground animate-pulse"></div>
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground animate-pulse delay-200"></div>
+                        <div className="h-2 w-2 rounded-full bg-muted-foreground animate-pulse delay-400"></div>
                     </div>
                 </div>
             )}
@@ -171,7 +239,7 @@ export default function BookingFlow({ facilities, csrfToken, onComplete, onCance
 
 function BotAvatar() {
     return (
-        <div className="bg-gray-300 h-10 w-10 rounded-lg flex items-center justify-center font-bold text-white flex-shrink-0 text-sm">
+        <div className="bg-muted h-10 w-10 rounded-lg flex items-center justify-center font-bold text-muted-foreground flex-shrink-0 text-sm">
             AI
         </div>
     );

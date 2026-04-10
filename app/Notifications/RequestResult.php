@@ -27,7 +27,15 @@ class RequestResult extends Notification implements ShouldQueue
 
     public function toWebPush($notifiable, $notification)
     {
-        $status_message = ($this->status->value === RequestStatus::APPROVED->value) ? "Your request has been approved!" : "Your request has been denied";
+        // Use a match expression to assign the correct message based on the Enum case
+        $status_message = match ($this->status) {
+            RequestStatus::PENDING => "Your request is currently pending review.",
+            RequestStatus::APPROVED => "Your request has been approved!",
+            RequestStatus::DENIED => "Your request has been denied.",
+            RequestStatus::CONDITIONALLY_APPROVED => "Your request has been conditionally approved.",
+            RequestStatus::ON_HOLD => "Your request has been placed on hold.",
+            RequestStatus::FOR_RESCHEDULE => "Your request needs to be rescheduled.",
+        };
 
         return (new WebPushMessage)
             ->title($this->request_title)

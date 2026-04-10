@@ -11,7 +11,9 @@ import {
   Settings,
   Check,
   User,
-  Bot,
+  Sparkles,
+  Cable,
+  IterationCw,
 } from "lucide-react"
 import * as React from "react"
 import {
@@ -27,12 +29,12 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { usePermission } from "@/hooks/use-permission"
-import { useEffect, useState } from "react"
-
+import ChatbotSessionModal from "@/components/ChatbotSessionModal"
 
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { hasPermission } = usePermission();
+  const [isChatbotModalOpen, setIsChatbotModalOpen] = React.useState(false);
   const data = {
     topNav: [
       {
@@ -50,6 +52,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "facilities",
         icon: Box,
       },
+      {
+        title: "Equipments",
+        url: "equipments",
+        icon: Cable,
+      },
       ...(hasPermission("manage users")
         ? [{
           title: "Accounts",
@@ -61,26 +68,32 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     navMenu: [
       {
         title: "Pending",
-        url: route("requests.index", ["pending"]),
-        status: 'pending',
+        url: route("requests.index", { status: "pending" }),
+        status: "pending",
         icon: FileClock
       },
       {
+        title: "For Reschedule",
+        url: route("requests.index", { status: "for_reschedule" }),
+        status: "for reschedule",
+        icon: IterationCw
+      },
+      {
         title: "Approved",
-        url: route("requests.index", ["approved"]),
-        status: 'approved',
+        url: route("requests.index", { status: "approved" }),
+        status: "approved",
         icon: Check
       },
       {
         title: "Conditionally Approved",
-        url: route("requests.index", ["conditionally_approved"]),
-        status: 'conditionally_approved',
+        url: route("requests.index", { status: "conditionally_approved" }),
+        status: "conditionally_approved",
         icon: CheckLine
       },
       {
         title: "Denied",
-        url: route("requests.index", ["denied"]),
-        status: 'denied',
+        url: route("requests.index", { status: "denied" }),
+        status: "denied",
         icon: X
       },
     ]
@@ -94,6 +107,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const checkRoute = (routeName: string) => {
     return route().current(routeName);
   }
+
+  const currentStatus = route().params?.status || new URLSearchParams(window.location.search).get("status");
 
   return (
     <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100]">
@@ -109,7 +124,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
 
           <SidebarMenuItem key="create-request" className="mt-2 px-4">
-            <SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer hover:text-primary-foreground">
+            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/90 cursor-pointer">
               <Link href={route("request.create")}>
                 <CirclePlus className="h-4 w-4" />
                 <span>Create Request</span>
@@ -117,12 +132,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          <SidebarMenuItem key="chatbot" className="mb-2 px-4">
-            <SidebarMenuButton asChild className="bg-primary text-primary-foreground hover:bg-primary/80 cursor-pointer hover:text-primary-foreground">
-              <Link href={route("chatbot")}>
-                <Bot className="h-4 w-4" />
-                <span>Chatbot</span>
-              </Link>
+          <SidebarMenuItem key="chatbot" className="px-4">
+            <SidebarMenuButton className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/80 cursor-pointer" onClick={() => setIsChatbotModalOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+              <span>Chatbot</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
@@ -145,7 +158,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           {data.navMenu.map((item) => (
             <SidebarMenuItem key={item.title} className="px-4">
-              <SidebarMenuButton asChild isActive={route().current('requests.index') && route().params.status === item.status}>
+              <SidebarMenuButton asChild
+                isActive={
+                  route().current("requests.index") &&
+                  currentStatus === item.status
+                }>
                 <Link href={item.url}>
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
@@ -178,6 +195,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
+      <ChatbotSessionModal
+        isOpen={isChatbotModalOpen}
+        onClose={() => setIsChatbotModalOpen(false)}
+      />
     </Sidebar>
   )
 }

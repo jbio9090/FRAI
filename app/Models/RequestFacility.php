@@ -13,7 +13,7 @@ class RequestFacility extends Model
         'date_requested',
         'time_start',
         'time_end',
-        'external_equipment',
+        'expected_capacity',
     ];
 
     public function request()
@@ -24,5 +24,10 @@ class RequestFacility extends Model
     public function facility()
     {
         return $this->belongsTo(Facility::class);
+    }
+
+    public function externalEquipments()
+    {
+        return $this->hasMany(ExternalEquipment::class);
     }
 }

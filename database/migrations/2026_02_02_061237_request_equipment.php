@@ -13,9 +13,14 @@ return new class extends Migration
     {
         Schema::create('request_equipment', function (Blueprint $table) {
             $table->id();
-            $table->foreignId("request_id")->constrained()->onDelete("cascade");
-            $table->foreignId("equipment_id")->constrained("equipments")->onDelete("cascade");
-            $table->integer("quantity_needed")->default(1); // How many they need
+            $table->foreignId('request_id')->constrained()->onDelete('cascade');
+            $table->foreignId('equipment_id')->constrained('equipments')->onDelete('cascade');
+            $table->integer('quantity_needed')->default(1);
+            $table->boolean('is_borrowed')->default(false);
+            $table->foreignId('source_facility_id')
+                ->nullable()
+                ->constrained('facilities')
+                ->onDelete('set null');
             $table->timestamps();
         });
     }

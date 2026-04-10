@@ -1,10 +1,9 @@
 import { useState } from 'react';
+import { getCsrfToken } from '../utils/csrfToken';
 
 export type BookingStep =
     | 'title'
-    | 'description'
-    | 'priority'
-    | 'priority_reason'
+    | 'event_type'
     | 'participants'
     | 'facility'
     | 'date'
@@ -12,6 +11,8 @@ export type BookingStep =
     | 'time_end'
     | 'equipment'
     | 'equipment_quantity'
+    | 'description'
+    | 'files'
     | 'review'
     | 'edit_pick'
     | 'done';
@@ -34,6 +35,7 @@ export interface BookingPayload {
         time_end: string;
         equipment: Array<{ equipment_id: number; quantity_needed: number }>;
     }>;
+    files?: string[];
 }
 
 export interface BookingData {
@@ -48,9 +50,9 @@ export interface BookingData {
     time_start: string;
     time_end: string;
     equipment: EquipmentItem[];
-    // Temp state for multi-equipment selection
     current_equipment_id: number | null;
     current_equipment_name: string;
+    attachedFiles: Array<{ id: string; name: string }>;
 }
 
 export interface Facility {
@@ -77,12 +79,14 @@ const INITIAL_DATA: BookingData = {
     equipment: [],
     current_equipment_id: null,
     current_equipment_name: '',
+    attachedFiles: [],
 };
 
 const PRIORITY_MAP: Record<string, { level: 0 | 1 | 2; label: string }> = {
-    'Normal Event':               { level: 0, label: 'Normal Event' },
-    'School Event':               { level: 1, label: 'School Event' },
-    'Government / High Authority': { level: 2, label: 'Government / High Authority' },
+    'Academic':      { level: 0, label: 'Academic' },
+    'Organizational': { level: 1, label: 'Organizational' },
+    'University':     { level: 1, label: 'University' },
+    'Government':     { level: 2, label: 'Government' },
 };
 
 const TIME_OPTIONS = [
@@ -97,18 +101,17 @@ const EQUIPMENT_OPTIONS: Equipment[] = [
     { id: 4, name: 'Whiteboard' },
 ];
 
-const PARTICIPANT_RANGES = ['1–100', '101–300', '301–500', '501–800', '801–1000'];
+const PARTICIPANT_RANGES = ['1-100', '101-300', '301-500', '501-800', '801-1000'];
 
 const EDITABLE_FIELDS: Array<{ key: BookingStep; label: string }> = [
     { key: 'title',           label: 'Title' },
-    { key: 'description',     label: 'Description' },
-    { key: 'priority',        label: 'Priority Level' },
-    { key: 'priority_reason', label: 'Priority Reason' },
+    { key: 'event_type',      label: 'Event Type' },
     { key: 'facility',        label: 'Facility' },
     { key: 'date',            label: 'Date' },
     { key: 'time_start',      label: 'Start Time' },
     { key: 'time_end',        label: 'End Time' },
     { key: 'equipment',       label: 'Equipment' },
+    { key: 'description',     label: 'Additional Information' },
 ];
 
 function timeToHHMM(time: string): string {
@@ -130,18 +133,22 @@ function addHours(time: string, hours: number): string {
     return `${displayH}:${String(m).padStart(2, '0')} ${newModifier}`;
 }
 
-export function useBookingFlow(facilities: Facility[], csrfToken: string) {
+export function useBookingFlow(facilities: Facility[]) {
     const [step, setStep] = useState<BookingStep>('title');
     const [data, setData] = useState<BookingData>({ ...INITIAL_DATA });
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string; request_id?: number } | null>(null);
+    const [submitResult, setSubmitResult] = useState<{
+        success: boolean;
+        message: string;
+        request_id?: number;
+        shouldRedirectToEdit?: boolean;
+    } | null>(null);
     const [awaitingCustomTime, setAwaitingCustomTime] = useState(false);
     const [awaitingCustomDate, setAwaitingCustomDate] = useState(false);
 
     const update = (patch: Partial<BookingData>) =>
         setData(prev => ({ ...prev, ...patch }));
 
-    // Returns { botMessage, quickReplies, isTextInput, showDatePicker }
     const getStepConfig = () => {
         switch (step) {
             case 'title':
@@ -151,37 +158,23 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                     isTextInput: true,
                     showDatePicker: false,
                 };
-            case 'description':
+            case 'event_type':
                 return {
-                    botMessage: 'Please provide a short description of the event.',
-                    quickReplies: [],
-                    isTextInput: true,
-                    showDatePicker: false,
-                };
-            case 'priority':
-                return {
-                    botMessage: 'What is the priority level of this request?',
-                    quickReplies: ['Normal Event', 'School Event', 'Government / High Authority'],
+                    botMessage: 'What is the type of event?',
+                    quickReplies: ['Academic', 'Organizational', 'University', 'Government'],
                     isTextInput: false,
-                    showDatePicker: false,
-                };
-            case 'priority_reason':
-                return {
-                    botMessage: 'Please specify the reason for the high priority request.',
-                    quickReplies: [],
-                    isTextInput: true,
                     showDatePicker: false,
                 };
             case 'participants':
                 return {
-                    botMessage: 'How many participants will attend? (Used to filter suitable facilities)',
+                    botMessage: 'How many participants will attend? This is used to filter suitable facilities.',
                     quickReplies: PARTICIPANT_RANGES,
                     isTextInput: false,
                     showDatePicker: false,
                 };
             case 'facility': {
                 const options = facilities.length > 0
-                    ? facilities.map(f => f.name)
+                    ? facilities.map(f => `${f.name} (Capacity: ${f.capacity})`)
                     : ['Loading facilities...'];
                 return {
                     botMessage: 'Please choose a facility suitable for your event.',
@@ -206,7 +199,7 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 };
             case 'time_end':
                 return {
-                    botMessage: `What time will the event end? (Start: ${data.time_start})`,
+                    botMessage: `What time will the event end? Start time is ${data.time_start}.`,
                     quickReplies: awaitingCustomTime
                         ? TIME_OPTIONS
                         : ['+1 Hour', '+2 Hours', '+3 Hours', 'Custom'],
@@ -215,13 +208,14 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 };
             case 'equipment': {
                 const alreadyPicked = data.equipment.map(e => e.equipment_name);
-                const remaining = EQUIPMENT_OPTIONS.filter(e => !alreadyPicked.includes(e.name)).map(e => e.name);
-                const options = [...remaining, 'Done — No More Equipment'];
+                const remaining = EQUIPMENT_OPTIONS
+                    .filter(e => !alreadyPicked.includes(e.name))
+                    .map(e => e.name);
                 return {
                     botMessage: data.equipment.length === 0
-                        ? 'Do you need equipment for the event? Select all that apply, then press Done.'
-                        : `Added: ${data.equipment.map(e => `${e.equipment_name} (${e.quantity_needed})`).join(', ')}. Add more or press Done.`,
-                    quickReplies: options,
+                        ? 'Do you need any equipment for the event? Select all that apply, then press Done.'
+                        : `Added so far: ${data.equipment.map(e => `${e.equipment_name} (${e.quantity_needed})`).join(', ')}. Add more or press Done.`,
+                    quickReplies: [...remaining, 'Done'],
                     isTextInput: false,
                     showDatePicker: false,
                 };
@@ -233,27 +227,41 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                     isTextInput: false,
                     showDatePicker: false,
                 };
+            case 'description':
+                return {
+                    botMessage: 'Is there any additional information you would like to provide?',
+                    quickReplies: [],
+                    isTextInput: true,
+                    showDatePicker: false,
+                };
+            case 'files':
+                return {
+                    botMessage: 'Would you like to attach any files to this request? (Optional)',
+                    quickReplies: ['Continue without files', 'Attach files'],
+                    isTextInput: false,
+                    showDatePicker: false,
+                };
             case 'review': {
                 const equipmentSummary = data.equipment.length > 0
                     ? data.equipment.map(e => `${e.equipment_name} (${e.quantity_needed})`).join(', ')
                     : 'None';
-                const priorityLabel = PRIORITY_MAP[
-                    Object.keys(PRIORITY_MAP).find(k => PRIORITY_MAP[k].level === data.priority_level) ?? 'Normal Event'
-                ]?.label ?? 'Normal Event';
+                const priorityLabel = Object.values(PRIORITY_MAP).find(
+                    p => p.level === data.priority_level
+                )?.label ?? 'Academic';
 
                 const reviewText = [
-                    '📋 Please review your request:',
+                    'Please review your request before submitting:',
                     '',
-                    `📌 Title: ${data.title}`,
-                    `📝 Description: ${data.description}`,
-                    `⚡ Priority: ${priorityLabel}`,
-                    data.priority_reason ? `📄 Priority Reason: ${data.priority_reason}` : null,
-                    `🏛️ Facility: ${data.facility_name}`,
-                    `📅 Date: ${data.date}`,
-                    `⏰ Time: ${data.time_start} – ${data.time_end}`,
-                    `🎛️ Equipment: ${equipmentSummary}`,
+                    `Title: ${data.title}`,
+                    `Event Type: ${priorityLabel}`,
+                    `Facility: ${data.facility_name}`,
+                    `Date: ${data.date}`,
+                    `Time: ${data.time_start} - ${data.time_end}`,
+                    `Equipment: ${equipmentSummary}`,
+                    data.description ? `Additional Information: ${data.description}` : null,
+                    data.attachedFiles.length > 0 ? `Attached Files: ${data.attachedFiles.length}` : null,
                     '',
-                    'Submit this request?',
+                    'Would you like to submit this request?',
                 ].filter(line => line !== null).join('\n');
 
                 return {
@@ -264,18 +272,20 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 };
             }
             case 'edit_pick': {
-                const fields = data.priority_level === 0
-                    ? EDITABLE_FIELDS.filter(f => f.key !== 'priority_reason')
-                    : EDITABLE_FIELDS;
                 return {
                     botMessage: 'Which field would you like to edit?',
-                    quickReplies: fields.map(f => f.label),
+                    quickReplies: EDITABLE_FIELDS.map(f => f.label),
                     isTextInput: false,
                     showDatePicker: false,
                 };
             }
             default:
-                return { botMessage: '', quickReplies: [], isTextInput: false, showDatePicker: false };
+                return {
+                    botMessage: '',
+                    quickReplies: [],
+                    isTextInput: false,
+                    showDatePicker: false,
+                };
         }
     };
 
@@ -284,9 +294,7 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
         return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     };
 
-    const getTodayStr = (): string => {
-        return new Date().toISOString().split('T')[0];
-    };
+    const getTodayStr = (): string => new Date().toISOString().split('T')[0];
 
     const getTomorrowStr = (): string => {
         const d = new Date();
@@ -294,31 +302,20 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
         return d.toISOString().split('T')[0];
     };
 
-    // Main handler — called by quick reply click or text submit
     const handleInput = (value: string) => {
         switch (step) {
             case 'title':
                 update({ title: value });
-                setStep('description');
+                setStep('event_type');
                 break;
 
-            case 'description':
-                update({ description: value });
-                setStep('priority');
-                break;
-
-            case 'priority': {
+            case 'event_type': {
                 const mapping = PRIORITY_MAP[value];
                 if (!mapping) break;
                 update({ priority_level: mapping.level, priority_reason: null });
-                setStep(mapping.level > 0 ? 'priority_reason' : 'participants');
-                break;
-            }
-
-            case 'priority_reason':
-                update({ priority_reason: value });
                 setStep('participants');
                 break;
+            }
 
             case 'participants':
                 update({ participant_range: value });
@@ -326,7 +323,8 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 break;
 
             case 'facility': {
-                const facility = facilities.find(f => f.name === value);
+                const facilityName = value.replace(/ \(Capacity: \d+\)$/, '');
+                const facility = facilities.find(f => f.name === facilityName);
                 if (!facility) break;
                 update({ facility_id: facility.id, facility_name: facility.name });
                 setStep('date');
@@ -343,7 +341,6 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 } else if (value === 'Pick Date') {
                     setAwaitingCustomDate(true);
                 } else {
-                    // Value from calendar — raw ISO string
                     update({ date: formatDate(value) });
                     setAwaitingCustomDate(false);
                     setStep('time_start');
@@ -364,7 +361,6 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                     update({ time_end: addHours(data.time_start, hours) });
                     setStep('equipment');
                 } else {
-                    // Custom time picked from list
                     update({ time_end: value });
                     setAwaitingCustomTime(false);
                     setStep('equipment');
@@ -372,8 +368,8 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 break;
 
             case 'equipment':
-                if (value === 'Done — No More Equipment') {
-                    setStep('review');
+                if (value === 'Done') {
+                    setStep('description');
                 } else {
                     const eq = EQUIPMENT_OPTIONS.find(e => e.name === value);
                     if (!eq) break;
@@ -401,6 +397,20 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 break;
             }
 
+            case 'description':
+                update({ description: value });
+                setStep('files');
+                break;
+
+            case 'files':
+                if (value === 'Continue without files') {
+                    setStep('review');
+                } else if (value === 'Attach files') {
+                    // Will be handled by the component
+                    setStep('review');
+                }
+                break;
+
             case 'review':
                 if (value === 'Submit Request') {
                     submitRequest();
@@ -414,7 +424,6 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
             case 'edit_pick': {
                 const field = EDITABLE_FIELDS.find(f => f.label === value);
                 if (!field) break;
-                // Clear downstream data when editing a field
                 if (field.key === 'equipment') {
                     update({ equipment: [] });
                 }
@@ -441,61 +450,88 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
                 })),
             },
         ],
+        files: data.attachedFiles.map(f => f.id),
     });
 
+    const getEmptyFields = (): string[] => {
+        const empty: string[] = [];
+        if (!data.title) empty.push('Title');
+        if (!data.description) empty.push('Additional Information');
+        return empty;
+    };
+
     const submitRequest = async () => {
+        const emptyFields = getEmptyFields();
+        if (emptyFields.length > 0) {
+            setSubmitResult({
+                success: false,
+                message: `⚠️ ${emptyFields.join(', ')} is empty. You can still submit, but these fields should be filled.`,
+            });
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const payload = buildPayload();
-            const token = csrfToken
-                || (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content
-                || document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN='))?.split('=')[1]
-                || '';
-
-            console.log('[BookingFlow] Submitting payload:', JSON.stringify(payload, null, 2));
-            console.log('[BookingFlow] CSRF token:', token ? `${token.slice(0, 10)}...` : 'MISSING');
-
-            const url = route('api.db.create.request');
-            console.log('[BookingFlow] POST →', url);
-
-            const res = await fetch(url, {
+            const res = await fetch(route('api.db.create.request'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': token,
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify(payload),
             });
 
-            console.log('[BookingFlow] Response status:', res.status, res.statusText);
+            if (res.status === 419) {
+                window.location.reload();
+                return;
+            }
 
             const rawText = await res.text();
-            console.log('[BookingFlow] Raw response:', rawText);
-
             let json: any = {};
             try {
                 json = JSON.parse(rawText);
             } catch {
-                setSubmitResult({ success: false, message: `✗ Server returned unexpected response (${res.status}): ${rawText.slice(0, 200)}` });
+                setSubmitResult({
+                    success: false,
+                    message: `Server returned an unexpected response (${res.status}): ${rawText.slice(0, 200)}`,
+                    shouldRedirectToEdit: true,
+                });
+                setIsSubmitting(false);
                 return;
             }
 
             if (res.ok && json.success) {
-                setSubmitResult({ success: true, message: `✓ Request #${json.request_id} created successfully!`, request_id: json.request_id });
+                setSubmitResult({
+                    success: true,
+                    message: `Request #${json.request_id} has been created successfully.`,
+                    request_id: json.request_id,
+                });
+                setIsSubmitting(false);
+                setStep('done');
             } else {
                 const errorDetail = json.errors
-                    ? '\n' + Object.entries(json.errors).map(([k, v]) => `• ${k}: ${(v as string[]).join(', ')}`).join('\n')
+                    ? '\n' + Object.entries(json.errors)
+                        .map(([k, v]) => `- ${k}: ${(v as string[]).join(', ')}`)
+                        .join('\n')
                     : '';
-                setSubmitResult({ success: false, message: `✗ Failed (${res.status}): ${json.message ?? json.error ?? 'Unknown error'}${errorDetail}` });
+                setSubmitResult({
+                    success: false,
+                    message: `Submission failed (${res.status}): ${json.message ?? json.error ?? 'Unknown error'}${errorDetail}`,
+                    shouldRedirectToEdit: true,
+                });
+                setIsSubmitting(false);
             }
         } catch (err) {
-            console.error('[BookingFlow] Fetch error:', err);
-            setSubmitResult({ success: false, message: `✗ Network error: ${err instanceof Error ? err.message : String(err)}` });
-        } finally {
+            setSubmitResult({
+                success: false,
+                message: `Network error: ${err instanceof Error ? err.message : String(err)}`,
+                shouldRedirectToEdit: true,
+            });
             setIsSubmitting(false);
-            setStep('done');
         }
     };
 
@@ -507,6 +543,26 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
         setAwaitingCustomDate(false);
     };
 
+    const buildContextSummary = (): string => {
+        const parts: string[] = [
+            'The user is currently going through a structured facility booking flow. The following information has been collected so far:',
+        ];
+        if (data.title)            parts.push(`Event Title: ${data.title}`);
+        if (data.priority_level !== undefined)
+            parts.push(`Event Type: ${data.priority_level} (0 = Academic, 1 = Organizational/University, 2 = Government)`);
+        if (data.facility_name)    parts.push(`Selected Facility: ${data.facility_name}`);
+        if (data.date)             parts.push(`Event Date: ${data.date}`);
+        if (data.time_start)       parts.push(`Start Time: ${data.time_start}`);
+        if (data.time_end)         parts.push(`End Time: ${data.time_end}`);
+        if (data.equipment.length > 0)
+            parts.push(`Equipment: ${data.equipment.map(e => `${e.equipment_name} x${e.quantity_needed}`).join(', ')}`);
+        if (data.description)      parts.push(`Additional Information: ${data.description}`);
+        if (data.attachedFiles.length > 0)
+            parts.push(`Attached Files: ${data.attachedFiles.length}`);
+        parts.push('Use this context to assist with any follow-up questions the user has.');
+        return parts.join('\n');
+    };
+
     return {
         step,
         data,
@@ -514,6 +570,9 @@ export function useBookingFlow(facilities: Facility[], csrfToken: string) {
         submitResult,
         getStepConfig,
         handleInput,
+        buildContextSummary,
         reset,
+        update,
+        goToStep: setStep,
     };
 }

@@ -24,7 +24,6 @@ class Request extends Model
         'priority_level',
         'recommended_action',
         'recommended_action_reason',
-        'comment',
         'status',
         'overridden_by_request_id',
         'title',
@@ -32,12 +31,21 @@ class Request extends Model
         'on_hold',
         'priority_reason',
         'held_by_request_id',
+        "processed_by",
+        "processed_at",
+        'pending_conflict_rf_ids',
+        'approved_conflict_rf_ids',
+        'approved_by',
     ];
 
     protected $casts = [
         'status'         => RequestStatus::class,
         'on_hold'        => 'boolean',
         'priority_level' => PriorityLevel::class,
+        'processed_at'   => 'datetime',
+        'pending_conflict_rf_ids' => 'array',
+        'approved_conflict_rf_ids' => 'array',
+        'approved_by' => 'array',
     ];
 
     /* =========================================
@@ -52,6 +60,11 @@ class Request extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function comments()
+    {
+        return $this->hasMany(Comment::class);
     }
 
     public function requestFacilities()
@@ -90,6 +103,16 @@ class Request extends Model
         return $this->hasMany(Request::class, 'held_by_request_id');
     }
 
+    public function files()
+    {
+        return $this->hasMany(RequestFile::class);
+    }
+
+    public function processedBy()
+    {
+        return $this->belongsTo(User::class, 'processed_by');
+    }
+
     /* SCOPES */
 
     public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)
@@ -98,11 +121,11 @@ class Request extends Model
             ->where('date', $date)
             ->where(function ($q) use ($start, $end) {
                 $q->whereBetween('start_time', [$start, $end])
-                  ->orWhereBetween('end_time', [$start, $end])
-                  ->orWhere(function ($inner) use ($start, $end) {
-                      $inner->where('start_time', '<=', $start)
+                    ->orWhereBetween('end_time', [$start, $end])
+                    ->orWhere(function ($inner) use ($start, $end) {
+                        $inner->where('start_time', '<=', $start)
                             ->where('end_time', '>=', $end);
-                  });
+                    });
             })
             ->whereIn('status', ['Pending', 'Approved']);
     }
@@ -127,7 +150,6 @@ class Request extends Model
                 $existing->status = 'On Hold';
                 $existing->overridden_by_request_id = $this->id;
                 $existing->save();
-
             } elseif ($this->priority_level < $existing->priority_level) {
 
                 $this->status = 'On Hold';

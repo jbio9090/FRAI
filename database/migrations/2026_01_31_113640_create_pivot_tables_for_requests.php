@@ -18,7 +18,7 @@ return new class extends Migration
             $table->date("date_requested");
             $table->time("time_start");
             $table->time("time_end");
-            $table->string("external_equipment", 1024)->nullable();
+            $table->integer("expected_capacity")->nullable();
             $table->timestamps();
         });
     }

@@ -9,6 +9,7 @@ use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\EquipmentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -21,19 +22,22 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
-    Route::get('/requests/{status}', [RequestController::class, 'index'])->name('requests.index');
-    Route::get('/request/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
+    Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
+    Route::get('/requests/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
     Route::get('/requests/{request}/edit', [RequestController::class, 'edit'])->name('requests.edit');
     Route::put('/requests/{request}', [RequestController::class, 'update'])->name('requests.update');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(["throttle:60,1"]);
+    Route::post('requests/{id}/comment', [RequestController::class, 'addComment'])->name('requests.comment');
 
     // Admin only routes
     Route::middleware(['permission:approve requests'])->group(function () {
         Route::post('/requests/{id}/approve', [RequestController::class, 'approve'])->name('requests.approve');
         Route::post('/requests/{id}/reject', [RequestController::class, 'reject'])->name('requests.reject');
         Route::post('/requests/{id}/conditionally_approve', [RequestController::class, "conditionally_approve"])->name("requests.conditionally_approve");
+        Route::post('/requests/{id}/reschedule', [RequestController::class, 'forReschedule'])->name('requests.reschedule');
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
         Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
+        Route::post('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
     });
 
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
@@ -55,6 +59,17 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");
 
+    Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');
+    Route::middleware('permission:manage facilities')->group(function () {
+        Route::post('/equipments', [EquipmentController::class, 'store'])->name('equipments.store');
+        Route::put('/equipments/{equipment}', [EquipmentController::class, 'update'])->name('equipments.update');
+        Route::delete('/equipments/{equipment}', [EquipmentController::class, 'destroy'])->name('equipments.destroy');
+        Route::post('/equipments/{equipment}/sync-facilities', [EquipmentController::class, 'syncFacilities']);
+    });
+
+    Route::post('/settings/profile-picture', [SettingsController::class, 'updateProfilePicture'])->name('settings.profile-picture');
+    Route::delete('/settings/profile-picture', [SettingsController::class, 'removeProfilePicture'])->name('settings.profile-picture.remove');
+
     Route::prefix("/push")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
         Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");
@@ -70,8 +85,10 @@ Route::middleware("auth")->group(function () {
 
     Route::middleware("permission:manage facilities")->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
+        Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
+        Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
-
+    // chatbot
     Route::get("/chatbot", function () {
         return Inertia::render("chatbot/chatbot");
     })->name("chatbot");
@@ -83,7 +100,11 @@ Route::middleware("auth")->group(function () {
         Route::get("/rules", [ChatController::class, "rulesList"])->name("chat.rules");
         Route::get("/facilities", [ChatController::class, "facilitiesList"])->name("chat.facilities");
         Route::get("/equipment", [ChatController::class, "equipmentList"])->name("chat.equipment");
+        Route::post("/upload", [ChatController::class, "uploadFile"])->name("chat.upload")->middleware(["throttle:60,1"]);
         Route::post("/create-request", [ChatController::class, "createRequestApi"])->name("api.db.create.request")->middleware(["throttle:10,1"]);
+        Route::post('/stream',  [ChatController::class, 'stream'])->name('chat.stream')->middleware(['throttle:60,1']);
+        Route::get('/session',  [ChatController::class, 'getSession'])->name('chat.session.get');
+        Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
 });
 

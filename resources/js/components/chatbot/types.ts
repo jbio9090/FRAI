@@ -3,17 +3,34 @@ export interface Message {
     content: string;
 }
 
+export interface AttachedFileInfo {
+    id: string;
+    name: string;
+    size: number;
+    mime_type: string;
+    url: string;
+}
+
 export interface ChatRequest {
     messages: Message[];
     participant_count?: number;
+    booking_context?: string;
 }
 
 export interface CreateRequestPayload {
     title: string;
     facility_bookings: Array<{
         facility_id: number;
-        start_time: string;
-        end_time: string;
+        date: string;
+        time_start: string;
+        time_end: string;
+        equipment?: Array<{
+            equipment_id: number;
+            quantity_needed: number;
+        }>;
     }>;
-    [key: string]: any;
+    description?: string;
+    priority_level?: number;
+    priority_reason?: string | null;
+    files?: string[];
 }
