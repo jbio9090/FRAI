@@ -79,7 +79,7 @@ class ChatController extends Controller
     private function injectApprovedBookingTable(array &$messages, $allRequests): void
     {
         $approvedBookings = $allRequests->filter(function ($r) {
-            return $r->status->value === 'approved';
+            return $r->status->value === 'Approved';
         })->flatMap(function ($r) {
             return $r->requestFacilities->map(function ($rf) use ($r) {
                 $facilityName = $r->facilities->firstWhere('id', $rf->facility_id)?->name ?? 'Unknown';
@@ -112,7 +112,7 @@ class ChatController extends Controller
 
         array_unshift($messages, [
             'role' => 'system',
-            'content' => "When the user asks whether a facility is available for a specific date or time, consult the approved bookings table above. If the same facility is already booked on that date with overlapping time, clearly tell the user it is unavailable and suggest an alternative facility or date. If there are no overlapping approved bookings, tell the user the facility is available.",
+            'content' => "When the user asks whether a facility is available for a specific date or time, consult the approved bookings table above. To check for conflicts:\n1. Find all bookings for the same facility_id on the same date\n2. Check if the requested time overlaps with any existing booking:\n   - Overlap occurs if: requested_start < existing_end AND requested_end > existing_start\n3. If ANY overlap is found, the facility is UNAVAILABLE for that time slot\n4. If NO overlaps are found, the facility is AVAILABLE\n\nAlways provide specific details about conflicting bookings when found, and suggest alternative times or facilities.",
         ]);
     }
 
@@ -132,7 +132,7 @@ class ChatController extends Controller
             try {
                 // Fetch recent requests (both pending and approved) for context
                 $allRequests = RequestModel::with(['user', 'requestFacilities', 'facilities'])
-                    ->whereIn('status', ['pending', 'approved'])
+                    ->whereIn('status', ['Pending', 'Approved'])
                     ->latest()
                     ->limit(30)
                     ->get();
@@ -187,7 +187,7 @@ class ChatController extends Controller
                     // Add a reminder to the AI to warn about already approved bookings for selected facilities
                     array_unshift($messages, [
                         'role'    => 'system',
-                        'content' => "When the user selects a facility, check the list of APPROVED requests. If the chosen facility is already booked for the requested date/time, you must warn the user that it is already reserved and suggest an alternative.",
+                        'content' => "CRITICAL: When the user wants to book a facility, you MUST check the APPROVED BOOKINGS TABLE first. If the requested facility, date, and time overlaps with any approved booking, you MUST tell the user it's unavailable and suggest alternatives. Do NOT proceed with creating a request that conflicts with approved bookings.",
                     ]);
                 } elseif ($filterApplied) {
                     array_unshift($messages, [
@@ -356,7 +356,7 @@ class ChatController extends Controller
         // Inject DB context 
         try {
             $allRequests = RequestModel::with(['user', 'requestFacilities', 'facilities'])
-                ->whereIn('status', ['pending', 'approved'])
+                ->whereIn('status', ['Pending', 'Approved'])
                 ->latest()->limit(30)->get();
 
             $lines = $allRequests->map(function ($r) {
@@ -392,6 +392,11 @@ class ChatController extends Controller
 
             if (!empty($facilities)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Facilities" . ($filterApplied ? " (filtered for {$participantCount} participants)" : "") . ":\n- " . implode("\n- ", $facilities)]);
+                // Add a reminder to the AI to warn about already approved bookings for selected facilities
+                array_unshift($messages, [
+                    'role'    => 'system',
+                    'content' => "CRITICAL: When the user wants to book a facility, you MUST check the APPROVED BOOKINGS TABLE first. If the requested facility, date, and time overlaps with any approved booking, you MUST tell the user it's unavailable and suggest alternatives. Do NOT proceed with creating a request that conflicts with approved bookings.",
+                ]);
             } elseif ($filterApplied) {
                 array_unshift($messages, ['role' => 'system', 'content' => "No facilities available with capacity suitable for {$participantCount} participants."]);
             }
