@@ -35,6 +35,7 @@ export default function Chatbot() {
     const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
+    const messageQueueRef = useRef<Array<{ message: Message; context?: string }>>([]);
 
     // Auto-scroll to bottom when messages change or mode changes
     useEffect(() => {
@@ -85,8 +86,10 @@ export default function Chatbot() {
             .catch(() => {});
     }, []);
 
-    const processAndSend = async (userMessage: Message, contextNote?: string) => {
-        addMessage(userMessage);
+    const processAndSend = async (userMessage: Message, contextNote?: string, skipUserAdd = false) => {
+        if (!skipUserAdd) {
+            addMessage(userMessage);
+        }
         addMessage({ role: 'assistant', content: '' });
 
         // Check if user is confirming a pending request
@@ -146,6 +149,13 @@ export default function Chatbot() {
                     } catch (_) { }
                 },
             );
+
+            if (messageQueueRef.current.length > 0) {
+                const next = messageQueueRef.current.shift();
+                if (next) {
+                    await processAndSend(next.message, next.context, true);
+                }
+            }
 
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -322,17 +332,34 @@ export default function Chatbot() {
             setMode('booking');
             return;
         }
+
+        const userMessage: Message = { role: 'user', content: option.message };
+
+        if (isLoading) {
+            addMessage(userMessage);
+            messageQueueRef.current.push({ message: userMessage, context: option.context });
+            return;
+        }
+
         // All other quick replies go to AI mode
         setMode('ai');
-        processAndSend({ role: 'user', content: option.message }, option.context);
+        processAndSend(userMessage, option.context);
     };
 
     const handleSendMessage = async () => {
         const message = input.trim();
-        if (!message || isLoading) return;
+        if (!message) return;
         setInput('');
-        if (mode === 'idle') setMode('ai');
-        await processAndSend({ role: 'user', content: message });
+        if (mode === 'idle' || mode === 'booking') setMode('ai');
+
+        const userMessage: Message = { role: 'user', content: message };
+        if (isLoading) {
+            addMessage(userMessage);
+            messageQueueRef.current.push({ message: userMessage });
+            return;
+        }
+
+        await processAndSend(userMessage);
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -452,15 +479,13 @@ export default function Chatbot() {
             </div>
 
             {/* Input area — hidden during booking flow */}
-            {mode !== 'booking' && (
-                <ChatInput
-                    value={input}
-                    onChange={setInput}
-                    onKeyPress={handleKeyPress}
-                    onSend={handleSendMessage}
-                    disabled={isLoading}
-                />
-            )}
+            <ChatInput
+                value={input}
+                onChange={setInput}
+                onKeyPress={handleKeyPress}
+                onSend={handleSendMessage}
+                disabled={uploading}
+            />
         </div>
     );
 }
