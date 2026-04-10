@@ -538,7 +538,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
             <div className="w-full">
                 <div className="max-w-3xl w-full mx-auto">
-                    <form onSubmit={submit} className="space-y-8 flex flex-col gap-4">
+                    <form onSubmit={submit} className="space-y-8 flex flex-col gap-6">
 
                         {Object.keys(errors).length > 0 && (
                             <Alert variant="destructive" className="border-destructive bg-destructive/4 mb-0 mt-0">
@@ -613,8 +613,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     </Select>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label className="font-semibold">Approved By:</Label>
+                                <div className="space-y-4">
+                                    <Label className="font-semibold">Approved By</Label>
 
                                     <div className="flex flex-wrap gap-4 mt-2">
                                         {approversList.map((approver) => {

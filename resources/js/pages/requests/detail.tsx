@@ -245,11 +245,12 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             <p className='font-semibold mb-2 text-muted-foreground'>Approved By</p>
                             <div className="flex flex-wrap gap-2">
                                 {(request.approved_by !== null) ? (
-                                    (request.approved_by.map((approvedBy) => (
-                                        <span className='text-sm font-semibold'>
+                                    request.approved_by.map((approvedBy, index) => (
+                                        <span key={index} className="text-sm font-bold">
                                             {approvedBy}
+                                            {index < request.approved_by.length - 1 && ", "}
                                         </span>
-                                    )))
+                                    ))
                                 ) : (
                                     <span className='text-sm font-semibold'>None</span>
                                 )
