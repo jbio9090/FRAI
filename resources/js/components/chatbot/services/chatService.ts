@@ -37,8 +37,7 @@ export async function sendChatMessageStream(
     const decoder = new TextDecoder();
 
     let buffer = '';
-    let isCapturingJSON = false;
-    let jsonBuffer = '';
+    let fullContent = '';
 
     while (true) {
         const { done, value } = await reader.read();
@@ -60,24 +59,21 @@ export async function sendChatMessageStream(
 
                 if (event.token) {
                     const token: string = event.token;
+                    fullContent += token;
 
-                    if (!isCapturingJSON && token.includes('{')) {
-                        isCapturingJSON = true;
-                        jsonBuffer = token;
-                        continue;
-                    }
-
-                    if (isCapturingJSON) {
-                        jsonBuffer += token;
-
+                    // Try to extract JSON from the accumulated content
+                    const jsonMatch = fullContent.match(/\{[\s\S]*?\}/);
+                    if (jsonMatch) {
                         try {
-                            const parsed = JSON.parse(jsonBuffer);
-                            onBookingPayload(JSON.stringify(parsed));
-                            isCapturingJSON = false;
-                            jsonBuffer = '';
-                        } catch {}
-
-                        continue;
+                            const parsed = JSON.parse(jsonMatch[0]);
+                            if (parsed.title && parsed.facility_bookings && Array.isArray(parsed.facility_bookings)) {
+                                onBookingPayload(JSON.stringify(parsed));
+                                // Remove the JSON from the content so it doesn't appear in the message
+                                fullContent = fullContent.replace(jsonMatch[0], '').trim();
+                            }
+                        } catch (e) {
+                            // Not valid JSON yet, continue accumulating
+                        }
                     }
 
                     onToken(token);

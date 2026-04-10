@@ -42,9 +42,8 @@ export function useChatAPI() {
                     }
                 },
 
-                (message) => {
-                    fullContent = message;
-                    onToken?.(message);
+                (violation) => {
+                    console.log('Violation detected:', violation);
                 },
 
                 () => {
