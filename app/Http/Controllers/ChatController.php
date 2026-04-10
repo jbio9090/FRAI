@@ -76,6 +76,46 @@ class ChatController extends Controller
         });
     }
 
+    private function injectApprovedBookingTable(array &$messages, $allRequests): void
+    {
+        $approvedBookings = $allRequests->filter(function ($r) {
+            return $r->status->value === 'approved';
+        })->flatMap(function ($r) {
+            return $r->requestFacilities->map(function ($rf) use ($r) {
+                $facilityName = $r->facilities->firstWhere('id', $rf->facility_id)?->name ?? 'Unknown';
+                return [
+                    'request_id' => $r->id,
+                    'facility_id' => $rf->facility_id,
+                    'facility_name' => $facilityName,
+                    'date' => $rf->date_requested,
+                    'time_start' => $rf->time_start,
+                    'time_end' => $rf->time_end,
+                ];
+            });
+        })->values();
+
+        if ($approvedBookings->isEmpty()) {
+            return;
+        }
+
+        $bookingLines = $approvedBookings->map(function ($b) {
+            return sprintf(
+                "%s | %s | %s | %s | %s | %s",
+                $b['facility_id'], $b['facility_name'], $b['date'], $b['time_start'], $b['time_end'], $b['request_id']
+            );
+        })->implode("\n");
+
+        array_unshift($messages, [
+            'role' => 'system',
+            'content' => "APPROVED BOOKINGS TABLE FOR AVAILABILITY CHECK:\nFacility ID | Facility Name | Date | Start | End | Request ID\n" . $bookingLines,
+        ]);
+
+        array_unshift($messages, [
+            'role' => 'system',
+            'content' => "When the user asks whether a facility is available for a specific date or time, consult the approved bookings table above. If the same facility is already booked on that date with overlapping time, clearly tell the user it is unavailable and suggest an alternative facility or date. If there are no overlapping approved bookings, tell the user the facility is available.",
+        ]);
+    }
+
     public function chat(Request $request): JsonResponse
     {
         try {
@@ -90,6 +130,7 @@ class ChatController extends Controller
             $bookingContext   = $request->input('booking_context');
 
             try {
+                // Fetch recent requests (both pending and approved) for context
                 $allRequests = RequestModel::with(['user', 'requestFacilities', 'facilities'])
                     ->whereIn('status', ['pending', 'approved'])
                     ->latest()
@@ -116,6 +157,8 @@ class ChatController extends Controller
                     'role'    => 'system',
                     'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines),
                 ]);
+
+                $this->injectApprovedBookingTable($messages, $allRequests);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch requests for chat: ' . $e->getMessage());
             }
@@ -140,6 +183,11 @@ class ChatController extends Controller
                     array_unshift($messages, [
                         'role'    => 'system',
                         'content' => "Available Facilities" . ($filterApplied ? " (filtered for {$participantCount} participants)" : "") . ":\n- " . implode("\n- ", $facilities),
+                    ]);
+                    // Add a reminder to the AI to warn about already approved bookings for selected facilities
+                    array_unshift($messages, [
+                        'role'    => 'system',
+                        'content' => "When the user selects a facility, check the list of APPROVED requests. If the chosen facility is already booked for the requested date/time, you must warn the user that it is already reserved and suggest an alternative.",
                     ]);
                 } elseif ($filterApplied) {
                     array_unshift($messages, [
@@ -168,7 +216,7 @@ class ChatController extends Controller
 
                 array_unshift($messages, [
                     'role' => 'system',
-                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Priority Level (IMPORTANT - determine from context):\n   - 0 = Normal (default, regular events)\n   - 1 = School Event (department heads, school-wide events, official school activities)\n   - 2 = Government / High Authority (government officials, external government events, high-authority visits)\n8. Priority Reason (brief explanation if priority > 0)\n9. Description (detailed explanation)\n10. Additional Message (any extra information the user wants to provide)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is a school event (priority 1) or government/high-authority event (priority 2), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"priority_reason\": \"...\", \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
+                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
                 ]);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
@@ -324,6 +372,7 @@ class ChatController extends Controller
             })->toArray();
 
             array_unshift($messages, ['role' => 'system', 'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines)]);
+            $this->injectApprovedBookingTable($messages, $allRequests);
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch requests: ' . $e->getMessage());
         }
@@ -355,7 +404,10 @@ class ChatController extends Controller
             }
 
             array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. Facilities are recommended based on:\n- Minimum: At least 50% capacity utilization (to avoid empty rooms)\n- Maximum: Can accommodate all participants\nFor example, for 40 participants, recommend rooms with capacity 40-80. Always present the filtered results and explain why those facilities are recommended."]);
-            array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information:\n1. Title (brief request name)\n2. Description (detailed explanation)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational or University (official school activities, department events)\n   - 2 = Government (government officials, external government events, high-authority visits)\n9. Priority Reason (brief explanation if event type is Organizational, University, or Government)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational/University (priority 1) or Government (priority 2), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENTS (OPTIONAL):\nUsers may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"priority_reason\": \"...\", \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
+            // Updated flow: ask for event type and map to priority level, no separate priority reason
+            // Updated order: Description moved after Event Type, and Additional Message retained at end.
+                // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
+                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch facilities/equipment: ' . $e->getMessage());
         }
