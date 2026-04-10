@@ -27,6 +27,7 @@ export interface Request {
     approved_conflicts?: ConflictingBooking[];
     processed_by?: User,
     processed_at?: string,
+    approved_by: string[],
 }
 
 export interface Comment {

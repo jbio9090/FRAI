@@ -208,7 +208,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
 
                     {/* Overview Tab */}
                     <TabsContent value="overview" className="flex flex-col gap-6 mt-6">
-                        <div className="flex flex-col w-md max-w-full">
+                        <div className="flex flex-col max-w-full">
                             <p className='font-semibold mb-2 text-muted-foreground'>Description</p>
                             <p>{request.description ? request.description : "No Description Provided"}</p>
                         </div>
@@ -238,6 +238,22 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             <div className="flex flex-col">
                                 <p className='font-semibold mb-2 text-muted-foreground'>Processed At</p>
                                 {request.processed_at ? (<p>{moment(request.processed_at).format("MMMM D, YYYY")}</p>) : (<span>None</span>)}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col">
+                            <p className='font-semibold mb-2 text-muted-foreground'>Approved By</p>
+                            <div className="flex flex-wrap gap-2">
+                                {(request.approved_by !== null) ? (
+                                    (request.approved_by.map((approvedBy) => (
+                                        <span className='text-sm font-semibold'>
+                                            {approvedBy}
+                                        </span>
+                                    )))
+                                ) : (
+                                    <span className='text-sm font-semibold'>None</span>
+                                )
+                                }
                             </div>
                         </div>
                     </TabsContent>

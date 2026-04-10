@@ -179,6 +179,7 @@ class RequestService
                 'status'          => RequestStatus::PENDING,
                 'priority_level'  => $validated['priority_level'] ?? 0,
                 'priority_reason' => $validated['priority_reason'] ?? null,
+                'approved_by' => $validated['approved_by'] ?? null,
             ]);
 
             if (!empty($validated['files'])) {
@@ -217,6 +218,7 @@ class RequestService
                 'description'     => $validated['description'],
                 'priority_level'  => $validated['priority_level'] ?? 0,
                 'priority_reason' => $validated['priority_reason'] ?? null,
+                'approved_by'     => $validated['approved_by'] ?? null,
             ]);
 
             $changes = collect($facilityRequest->only([

@@ -148,6 +148,17 @@ function timeAgo(ts: number): string {
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
+const approversList = [
+    { id: 1, name: "Faculty" },
+    { id: 3, name: "College Dean" },
+    { id: 4, name: "Chairperson" },
+    { id: 5, name: "OSA" },
+    { id: 6, name: "VP AA" },
+    { id: 7, name: "VP Admin" },
+    { id: 8, name: "President" },
+];
+
+
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
@@ -187,6 +198,15 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         existingRequest?.existing_files ?? []
     );
     const [deletedFileIds, setDeletedFileIds] = useState<number[]>([]);
+    const [approvedBy, setApprovedBy] = useState<string[]>([]);
+
+    const handleCheckboxChange = (name: string) => {
+        setApprovedBy((prev) =>
+            prev.includes(name)
+                ? prev.filter((item) => item !== name)
+                : [...prev, name]
+        );
+    };
 
     const allBorrowableEquipment = facilities
         .filter(f => f.id !== selectedFacility)
@@ -469,6 +489,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             priority_reason: data.priority_reason,
             files: attachedFiles.map(f => f.file),
             existing_file_ids: existingFiles.map(f => f.id),
+            approved_by: approvedBy,
         };
 
         if (isEditing) {
@@ -591,6 +612,32 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         </SelectContent>
                                     </Select>
                                 </div>
+
+                                <div className="space-y-2">
+                                    <Label className="font-semibold">Approved By:</Label>
+
+                                    <div className="flex flex-wrap gap-4 mt-2">
+                                        {approversList.map((approver) => {
+                                            const isChecked = approvedBy.includes(approver.name)
+
+                                            return (
+                                                <div key={approver.id} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={`approver-${approver.id}`}
+                                                        checked={isChecked}
+                                                        onCheckedChange={() =>
+                                                            handleCheckboxChange(approver.name)
+                                                        }
+                                                    />
+                                                    <Label htmlFor={`approver-${approver.id}`}>
+                                                        {approver.name}
+                                                    </Label>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
 
                                 {/* File Attachments */}
                                 <div className="space-y-3">

@@ -28,7 +28,7 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.equipment'                               => 'array',
             'facility_bookings.*.equipment.*.equipment_id'                => 'required|exists:equipments,id',
             'facility_bookings.*.equipment.*.quantity_needed'             => 'required|integer|min:1',
-            'facility_bookings.*.external_equipment'                      => 'nullable|array',       
+            'facility_bookings.*.external_equipment'                      => 'nullable|array',
             'facility_bookings.*.external_equipment.*.name'               => 'required|string|max:255',
             'facility_bookings.*.borrowed_equipment'                      => 'array',
             'facility_bookings.*.borrowed_equipment.*.equipment_id'       => 'required|exists:equipments,id',
@@ -39,6 +39,7 @@ class FacilityFormRequest extends FormRequest
             'files.*'                                                      => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
             'existing_file_ids'                                            => ['nullable', 'array'],
             'existing_file_ids.*'                                          => ['integer'],
+            'approved_by' => ["nullable", "array"],
         ];
     }
 

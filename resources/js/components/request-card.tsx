@@ -121,6 +121,18 @@ export default function RequestCard({
 
                         <p className="mt-2 text-foreground/70 text-sm">{request.description}</p>
 
+                        {(request.approved_by !== null) && (
+                            <div className="flex flex-wrap gap-2 text-sm">
+                                <span>Approved by: </span>
+                                {request.approved_by.map((approvedBy) => (
+                                    <div className="text-xs">
+                                        {approvedBy}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+
                         <div className="text-sm mt-4 flex gap-2 items-center">
                             <AvatarWithInitials
                                 username={request.user.name}

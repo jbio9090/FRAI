@@ -35,6 +35,7 @@ class Request extends Model
         "processed_at",
         'pending_conflict_rf_ids',
         'approved_conflict_rf_ids',
+        'approved_by',
     ];
 
     protected $casts = [
@@ -44,6 +45,7 @@ class Request extends Model
         'processed_at'   => 'datetime',
         'pending_conflict_rf_ids' => 'array',
         'approved_conflict_rf_ids' => 'array',
+        'approved_by' => 'array',
     ];
 
     /* =========================================

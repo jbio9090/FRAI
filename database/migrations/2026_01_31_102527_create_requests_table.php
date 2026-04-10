@@ -7,9 +7,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('requests', function (Blueprint $table) {
@@ -25,13 +22,10 @@ return new class extends Migration
             $table->timestamp('processed_at')->nullable();
             $table->json('pending_conflict_rf_ids')->nullable();
             $table->json('approved_conflict_rf_ids')->nullable();
+            $table->json("approved_by")->nullable();
         });
     }
 
-
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('requests');
