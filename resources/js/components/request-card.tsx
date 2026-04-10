@@ -270,11 +270,20 @@ function RequestDetails({ request }: { request: Request }) {
                                         <span className='font-semibold'>{facility?.name}</span>
                                     </Link>
 
-                                    {facility?.capacity < rf.expected_capacity && (
-                                        <div className="self-start py-0.5 px-2 text-xs border rounded-full text-amber-600 border-amber-600 dark:border-amber-400 dark:text-amber-400 bg-amber-500/10">
-                                            Capacity Exceeded
-                                        </div>
-                                    )}
+                                    <div className="flex flex-wrap gap-1">
+                                        {facility?.capacity < rf.expected_capacity && (
+                                            <div className="self-start py-0.5 px-2 text-xs border rounded-full text-amber-700 border-amber-700 dark:border-amber-400 dark:text-amber-400 bg-amber-500/10">
+                                                Capacity Exceeded
+                                            </div>
+                                        )}
+
+                                        {rf.has_outsiders && (
+                                            <div className="self-start py-0.5 px-2 text-xs border rounded-full text-slate-600 border-slate-600 dark:border-slate-400 dark:text-slate-400 bg-slate-500/10 flex items-center gap-1">
+                                                <UsersRound size={10} />
+                                                <span>With Outsiders</span>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     <div className="flex items-center flex-wrap gap-x-2 text-foreground/70 font-medium">
                                         <div className="flex gap-1 items-center">

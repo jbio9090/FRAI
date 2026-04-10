@@ -19,6 +19,7 @@ return new class extends Migration
             $table->time("time_start");
             $table->time("time_end");
             $table->integer("expected_capacity")->nullable();
+            $table->boolean('has_outsiders')->default(false);
             $table->timestamps();
         });
     }

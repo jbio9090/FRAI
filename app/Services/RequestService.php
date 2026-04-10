@@ -268,6 +268,7 @@ class RequestService
                 'time_start'        => $booking['time_start'],
                 'time_end'          => $booking['time_end'],
                 'expected_capacity' => $booking['expected_capacity'] ?? null,
+                'has_outsiders'     => $booking['has_outsiders'] ?? false,
             ]);
 
             foreach ($booking['external_equipment'] ?? [] as $externalItem) {
@@ -696,6 +697,7 @@ class RequestService
                         'equipment'          => $ownEquipment,
                         'borrowed_equipment' => $borrowedEquipment,
                         'conflicts'          => [],
+                        'has_outsiders'      => (bool) $rf->has_outsiders,
                     ];
                 },
             )->values(),

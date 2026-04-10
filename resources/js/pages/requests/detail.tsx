@@ -7,7 +7,8 @@ import {
     XCircle,
     ClipboardCheck,
     MessageSquare,
-    ShieldAlert
+    ShieldAlert,
+    UsersRound,
 } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
@@ -284,7 +285,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                                                 {facility.name}
                                             </h2>
                                         </Link>
-                                        <div className="flex flex-wrap gap-3">
+                                        <div className="flex flex-wrap gap-3 mb-2">
                                             <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-1">
                                                 <Calendar size={12} />
                                                 {date}
@@ -294,6 +295,13 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                                                 {formatTime(rf.time_start)} – {formatTime(rf.time_end)}
                                             </span>
                                         </div>
+
+                                        {rf.has_outsiders && (
+                                            <span className="flex items-center w-fit gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1">
+                                                <UsersRound size={12} />
+                                                With Outsiders
+                                            </span>
+                                        )}
                                     </div>
 
                                     {facilityEquipment.length > 0 && (

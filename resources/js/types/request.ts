@@ -70,6 +70,7 @@ interface RequestFacility {
     time_end: string;
     expected_capacity: number | null;
     external_equipments: { id: number; name: string }[];
+    has_outsiders: boolean;
 }
 
 export interface Facility {

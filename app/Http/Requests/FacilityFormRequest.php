@@ -35,6 +35,7 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.borrowed_equipment.*.source_facility_id' => 'required|exists:facilities,id',
             'facility_bookings.*.borrowed_equipment.*.quantity_needed'    => 'required|integer|min:1',
             'facility_bookings.*.expected_capacity'                       => 'nullable|integer|min:1',
+            'facility_bookings.*.has_outsiders'                       => 'nullable|boolean',
             'files'                                                        => 'nullable|array|max:10',
             'files.*'                                                      => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
             'existing_file_ids'                                            => ['nullable', 'array'],

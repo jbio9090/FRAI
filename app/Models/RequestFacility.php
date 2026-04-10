@@ -14,6 +14,8 @@ class RequestFacility extends Model
         'time_start',
         'time_end',
         'expected_capacity',
+        'outsider_attendees',
+        'has_outsiders',
     ];
 
     public function request()

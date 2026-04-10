@@ -45,6 +45,7 @@ interface FacilityBooking {
     conflicts: BookingSchedule[];
     external_equipment: { name: string }[];
     expected_capacity: number | null;
+    has_outsiders: boolean;
 }
 
 interface EquipmentRequest {
@@ -74,6 +75,7 @@ interface ExistingRequest {
     priority_reason: string;
     facility_bookings: FacilityBooking[];
     existing_files: ExistingFile[];
+    approved_by: string[];
 }
 
 interface ExistingFile {
@@ -97,6 +99,7 @@ interface DraftData {
     priority_level: 0 | 1 | 2;
     priority_reason: string;
     savedAt: number;
+    approved_by: string[];
 }
 
 interface AttachedFile {
@@ -194,17 +197,19 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [expectedCapacity, setExpectedCapacity] = useState<number | ''>('');
+    const [hasOutsiders, setHasOutsiders] = useState<boolean>(false);
     const [existingFiles, setExistingFiles] = useState<ExistingFile[]>(
         existingRequest?.existing_files ?? []
     );
     const [deletedFileIds, setDeletedFileIds] = useState<number[]>([]);
-    const [approvedBy, setApprovedBy] = useState<string[]>([]);
+    const [approvedBy, setApprovedBy] = useState<string[]>(
+        existingRequest?.approved_by ?? []
+    );
 
     const handleCheckboxChange = (name: string) => {
-        setApprovedBy((prev) =>
-            prev.includes(name)
-                ? prev.filter((item) => item !== name)
-                : [...prev, name]
+        setData('approved_by', data.approved_by.includes(name)
+            ? data.approved_by.filter((item) => item !== name)
+            : [...data.approved_by, name]
         );
     };
 
@@ -221,12 +226,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             return unique;
         }, [] as Array<FacilityEquipment & { sources: { facilityId: number; facilityName: string; quantity: number }[] }>);
 
-    const { data, setData, post, put, processing, errors } = useForm({
+    const { data, setData, processing, errors } = useForm({
         title: existingRequest?.title ?? '',
         description: existingRequest?.description ?? '',
         facility_bookings: existingRequest?.facility_bookings ?? [] as FacilityBooking[],
         priority_level: existingRequest?.priority_level ?? 0,
         priority_reason: existingRequest?.priority_reason ?? '',
+        approved_by: existingRequest?.approved_by ?? [] as string[],
         files: [] as File[],
     });
 
@@ -249,6 +255,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                 facility_bookings: data.facility_bookings,
                 priority_level: data.priority_level as 0 | 1 | 2,
                 priority_reason: data.priority_reason,
+                approved_by: data.approved_by,
             }, existingRequest?.id);
 
             toast.success(
@@ -262,7 +269,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         }, 2000);
 
         return () => clearTimeout(timeout);
-    }, [data.title, data.description, data.priority_level, data.priority_reason, data.facility_bookings, showDraftBanner]);
+    }, [data.title, data.description, data.priority_level, data.priority_reason, data.facility_bookings, data.approved_by, showDraftBanner]);
 
     function editBooking(index: number) {
         const booking = data.facility_bookings[index];
@@ -275,6 +282,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setSelectedBorrowedEquipment(booking.borrowed_equipment ?? []);
         setExternalEquipment(booking.external_equipment ?? []);
         setExpectedCapacity(booking.expected_capacity ?? '');
+        setHasOutsiders(booking.has_outsiders ?? false);
 
         loadSchedule(booking.facility_id, new Date(booking.date));
 
@@ -288,6 +296,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setData('priority_level', draft.priority_level);
         setData('priority_reason', draft.priority_reason);
         setData('facility_bookings', draft.facility_bookings);
+        setData('approved_by', draft.approved_by ?? []);
         setShowDraftBanner(false);
         setLastSavedAt(draft.savedAt);
     };
@@ -429,7 +438,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             borrowed_equipment: selectedBorrowedEquipment,
             conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
             external_equipment: externalEquipment,
-            expected_capacity: expectedCapacity === '' ? null : expectedCapacity
+            expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+            has_outsiders: hasOutsiders,
         };
 
         const updatedBookings = [...data.facility_bookings, newBooking];
@@ -447,6 +457,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setExternalEquipment([]);
         setExternalEquipmentInput('');
         setExpectedCapacity('');
+        setHasOutsiders(false);
     }
 
     function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -489,7 +500,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             priority_reason: data.priority_reason,
             files: attachedFiles.map(f => f.file),
             existing_file_ids: existingFiles.map(f => f.id),
-            approved_by: approvedBy,
+            approved_by: data.approved_by,
         };
 
         if (isEditing) {
@@ -618,7 +629,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
                                     <div className="flex flex-wrap gap-4 mt-2">
                                         {approversList.map((approver) => {
-                                            const isChecked = approvedBy.includes(approver.name)
+                                            const isChecked = data.approved_by.includes(approver.name)
 
                                             return (
                                                 <div key={approver.id} className="flex items-center space-x-2">
@@ -735,17 +746,31 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <Label htmlFor="expected_capacity">Expected Attendees</Label>
-                                        <Input
-                                            id="expected_capacity"
-                                            type="number"
-                                            min="1"
-                                            value={expectedCapacity}
-                                            onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
-                                            placeholder="Input expected attendees for this facility at this time"
-                                            className="text-sm"
-                                        />
+                                    {/* Expected Attendees + Has Outsiders */}
+                                    <div className="flex items-end gap-4">
+                                        <div className="space-y-2 flex-1">
+                                            <Label htmlFor="expected_capacity">Expected Attendees</Label>
+                                            <Input
+                                                id="expected_capacity"
+                                                type="number"
+                                                min="1"
+                                                value={expectedCapacity}
+                                                onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
+                                                placeholder="Input expected attendees for this facility at this time"
+                                                className="text-sm"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center gap-2 pb-2 shrink-0">
+                                            <Checkbox
+                                                id="has_outsiders"
+                                                checked={hasOutsiders}
+                                                onCheckedChange={(checked) => setHasOutsiders(!!checked)}
+                                            />
+                                            <Label htmlFor="has_outsiders" className="text-sm cursor-pointer whitespace-nowrap">
+                                                Has Outsiders
+                                            </Label>
+                                        </div>
                                     </div>
 
                                     {hasTimeConflict && (
@@ -1219,7 +1244,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     >
                                                         <Pen size={14} />
                                                     </Button>
-                                                    <div className="w-[1px] h-4 bg-border/60" /> {/* Tiny vertical divider */}
+                                                    <div className="w-[1px] h-4 bg-border/60" />
                                                     <Button
                                                         type="button"
                                                         variant="ghost"
@@ -1245,6 +1270,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     <div className="flex items-center gap-2">
                                                         <User size={15} className="text-primary/70" />
                                                         <span>{booking.expected_capacity} attendees</span>
+                                                    </div>
+                                                )}
+                                                {booking.has_outsiders && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                                                            Has Outsiders
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
