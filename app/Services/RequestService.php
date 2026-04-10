@@ -463,12 +463,6 @@ class RequestService
                 ->lockForUpdate()
                 ->findOrFail($request_id);
 
-            if ($request->recommended_action === RequestStatus::DENIED) {
-                throw new \Exception(
-                    "Cannot approve this request. Recommended action: {$request->recommended_action_reason}"
-                );
-            }
-
             $bookings = $request->requestFacilities->map(fn($rf) => [
                 'facility_id' => $rf->facility_id,
                 'date'        => $rf->date_requested,
@@ -491,62 +485,35 @@ class RequestService
                 return $request;
             }
 
-            $highestConflictPriority = $conflictingRequests->max(fn($r) => $r->priority_level->value);
+            $request->update([
+                'status'             => RequestStatus::APPROVED,
+                'on_hold'            => false,
+                'held_by_request_id' => null,
+                'processed_by'       => Auth::id(),
+                'processed_at'       => Carbon::now(),
+            ]);
 
-            if ($request->priority_level->value >= $highestConflictPriority) {
-                $request->update([
-                    'status'             => RequestStatus::APPROVED,
-                    'on_hold'            => false,
-                    'held_by_request_id' => null,
-                    'processed_by'       => Auth::id(),
-                    'processed_at'       => Carbon::now(),
-                ]);
+            $this->auditLogger::requestApproved($request);
 
-                $this->auditLogger::requestApproved($request);
-                foreach ($conflictingRequests as $conflicting) {
-                    $isApproved = $conflicting->status === RequestStatus::APPROVED;
-
-                    $conflicting->update([
-                        'status'                    => $isApproved ? RequestStatus::FOR_RESCHEDULE : RequestStatus::PENDING,
-                        'on_hold'                   => true,
-                        'held_by_request_id'        => $request->id,
-                        'recommended_action'        => RequestStatus::DENIED,
-                        'recommended_action_reason' => 'Superseded by higher priority request: "' . $request->title . '"',
-                        'processed_by'              => null,
-                        'processed_at'              => null,
-                    ]);
-
-                    $conflicting->comments()->create([
-                        'user_id' => Auth::id(),
-                        'body'    => $isApproved
-                            ? 'Marked for reschedule — superseded by government-priority request: "' . $request->title . '"'
-                            : 'Placed on hold — superseded by higher priority request: "' . $request->title . '"',
-                    ]);
-
-                    $this->auditLogger::requestHeld($conflicting, $request);
-                }
-            } else {
-                $winner = $conflictingRequests->sortByDesc('priority_level')->first();
-
-                $request->update([
-                    'status'                    => RequestStatus::PENDING,
+            foreach ($conflictingRequests as $conflicting) {
+                $conflicting->update([
+                    'status'                    => RequestStatus::FOR_RESCHEDULE,
                     'on_hold'                   => true,
-                    'held_by_request_id'        => $winner->id,
+                    'held_by_request_id'        => $request->id,
                     'recommended_action'        => RequestStatus::DENIED,
-                    'recommended_action_reason' => 'Time conflict with higher priority approved request: "' . $winner->title . '"',
+                    'recommended_action_reason' => 'Superseded by approved request: "' . $request->title . '"',
                     'processed_by'              => null,
                     'processed_at'              => null,
                 ]);
 
-                $request->comments()->create([
+                $conflicting->comments()->create([
                     'user_id' => Auth::id(),
-                    'body'    => 'Placed on hold — time conflict with higher priority approved request: "' . $winner->title . '"',
+                    'body'    => 'Marked for reschedule — overridden by approved request: "' . $request->title . '"',
                 ]);
 
-                $this->auditLogger::requestHeld($request, $winner);
+                $this->auditLogger::requestHeld($conflicting, $request);
             }
 
-            $this->auditLogger::requestApproved($request);
             return $request->fresh();
         });
     }
