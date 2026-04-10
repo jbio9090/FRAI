@@ -40,15 +40,14 @@ class Equipment extends Model
     {
         return $this->requests()
             ->whereHas('facilities', function ($q) use ($date, $timeStart, $timeEnd) {
-                $q->wherePivot('date_requested', $date)
-                    ->wherePivot('time_start', '<', $timeEnd)
-                    ->wherePivot('time_end', '>', $timeStart);
+                $q->where('request_facilities.date_requested', $date)
+                    ->where('request_facilities.time_start', '<', $timeEnd)
+                    ->where('request_facilities.time_end', '>', $timeStart);
             })
             ->when($excludeRequestId, fn($q) => $q->where('requests.id', '!=', $excludeRequestId))
-            ->sum('request_equipment.quantity_needed'); // counts both borrowed and normal
+            ->sum('request_equipment.quantity_needed');
     }
 
-    // Available from a specific facility (owned quantity)
     public function quantityAvailableInFacility(int $facilityId, string $date, string $timeStart, string $timeEnd, ?int $excludeRequestId = null): int
     {
         $facilityHolds   = $this->quantityInFacility($facilityId);
@@ -57,8 +56,6 @@ class Equipment extends Model
         return min($facilityHolds, max(0, $globalAvailable));
     }
 
-    // Available to borrow FROM a specific source facility
-    // (respects global pool minus what's already committed)
     public function quantityAvailableToBorrowFrom(int $sourceFacilityId, string $date, string $timeStart, string $timeEnd, ?int $excludeRequestId = null): int
     {
         return $this->quantityAvailableInFacility(
@@ -77,7 +74,6 @@ class Equipment extends Model
 
     public function quantityInFacility(int $facilityId): int
     {
-        // Uses FacilityEquipment model directly — cleaner than going through the pivot
         return FacilityEquipment::where('facility_id', $facilityId)
             ->where('equipment_id', $this->id)
             ->value('quantity') ?? 0;
