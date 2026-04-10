@@ -37,8 +37,8 @@ const QUICK_REPLIES: QuickReply[] = [
     },
     {
         id: 'ask_rules',
-        label: 'Facility Rules',
-        message: 'View facility rules',
+        label: 'Facility Policy',
+        message: 'View facility Policy',
         context: 'User navigated to the facility rules page.',
         action: 'navigate',
         href: route('rules'),
