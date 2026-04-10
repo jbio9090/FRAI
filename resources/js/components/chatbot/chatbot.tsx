@@ -1,20 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { usePage } from '@inertiajs/react';
-import { Message } from './types';
+import { Message, CreateRequestPayload, AttachedFileInfo } from './types';
 import { useMessages } from './hooks/useMessages';
 import { useParticipantCount } from './hooks/useParticipantCount';
 import { useChatAPI } from './hooks/useChatAPI';
 import { QuickReply } from './components/QuickReplies';
-<<<<<<< Updated upstream
-import { Facility } from './hooks/useBookingFlow';
-=======
 import { Facility, useBookingFlow } from './hooks/useBookingFlow';
 import { Equipment } from '@/types/equipment';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
->>>>>>> Stashed changes
+import { getCsrfToken } from './utils/csrfToken';
 import WelcomeMessage from './components/WelcomeMessage';
 import MessageList from './components/MessageList';
 import LoadingIndicator from './components/LoadingIndicator';
@@ -24,31 +20,29 @@ import BookingFlow from './components/BookingFlow';
 type ChatMode = 'idle' | 'booking' | 'ai';
 
 export default function Chatbot() {
-    const page = usePage();
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const [input, setInput] = React.useState('');
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment & { facility?: string }>>([]);
     const [selectedEquipment, setSelectedEquipment] = useState<Array<{ equipment_id: number; equipment_name: string; quantity_needed: number }>>([]);
 
-    const { messages, addMessage, getMessagesText } = useMessages();
+    const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
     const { extractAndSet, getCurrentCount } = useParticipantCount();
-    const csrfToken = (page.props as any).csrf_token || '';
-    const { isLoading, sendMessage, detectAndSubmitRequest } = useChatAPI(csrfToken);
-    const [pendingPayload, setPendingPayload] = useState(null);
+    const bookingFlow = useBookingFlow(facilities);
+    const { isLoading, sendMessage, submitRequest } = useChatAPI();
+    const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
+    const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Auto-scroll to bottom when messages change or mode changes
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, mode]);
 
-    // Fetch facilities for the booking flow
+    // Fetch facilities and equipment for the booking flow
     useEffect(() => {
-<<<<<<< Updated upstream
-        fetch('/chat/facilities', {
-            headers: { 'X-CSRF-TOKEN': csrfToken },
-=======
         fetch(route('chat.facilities'), {
             headers: {
                 'Accept': 'application/json',
@@ -80,17 +74,20 @@ export default function Chatbot() {
                 'X-CSRF-TOKEN': getCsrfToken(),
             },
             credentials: 'same-origin',
->>>>>>> Stashed changes
         })
             .then(res => res.json())
             .then(json => {
-                if (json.data) setFacilities(json.data);
+                if (json.messages && json.messages.length > 0) {
+                    setMessages(json.messages);
+                    setMode('ai');
+                }
             })
-            .catch(() => { });
+            .catch(() => {});
     }, []);
 
     const processAndSend = async (userMessage: Message, contextNote?: string) => {
         addMessage(userMessage);
+        addMessage({ role: 'assistant', content: '' });
 
         // Check if user is confirming a pending request
         const isConfirming = pendingPayload && /\b(yes|proceed|confirm|ok)\b/i.test(userMessage.content);
@@ -117,28 +114,52 @@ export default function Chatbot() {
             ];
 
             const currentCount = getCurrentCount(getMessagesText()) ?? undefined;
-            const responseContent = await sendMessage(allMessages, currentCount);
-            addMessage({ role: 'assistant', content: responseContent });
+            const activeBookingContext = bookingFlow.step !== 'title' && bookingFlow.step !== 'done'
+                ? bookingFlow.buildContextSummary()
+                : undefined;
 
-            // Detect JSON payload in AI response and stage it — don't submit yet
-            const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                try {
-                    const payload = JSON.parse(jsonMatch[0]);
-                    if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
-                        setPendingPayload(payload); // stage for confirmation
-                    }
-                } catch (_) { }
-            }
+            let streamingContent = '';
+
+            await sendMessage(
+                allMessages,
+                currentCount,
+                activeBookingContext,
+                (token) => {
+                    streamingContent += token;
+                    setMessages(prev => {
+                        if (prev.length === 0) return prev;
+                        const updated = [...prev];
+                        const last = updated[updated.length - 1];
+                        updated[updated.length - 1] = {
+                            ...last,
+                            content: streamingContent,
+                        };
+                        return updated;
+                    });
+                },
+                (json) => {
+                    try {
+                        const payload = JSON.parse(json);
+                        if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
+                            setPendingPayload(payload); // stage for confirmation
+                        }
+                    } catch (_) { }
+                },
+            );
 
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
-            addMessage({ role: 'assistant', content: `Error: ${errorMsg}` });
+            setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                    role: 'assistant',
+                    content: `Error: ${errorMsg}`,
+                };
+                return updated;
+            });
         }
     };
 
-<<<<<<< Updated upstream
-=======
     const buildRequestSummary = (payload: CreateRequestPayload): string => {
         const bookings = payload.facility_bookings.map((b, i) => {
             const facility = facilities.find(f => f.id === b.facility_id);
@@ -295,7 +316,6 @@ export default function Chatbot() {
         await processAndSend({ role: 'user', content: message }, context);
     };
 
->>>>>>> Stashed changes
     const handleQuickReply = (option: QuickReply) => {
         if (option.id === 'book_facility') {
             // Enter structured booking flow — no AI needed
@@ -328,7 +348,7 @@ export default function Chatbot() {
     };
 
     return (
-        <div className="w-full h-full flex flex-col bg-white">
+        <div className="w-full h-full flex flex-col bg-background">
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
 
                 {/* Idle — show welcome + quick reply buttons */}
@@ -339,19 +359,19 @@ export default function Chatbot() {
                 {/* Booking flow — fully structured, no AI */}
                 {mode === 'booking' && (
                     <BookingFlow
-                        facilities={facilities}
-                        csrfToken={csrfToken}
+                        bookingFlow={bookingFlow}
                         onComplete={handleBookingComplete}
                         onCancel={() => setMode('idle')}
+                        attachedFiles={attachedFiles}
+                        onAttachFile={handleAttachFiles}
+                        uploading={uploading}
+                        uploadError={uploadError}
                     />
                 )}
 
                 {/* AI chat mode */}
                 {mode === 'ai' && (
                     <>
-<<<<<<< Updated upstream
-                        <MessageList messages={messages} messagesEndRef={messagesEndRef} />
-=======
                         <MessageList 
                             messages={messages} 
                             messagesEndRef={messagesEndRef} 
@@ -424,7 +444,6 @@ export default function Chatbot() {
                             </div>
                         )}
 
->>>>>>> Stashed changes
                         {isLoading && <LoadingIndicator />}
                     </>
                 )}
