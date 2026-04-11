@@ -738,6 +738,7 @@ class ChatController extends Controller
                     'id'       => $e->id,
                     'name'     => $e->name,
                     'quantity' => $e->quantity,
+                    'facility_id' => $e->facility_id,
                     'facility' => $e->facility->name ?? $e->facility_id ?? null,
                 ]);
 

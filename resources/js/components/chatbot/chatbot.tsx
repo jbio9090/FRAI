@@ -24,12 +24,14 @@ export default function Chatbot() {
     const [input, setInput] = React.useState('');
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
-    const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment & { facility?: string }>>([]);
+    const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment>>([]);
     const [selectedEquipment, setSelectedEquipment] = useState<
         Array<{ equipment_id: number; equipment_name: string; quantity_needed: number }>
     >([]);
     // NEW: Track the message index of the last equipment question we responded to
     const [lastEquipmentQuestionIndex, setLastEquipmentQuestionIndex] = useState<number>(-1);
+    // NEW: Track whether to show equipment selection UI
+    const [showEquipmentSelection, setShowEquipmentSelection] = useState<boolean>(false);
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
     const { extractAndSet, getCurrentCount } = useParticipantCount();
@@ -41,10 +43,11 @@ export default function Chatbot() {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const messageQueueRef = useRef<Array<{ message: Message; context?: string }>>([]);
 
-    // Auto-scroll to bottom when messages change or mode changes
+    // Reset equipment selection UI when mode changes
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, mode]);
+        setShowEquipmentSelection(false);
+        setSelectedEquipment([]);
+    }, [mode]);
 
     // Fetch facilities and equipment for the booking flow
     useEffect(() => {
@@ -218,31 +221,83 @@ export default function Chatbot() {
         addMessage({ role: 'assistant', content: 'Request cancelled. How else can I help you?' });
     };
 
-    const getLatestAssistantMessage = (): { message: Message; index: number } | undefined => {
-        for (let i = messages.length - 1; i >= 0; i--) {
+    const getCurrentFacilityId = (): number | null => {
+        if (bookingFlow.data.facility_id) {
+            return bookingFlow.data.facility_id;
+        }
+        if (pendingPayload && pendingPayload.facility_bookings.length > 0) {
+            return pendingPayload.facility_bookings[0].facility_id;
+        }
+        return null;
+    };
+
+    const getFilteredEquipment = () => {
+        const facilityId = getCurrentFacilityId();
+        if (!facilityId) return equipmentOptions;
+        return equipmentOptions.filter(eq => eq.facility_id === facilityId);
+    };
+
+    const getLatestAssistantMessage = (): { message: Message; index: number } | null => {
+        for (let i = messages.length - 1; i >= 0; i -= 1) {
             if (messages[i].role === 'assistant') {
                 return { message: messages[i], index: i };
             }
         }
-        return undefined;
+
+        return null;
+    };
+
+    const getLatestUserMessageBeforeIndex = (endIndex: number): { message: Message; index: number } | null => {
+        for (let i = endIndex - 1; i >= 0; i -= 1) {
+            if (messages[i].role === 'user') {
+                return { message: messages[i], index: i };
+            }
+        }
+
+        return null;
+    };
+
+    const isEquipmentAvailabilityIntent = (text: string): boolean => {
+        return [
+            /\bavailable equipment\b/,
+            /\bequipment available\b/,
+            /\bwhat equipment(?:s)? (?:are )?available\b/,
+            /\bwhich equipment(?:s)? (?:are )?available\b/,
+            /\bshow\b.*\bequipment\b/,
+            /\blist\b.*\bequipment\b/,
+            /\bselect equipment\b/,
+            /\bchoose equipment\b/,
+            /\bdo you need\b.*\bequipment\b/,
+            /\bwould you like\b.*\bequipment\b/,
+            /\bneed any of (?:these )?equipment\b/,
+            /\bneed any of these\b.*\bequipment\b/,
+            /\bplease let me know if you need\b.*\bequipment\b/,
+            /\bi(?:'|’)ll add (?:them|it) to the facility request\b/,
+            /\bany additional equipment\b/,
+            /\bavailable for use\b/,
+        ].some((pattern) => pattern.test(text));
     };
 
     const shouldShowEquipmentPicker = (): boolean => {
         const latest = getLatestAssistantMessage();
-        if (!latest || pendingPayload) return false;
-        
+        if (!latest) return false;
+
         if (latest.index <= lastEquipmentQuestionIndex) return false;
-        
-        const text = latest.message.content.toLowerCase();
-        const hasEquipmentKeywords =
-            /equipment|any equipment|what equipment|select equipment|equipment you wish|equipment you want/.test(
-                text
-            );
-        
-        return hasEquipmentKeywords && equipmentOptions.length > 0;
+
+        const latestAssistantText = latest.message.content.toLowerCase();
+        const latestUser = getLatestUserMessageBeforeIndex(latest.index);
+        const latestUserText = latestUser?.message.content.toLowerCase() ?? '';
+
+        const assistantAskedAboutEquipment = isEquipmentAvailabilityIntent(latestAssistantText);
+        const userAskedAboutEquipmentAvailability = isEquipmentAvailabilityIntent(latestUserText);
+
+        return (
+            getFilteredEquipment().length > 0 &&
+            (assistantAskedAboutEquipment || userAskedAboutEquipmentAvailability)
+        );
     };
 
-    const handleEquipmentToggle = (equipment: Equipment & { facility?: string }) => {
+    const handleEquipmentToggle = (equipment: Equipment) => {
         setSelectedEquipment(prev => {
             const exists = prev.find(item => item.equipment_id === equipment.id);
             if (exists) {
@@ -271,7 +326,11 @@ export default function Chatbot() {
         if (selectedEquipment.length === 0) {
             return "I don't need any additional equipment.";
         }
-        const items = selectedEquipment.map(e => `${e.equipment_name} (quantity: ${e.quantity_needed})`).join(', ');
+        const items = selectedEquipment
+            .map(
+                (e) => `${e.equipment_name} (ID: ${e.equipment_id}, quantity: ${e.quantity_needed})`
+            )
+            .join(', ');
         return `I need the following equipment: ${items}`;
     };
 
@@ -334,9 +393,14 @@ export default function Chatbot() {
 
     const submitEquipmentSelection = async () => {
         const message = buildEquipmentSelectionMessage();
+        const serializedSelection = selectedEquipment.map((equipment) => ({
+            equipment_id: equipment.equipment_id,
+            quantity_needed: equipment.quantity_needed,
+        }));
         const equipmentMsg =
             'The user selected equipment using the checkbox list. ' +
-            'Use these exact selections when generating or updating the booking JSON payload.';
+            `Use these exact selections when generating or updating the booking JSON payload: ${JSON.stringify(serializedSelection)}. ` +
+            'Do not replace the equipment IDs with names or any other format.';
         const noEquipmentMsg =
             'The user selected no additional equipment. ' +
             'Do not ask for equipment again unless it is required later.';
@@ -349,6 +413,7 @@ export default function Chatbot() {
         }
 
         setSelectedEquipment([]);
+        setShowEquipmentSelection(false); // Reset the selection UI
         await processAndSend({ role: 'user', content: message }, context);
     };
 
@@ -435,76 +500,101 @@ export default function Chatbot() {
 
                         {shouldShowEquipmentPicker() && (
                             <div className="mb-4 rounded-lg border border-border bg-background p-4">
-                                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p className="text-sm font-semibold">Equipment selection</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            The assistant asked for equipment. Tick the items you
-                                            need, adjust quantities, then submit your selection.
-                                        </p>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
+                                {!showEquipmentSelection ? (
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-semibold">Equipment Selection</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Click the button to select equipment from the available list.
+                                            </p>
+                                        </div>
                                         <Button
                                             size="sm"
-                                            variant="outline"
-                                            onClick={submitEquipmentSelection}
+                                            onClick={() => setShowEquipmentSelection(true)}
                                             disabled={isLoading}
                                         >
-                                            {selectedEquipment.length > 0 ? 'Send equipment' : 'No equipment needed'}
+                                            Select Equipment
                                         </Button>
                                     </div>
-                                </div>
-                                <div className="space-y-3 max-h-64 overflow-y-auto">
-                                    {equipmentOptions.map((equipment) => {
-                                        const selected = selectedEquipment.find(
-                                            item => item.equipment_id === equipment.id
-                                        );
-                                        return (
-                                            <div key={equipment.id} className="rounded-lg border border-border p-3">
-                                                <div className="flex items-start gap-3">
-                                                    <Checkbox
-                                                        id={`equipment-${equipment.id}`}
-                                                        checked={!!selected}
-                                                        onCheckedChange={() => handleEquipmentToggle(equipment)}
-                                                    />
-                                                    <div className="min-w-0 flex-1">
-                                                        <Label
-                                                        htmlFor={`equipment-${equipment.id}`}
-                                                        className="text-sm font-medium cursor-pointer"
-                                                    >
-                                                            {equipment.name}
-                                                        </Label>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Available: {equipment.quantity}{' '}
-                                                            {equipment.facility ? `in ${equipment.facility}` : ''}
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                {selected && (
-                                                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-                                                        <Label className="text-sm">Quantity</Label>
-                                                        <Input
-                                                            type="number"
-                                                            min={1}
-                                                            max={equipment.quantity}
-                                                            value={selected.quantity_needed}
-                                                            onChange={(e) => {
-                                                                const value = Number(e.target.value);
-                                                                const bounded = Math.min(
-                                                                    Math.max(1, value),
-                                                                    equipment.quantity
-                                                                );
-                                                                updateEquipmentQuantity(equipment.id, bounded);
-                                                            }}
-                                                            className="w-24"
-                                                        />
-                                                    </div>
-                                                )}
+                                ) : (
+                                    <>
+                                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <p className="text-sm font-semibold">Equipment selection</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Tick the items you need, adjust quantities, then submit your selection.
+                                                </p>
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => setShowEquipmentSelection(false)}
+                                                >
+                                                    Cancel
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={submitEquipmentSelection}
+                                                    disabled={isLoading}
+                                                >
+                                                    {selectedEquipment.length > 0 ? 'Send equipment' : 'No equipment needed'}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3 max-h-64 overflow-y-auto">
+                                            {getFilteredEquipment().map((equipment) => {
+                                                const selected = selectedEquipment.find(
+                                                    item => item.equipment_id === equipment.id
+                                                );
+                                                return (
+                                                    <div key={equipment.id} className="rounded-lg border border-border p-3">
+                                                        <div className="flex items-start gap-3">
+                                                            <Checkbox
+                                                                id={`equipment-${equipment.id}`}
+                                                                checked={!!selected}
+                                                                onCheckedChange={() => handleEquipmentToggle(equipment)}
+                                                            />
+                                                            <div className="min-w-0 flex-1">
+                                                                <Label
+                                                                htmlFor={`equipment-${equipment.id}`}
+                                                                className="text-sm font-medium cursor-pointer"
+                                                            >
+                                                                    {equipment.name}
+                                                                </Label>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Available: {equipment.quantity}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        {selected && (
+                                                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                                <Label className="text-sm">Quantity</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min={1}
+                                                                    max={equipment.quantity}
+                                                                    value={selected.quantity_needed}
+                                                                    onChange={(e) => {
+                                                                        const value = Number(e.target.value);
+                                                                        const bounded = Math.min(
+                                                                            Math.max(1, value),
+                                                                            equipment.quantity
+                                                                        );
+                                                                        updateEquipmentQuantity(equipment.id, bounded);
+                                                                    }}
+                                                                    className="w-24"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
 
