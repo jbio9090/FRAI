@@ -25,7 +25,9 @@ export default function Chatbot() {
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment & { facility?: string }>>([]);
-    const [selectedEquipment, setSelectedEquipment] = useState<Array<{ equipment_id: number; equipment_name: string; quantity_needed: number }>>([]);
+    const [selectedEquipment, setSelectedEquipment] = useState<
+        Array<{ equipment_id: number; equipment_name: string; quantity_needed: number }>
+    >([]);
     // NEW: Track the message index of the last equipment question we responded to
     const [lastEquipmentQuestionIndex, setLastEquipmentQuestionIndex] = useState<number>(-1);
 
@@ -101,6 +103,7 @@ export default function Chatbot() {
             try {
                 const result = await submitRequest(pendingPayload);
                 setPendingPayload(null);
+                setAttachedFiles([]);
                 addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
             } catch (err) {
                 const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
@@ -146,7 +149,10 @@ export default function Chatbot() {
                     try {
                         const payload = JSON.parse(json);
                         if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
-                            setPendingPayload(payload); // stage for confirmation
+                            if (attachedFiles.length > 0) {
+                                payload.files = attachedFiles.map(f => f.id);
+                            }
+                            setPendingPayload(payload);
                         }
                     } catch (_) { }
                 },
@@ -175,11 +181,22 @@ export default function Chatbot() {
     const buildRequestSummary = (payload: CreateRequestPayload): string => {
         const bookings = payload.facility_bookings.map((b, i) => {
             const facility = facilities.find(f => f.id === b.facility_id);
-            const equipmentList = b.equipment?.map(e => `${e.equipment_name} x${e.quantity_needed}`).join(', ') || 'None';
-            return `${i + 1}. ${facility?.name || 'Unknown'} on ${b.date} (${b.time_start} - ${b.time_end}) | Equipment: ${equipmentList}`;
+            const equipmentList =
+                b.equipment
+                    ?.map(e => {
+                        const eq = equipmentOptions.find(opt => opt.id === e.equipment_id);
+                        return `${eq?.name || 'Unknown'} x${e.quantity_needed}`;
+                    })
+                    .join(', ') || 'None';
+            const facilityName = facility?.name || 'Unknown';
+            const facilityInfo = `${i + 1}. ${facilityName} on ${b.date} (${b.time_start} - ${b.time_end})`;
+            return `${facilityInfo} | Equipment: ${equipmentList}`;
         }).join('\n');
 
-        return `Title: ${payload.title}\nDescription: ${payload.description || 'N/A'}\nPriority: ${payload.priority_level ?? 0}\n\nFacilities:\n${bookings}`;
+        const titleLine = `Title: ${payload.title}`;
+        const descriptionLine = `Description: ${payload.description || 'N/A'}`;
+        const priorityLine = `Priority: ${payload.priority_level ?? 0}`;
+        return `${titleLine}\n${descriptionLine}\n${priorityLine}\n\nFacilities:\n${bookings}`;
     };
 
     const handleConfirmRequest = async () => {
@@ -188,6 +205,7 @@ export default function Chatbot() {
         try {
             const result = await submitRequest(pendingPayload);
             setPendingPayload(null);
+            setAttachedFiles([]);
             addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
@@ -213,11 +231,13 @@ export default function Chatbot() {
         const latest = getLatestAssistantMessage();
         if (!latest || pendingPayload) return false;
         
-        // NEW: Don't show if we've already responded to this equipment question
         if (latest.index <= lastEquipmentQuestionIndex) return false;
         
         const text = latest.message.content.toLowerCase();
-        const hasEquipmentKeywords = /equipment|any equipment|what equipment|select equipment|equipment you wish|equipment you want/.test(text);
+        const hasEquipmentKeywords =
+            /equipment|any equipment|what equipment|select equipment|equipment you wish|equipment you want/.test(
+                text
+            );
         
         return hasEquipmentKeywords && equipmentOptions.length > 0;
     };
@@ -255,14 +275,22 @@ export default function Chatbot() {
         return `I need the following equipment: ${items}`;
     };
 
-    const handleAttachFiles = async (files: File[]) => {
+    const handleAttachFiles = async (fileList: FileList) => {
+        if (!fileList || fileList.length === 0) {
+            setUploadError('No files selected');
+            return;
+        }
+
         setUploading(true);
         setUploadError(null);
 
         const formData = new FormData();
-        files.forEach(file => formData.append('files[]', file));
+        Array.from(fileList).forEach(file => formData.append('files[]', file));
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
             const response = await fetch(route('chat.upload'), {
                 method: 'POST',
                 headers: {
@@ -271,27 +299,48 @@ export default function Chatbot() {
                 },
                 credentials: 'same-origin',
                 body: formData,
+                signal: controller.signal,
             });
 
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Upload error response:', response.status, errorText);
+                setUploadError(`Upload failed: ${response.status} ${response.statusText}`);
+                setUploading(false);
+                return;
+            }
+
             const data = await response.json();
+            console.log('Upload response:', data);
 
             if (data.success && data.files) {
                 setAttachedFiles(prev => [...prev, ...data.files]);
             } else {
-                setUploadError(data.error || 'Upload failed');
+                setUploadError(data.error || data.message || 'Upload failed');
             }
+            setUploading(false);
         } catch (err) {
-            setUploadError('Network error during upload');
-        } finally {
+            if (err instanceof Error && err.name === 'AbortError') {
+                setUploadError('Upload timeout - request took too long');
+            } else {
+                setUploadError(err instanceof Error ? err.message : 'Network error during upload');
+            }
+            console.error('Upload error:', err);
             setUploading(false);
         }
     };
 
     const submitEquipmentSelection = async () => {
         const message = buildEquipmentSelectionMessage();
-        const context = selectedEquipment.length > 0
-            ? 'The user selected equipment using the checkbox list. Use these exact selections when generating or updating the booking JSON payload.'
-            : 'The user selected no additional equipment. Do not ask for equipment again unless it is required later.';
+        const equipmentMsg =
+            'The user selected equipment using the checkbox list. ' +
+            'Use these exact selections when generating or updating the booking JSON payload.';
+        const noEquipmentMsg =
+            'The user selected no additional equipment. ' +
+            'Do not ask for equipment again unless it is required later.';
+        const context = selectedEquipment.length > 0 ? equipmentMsg : noEquipmentMsg;
 
         // NEW: Mark this equipment question as answered by storing the message index
         const latest = getLatestAssistantMessage();
@@ -390,7 +439,8 @@ export default function Chatbot() {
                                     <div>
                                         <p className="text-sm font-semibold">Equipment selection</p>
                                         <p className="text-xs text-muted-foreground">
-                                            The assistant asked for equipment. Tick the items you need, adjust quantities, then submit your selection.
+                                            The assistant asked for equipment. Tick the items you
+                                            need, adjust quantities, then submit your selection.
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
@@ -406,7 +456,9 @@ export default function Chatbot() {
                                 </div>
                                 <div className="space-y-3 max-h-64 overflow-y-auto">
                                     {equipmentOptions.map((equipment) => {
-                                        const selected = selectedEquipment.find(item => item.equipment_id === equipment.id);
+                                        const selected = selectedEquipment.find(
+                                            item => item.equipment_id === equipment.id
+                                        );
                                         return (
                                             <div key={equipment.id} className="rounded-lg border border-border p-3">
                                                 <div className="flex items-start gap-3">
@@ -416,11 +468,15 @@ export default function Chatbot() {
                                                         onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                     />
                                                     <div className="min-w-0 flex-1">
-                                                        <Label htmlFor={`equipment-${equipment.id}`} className="text-sm font-medium cursor-pointer">
+                                                        <Label
+                                                        htmlFor={`equipment-${equipment.id}`}
+                                                        className="text-sm font-medium cursor-pointer"
+                                                    >
                                                             {equipment.name}
                                                         </Label>
                                                         <p className="text-xs text-muted-foreground">
-                                                            Available: {equipment.quantity} {equipment.facility ? `in ${equipment.facility}` : ''}
+                                                            Available: {equipment.quantity}{' '}
+                                                            {equipment.facility ? `in ${equipment.facility}` : ''}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -433,10 +489,14 @@ export default function Chatbot() {
                                                             min={1}
                                                             max={equipment.quantity}
                                                             value={selected.quantity_needed}
-                                                            onChange={(e) => updateEquipmentQuantity(
-                                                                equipment.id,
-                                                                Math.min(Math.max(1, Number(e.target.value)), equipment.quantity)
-                                                            )}
+                                                            onChange={(e) => {
+                                                                const value = Number(e.target.value);
+                                                                const bounded = Math.min(
+                                                                    Math.max(1, value),
+                                                                    equipment.quantity
+                                                                );
+                                                                updateEquipmentQuantity(equipment.id, bounded);
+                                                            }}
                                                             className="w-24"
                                                         />
                                                     </div>
@@ -461,7 +521,14 @@ export default function Chatbot() {
                 onChange={setInput}
                 onKeyPress={handleKeyPress}
                 onSend={handleSendMessage}
-                disabled={uploading}
+                disabled={uploading || isLoading}
+                attachedFiles={attachedFiles}
+                onAttachFile={handleAttachFiles}
+                uploading={uploading}
+                uploadError={uploadError}
+                onRemoveFile={(fileId) => {
+                    setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
+                }}
             />
         </div>
     );
