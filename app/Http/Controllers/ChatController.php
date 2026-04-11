@@ -76,6 +76,106 @@ class ChatController extends Controller
         });
     }
 
+    private function getLatestUserMessageContent(array $messages): ?string
+    {
+        for ($i = count($messages) - 1; $i >= 0; $i--) {
+            if (($messages[$i]['role'] ?? null) === 'user') {
+                return trim((string) ($messages[$i]['content'] ?? ''));
+            }
+        }
+
+        return null;
+    }
+
+    private function extractFacilityAndDateFromMessage(?string $message, $facilities): array
+    {
+        if (empty($message)) {
+            return ['facility' => null, 'date' => null];
+        }
+
+        $facility = null;
+
+        if (preg_match('/\b(?:facility\s*)?id\s*(\d+)\b/i', $message, $matches)) {
+            $facility = $facilities->firstWhere('id', (int) $matches[1]);
+        }
+
+        if (!$facility) {
+            $normalizedMessage = Str::lower($message);
+            $facility = $facilities
+                ->sortByDesc(fn($f) => strlen((string) $f->name))
+                ->first(function ($f) use ($normalizedMessage) {
+                    return Str::contains($normalizedMessage, Str::lower((string) $f->name));
+                });
+        }
+
+        $date = null;
+
+        if (preg_match('/\b\d{4}-\d{2}-\d{2}\b/', $message, $matches)) {
+            try {
+                $date = \Illuminate\Support\Carbon::parse($matches[0])->format('Y-m-d');
+            } catch (\Exception $e) {
+                $date = null;
+            }
+        }
+
+        if (!$date && preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*|\s+)\d{4}\b/i', $message, $matches)) {
+            try {
+                $date = \Illuminate\Support\Carbon::parse($matches[0])->format('Y-m-d');
+            } catch (\Exception $e) {
+                $date = null;
+            }
+        }
+
+        return ['facility' => $facility, 'date' => $date];
+    }
+
+    private function injectDeterministicAvailabilityContext(array &$messages, ?string $latestUserMessage, $allFacilities, $allRequests): void
+    {
+        $parsed = $this->extractFacilityAndDateFromMessage($latestUserMessage, $allFacilities);
+        $facility = $parsed['facility'];
+        $date = $parsed['date'];
+
+        if (!$facility || !$date) {
+            return;
+        }
+
+        $approvedBookings = $allRequests
+            ->filter(fn($r) => $r->status->value === 'Approved')
+            ->flatMap(function ($r) use ($facility) {
+                return $r->requestFacilities
+                    ->where('facility_id', $facility->id)
+                    ->map(function ($rf) use ($r) {
+                        return [
+                            'request_id' => $r->id,
+                            'title' => $r->title,
+                            'date' => $rf->date_requested,
+                            'time_start' => $rf->time_start,
+                            'time_end' => $rf->time_end,
+                        ];
+                    });
+            })
+            ->where('date', $date)
+            ->sortBy('time_start')
+            ->values();
+
+        if ($approvedBookings->isEmpty()) {
+            array_unshift($messages, [
+                'role' => 'system',
+                'content' => "DETERMINISTIC AVAILABILITY CHECK:\nThe latest user message refers to facility '{$facility->name}' (ID {$facility->id}) on {$date}. Backend check result: there are NO approved bookings for this facility on that date.\n\nYou must treat the facility as date-available. If the user has not provided a time yet, ask for the preferred start and end time before checking time-slot conflicts.",
+            ]);
+            return;
+        }
+
+        $bookingLines = $approvedBookings->map(function ($booking) {
+            return "- {$booking['date']} | {$booking['time_start']} - {$booking['time_end']} | Request #{$booking['request_id']} | {$booking['title']}";
+        })->implode("\n");
+
+        array_unshift($messages, [
+            'role' => 'system',
+            'content' => "DETERMINISTIC AVAILABILITY CHECK:\nThe latest user message refers to facility '{$facility->name}' (ID {$facility->id}) on {$date}. Backend check result: there ARE approved bookings for this facility on that date, but only for the exact time slots listed below:\n{$bookingLines}\n\nImportant instructions:\n- Do NOT say the facility is unavailable for the whole day unless the bookings actually cover the whole day\n- If the user did not provide a specific start and end time, do NOT claim a conflict yet\n- Instead, explain that the facility already has the listed booked time slots on {$date} and ask the user for their preferred start and end time so you can check overlap precisely\n- If the user asks whether a previous conflict claim was correct, use this backend check as the source of truth",
+        ]);
+    }
+
     private function injectApprovedBookingTable(array &$messages, $allRequests): void
     {
         $approvedBookings = $allRequests->filter(function ($r) {
@@ -116,6 +216,62 @@ class ChatController extends Controller
         ]);
     }
 
+    private function normalizeCreateRequestPayload(array $input): array
+    {
+        $normalized = $input;
+
+        if (!empty($normalized['facility_bookings']) && is_array($normalized['facility_bookings'])) {
+            $normalized['facility_bookings'] = array_map(function ($booking) {
+                if (!is_array($booking)) {
+                    return $booking;
+                }
+
+                if (!isset($booking['time_start']) && isset($booking['start_time'])) {
+                    $booking['time_start'] = $booking['start_time'];
+                }
+
+                if (!isset($booking['time_end']) && isset($booking['end_time'])) {
+                    $booking['time_end'] = $booking['end_time'];
+                }
+
+                if (!empty($booking['equipment']) && is_array($booking['equipment'])) {
+                    $booking['equipment'] = array_map(function ($equipment) {
+                        if (!is_array($equipment)) {
+                            return $equipment;
+                        }
+
+                        if (!isset($equipment['equipment_id']) && isset($equipment['id'])) {
+                            $equipment['equipment_id'] = $equipment['id'];
+                        }
+
+                        if (!isset($equipment['quantity_needed']) && isset($equipment['quantity'])) {
+                            $equipment['quantity_needed'] = $equipment['quantity'];
+                        }
+
+                        return $equipment;
+                    }, $booking['equipment']);
+                }
+
+                return $booking;
+            }, $normalized['facility_bookings']);
+        }
+
+        if (!empty($normalized['equipment']) && is_array($normalized['equipment']) && !empty($normalized['facility_bookings'][0]) && empty($normalized['facility_bookings'][0]['equipment'])) {
+            $normalized['facility_bookings'][0]['equipment'] = array_map(function ($equipment) {
+                if (!is_array($equipment)) {
+                    return $equipment;
+                }
+
+                return [
+                    'equipment_id' => $equipment['equipment_id'] ?? $equipment['id'] ?? null,
+                    'quantity_needed' => $equipment['quantity_needed'] ?? $equipment['quantity'] ?? null,
+                ];
+            }, $normalized['equipment']);
+        }
+
+        return $normalized;
+    }
+
     public function chat(Request $request): JsonResponse
     {
         try {
@@ -132,6 +288,7 @@ class ChatController extends Controller
                     strpos($content, 'Available Facilities') !== false ||
                     strpos($content, 'Available Equipment') !== false ||
                     strpos($content, 'FACILITY CAPACITY MATCHING') !== false ||
+                    strpos($content, 'DETERMINISTIC AVAILABILITY CHECK') !== false ||
                     strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
                     strpos($content, 'When the user asks whether a facility is available') !== false;
                 
@@ -142,6 +299,8 @@ class ChatController extends Controller
 
             $participantCount = $request->input('participant_count');
             $bookingContext   = $request->input('booking_context');
+            $allRequests      = collect();
+            $allFacilities    = collect();
 
             try {
                 // Fetch recent requests (both pending and approved) for context
@@ -234,6 +393,11 @@ class ChatController extends Controller
                         'role'    => 'system',
                         'content' => "Available Equipment:\n- " . implode("\n- ", $equipment),
                     ]);
+                }
+
+                if ($allRequests->isNotEmpty()) {
+                    $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
+                    $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
                 }
 
                 array_unshift($messages, [
@@ -372,9 +536,11 @@ class ChatController extends Controller
     public function stream(Request $request): StreamedResponse
     {
         // Collect all the same context as chat()
-        $messages         = $request->input('messages', []);
-        $participantCount = $request->input('participant_count');
-        $bookingContext   = $request->input('booking_context');
+            $messages         = $request->input('messages', []);
+            $participantCount = $request->input('participant_count');
+            $bookingContext   = $request->input('booking_context');
+            $allRequests      = collect();
+            $allFacilities    = collect();
 
         // Load session history and merge
         $sessionMessages = $this->loadSession();
@@ -387,6 +553,7 @@ class ChatController extends Controller
                 strpos($content, 'Available Facilities') !== false ||
                 strpos($content, 'Available Equipment') !== false ||
                 strpos($content, 'FACILITY CAPACITY MATCHING') !== false ||
+                strpos($content, 'DETERMINISTIC AVAILABILITY CHECK') !== false ||
                 strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
                 strpos($content, 'When the user asks whether a facility is available') !== false;
             
@@ -459,6 +626,11 @@ class ChatController extends Controller
 
             if (!empty($equipment)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
+            }
+
+            if ($allRequests->isNotEmpty()) {
+                $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
+                $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
             }
 
             array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. The valid capacity rule is:\n- Minimum: Facility capacity must be at least 100% of the participant count\n- Maximum: Facility capacity must be at most 200% of the participant count\nFor example, for 40 participants, only facilities with capacity 40-80 are valid. Never describe this as 40%-80% of the participant count. Never recommend facilities outside the filtered results. Always present the filtered results exactly as provided."]);
@@ -862,6 +1034,9 @@ class ChatController extends Controller
     public function createRequestApi(Request $request): JsonResponse
     {
         try {
+            $normalizedInput = $this->normalizeCreateRequestPayload($request->all());
+            $request->replace($normalizedInput);
+
             $validated = $request->validate([
                 'title'                                           => 'required|string|max:255',
                 'description'                                     => 'nullable|string',
