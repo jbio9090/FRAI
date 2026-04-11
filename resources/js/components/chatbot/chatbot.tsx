@@ -26,6 +26,8 @@ export default function Chatbot() {
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment & { facility?: string }>>([]);
     const [selectedEquipment, setSelectedEquipment] = useState<Array<{ equipment_id: number; equipment_name: string; quantity_needed: number }>>([]);
+    // NEW: Track the message index of the last equipment question we responded to
+    const [lastEquipmentQuestionIndex, setLastEquipmentQuestionIndex] = useState<number>(-1);
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
     const { extractAndSet, getCurrentCount } = useParticipantCount();
@@ -173,108 +175,35 @@ export default function Chatbot() {
     const buildRequestSummary = (payload: CreateRequestPayload): string => {
         const bookings = payload.facility_bookings.map((b, i) => {
             const facility = facilities.find(f => f.id === b.facility_id);
-            const facilityName = facility?.name || `Facility #${b.facility_id}`;
-            const equipment = b.equipment?.map(e => {
-                return `${e.quantity_needed}x equipment`;
-            }).join(', ') || 'None';
-            return `${i + 1}. ${facilityName} on ${b.date} from ${b.time_start} to ${b.time_end} (Equipment: ${equipment})`;
+            const equipmentList = b.equipment?.map(e => `${e.equipment_name} x${e.quantity_needed}`).join(', ') || 'None';
+            return `${i + 1}. ${facility?.name || 'Unknown'} on ${b.date} (${b.time_start} - ${b.time_end}) | Equipment: ${equipmentList}`;
         }).join('\n');
 
-        return `📋 **Booking Summary**\n\n` +
-            `**Title:** ${payload.title}\n` +
-            `**Description:** ${payload.description || 'N/A'}\n` +
-            `**Event Type:** ${payload.priority_level === 2 ? 'Government' : payload.priority_level === 1 ? 'Organizational/University' : 'Academic'}\n\n` +
-            `**Bookings:**\n${bookings}\n\n` +
-            `Reply "confirm" to submit this request, or "cancel" to discard it.`;
+        return `Title: ${payload.title}\nDescription: ${payload.description || 'N/A'}\nPriority: ${payload.priority_level ?? 0}\n\nFacilities:\n${bookings}`;
     };
 
     const handleConfirmRequest = async () => {
         if (!pendingPayload) return;
 
-        const payload = pendingPayload;
-        setPendingPayload(null);
-
-        addMessage({ role: 'user', content: 'Confirm' });
-
         try {
-            const payloadWithFiles: CreateRequestPayload = {
-                ...payload,
-                files: attachedFiles.map(f => f.id),
-            };
-
-            const result = await submitRequest(payloadWithFiles);
-            if (result) {
-                addMessage({
-                    role: 'assistant',
-                    content: `✅ Request #${result.request_id} has been created successfully${attachedFiles.length > 0 ? ` with ${attachedFiles.length} file(s)` : ''}!`,
-                });
-                setAttachedFiles([]);
-                setUploadError(null);
-            }
+            const result = await submitRequest(pendingPayload);
+            setPendingPayload(null);
+            addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
-            addMessage({ role: 'assistant', content: `❌ Failed to create request: ${errorMsg}` });
+            addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
         }
     };
 
     const handleCancelRequest = () => {
         setPendingPayload(null);
-        addMessage({ role: 'user', content: 'Cancel' });
-        addMessage({
-            role: 'assistant',
-            content: 'Request cancelled. Is there anything else I can help you with?',
-        });
+        addMessage({ role: 'assistant', content: 'Request cancelled. How else can I help you?' });
     };
 
-    const handleAttachFiles = async (files: FileList) => {
-        if (!files || files.length === 0) return;
-
-        setUploading(true);
-        setUploadError(null);
-
-        try {
-            const formData = new FormData();
-            for (let i = 0; i < files.length; i++) {
-                formData.append('files[]', files[i]);
-            }
-
-            const response = await fetch(route('chat.upload'), {
-                method: 'POST',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
-                },
-                credentials: 'same-origin',
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                const errorMessage = errorData.messages?.join(', ') || errorData.error || 'File upload failed';
-                setUploadError(errorMessage);
-                return;
-            }
-
-            const data = await response.json();
-            if (data.success && data.files) {
-                setAttachedFiles(prev => [...prev, ...data.files]);
-            }
-        } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : 'Upload failed';
-            setUploadError(errorMsg);
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const handleRemoveFile = (fileId: string) => {
-        setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
-    };
-
-    const getLatestAssistantMessage = (): Message | undefined => {
+    const getLatestAssistantMessage = (): { message: Message; index: number } | undefined => {
         for (let i = messages.length - 1; i >= 0; i--) {
             if (messages[i].role === 'assistant') {
-                return messages[i];
+                return { message: messages[i], index: i };
             }
         }
         return undefined;
@@ -283,37 +212,79 @@ export default function Chatbot() {
     const shouldShowEquipmentPicker = (): boolean => {
         const latest = getLatestAssistantMessage();
         if (!latest || pendingPayload) return false;
-        const text = latest.content.toLowerCase();
-        return /equipment|any equipment|what equipment|select equipment|equipment you wish|equipment you want/.test(text)
-            && equipmentOptions.length > 0;
+        
+        // NEW: Don't show if we've already responded to this equipment question
+        if (latest.index <= lastEquipmentQuestionIndex) return false;
+        
+        const text = latest.message.content.toLowerCase();
+        const hasEquipmentKeywords = /equipment|any equipment|what equipment|select equipment|equipment you wish|equipment you want/.test(text);
+        
+        return hasEquipmentKeywords && equipmentOptions.length > 0;
     };
 
-    const handleEquipmentToggle = (equipment: Equipment) => {
-        setSelectedEquipment((prev) => {
-            const exists = prev.find((item) => item.equipment_id === equipment.id);
+    const handleEquipmentToggle = (equipment: Equipment & { facility?: string }) => {
+        setSelectedEquipment(prev => {
+            const exists = prev.find(item => item.equipment_id === equipment.id);
             if (exists) {
-                return prev.filter((item) => item.equipment_id !== equipment.id);
+                return prev.filter(item => item.equipment_id !== equipment.id);
+            } else {
+                return [...prev, {
+                    equipment_id: equipment.id,
+                    equipment_name: equipment.name,
+                    quantity_needed: 1,
+                }];
             }
-            return [
-                ...prev,
-                { equipment_id: equipment.id, equipment_name: equipment.name, quantity_needed: 1 },
-            ];
         });
     };
 
     const updateEquipmentQuantity = (equipmentId: number, quantity: number) => {
-        setSelectedEquipment((prev) => prev.map((item) =>
-            item.equipment_id === equipmentId
-                ? { ...item, quantity_needed: Math.max(1, quantity) }
-                : item
-        ));
+        setSelectedEquipment(prev =>
+            prev.map(item =>
+                item.equipment_id === equipmentId
+                    ? { ...item, quantity_needed: quantity }
+                    : item
+            )
+        );
     };
 
     const buildEquipmentSelectionMessage = (): string => {
         if (selectedEquipment.length === 0) {
-            return 'No additional equipment is needed.';
+            return "I don't need any additional equipment.";
         }
-        return 'I would like the following equipment:\n' + selectedEquipment.map((item) => `- ${item.equipment_name} x${item.quantity_needed}`).join('\n');
+        const items = selectedEquipment.map(e => `${e.equipment_name} (quantity: ${e.quantity_needed})`).join(', ');
+        return `I need the following equipment: ${items}`;
+    };
+
+    const handleAttachFiles = async (files: File[]) => {
+        setUploading(true);
+        setUploadError(null);
+
+        const formData = new FormData();
+        files.forEach(file => formData.append('files[]', file));
+
+        try {
+            const response = await fetch(route('chat.upload'), {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                body: formData,
+            });
+
+            const data = await response.json();
+
+            if (data.success && data.files) {
+                setAttachedFiles(prev => [...prev, ...data.files]);
+            } else {
+                setUploadError(data.error || 'Upload failed');
+            }
+        } catch (err) {
+            setUploadError('Network error during upload');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const submitEquipmentSelection = async () => {
@@ -321,6 +292,12 @@ export default function Chatbot() {
         const context = selectedEquipment.length > 0
             ? 'The user selected equipment using the checkbox list. Use these exact selections when generating or updating the booking JSON payload.'
             : 'The user selected no additional equipment. Do not ask for equipment again unless it is required later.';
+
+        // NEW: Mark this equipment question as answered by storing the message index
+        const latest = getLatestAssistantMessage();
+        if (latest) {
+            setLastEquipmentQuestionIndex(latest.index);
+        }
 
         setSelectedEquipment([]);
         await processAndSend({ role: 'user', content: message }, context);
