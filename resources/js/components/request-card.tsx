@@ -206,14 +206,14 @@ export default function RequestCard({
                                 <span className='text-xs font-semibold text-muted-foreground'>Recommendation</span>
 
                                 {isLoadingRecommendation ? (
-                                    <AnimatedText />
+                                    <AnimatedText italize={true} />
                                 ) : (
                                     <>
-                                        <motion.span 
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ duration: 1, ease: "easeIn" }}
-                                        className={cn('font-black', request.recommended_action === "Denied" && "text-destructive")}>
+                                        <motion.span
+                                            initial={{ y: 10, opacity: 0 }}
+                                            animate={{ y: 0, opacity: 1 }}
+                                            transition={{ duration: 0.2, ease: "easeIn" }}
+                                            className={cn('font-black overflow-hidden', request.recommended_action === "Denied" && "text-destructive")}>
                                             {recommendedActionToPresentTense(request.recommended_action)}
                                         </motion.span>
                                     </>

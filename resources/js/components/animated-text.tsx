@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 
-export default function AnimatedText({ label = "Analyzing Request..." }: { label?: string }) {
+export default function AnimatedText({ label = "Analyzing Request...", italize = false }: { label?: string, italize?: boolean }) {
     const colors = [
         "#00ccff",
         "#004dff",
@@ -8,7 +8,7 @@ export default function AnimatedText({ label = "Analyzing Request..." }: { label
     ];
 
     return (
-        <span style={{ display: "inline-block", position: "relative", overflow: "hidden" }} className="font-bold">
+        <span style={{ display: "inline-block", position: "relative", overflow: "hidden" }} className={"font-semibold" + (italize ? " italic" : "")}>
             <span style={{ visibility: "hidden" }}>{label}</span>
             <motion.span
                 className="absolute inset-0"
@@ -30,7 +30,7 @@ export default function AnimatedText({ label = "Analyzing Request..." }: { label
                         duration: 4,
                         ease: "linear",
                         repeat: Infinity,
-                        repeatType: "mirror", 
+                        repeatType: "mirror",
                     },
                     backgroundPosition: {
                         duration: 1.8,
