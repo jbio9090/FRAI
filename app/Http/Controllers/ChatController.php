@@ -71,8 +71,8 @@ class ChatController extends Controller
     private function filterFacilitiesByCapacity($facilities, $participants)
     {
         return $facilities->filter(function ($facility) use ($participants) {
-            return $participants <= $facility->capacity
-                && $participants >= ($facility->capacity * 0.5);
+            return $facility->capacity >= $participants
+                && $facility->capacity <= ($participants * 2);
         });
     }
 
@@ -198,12 +198,19 @@ class ChatController extends Controller
                 $facilities = $facilitiesToDisplay->map(function ($f) {
                     return "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})";
                 })->toArray();
+                $facilityCount = count($facilities);
 
                 if (!empty($facilities)) {
                     array_unshift($messages, [
                         'role'    => 'system',
                         'content' => "Available Facilities" . ($filterApplied ? " (filtered for {$participantCount} participants)" : "") . ":\n- " . implode("\n- ", $facilities),
                     ]);
+                    if ($filterApplied) {
+                        array_unshift($messages, [
+                            'role'    => 'system',
+                            'content' => "STRICT FACILITY RECOMMENDATION RULE:\nThe 'Available Facilities (filtered for {$participantCount} participants)' list already contains the COMPLETE and EXACT set of valid facilities for this participant count. There are exactly {$facilityCount} valid facilities in that filtered list.\n\nWhen the user asks for facility recommendations for {$participantCount} participants, you MUST:\n- Recommend ONLY facilities from that filtered list\n- Recommend ALL {$facilityCount} facilities from that filtered list\n- Do NOT mention any facility outside that filtered list\n- Do NOT omit any facility from that filtered list\n- Do NOT recompute percentages, ranges, or suitability yourself\n- Do NOT provide sample recommendations, examples, or a partial shortlist\n- If the user asks 'any other rooms?', answer no if all {$facilityCount} facilities were already shown\n\nRequired response behavior:\n- If {$facilityCount} is greater than 0, list all {$facilityCount} facilities using the exact IDs, names, buildings, and capacities from the filtered list\n- If {$facilityCount} is 0, say that no facilities match the {$participantCount}-participant requirement\n- After listing facilities, ask whether the user wants to check availability or proceed with booking\n\nDo not mention Main Auditorium, Assembly Hall, or any other facility unless it appears in the filtered list.",
+                        ]);
+                    }
                     // Add a reminder to the AI to warn about already approved bookings for selected facilities
                     array_unshift($messages, [
                         'role'    => 'system',
@@ -231,7 +238,7 @@ class ChatController extends Controller
 
                 array_unshift($messages, [
                     'role'    => 'system',
-                    'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. Facilities are recommended based on:\n- Minimum: At least 50% capacity utilization (to avoid empty rooms)\n- Maximum: Can accommodate all participants\nFor example, for 40 participants, recommend rooms with capacity 40-80. Always present the filtered results and explain why those facilities are recommended.",
+                    'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. The valid capacity rule is:\n- Minimum: Facility capacity must be at least 100% of the participant count\n- Maximum: Facility capacity must be at most 200% of the participant count\nFor example, for 40 participants, only facilities with capacity 40-80 are valid. Never describe this as 40%-80% of the participant count. Never recommend facilities outside the filtered results. Always present the filtered results exactly as provided.",
                 ]);
 
                 array_unshift($messages, [
@@ -428,9 +435,16 @@ class ChatController extends Controller
             }
 
             $facilities = $facilitiesToDisplay->map(fn($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
+            $facilityCount = count($facilities);
 
             if (!empty($facilities)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Facilities" . ($filterApplied ? " (filtered for {$participantCount} participants)" : "") . ":\n- " . implode("\n- ", $facilities)]);
+                if ($filterApplied) {
+                    array_unshift($messages, [
+                        'role'    => 'system',
+                        'content' => "STRICT FACILITY RECOMMENDATION RULE:\nThe 'Available Facilities (filtered for {$participantCount} participants)' list already contains the COMPLETE and EXACT set of valid facilities for this participant count. There are exactly {$facilityCount} valid facilities in that filtered list.\n\nWhen the user asks for facility recommendations for {$participantCount} participants, you MUST:\n- Recommend ONLY facilities from that filtered list\n- Recommend ALL {$facilityCount} facilities from that filtered list\n- Do NOT mention any facility outside that filtered list\n- Do NOT omit any facility from that filtered list\n- Do NOT recompute percentages, ranges, or suitability yourself\n- Do NOT provide sample recommendations, examples, or a partial shortlist\n- If the user asks 'any other rooms?', answer no if all {$facilityCount} facilities were already shown\n\nRequired response behavior:\n- If {$facilityCount} is greater than 0, list all {$facilityCount} facilities using the exact IDs, names, buildings, and capacities from the filtered list\n- If {$facilityCount} is 0, say that no facilities match the {$participantCount}-participant requirement\n- After listing facilities, ask whether the user wants to check availability or proceed with booking\n\nDo not mention Main Auditorium, Assembly Hall, or any other facility unless it appears in the filtered list.",
+                    ]);
+                }
                 // Add a reminder to the AI to warn about already approved bookings for selected facilities
                 array_unshift($messages, [
                     'role'    => 'system',
@@ -447,7 +461,7 @@ class ChatController extends Controller
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
             }
 
-            array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. Facilities are recommended based on:\n- Minimum: At least 50% capacity utilization (to avoid empty rooms)\n- Maximum: Can accommodate all participants\nFor example, for 40 participants, recommend rooms with capacity 40-80. Always present the filtered results and explain why those facilities are recommended."]);
+            array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. The valid capacity rule is:\n- Minimum: Facility capacity must be at least 100% of the participant count\n- Maximum: Facility capacity must be at most 200% of the participant count\nFor example, for 40 participants, only facilities with capacity 40-80 are valid. Never describe this as 40%-80% of the participant count. Never recommend facilities outside the filtered results. Always present the filtered results exactly as provided."]);
             // Updated flow: ask for event type and map to priority level, no separate priority reason
             // Updated order: Description moved after Event Type, and Additional Message retained at end.
                 // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
