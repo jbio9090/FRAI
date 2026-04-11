@@ -715,7 +715,7 @@ class ChatController extends Controller
     public function uploadFile(Request $request): JsonResponse
     {
         try {
-            $request->validate([
+            $validated = $request->validate([
                 'files' => 'required|array|min:1',
                 'files.*' => 'required|file|max:10485760|mimes:jpeg,jpg,png,pdf,doc,docx,xls,xlsx,ppt,pptx',
             ]);
@@ -725,17 +725,31 @@ class ChatController extends Controller
             $sessionId = session()->getId();
             $tempDir = "chat-uploads/{$userId}/{$sessionId}";
 
-            if (!Storage::disk('public')->exists($tempDir)) {
-                Storage::disk('public')->makeDirectory($tempDir);
+            try {
+                if (!Storage::disk('public')->exists($tempDir)) {
+                    Storage::disk('public')->makeDirectory($tempDir, 0755, true);
+                }
+            } catch (\Exception $dirErr) {
+                \Log::error("Failed to create temp directory: " . $dirErr->getMessage());
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Failed to create upload directory',
+                ], 500);
             }
 
             foreach ($request->file('files') as $file) {
-                $fileId = Str::uuid();
-                $filename = $fileId . '.' . $file->getClientOriginalExtension();
-                
-                $path = Storage::disk('public')->putFileAs($tempDir, $file, $filename);
-                
-                if ($path) {
+                try {
+                    $fileId = Str::uuid();
+                    $extension = $file->getClientOriginalExtension();
+                    $filename = $fileId . '.' . $extension;
+                    
+                    $path = Storage::disk('public')->putFileAs($tempDir, $file, $filename);
+                    
+                    if (!$path) {
+                        \Log::warning("File storage returned false for: {$filename}");
+                        continue;
+                    }
+
                     $uploadedFiles[] = [
                         'id' => (string) $fileId,
                         'name' => $file->getClientOriginalName(),
@@ -743,7 +757,17 @@ class ChatController extends Controller
                         'mime_type' => $file->getMimeType(),
                         'url' => Storage::disk('public')->url($path),
                     ];
+                } catch (\Exception $fileErr) {
+                    \Log::error("Failed to upload file: " . $fileErr->getMessage());
+                    continue;
                 }
+            }
+
+            if (empty($uploadedFiles)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No files were successfully uploaded',
+                ], 422);
             }
 
             return response()->json([
@@ -772,7 +796,7 @@ class ChatController extends Controller
             ], 422);
 
         } catch (\Exception $e) {
-            \Log::error('File upload error: ' . $e->getMessage());
+            \Log::error('File upload error: ' . $e->getMessage() . ' ' . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'error' => 'File upload failed',
