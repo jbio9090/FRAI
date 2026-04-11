@@ -124,6 +124,20 @@ class ChatController extends Controller
             $sessionMessages  = $this->loadSession();
             $incomingMessages = $request->input('messages', []);
 
+            $sessionMessages = array_filter($sessionMessages, function($msg) {
+                $content = $msg['content'] ?? '';
+                $isStaleContext = 
+                    strpos($content, 'APPROVED BOOKINGS TABLE') !== false ||
+                    strpos($content, 'CURRENT FACILITY REQUESTS') !== false ||
+                    strpos($content, 'Available Facilities') !== false ||
+                    strpos($content, 'Available Equipment') !== false ||
+                    strpos($content, 'FACILITY CAPACITY MATCHING') !== false ||
+                    strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
+                    strpos($content, 'When the user asks whether a facility is available') !== false;
+                
+                return $msg['role'] !== 'system' || !$isStaleContext;
+            });
+
             $messages = array_merge($sessionMessages, $incomingMessages);
 
             $participantCount = $request->input('participant_count');
@@ -153,12 +167,18 @@ class ChatController extends Controller
                     );
                 })->toArray();
 
-                array_unshift($messages, [
-                    'role'    => 'system',
-                    'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines),
-                ]);
-
-                $this->injectApprovedBookingTable($messages, $allRequests);
+                if (!empty($lines)) {
+                    array_unshift($messages, [
+                        'role'    => 'system',
+                        'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines),
+                    ]);
+                    $this->injectApprovedBookingTable($messages, $allRequests);
+                } else {
+                    array_unshift($messages, [
+                        'role'    => 'system',
+                        'content' => "There are currently NO pending or approved facility bookings in the system. All facilities are available unless specified otherwise.",
+                    ]);
+                }
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch requests for chat: ' . $e->getMessage());
             }
@@ -351,7 +371,22 @@ class ChatController extends Controller
 
         // Load session history and merge
         $sessionMessages = $this->loadSession();
-        $messages        = array_merge($sessionMessages, $messages);
+        
+        $sessionMessages = array_filter($sessionMessages, function($msg) {
+            $content = $msg['content'] ?? '';
+            $isStaleContext = 
+                strpos($content, 'APPROVED BOOKINGS TABLE') !== false ||
+                strpos($content, 'CURRENT FACILITY REQUESTS') !== false ||
+                strpos($content, 'Available Facilities') !== false ||
+                strpos($content, 'Available Equipment') !== false ||
+                strpos($content, 'FACILITY CAPACITY MATCHING') !== false ||
+                strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
+                strpos($content, 'When the user asks whether a facility is available') !== false;
+            
+            return $msg['role'] !== 'system' || !$isStaleContext;
+        });
+        
+        $messages = array_merge($sessionMessages, $messages);
 
         // Inject DB context 
         try {
@@ -371,8 +406,12 @@ class ChatController extends Controller
                 );
             })->toArray();
 
-            array_unshift($messages, ['role' => 'system', 'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines)]);
-            $this->injectApprovedBookingTable($messages, $allRequests);
+            if (!empty($lines)) {
+                array_unshift($messages, ['role' => 'system', 'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines)]);
+                $this->injectApprovedBookingTable($messages, $allRequests);
+            } else {
+                array_unshift($messages, ['role' => 'system', 'content' => "There are currently NO pending or approved facility bookings in the system. All facilities are available unless specified otherwise."]);
+            }
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch requests: ' . $e->getMessage());
         }
