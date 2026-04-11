@@ -12,12 +12,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use App\PriorityLevel;
-
+use App\Services\RAG\AIRecommendationService;
 
 class RequestService
 {
     public function __construct(
-        protected AuditLogger $auditLogger
+        protected AuditLogger $auditLogger,
+        protected AIRecommendationService $aiRecommender,
     ) {}
 
     public function get(
@@ -326,16 +327,16 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $requestedDate  = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$booking['time_start']}");
-            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$booking['time_end']}");
+            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', $requestedDate . ' ' . substr($booking['time_start'], 0, 5));
+            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', $requestedDate . ' ' . substr($booking['time_end'], 0, 5));
 
             foreach ($existingBookings as $existing) {
                 if ($existing->facility_id != $booking['facility_id'] || $existing->date_requested != $requestedDate) {
                     continue;
                 }
 
-                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$existing->time_start}");
-                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$existing->time_end}");
+                $existingStart = Carbon::createFromFormat('Y-m-d H:i', $requestedDate . ' ' . substr($existing->time_start, 0, 5));
+                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', $requestedDate . ' ' . substr($existing->time_end, 0, 5));
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $status = $existing->request->status;
@@ -387,23 +388,14 @@ class RequestService
             }
         }
 
-        if ($hasApprovedConflict) {
-            $recommended_action        = RequestStatus::DENIED;
-            $recommended_action_reason = "Time conflict with approved events";
-        } elseif ($pendingConflicts->isNotEmpty()) {
-            $recommended_action        = RequestStatus::APPROVED;
-            $recommended_action_reason = "Time conflict with pending requests";
-        } elseif ($hasExternalEquipment) {
-            $recommended_action        = RequestStatus::CONDITIONALLY_APPROVED;
-            $recommended_action_reason = "Approve request along with the external equipment";
-        } else {
-            $word                      = count($validated['facility_bookings']) > 1 ? "facilities" : "facility";
-            $recommended_action_reason = "No conflicting schedule found for all the requested $word";
-        }
+
+        $saved_request->loadMissing(['requestFacilities.facility', 'requestFacilities.externalEquipments', 'equipment']);
+
+        $ai = $this->aiRecommender->recommend($saved_request);
 
         $saved_request->update([
-            'recommended_action'        => $recommended_action,
-            'recommended_action_reason' => $recommended_action_reason,
+            'recommended_action'        => $ai['status'],
+            'recommended_action_reason' => $ai['reason'],
             'pending_conflict_rf_ids'   => $pendingConflictRfIds ?: [],
             'approved_conflict_rf_ids'  => $approvedConflictRfIds ?: [],
         ]);
