@@ -22,7 +22,18 @@ export async function createRequest(payload: CreateRequestPayload): Promise<{ re
 
     if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error ${response.status}`);
+        if (response.status === 422 && errorData?.errors && typeof errorData.errors === 'object') {
+            const validationDetails = Object.entries(errorData.errors)
+                .map(([field, messages]) => {
+                    const normalizedMessages = Array.isArray(messages) ? messages.join(', ') : String(messages);
+                    return `${field}: ${normalizedMessages}`;
+                })
+                .join(' | ');
+
+            throw new Error(validationDetails || errorData.error || 'Validation failed');
+        }
+
+        throw new Error(errorData.message || errorData.error || `HTTP error ${response.status}`);
     }
 
     return await response.json();
