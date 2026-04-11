@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { router, Link } from '@inertiajs/react';
 import { usePermission } from '@/hooks/use-permission';
 import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
@@ -28,7 +28,7 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
 
 
 export default function RequestCard({
-    request,
+    request: initialRequest,
     page_title,
     handleSelection,
     isSelecting,
@@ -43,6 +43,45 @@ export default function RequestCard({
     const { hasPermission } = usePermission();
     const [isCommentInputOpen, setCommentInputState] = useState(false);
     const [comment, setComment] = useState("");
+    const [request, setRequest] = useState(initialRequest);
+    const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(
+        !initialRequest.recommended_action
+    );
+
+    useEffect(() => {
+        if (!isLoadingRecommendation) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(route('request.recommendation', [request.id]), {
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (!res.ok) {
+                    console.error('Recommendation endpoint error:', res.status);
+                    clearInterval(interval);
+                    return;
+                }
+
+                const data = await res.json();
+
+                if (data.recommended_action) {
+                    setRequest(prev => ({
+                        ...prev,
+                        recommended_action: data.recommended_action,
+                        recommended_action_reason: data.recommended_action_reason,
+                    }));
+                    setIsLoadingRecommendation(false);
+                    clearInterval(interval);
+                }
+            } catch (e) {
+                console.error('Polling error:', e);
+                clearInterval(interval);
+            }
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [request.id, isLoadingRecommendation]);
 
     const toggleInput = () => {
         setCommentInputState(prev => !prev);
@@ -111,13 +150,10 @@ export default function RequestCard({
                             {request.on_hold && (
                                 <div className="px-2 py-1 font-semibold text-xs text-yellow-900 dark:text-yellow-100 border-yellow-900 dark:border-yellow-200 border-1 rounded-full flex gap-1 items-center bg-yellow-200/50">
                                     <CirclePause size={14} />
-                                    <span>
-                                        On Hold
-                                    </span>
+                                    <span>On Hold</span>
                                 </div>
                             )}
                         </div>
-
 
                         <p className="mt-2 text-foreground/70 text-sm">{request.description}</p>
 
@@ -132,7 +168,6 @@ export default function RequestCard({
                                 ))}
                             </div>
                         )}
-
 
                         <div className="text-sm mt-4 flex gap-2 items-center">
                             <AvatarWithInitials
@@ -154,7 +189,7 @@ export default function RequestCard({
                     </Link>
                 </div>
 
-                <RequestDetails request={request} />
+                <RequestDetails request={request} isLoadingRecommendation={isLoadingRecommendation} />
 
                 {request.files?.length > 0 && (
                     <div className="w-full">
@@ -168,9 +203,19 @@ export default function RequestCard({
                         <div className="flex items-center">
                             <div className="flex flex-col">
                                 <span className='text-xs font-semibold text-muted-foreground'>Recommendation</span>
-                                <span className={cn('font-black ', request.recommended_action === "Denied" && " text-destructive")}>
-                                    {recommendedActionToPresentTense(request.recommended_action)}
-                                </span>
+
+                                {isLoadingRecommendation ? (
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                                        <span className="text-sm">Analyzing request...</span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <span className={cn('font-black', request.recommended_action === "Denied" && "text-destructive")}>
+                                            {recommendedActionToPresentTense(request.recommended_action)}
+                                        </span>
+                                    </>
+                                )}
                             </div>
 
                             <div className="flex justify-end gap-2 w-content ml-auto">
@@ -184,12 +229,8 @@ export default function RequestCard({
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="outline">
-                                            <span className="hidden xs:block">
-                                                More
-                                            </span>
-                                            <span className="block xs:hidden">
-                                                Actions
-                                            </span>
+                                            <span className="hidden xs:block">More</span>
+                                            <span className="block xs:hidden">Actions</span>
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
@@ -238,7 +279,7 @@ export default function RequestCard({
 }
 
 
-function RequestDetails({ request }: { request: Request }) {
+function RequestDetails({ request, isLoadingRecommendation }: { request: Request; isLoadingRecommendation: boolean }) {
     const isPending: boolean = request.status === "Pending";
     const [activeTab, setActiveTab] = useState("facilities");
 
@@ -360,10 +401,7 @@ function RequestDetails({ request }: { request: Request }) {
             content: request.comments?.length > 0 ? (
                 <div className='flex flex-col gap-3 mt-4'>
                     {request.comments.map((comment) => (
-                        <Comment
-                            comment={comment}
-                            key={comment.id}
-                        />
+                        <Comment comment={comment} key={comment.id} />
                     ))}
                 </div>
             ) : (
@@ -375,11 +413,21 @@ function RequestDetails({ request }: { request: Request }) {
             icon: <ThumbsUp size={16} />,
             label: "Recommendation",
             content: (
-                <>
-                    <p className='font-semibold text-muted-foreground mt-4'>Recommended Action</p>
-                    <p className='font-bold'>{request.recommended_action}</p>
-                    <p className='text-sm'>{request.recommended_action_reason}</p>
-                </>
+                <div className="mt-4">
+                    <p className='font-semibold text-muted-foreground'>Recommended Action</p>
+
+                    {isLoadingRecommendation ? (
+                        <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                            <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                            <span className="text-sm">Analyzing request...</span>
+                        </div>
+                    ) : (
+                        <>
+                            <p className='font-bold'>{request.recommended_action}</p>
+                            <p className='text-sm text-muted-foreground'>{request.recommended_action_reason}</p>
+                        </>
+                    )}
+                </div>
             ),
         }] : []),
     ];

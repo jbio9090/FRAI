@@ -40,6 +40,14 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
     });
 
+    Route::get('/requests/{id}/recommendation', function ($id) {
+        $request = \App\Models\Request::findOrFail($id);
+        return response()->json([
+            'recommended_action'        => $request->getRawOriginal('recommended_action'),
+            'recommended_action_reason' => $request->recommended_action_reason,
+        ]);
+    })->name('request.recommendation');
+
     Route::get('/rules', [RulesController::class, "index"])->name("rules");
 
     // Admin lang po

@@ -100,7 +100,11 @@ class AIRecommendationService
 
     private function buildRequestContext(FacilityRequest $request): string
     {
-        $request->loadMissing(['facilities', 'requestFacilities', 'equipment']);
+        $request->loadMissing([
+            'requestFacilities.facility',
+            'requestFacilities.externalEquipments',
+            'equipment',
+        ]);
 
         $facilities = $request->requestFacilities->map(
             fn($rf) =>
@@ -116,19 +120,43 @@ class AIRecommendationService
             ->flatMap(fn($rf) => $rf->externalEquipments ?? collect())
             ->isNotEmpty();
 
-        $hasConflicts = !empty($request->approved_conflict_rf_ids) || !empty($request->pending_conflict_rf_ids);
+        $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
+        $pendingConflictRfIds  = $request->pending_conflict_rf_ids ?? [];
+
+        $approvedConflictDetails = '';
+        $pendingConflictDetails  = '';
+
+        if (!empty($approvedConflictRfIds)) {
+            $approvedConflictDetails = \App\Models\RequestFacility::whereIn('id', $approvedConflictRfIds)
+                ->with(['facility', 'request.user'])
+                ->get()
+                ->map(
+                    fn($rf) =>
+                    "  - \"{$rf->request->title}\" by {$rf->request->user->name} at {$rf->facility->name} ({$rf->time_start}–{$rf->time_end})"
+                )->join("\n");
+        }
+
+        if (!empty($pendingConflictRfIds)) {
+            $pendingConflictDetails = \App\Models\RequestFacility::whereIn('id', $pendingConflictRfIds)
+                ->with(['facility', 'request.user'])
+                ->get()
+                ->map(
+                    fn($rf) =>
+                    "  - \"{$rf->request->title}\" by {$rf->request->user->name} at {$rf->facility->name} ({$rf->time_start}–{$rf->time_end})"
+                )->join("\n");
+        }
 
         return implode("\n", array_filter([
             "Title: {$request->title}",
             "Description: {$request->description}",
             "Priority Level: {$request->priority_level->name}",
-            $request->priority_reason ? "Priority Reason: {$request->priority_reason}" : null,
+            $request->priority_reason        ? "Priority Reason: {$request->priority_reason}"          : null,
             "Facilities Requested: {$facilities}",
-            $equipment          ? "Equipment: {$equipment}"                                               : null,
-            $hasExternalEquipment ? "Has External (non-owned) Equipment: Yes"                             : null,
-            !empty($request->approved_conflict_rf_ids) ? "Conflicts with APPROVED bookings: Yes"         : null,
-            !empty($request->pending_conflict_rf_ids)  ? "Conflicts with PENDING bookings: Yes"          : null,
-            $request->approved_by ? "Pre-approved by: " . implode(', ', $request->approved_by)          : null,
+            $equipment                        ? "Equipment: {$equipment}"                                : null,
+            $hasExternalEquipment             ? "Has External (non-owned) Equipment: Yes"               : null,
+            $approvedConflictDetails          ? "Conflicts with APPROVED bookings:\n{$approvedConflictDetails}" : "Conflicts with approved bookings: None",
+            $pendingConflictDetails           ? "Conflicts with PENDING bookings:\n{$pendingConflictDetails}"   : "Conflicts with pending bookings: None",
+            $request->approved_by             ? "Pre-approved by: " . implode(', ', $request->approved_by)     : null,
         ]));
     }
 

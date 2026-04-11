@@ -59,77 +59,77 @@ class FacilityFormRequest extends FormRequest
         }
     }
 
-    public function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $validator) {
-            $bookings = $this->input('facility_bookings', []);
+    // public function withValidator(Validator $validator): void
+    // {
+    //     $validator->after(function (Validator $validator) {
+    //         $bookings = $this->input('facility_bookings', []);
 
-            foreach ($bookings as $bookingIndex => $booking) {
-                $facilityId = $booking['facility_id'] ?? null;
-                $date       = $booking['date'] ?? null;
-                $timeStart  = $booking['time_start'] ?? null;
-                $timeEnd    = $booking['time_end'] ?? null;
+    //         foreach ($bookings as $bookingIndex => $booking) {
+    //             $facilityId = $booking['facility_id'] ?? null;
+    //             $date       = $booking['date'] ?? null;
+    //             $timeStart  = $booking['time_start'] ?? null;
+    //             $timeEnd    = $booking['time_end'] ?? null;
 
-                if (!$facilityId || !$date || !$timeStart || !$timeEnd) continue;
+    //             if (!$facilityId || !$date || !$timeStart || !$timeEnd) continue;
 
-                $excludeRequestId = $this->route('request')?->id;
+    //             $excludeRequestId = $this->route('request')?->id;
 
-                // Validate regular equipment
-                foreach ($booking['equipment'] ?? [] as $eqIndex => $item) {
-                    $eq = Equipment::find($item['equipment_id'] ?? null);
-                    if (!$eq) continue;
+    //             // Validate regular equipment
+    //             foreach ($booking['equipment'] ?? [] as $eqIndex => $item) {
+    //                 $eq = Equipment::find($item['equipment_id'] ?? null);
+    //                 if (!$eq) continue;
 
-                    $available = $eq->quantityAvailableInFacility(
-                        $facilityId,
-                        $date,
-                        $timeStart,
-                        $timeEnd,
-                        $excludeRequestId
-                    );
+    //                 $available = $eq->quantityAvailableInFacility(
+    //                     $facilityId,
+    //                     $date,
+    //                     $timeStart,
+    //                     $timeEnd,
+    //                     $excludeRequestId
+    //                 );
 
-                    if ($item['quantity_needed'] > $available) {
-                        $validator->errors()->add(
-                            "facility_bookings.{$bookingIndex}.equipment.{$eqIndex}.quantity_needed",
-                            "{$eq->name} only has {$available} units available in this facility for this time slot."
-                        );
-                    }
-                }
+    //                 if ($item['quantity_needed'] > $available) {
+    //                     $validator->errors()->add(
+    //                         "facility_bookings.{$bookingIndex}.equipment.{$eqIndex}.quantity_needed",
+    //                         "{$eq->name} only has {$available} units available in this facility for this time slot."
+    //                     );
+    //                 }
+    //             }
 
-                // Validate borrowed equipment
-                foreach ($booking['borrowed_equipment'] ?? [] as $eqIndex => $item) {
-                    $eq = Equipment::find($item['equipment_id'] ?? null);
-                    if (!$eq) continue;
+    //             // Validate borrowed equipment
+    //             foreach ($booking['borrowed_equipment'] ?? [] as $eqIndex => $item) {
+    //                 $eq = Equipment::find($item['equipment_id'] ?? null);
+    //                 if (!$eq) continue;
 
-                    $sourceFacilityId = $item['source_facility_id'] ?? null;
-                    if (!$sourceFacilityId) continue;
+    //                 $sourceFacilityId = $item['source_facility_id'] ?? null;
+    //                 if (!$sourceFacilityId) continue;
 
-                    // Can't borrow from the same facility — just use regular equipment
-                    if ($sourceFacilityId == $facilityId) {
-                        $validator->errors()->add(
-                            "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.source_facility_id",
-                            "Cannot borrow from the same facility. Use the regular equipment section instead."
-                        );
-                        continue;
-                    }
+    //                 // Can't borrow from the same facility — just use regular equipment
+    //                 if ($sourceFacilityId == $facilityId) {
+    //                     $validator->errors()->add(
+    //                         "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.source_facility_id",
+    //                         "Cannot borrow from the same facility. Use the regular equipment section instead."
+    //                     );
+    //                     continue;
+    //                 }
 
-                    $available = $eq->quantityAvailableToBorrowFrom(
-                        $sourceFacilityId,
-                        $date,
-                        $timeStart,
-                        $timeEnd,
-                        $excludeRequestId
-                    );
+    //                 $available = $eq->quantityAvailableToBorrowFrom(
+    //                     $sourceFacilityId,
+    //                     $date,
+    //                     $timeStart,
+    //                     $timeEnd,
+    //                     $excludeRequestId
+    //                 );
 
-                    if ($item['quantity_needed'] > $available) {
-                        $validator->errors()->add(
-                            "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.quantity_needed",
-                            "{$eq->name} only has {$available} units available to borrow from that facility for this time slot."
-                        );
-                    }
-                }
-            }
-        });
-    }
+    //                 if ($item['quantity_needed'] > $available) {
+    //                     $validator->errors()->add(
+    //                         "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.quantity_needed",
+    //                         "{$eq->name} only has {$available} units available to borrow from that facility for this time slot."
+    //                     );
+    //                 }
+    //             }
+    //         }
+    //     });
+    // }
 
     public function attributes(): array
     {

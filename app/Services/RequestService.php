@@ -220,6 +220,8 @@ class RequestService
                 'priority_level'  => $validated['priority_level'] ?? 0,
                 'priority_reason' => $validated['priority_reason'] ?? null,
                 'approved_by'     => $validated['approved_by'] ?? null,
+                'recommended_action'        => null,
+                'recommended_action_reason' => null,
             ]);
 
             $changes = collect($facilityRequest->only([
@@ -386,6 +388,11 @@ class RequestService
             }
         }
 
+        $saved_request->update([
+            'pending_conflict_rf_ids'  => $pendingConflictRfIds ?: [],
+            'approved_conflict_rf_ids' => $approvedConflictRfIds ?: [],
+        ]);
+        $saved_request->refresh();
 
         $saved_request->loadMissing(['requestFacilities.facility', 'requestFacilities.externalEquipments', 'equipment']);
 
@@ -394,8 +401,6 @@ class RequestService
         $saved_request->update([
             'recommended_action'        => $ai['status'],
             'recommended_action_reason' => $ai['reason'],
-            'pending_conflict_rf_ids'   => $pendingConflictRfIds ?: [],
-            'approved_conflict_rf_ids'  => $approvedConflictRfIds ?: [],
         ]);
 
         $savedRequestRfIds = $saved_request->requestFacilities()->pluck('id')->toArray();
@@ -452,7 +457,7 @@ class RequestService
     public function approve(int $request_id): FacilityRequest
     {
         return DB::transaction(function () use ($request_id) {
-            $request = FacilityRequest::with(['requestFacilities'])
+            $request = FacilityRequest::with(['requestFacilities', 'equipment'])
                 ->lockForUpdate()
                 ->findOrFail($request_id);
 
@@ -464,19 +469,6 @@ class RequestService
             ])->toArray();
 
             $conflictingRequests = $this->getConflictingApprovedRequests($bookings, $request->id);
-
-            if ($conflictingRequests->isEmpty()) {
-                $request->update([
-                    'status'             => RequestStatus::APPROVED,
-                    'on_hold'            => false,
-                    'held_by_request_id' => null,
-                    'processed_by'       => Auth::id(),
-                    'processed_at'       => Carbon::now(),
-                ]);
-
-                $this->auditLogger::requestApproved($request);
-                return $request;
-            }
 
             $request->update([
                 'status'             => RequestStatus::APPROVED,
@@ -507,8 +499,69 @@ class RequestService
                 $this->auditLogger::requestHeld($conflicting, $request);
             }
 
+            $equipmentDisplaced = $this->getEquipmentDisplacedRequests($request);
+
+            foreach ($equipmentDisplaced as $conflicting) {
+                if ($conflicting->on_hold) continue;
+
+                $conflicting->update([
+                    'status'                    => RequestStatus::FOR_RESCHEDULE,
+                    'on_hold'                   => true,
+                    'held_by_request_id'        => $request->id,
+                    'recommended_action'        => RequestStatus::DENIED,
+                    'recommended_action_reason' => 'Equipment no longer available — superseded by approved request: "' . $request->title . '"',
+                    'processed_by'              => null,
+                    'processed_at'              => null,
+                ]);
+
+                $conflicting->comments()->create([
+                    'user_id' => Auth::id(),
+                    'body'    => 'Marked for reschedule — equipment taken by approved request: "' . $request->title . '"',
+                ]);
+
+                $this->auditLogger::requestHeld($conflicting, $request);
+            }
+
             return $request->fresh();
         });
+    }
+
+    private function getEquipmentDisplacedRequests(FacilityRequest $approvedRequest): Collection
+    {
+        $displacedIds = collect();
+
+        foreach ($approvedRequest->requestFacilities as $rf) {
+            $date      = Carbon::parse($rf->date_requested)->format('Y-m-d');
+            $timeStart = substr($rf->time_start, 0, 5);
+            $timeEnd   = substr($rf->time_end, 0, 5);
+
+            foreach ($approvedRequest->equipment as $equipment) {
+                $available = $equipment->quantityAvailable($date, $timeStart, $timeEnd, null);
+
+                if ($available >= 0) continue;
+
+                $pendingRequests = FacilityRequest::whereIn('status', [RequestStatus::PENDING, RequestStatus::CONDITIONALLY_APPROVED])
+                    ->where('on_hold', false)
+                    ->where('id', '!=', $approvedRequest->id)
+                    ->whereHas('equipment', fn($q) => $q->where('equipments.id', $equipment->id))
+                    ->whereHas('requestFacilities', function ($q) use ($date, $timeStart, $timeEnd) {
+                        $q->where('date_requested', $date)
+                            ->where('time_start', '<', $timeEnd)
+                            ->where('time_end', '>', $timeStart);
+                    })
+                    ->get();
+
+                foreach ($pendingRequests as $pending) {
+                    $displacedIds->push($pending->id);
+                }
+            }
+        }
+
+        if ($displacedIds->isEmpty()) {
+            return collect();
+        }
+
+        return FacilityRequest::whereIn('id', $displacedIds->unique())->get();
     }
 
     private function getConflictingApprovedRequests(array $bookings, int $excludeRequestId): Collection
@@ -517,8 +570,8 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_start']}");
-            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_end']}");
+            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($booking['time_start'], 0, 5));
+            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($booking['time_end'], 0, 5));
 
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
@@ -531,8 +584,8 @@ class RequestService
                 ->get();
 
             foreach ($existingBookings as $existing) {
-                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_start}");
-                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_end}");
+                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($existing->time_start, 0, 5));
+                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($existing->time_end, 0, 5));
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $conflictingIds->push($existing->request_id);
@@ -575,8 +628,8 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_start']}");
-            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_end']}");
+            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($booking['time_start'], 0, 5));
+            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($booking['time_end'], 0, 5));
 
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
@@ -589,8 +642,8 @@ class RequestService
                 ->get();
 
             foreach ($existingBookings as $existing) {
-                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_start}");
-                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_end}");
+                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($existing->time_start, 0, 5));
+                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} " . substr($existing->time_end, 0, 5));
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $conflictingIds->push($existing->request_id);

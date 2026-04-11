@@ -226,7 +226,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             return unique;
         }, [] as Array<FacilityEquipment & { sources: { facilityId: number; facilityName: string; quantity: number }[] }>);
 
-    const { data, setData, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, transform } = useForm({
         title: existingRequest?.title ?? '',
         description: existingRequest?.description ?? '',
         facility_bookings: existingRequest?.facility_bookings ?? [] as FacilityBooking[],
@@ -234,6 +234,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         priority_reason: existingRequest?.priority_reason ?? '',
         approved_by: existingRequest?.approved_by ?? [] as string[],
         files: [] as File[],
+        existing_file_ids: [] as number[],
+        _method: '',
     });
 
     useEffect(() => {
@@ -490,40 +492,24 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     function submit(e: React.FormEvent) {
         e.preventDefault();
-        setIsSubmitting(true);
 
-        const payload: Record<string, unknown> = {
-            title: data.title,
-            description: data.description,
-            facility_bookings: JSON.stringify(data.facility_bookings),
-            priority_level: data.priority_level,
-            priority_reason: data.priority_reason,
+        transform((d) => ({
+            ...d,
+            facility_bookings: JSON.stringify(d.facility_bookings),
             files: attachedFiles.map(f => f.file),
             existing_file_ids: existingFiles.map(f => f.id),
-            approved_by: data.approved_by,
-        };
+            _method: isEditing ? 'PUT' : '',
+        }));
 
-        if (isEditing) {
-            router.post(
-                route('requests.update', existingRequest!.id),
-                { ...payload, _method: 'PUT' },
-                {
-                    forceFormData: true,
-                    onSuccess: () => { clearDraft(existingRequest?.id); setIsSubmitting(false); },
-                    onError: (errors) => { console.log('validation errors:', errors); setIsSubmitting(false); },
-                }
-            );
-        } else {
-            router.post(
-                route('requests.store'),
-                payload,
-                {
-                    forceFormData: true,
-                    onSuccess: () => { clearDraft(); setIsSubmitting(false); },
-                    onError: () => setIsSubmitting(false),
-                }
-            );
-        }
+        const url = isEditing
+            ? route('requests.update', existingRequest!.id)
+            : route('requests.store');
+
+        post(url, {
+            forceFormData: true,
+            onSuccess: () => clearDraft(existingRequest?.id),
+            onError: (errs) => console.log('validation errors:', errs),
+        });
     }
 
     return (
@@ -554,24 +540,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         {Object.keys(errors).length > 0 && (
                             <Alert variant="destructive" className="border-destructive bg-destructive/4 mb-0 mt-0">
                                 <AlertCircleIcon />
-                                <AlertTitle>Error with submition. Please properly fill in all the details.</AlertTitle>
+                                <AlertTitle>Error with submission. Please properly fill in all the details.</AlertTitle>
                                 <AlertDescription>
                                     <ul className="list-disc pl-5 space-y-1 mt-1">
-                                        {errors.title && <li>{errors.title}</li>}
-                                        {errors.description && <li>{errors.description}</li>}
-                                        {errors.priority_level && <li>{errors.priority_level}</li>}
-                                        {errors.priority_reason && <li>{errors.priority_reason}</li>}
-                                        {errors.files && <li>{errors.files}</li>}
-
-                                        {typeof errors.facility_bookings === 'string' && (
-                                            <li>{errors.facility_bookings}</li>
-                                        )}
-
-                                        {typeof errors.facility_bookings === 'object' && errors.facility_bookings !== null &&
-                                            Object.values(errors.facility_bookings).map((msg, i) => (
-                                                <li key={i}>{msg}</li>
-                                            ))
-                                        }
+                                        {Object.entries(errors).map(([key, msg]) => (
+                                            <li key={key}>{msg as string}</li>
+                                        ))}
                                     </ul>
                                 </AlertDescription>
                             </Alert>

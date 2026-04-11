@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\RequestStatus;
 
 class Equipment extends Model
 {
@@ -39,6 +40,11 @@ class Equipment extends Model
     public function quantityAllocated(string $date, string $timeStart, string $timeEnd, ?int $excludeRequestId = null): int
     {
         return $this->requests()
+            ->whereIn('requests.status', [
+                RequestStatus::APPROVED,
+                RequestStatus::CONDITIONALLY_APPROVED,
+            ])
+            ->where('requests.on_hold', false)
             ->whereHas('facilities', function ($q) use ($date, $timeStart, $timeEnd) {
                 $q->where('request_facilities.date_requested', $date)
                     ->where('request_facilities.time_start', '<', $timeEnd)
