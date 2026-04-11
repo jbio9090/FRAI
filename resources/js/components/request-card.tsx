@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, CalendarClock } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, IterationCw } from 'lucide-react';
 import { PRIORITY_LABELS } from '@/types/request';
 import { motion } from 'motion/react';
 import { Request } from '@/types/request';
@@ -18,6 +18,7 @@ import { AttachedFileList } from './attached-file-list';
 import AvatarWithInitials from './avatar-with-initials';
 import Comment from './comment';
 import StatusTag from './status-tag';
+import AnimatedText from './animated-text';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -125,7 +126,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection(request.id)}
             className={cn(
-                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200",
+                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-xl",
                 isSelecting && "cursor-pointer hover:border-primary/50",
                 isSelected && "border-primary ring-1 ring-primary"
             )}
@@ -205,15 +206,16 @@ export default function RequestCard({
                                 <span className='text-xs font-semibold text-muted-foreground'>Recommendation</span>
 
                                 {isLoadingRecommendation ? (
-                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                        <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                                        <span className="text-sm">Analyzing request...</span>
-                                    </div>
+                                    <AnimatedText />
                                 ) : (
                                     <>
-                                        <span className={cn('font-black', request.recommended_action === "Denied" && "text-destructive")}>
+                                        <motion.span 
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ duration: 1, ease: "easeIn" }}
+                                        className={cn('font-black', request.recommended_action === "Denied" && "text-destructive")}>
                                             {recommendedActionToPresentTense(request.recommended_action)}
-                                        </span>
+                                        </motion.span>
                                     </>
                                 )}
                             </div>
@@ -248,7 +250,7 @@ export default function RequestCard({
                                                 <span>Conditionally Approve</span>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem onClick={() => handleAction("for_reschedule")}>
-                                                <CalendarClock size={16} />
+                                                <IterationCw size={16} />
                                                 <span>Mark for Reschedule</span>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem onClick={toggleInput}>
@@ -418,8 +420,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
 
                     {isLoadingRecommendation ? (
                         <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                            <div className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                            <span className="text-sm">Analyzing request...</span>
+                            <AnimatedText />
                         </div>
                     ) : (
                         <>
