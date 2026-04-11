@@ -10,5 +10,5 @@ class Rule extends Model
     /** @use HasFactory<\Database\Factories\RulesFactory> */
     use HasFactory;
 
-    protected $fillable = ["rule"];
+    protected $fillable = ["rule", "priority"];
 }

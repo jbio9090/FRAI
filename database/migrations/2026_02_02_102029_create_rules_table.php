@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->timestamps();
             $table->string("rule");
+            $table->unsignedInteger('priority')->default(0)->after('rule');
         });
     }
 

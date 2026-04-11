@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { Plus, X, Pencil, Check } from 'lucide-react';
+import { Plus, X, Pencil, Check, ChevronUp, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -8,12 +8,14 @@ import { Item, ItemContent, ItemActions, ItemDescription } from '@/components/ui
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 
-
 interface Rule {
     id: number;
     rule: string;
+    priority: number;
     created_at: string;
 }
+
+
 
 interface DashboardProps {
     children: React.ReactNode;
@@ -21,24 +23,18 @@ interface DashboardProps {
 }
 
 export default function Rules({ rules }: DashboardProps) {
-
     const { hasPermission } = usePermission();
     const [showInput, setInputState] = useState<boolean>(false);
-    const { post, data, setData } = useForm({
-        rule: "",
-    });
+    const { post, data, setData } = useForm({ rule: "" });
 
     function submit(e) {
         e.preventDefault();
-
         post(route('rules.add'), {
             onSuccess: () => {
                 setData("rule", "");
                 setInputState(false);
             },
-            onError: (errors) => {
-                console.log("Errors:", errors);
-            },
+            onError: (errors) => console.log("Errors:", errors),
         });
     }
 
@@ -51,8 +47,8 @@ export default function Rules({ rules }: DashboardProps) {
                         <Plus />
                         <span>Add Rule</span>
                     </Button>
-                </header>)
-            }
+                </header>
+            )}
 
             {(hasPermission("modify rules") && showInput) && (
                 <Field>
@@ -69,8 +65,14 @@ export default function Rules({ rules }: DashboardProps) {
             )}
 
             <div className="flex flex-col w-full max-w-4xl">
-                {rules.map((rule) => (
-                    <RuleItem id={rule.id}>
+                {rules.map((rule, index) => (
+                    <RuleItem
+                        key={rule.id}
+                        id={rule.id}
+                        priority={rule.priority}
+                        isFirst={index === 0}
+                        isLast={index === rules.length - 1}
+                    >
                         {rule.rule}
                     </RuleItem>
                 ))}
@@ -79,28 +81,25 @@ export default function Rules({ rules }: DashboardProps) {
     );
 }
 
-
 interface RuleItemProps {
     children: React.ReactNode;
     id: number;
+    priority: number;
+    isFirst: boolean;
+    isLast: boolean;
 }
 
-function RuleItem({ children, id }: RuleItemProps) {
+function RuleItem({ children, id, priority, isFirst, isLast }: RuleItemProps) {
     const { hasPermission } = usePermission();
     const [isEditing, setIsEditing] = useState(false);
     const [editedRule, setEditedRule] = useState(children as string);
 
     function remove(e) {
         e.preventDefault();
-
         router.delete(route('rules.remove'), {
             data: { id },
-            onSuccess: () => {
-                console.log("Remove success!");
-            },
-            onError: (errors) => {
-                console.log("Remove errors:", errors);
-            },
+            onSuccess: () => console.log("Remove success!"),
+            onError: (errors) => console.log("Remove errors:", errors),
         });
     }
 
@@ -109,21 +108,11 @@ function RuleItem({ children, id }: RuleItemProps) {
         setIsEditing(true);
     }
 
-function saveEdit(e) {
+    function saveEdit(e) {
         e.preventDefault();
-        console.log("Saving edit for rule:", id, "with value:", editedRule);
-
-        router.put(route('rules.update'), { 
-            id, 
-            rule: editedRule 
-        }, {
-            onSuccess: () => {
-                console.log("Update success!");
-                setIsEditing(false);
-            },
-            onError: (errors) => {
-                console.log("Update errors:", errors);
-            },
+        router.put(route('rules.update'), { id, rule: editedRule }, {
+            onSuccess: () => setIsEditing(false),
+            onError: (errors) => console.log("Update errors:", errors),
         });
     }
 
@@ -133,8 +122,39 @@ function saveEdit(e) {
         setIsEditing(false);
     }
 
+    function shift(direction: 'up' | 'down') {
+        router.put(route('rules.reorder'), { id, direction }, {
+            onError: (errors) => console.log("Reorder errors:", errors),
+        });
+    }
+
     return (
-        <Item id={id.toString()} key={id.toString() + children}>
+        <Item id={id.toString()}>
+            {hasPermission("modify rules") && !isEditing && (
+                <div className="flex flex-col items-center">
+                    <Button
+                        size={"icon-xs"}
+                        variant={"ghost"}
+                        onClick={() => shift('up')}
+                        disabled={isFirst}
+                    >
+                        <ChevronUp />
+                    </Button>
+                    <Button
+                        size={"icon-xs"}
+                        variant={"ghost"}
+                        onClick={() => shift('down')}
+                        disabled={isLast}
+                    >
+                        <ChevronDown />
+                    </Button>
+                </div>
+            )}
+
+            <span className="text-sm text-muted-foreground w-6 text-center shrink-0">
+                {priority + 1}
+            </span>
+
             <ItemContent>
                 {isEditing ? (
                     <Input
@@ -143,9 +163,7 @@ function saveEdit(e) {
                         className="text-sm"
                     />
                 ) : (
-                    <ItemDescription>
-                        {children}
-                    </ItemDescription>
+                    <ItemDescription className='text-sm font-foreground'>{children}</ItemDescription>
                 )}
             </ItemContent>
 

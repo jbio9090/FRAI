@@ -47,6 +47,7 @@ Route::middleware("auth")->group(function () {
         Route::post('/rules/add', [RulesController::class, 'store'])->name('rules.add');
         Route::put('/rules/update', [RulesController::class, 'update'])->name('rules.update');
         Route::delete('/rules/remove/', [RulesController::class, 'remove'])->name('rules.remove');
+        Route::put('/rules/reorder', [RulesController::class, 'reorder'])->name('rules.reorder');
     })->middleware(["throttle:60,1"]);
 
 
