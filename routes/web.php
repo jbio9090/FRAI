@@ -68,7 +68,7 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");
 
-    Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');
+    Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');   
     Route::post('/equipment/check-conflicts', [EquipmentController::class, 'checkConflicts'])
         ->name('equipment.check-conflicts');
     Route::middleware('permission:manage facilities')->group(function () {
