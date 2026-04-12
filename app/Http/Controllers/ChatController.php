@@ -216,6 +216,36 @@ class ChatController extends Controller
         ]);
     }
 
+    private function resolveFacilityIdFromValue(mixed $facilityValue): mixed
+    {
+        if (is_int($facilityValue) || (is_string($facilityValue) && ctype_digit(trim($facilityValue)))) {
+            return (int) $facilityValue;
+        }
+
+        if (!is_string($facilityValue) || trim($facilityValue) === '') {
+            return $facilityValue;
+        }
+
+        $normalizedValue = trim($facilityValue);
+
+        if (preg_match('/\b(?:facility\s*)?id\s*(\d+)\b/i', $normalizedValue, $matches)) {
+            return (int) $matches[1];
+        }
+
+        $facility = Facility::query()
+            ->orderByRaw('LENGTH(name) DESC')
+            ->get(['id', 'name'])
+            ->first(function ($facility) use ($normalizedValue) {
+                $facilityName = (string) $facility->name;
+
+                return strcasecmp($facilityName, $normalizedValue) === 0
+                    || stripos($facilityName, $normalizedValue) !== false
+                    || stripos($normalizedValue, $facilityName) !== false;
+            });
+
+        return $facility?->id ?? $facilityValue;
+    }
+
     private function normalizeCreateRequestPayload(array $input): array
     {
         $normalized = $input;
@@ -234,22 +264,45 @@ class ChatController extends Controller
                     $booking['time_end'] = $booking['end_time'];
                 }
 
+                if (isset($booking['facility_id'])) {
+                    $booking['facility_id'] = $this->resolveFacilityIdFromValue($booking['facility_id']);
+                }
+
                 if (!empty($booking['equipment']) && is_array($booking['equipment'])) {
-                    $booking['equipment'] = array_map(function ($equipment) {
-                        if (!is_array($equipment)) {
-                            return $equipment;
+                    $normalizedEquipment = [];
+
+                    foreach ($booking['equipment'] as $equipmentKey => $equipmentValue) {
+                        if (is_array($equipmentValue)) {
+                            if (!isset($equipmentValue['equipment_id']) && isset($equipmentValue['id'])) {
+                                $equipmentValue['equipment_id'] = $equipmentValue['id'];
+                            }
+
+                            if (!isset($equipmentValue['quantity_needed']) && isset($equipmentValue['quantity'])) {
+                                $equipmentValue['quantity_needed'] = $equipmentValue['quantity'];
+                            }
+
+                            if (
+                                isset($equipmentValue['equipment_id'], $equipmentValue['quantity_needed']) &&
+                                (int) $equipmentValue['quantity_needed'] > 0
+                            ) {
+                                $normalizedEquipment[] = [
+                                    'equipment_id' => (int) $equipmentValue['equipment_id'],
+                                    'quantity_needed' => (int) $equipmentValue['quantity_needed'],
+                                ];
+                            }
+
+                            continue;
                         }
 
-                        if (!isset($equipment['equipment_id']) && isset($equipment['id'])) {
-                            $equipment['equipment_id'] = $equipment['id'];
+                        if (is_numeric($equipmentKey) && is_numeric($equipmentValue) && (int) $equipmentValue > 0) {
+                            $normalizedEquipment[] = [
+                                'equipment_id' => (int) $equipmentKey,
+                                'quantity_needed' => (int) $equipmentValue,
+                            ];
                         }
+                    }
 
-                        if (!isset($equipment['quantity_needed']) && isset($equipment['quantity'])) {
-                            $equipment['quantity_needed'] = $equipment['quantity'];
-                        }
-
-                        return $equipment;
-                    }, $booking['equipment']);
+                    $booking['equipment'] = $normalizedEquipment;
                 }
 
                 return $booking;
@@ -407,7 +460,7 @@ class ChatController extends Controller
 
                 array_unshift($messages, [
                     'role' => 'system',
-                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
+                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
                 ]);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
@@ -637,7 +690,7 @@ class ChatController extends Controller
             // Updated flow: ask for event type and map to priority level, no separate priority reason
             // Updated order: Description moved after Event Type, and Additional Message retained at end.
                 // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
-                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
+                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch facilities/equipment: ' . $e->getMessage());
         }

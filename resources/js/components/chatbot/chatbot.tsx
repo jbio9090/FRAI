@@ -43,6 +43,36 @@ export default function Chatbot() {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const messageQueueRef = useRef<Array<{ message: Message; context?: string }>>([]);
 
+    const withAttachedFiles = (payload: CreateRequestPayload): CreateRequestPayload => {
+        const fileIds = attachedFiles.map(file => file.id);
+
+        if (fileIds.length === 0) {
+            const { files: _files, ...rest } = payload;
+            return rest;
+        }
+
+        return {
+            ...payload,
+            files: fileIds,
+        };
+    };
+
+    const getPayloadValidationError = (payload: CreateRequestPayload): string | null => {
+        const invalidFacilityIds = payload.facility_bookings
+            .map(booking => booking.facility_id)
+            .filter(facilityId => !facilities.some(facility => facility.id === facilityId));
+
+        if (invalidFacilityIds.length === 0) {
+            return null;
+        }
+
+        const availableFacilities = facilities
+            .map(facility => `ID ${facility.id}: ${facility.name}`)
+            .join(', ');
+
+        return `The chatbot selected an invalid facility ID (${invalidFacilityIds.join(', ')}). Please choose a valid facility from the current list: ${availableFacilities}`;
+    };
+
     // Reset equipment selection UI when mode changes
     useEffect(() => {
         setShowEquipmentSelection(false);
@@ -104,7 +134,16 @@ export default function Chatbot() {
 
         if (isConfirming && pendingPayload) {
             try {
-                const result = await submitRequest(pendingPayload);
+                const payload = withAttachedFiles(pendingPayload);
+                const validationError = getPayloadValidationError(payload);
+
+                if (validationError) {
+                    setPendingPayload(null);
+                    addMessage({ role: 'assistant', content: validationError });
+                    return;
+                }
+
+                const result = await submitRequest(payload);
                 setPendingPayload(null);
                 setAttachedFiles([]);
                 addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
@@ -152,10 +191,7 @@ export default function Chatbot() {
                     try {
                         const payload = JSON.parse(json);
                         if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
-                            if (attachedFiles.length > 0) {
-                                payload.files = attachedFiles.map(f => f.id);
-                            }
-                            setPendingPayload(payload);
+                            setPendingPayload(withAttachedFiles(payload));
                         }
                     } catch (_) { }
                 },
@@ -206,7 +242,16 @@ export default function Chatbot() {
         if (!pendingPayload) return;
 
         try {
-            const result = await submitRequest(pendingPayload);
+            const payload = withAttachedFiles(pendingPayload);
+            const validationError = getPayloadValidationError(payload);
+
+            if (validationError) {
+                setPendingPayload(null);
+                addMessage({ role: 'assistant', content: validationError });
+                return;
+            }
+
+            const result = await submitRequest(payload);
             setPendingPayload(null);
             setAttachedFiles([]);
             addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
