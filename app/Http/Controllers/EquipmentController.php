@@ -115,4 +115,42 @@ class EquipmentController extends Controller
 
         return response()->json(['conflicts' => $byEquipment]);
     }
+
+    public function getAvailability(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'facility_id' => 'required|integer|exists:facilities,id',
+            'date'        => 'required|date',
+            'time_start'  => 'required|string',
+            'time_end'    => 'required|string',
+        ]);
+
+        $date      = Carbon::parse($validated['date'])->format('Y-m-d');
+        $timeStart = substr($validated['time_start'], 0, 5);
+        $timeEnd   = substr($validated['time_end'], 0, 5);
+
+        $facility = Facility::findOrFail($validated['facility_id']);
+
+        $equipmentAvailability = $facility->equipment
+            ->map(function ($equipment) use ($validated['facility_id'], $date, $timeStart, $timeEnd) {
+                $totalInFacility = $equipment->quantityInFacility($validated['facility_id']);
+                $available = $equipment->quantityAvailableInFacility(
+                    $validated['facility_id'],
+                    $date,
+                    $timeStart,
+                    $timeEnd
+                );
+
+                return [
+                    'equipment_id'      => $equipment->id,
+                    'equipment_name'    => $equipment->name,
+                    'total_quantity'    => $totalInFacility,
+                    'available_quantity' => max(0, $available),
+                    'is_limited'        => $available < $totalInFacility,
+                ];
+            })
+            ->values();
+
+        return response()->json(['availability' => $equipmentAvailability]);
+    }
 }

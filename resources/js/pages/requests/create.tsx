@@ -210,6 +210,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     );
     const [equipmentConflicts, setEquipmentConflicts] = useState<Record<number, EquipmentConflict[]>>({});
     const [checkingEquipmentConflicts, setCheckingEquipmentConflicts] = useState(false);
+    const [equipmentAvailability, setEquipmentAvailability] = useState<Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>>({});
+    const [checkingAvailability, setCheckingAvailability] = useState(false);
 
     const handleCheckboxChange = (name: string) => {
         setData('approved_by', data.approved_by.includes(name)
@@ -282,6 +284,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         const ids = selectedEquipment.map(e => e.equipment_id);
         if (ids.length > 0) fetchEquipmentConflicts(ids);
         else setEquipmentConflicts({});
+
+        if (selectedFacility && currentDate && currentTimeStart && currentTimeEnd) {
+            fetchEquipmentAvailability();
+        } else {
+            setEquipmentAvailability({});
+        }
     }, [currentTimeStart, currentTimeEnd, currentDate]);
 
     function editBooking(index: number) {
@@ -551,6 +559,38 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             console.error('Failed to check equipment conflicts', err);
         } finally {
             setCheckingEquipmentConflicts(false);
+        }
+    }
+
+    async function fetchEquipmentAvailability() {
+        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) return;
+
+        setCheckingAvailability(true);
+        try {
+            const res = await fetch(route('equipment.availability'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content },
+                body: JSON.stringify({
+                    facility_id: selectedFacility,
+                    date: format(currentDate, 'yyyy-MM-dd'),
+                    time_start: currentTimeStart,
+                    time_end: currentTimeEnd,
+                }),
+            });
+            const data = await res.json();
+            const availabilityMap = (data.availability ?? []).reduce((map: Record<number, any>, item: any) => {
+                map[item.equipment_id] = {
+                    total_quantity: item.total_quantity,
+                    available_quantity: item.available_quantity,
+                    is_limited: item.is_limited,
+                };
+                return map;
+            }, {});
+            setEquipmentAvailability(availabilityMap);
+        } catch (err) {
+            console.error('Failed to check equipment availability', err);
+        } finally {
+            setCheckingAvailability(false);
         }
     }
 
@@ -862,6 +902,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                             {availableEquipment.map((equipment) => {
                                                 const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
                                                 const conflicts = equipmentConflicts[equipment.id] ?? [];
+                                                const availability = equipmentAvailability[equipment.id];
+                                                const displayQty = availability ? availability.available_quantity : equipment.pivot.quantity;
+                                                const isLimited = availability ? availability.is_limited : false;
+                                                const exceedsAvailable = selected && availability && selected.quantity_needed > availability.available_quantity;
 
                                                 return (
                                                     <div key={equipment.id} className="space-y-1">
@@ -876,8 +920,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                     <Label htmlFor={`equipment-${equipment.id}`} className="text-sm text-foreground font-medium cursor-pointer">
                                                                         {equipment.name}
                                                                     </Label>
-                                                                    <Label className="text-xs text-muted-foreground block">
-                                                                        Available: {equipment.pivot.quantity}
+                                                                    <Label className={cn("text-xs block", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
+                                                                        Available: {displayQty} {isLimited && `(${availability?.total_quantity} total)`}
                                                                     </Label>
                                                                 </div>
                                                             </div>
@@ -887,14 +931,24 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                     <Input
                                                                         type="number"
                                                                         min="1"
-                                                                        max={equipment.pivot.quantity}
+                                                                        max={displayQty}
                                                                         value={selected.quantity_needed}
-                                                                        onChange={(e) => updateEquipmentQuantity(equipment.id, Math.min(Number(e.target.value), equipment.pivot.quantity))}
-                                                                        className="w-20 text-sm p-2"
+                                                                        onChange={(e) => updateEquipmentQuantity(equipment.id, Math.min(Number(e.target.value), displayQty))}
+                                                                        className={cn("w-20 text-sm p-2", exceedsAvailable && "border-orange-400 bg-orange-50 dark:bg-orange-950/20")}
                                                                     />
                                                                 </div>
                                                             )}
                                                         </div>
+
+                                                        {/* Availability warning */}
+                                                        {exceedsAvailable && (
+                                                            <div className="ml-7 flex items-start gap-1.5 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-2 py-1">
+                                                                <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
+                                                                <span>
+                                                                    Only <strong>{availability?.available_quantity}</strong> available for the selected date/time
+                                                                </span>
+                                                            </div>
+                                                        )}
 
                                                         {/* Equipment conflict warning */}
                                                         {selected && conflicts.length > 0 && (
