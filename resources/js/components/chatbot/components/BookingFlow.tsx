@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useBookingFlow } from '../hooks/useBookingFlow';
 import DatePicker from './DatePicker';
+import TypingMessage from './TypingMessage';
 
 interface BookingFlowProps {
     bookingFlow: ReturnType<typeof useBookingFlow>;
@@ -18,15 +19,21 @@ interface FlowMessage {
 }
 
 export default function BookingFlow({ bookingFlow, onComplete, onCancel, attachedFiles = [], onAttachFile, uploading = false, uploadError = null }: BookingFlowProps) {
-    const { step, data, isSubmitting, submitResult, getStepConfig, handleInput, reset, update } = bookingFlow;
+    const { step, data, isSubmitting, submitResult, canGoBack, getCurrentEquipmentMaxQuantity, getStepConfig, handleInput, goBack, reset, update } = bookingFlow;
     const [textInput, setTextInput] = useState('');
     const [history, setHistory] = useState<FlowMessage[]>([]);
+    const [isTypingPrompt, setIsTypingPrompt] = useState(true);
 
     const config = getStepConfig();
+    const promptKey = `${step}:${config.botMessage}`;
 
     useEffect(() => {
         update({ attachedFiles });
     }, [attachedFiles]);
+
+    useEffect(() => {
+        setIsTypingPrompt(true);
+    }, [promptKey]);
 
     const pushHistory = (userText: string) => {
         setHistory(prev => [...prev, { from: 'user', text: userText }]);
@@ -43,9 +50,29 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
     const handleTextSubmit = () => {
         const val = textInput.trim();
         if (!val) return;
+        if (step === 'equipment_quantity') {
+            const numericValue = Number.parseInt(val, 10);
+            const maxQuantity = getCurrentEquipmentMaxQuantity();
+
+            if (Number.isNaN(numericValue) || numericValue < 1) {
+                return;
+            }
+
+            pushHistory(String(Math.min(numericValue, maxQuantity)));
+            setTextInput('');
+            handleInput(String(Math.min(numericValue, maxQuantity)));
+            return;
+        }
+
         pushHistory(val);
         setTextInput('');
         handleInput(val);
+    };
+
+    const handleReturn = () => {
+        setTextInput('');
+        setHistory(prev => prev.slice(0, -1));
+        goBack();
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -165,9 +192,13 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
                         <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                             assistant
                         </div>
-                        <div className="text-sm whitespace-pre-wrap">{config.botMessage}</div>
+                        <TypingMessage
+                            text={config.botMessage}
+                            messageKey={promptKey}
+                            onComplete={() => setIsTypingPrompt(false)}
+                        />
 
-                        {config.quickReplies.length > 0 && (
+                        {!isTypingPrompt && config.quickReplies.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {config.quickReplies.map(option => (
                                     <button
@@ -195,18 +226,22 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
                             </div>
                         )}
 
-                        {config.showDatePicker && (
+                        {!isTypingPrompt && config.showDatePicker && (
                             <DatePicker onSelect={(iso) => handleQuickReply(iso)} />
                         )}
 
-                        {config.isTextInput && (
+                        {!isTypingPrompt && config.isTextInput && (
                             <div className="mt-3 flex gap-2">
                                 <input
-                                    type="text"
+                                    type={step === 'equipment_quantity' ? 'number' : 'text'}
                                     value={textInput}
                                     onChange={e => setTextInput(e.target.value)}
                                     onKeyDown={handleKeyDown}
-                                    placeholder="Type your answer..."
+                                    min={step === 'equipment_quantity' ? 1 : undefined}
+                                    max={step === 'equipment_quantity' ? getCurrentEquipmentMaxQuantity() : undefined}
+                                    placeholder={step === 'equipment_quantity'
+                                        ? `Enter a quantity up to ${getCurrentEquipmentMaxQuantity()}`
+                                        : 'Type your answer...'}
                                     autoFocus
                                     className="flex-1 text-sm border border-input bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
                                 />
@@ -216,6 +251,17 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
                                     className="px-4 py-2 text-xs bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed font-semibold uppercase tracking-wide transition-colors"
                                 >
                                     Next
+                                </button>
+                            </div>
+                        )}
+
+                        {!isTypingPrompt && canGoBack && (
+                            <div className="mt-3">
+                                <button
+                                    onClick={handleReturn}
+                                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                                >
+                                    Return
                                 </button>
                             </div>
                         )}

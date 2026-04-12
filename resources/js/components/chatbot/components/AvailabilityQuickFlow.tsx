@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Facility } from '../hooks/useBookingFlow';
 import DatePicker from './DatePicker';
+import TypingMessage from './TypingMessage';
 
 interface AvailabilityQuickFlowProps {
     facilities: Facility[];
@@ -21,6 +22,7 @@ export default function AvailabilityQuickFlow({
     const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [selectedStartTime, setSelectedStartTime] = useState<string>('');
+    const [isTypingPrompt, setIsTypingPrompt] = useState(true);
 
     const handleFacilitySelect = (facilityName: string) => {
         const facility = facilities.find(item => item.name === facilityName);
@@ -53,9 +55,43 @@ export default function AvailabilityQuickFlow({
         });
     };
 
+    const handleReturn = () => {
+        if (selectedStartTime) {
+            setSelectedStartTime('');
+            return;
+        }
+
+        if (selectedDate) {
+            setSelectedDate('');
+            return;
+        }
+
+        if (selectedFacility) {
+            setSelectedFacility(null);
+        }
+    };
+
     const facilityOptions = facilities.length > 0
         ? facilities.map(facility => facility.name)
         : ['Loading rooms...'];
+
+    const currentPrompt = !selectedFacility
+        ? 'Please select a room to check availability.'
+        : !selectedDate
+            ? `Select a date for ${selectedFacility.name}.`
+            : !selectedStartTime
+                ? `Select a start time for ${selectedFacility.name} on ${selectedDate}.`
+                : `Select an end time for ${selectedFacility.name} on ${selectedDate}. Start time is ${selectedStartTime}.`;
+
+    const promptKey = [
+        selectedFacility?.id ?? 'none',
+        selectedDate || 'none',
+        selectedStartTime || 'none',
+    ].join(':');
+
+    useEffect(() => {
+        setIsTypingPrompt(true);
+    }, [promptKey]);
 
     return (
         <div className="space-y-4">
@@ -67,10 +103,14 @@ export default function AvailabilityQuickFlow({
                     <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                         assistant
                     </div>
+                    <TypingMessage
+                        text={currentPrompt}
+                        messageKey={promptKey}
+                        onComplete={() => setIsTypingPrompt(false)}
+                    />
 
-                    {!selectedFacility && (
+                    {!isTypingPrompt && !selectedFacility && (
                         <>
-                            <div className="text-sm whitespace-pre-wrap">Please select a room to check availability.</div>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {facilityOptions.map(option => (
                                     <button
@@ -91,20 +131,14 @@ export default function AvailabilityQuickFlow({
                         </>
                     )}
 
-                    {selectedFacility && !selectedDate && (
+                    {!isTypingPrompt && selectedFacility && !selectedDate && (
                         <>
-                            <div className="text-sm whitespace-pre-wrap">
-                                Select a date for {selectedFacility.name}.
-                            </div>
                             <DatePicker onSelect={handleDateSelect} />
                         </>
                     )}
 
-                    {selectedFacility && selectedDate && !selectedStartTime && (
+                    {!isTypingPrompt && selectedFacility && selectedDate && !selectedStartTime && (
                         <>
-                            <div className="text-sm whitespace-pre-wrap">
-                                Select a start time for {selectedFacility.name} on {selectedDate}.
-                            </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {TIME_OPTIONS.map(option => (
                                     <button
@@ -124,11 +158,8 @@ export default function AvailabilityQuickFlow({
                         </>
                     )}
 
-                    {selectedFacility && selectedDate && selectedStartTime && (
+                    {!isTypingPrompt && selectedFacility && selectedDate && selectedStartTime && (
                         <>
-                            <div className="text-sm whitespace-pre-wrap">
-                                Select an end time for {selectedFacility.name} on {selectedDate}. Start time is {selectedStartTime}.
-                            </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {TIME_OPTIONS.map(option => (
                                     <button
@@ -148,14 +179,24 @@ export default function AvailabilityQuickFlow({
                         </>
                     )}
 
-                    <div className="mt-3">
-                        <button
-                            onClick={onCancel}
-                            className="text-xs text-muted-foreground hover:text-foreground underline"
-                        >
-                            Cancel
-                        </button>
-                    </div>
+                    {!isTypingPrompt && (
+                        <div className="mt-3 flex gap-4">
+                            {(selectedFacility || selectedDate || selectedStartTime) && (
+                                <button
+                                    onClick={handleReturn}
+                                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                                >
+                                    Return
+                                </button>
+                            )}
+                            <button
+                                onClick={onCancel}
+                                className="text-xs text-muted-foreground hover:text-foreground underline"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

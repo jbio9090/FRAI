@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getCsrfToken } from '../utils/csrfToken';
 
 export type BookingStep =
@@ -63,6 +63,8 @@ export interface Facility {
 export interface Equipment {
     id: number;
     name: string;
+    facility_id: number;
+    quantity: number;
 }
 
 const INITIAL_DATA: BookingData = {
@@ -92,13 +94,6 @@ const PRIORITY_MAP: Record<string, { level: 0 | 1 | 2; label: string }> = {
 const TIME_OPTIONS = [
     '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
-];
-
-const EQUIPMENT_OPTIONS: Equipment[] = [
-    { id: 1, name: 'Projector' },
-    { id: 2, name: 'Microphone' },
-    { id: 3, name: 'Sound System' },
-    { id: 4, name: 'Whiteboard' },
 ];
 
 const PARTICIPANT_RANGES = ['1-100', '101-300', '301-500', '501-800', '801-1000'];
@@ -173,7 +168,43 @@ function getAvailableDurationOptions(startTime: string): string[] {
     return [...durationOptions, 'Custom'];
 }
 
-export function useBookingFlow(facilities: Facility[]) {
+function getQuantityQuickReplies(maxQuantity: number): string[] {
+    if (maxQuantity <= 0) {
+        return [];
+    }
+
+    if (maxQuantity <= 10) {
+        return Array.from({ length: maxQuantity }, (_, index) => String(index + 1));
+    }
+
+    if (maxQuantity < 100) {
+        const options: string[] = [];
+
+        for (let value = 10; value <= maxQuantity; value += 10) {
+            options.push(String(value));
+        }
+
+        if (options.length === 0 || options[options.length - 1] !== String(maxQuantity)) {
+            options.push(String(maxQuantity));
+        }
+
+        return options;
+    }
+
+    const options: string[] = [];
+
+    for (let value = 100; value <= maxQuantity; value += 100) {
+        options.push(String(value));
+    }
+
+    if (options.length === 0 || options[options.length - 1] !== String(maxQuantity)) {
+        options.push(String(maxQuantity));
+    }
+
+    return options;
+}
+
+export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipment[]) {
     const [step, setStep] = useState<BookingStep>('title');
     const [data, setData] = useState<BookingData>({ ...INITIAL_DATA });
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -188,6 +219,36 @@ export function useBookingFlow(facilities: Facility[]) {
 
     const update = (patch: Partial<BookingData>) =>
         setData(prev => ({ ...prev, ...patch }));
+
+    const getBookingEquipmentOptions = (): Equipment[] => {
+        return equipmentOptions;
+    };
+
+    const getCurrentEquipmentMaxQuantity = (): number => {
+        if (!data.current_equipment_id) {
+            return 0;
+        }
+
+        return getBookingEquipmentOptions().find(
+            equipment => equipment.id === data.current_equipment_id
+        )?.quantity ?? 0;
+    };
+
+    useEffect(() => {
+        if (step !== 'equipment') {
+            return;
+        }
+
+        const filteredEquipment = getBookingEquipmentOptions();
+
+        console.log('[BookingFlow equipment debug] Selected facility:', {
+            facility_id: data.facility_id,
+            facility_name: data.facility_name,
+        });
+        console.log('[BookingFlow equipment debug] All equipment options:', equipmentOptions);
+        console.log('[BookingFlow equipment debug] Filtered facility equipment:', filteredEquipment);
+        console.log('[BookingFlow equipment debug] Already selected equipment:', data.equipment);
+    }, [step, data.facility_id, data.facility_name, data.equipment, equipmentOptions]);
 
     const getStepConfig = () => {
         switch (step) {
@@ -248,12 +309,15 @@ export function useBookingFlow(facilities: Facility[]) {
                 };
             case 'equipment': {
                 const alreadyPicked = data.equipment.map(e => e.equipment_name);
-                const remaining = EQUIPMENT_OPTIONS
+                const availableEquipment = getBookingEquipmentOptions();
+                const remaining = availableEquipment
                     .filter(e => !alreadyPicked.includes(e.name))
                     .map(e => e.name);
                 return {
-                    botMessage: data.equipment.length === 0
-                        ? 'Do you need any equipment for the event? Select all that apply, then press Done.'
+                    botMessage: availableEquipment.length === 0
+                        ? 'There is no equipment available right now. Press Done to continue.'
+                        : data.equipment.length === 0
+                            ? 'Do you need any equipment for the event? Select all that apply, then press Done.'
                         : `Added so far: ${data.equipment.map(e => `${e.equipment_name} (${e.quantity_needed})`).join(', ')}. Add more or press Done.`,
                     quickReplies: [...remaining, 'Done'],
                     isTextInput: false,
@@ -261,10 +325,11 @@ export function useBookingFlow(facilities: Facility[]) {
                 };
             }
             case 'equipment_quantity':
+                const maxQuantity = getCurrentEquipmentMaxQuantity();
                 return {
-                    botMessage: `How many units of "${data.current_equipment_name}" do you need?`,
-                    quickReplies: ['1', '2', '3', '4', '5'],
-                    isTextInput: false,
+                    botMessage: `How many units of "${data.current_equipment_name}" do you need? Maximum available is ${maxQuantity}.`,
+                    quickReplies: getQuantityQuickReplies(maxQuantity),
+                    isTextInput: true,
                     showDatePicker: false,
                 };
             case 'description':
@@ -364,7 +429,13 @@ export function useBookingFlow(facilities: Facility[]) {
                 const facilityName = value.replace(/ \(Capacity: \d+\)$/, '');
                 const facility = facilities.find(f => f.name === facilityName);
                 if (!facility) break;
-                update({ facility_id: facility.id, facility_name: facility.name });
+                update({
+                    facility_id: facility.id,
+                    facility_name: facility.name,
+                    equipment: [],
+                    current_equipment_id: null,
+                    current_equipment_name: '',
+                });
                 setStep('date');
                 break;
             }
@@ -415,7 +486,7 @@ export function useBookingFlow(facilities: Facility[]) {
                 if (value === 'Done') {
                     setStep('description');
                 } else {
-                    const eq = EQUIPMENT_OPTIONS.find(e => e.name === value);
+                    const eq = getBookingEquipmentOptions().find(e => e.name === value);
                     if (!eq) break;
                     update({ current_equipment_id: eq.id, current_equipment_name: eq.name });
                     setStep('equipment_quantity');
@@ -423,15 +494,17 @@ export function useBookingFlow(facilities: Facility[]) {
                 break;
 
             case 'equipment_quantity': {
-                const qty = parseInt(value);
+                const qty = parseInt(value, 10);
+                const maxQuantity = getCurrentEquipmentMaxQuantity();
                 if (!data.current_equipment_id) break;
+                if (Number.isNaN(qty) || qty < 1) break;
                 update({
                     equipment: [
                         ...data.equipment,
                         {
                             equipment_id: data.current_equipment_id,
                             equipment_name: data.current_equipment_name,
-                            quantity_needed: qty,
+                            quantity_needed: Math.min(qty, maxQuantity),
                         },
                     ],
                     current_equipment_id: null,
@@ -476,6 +549,85 @@ export function useBookingFlow(facilities: Facility[]) {
             }
         }
     };
+
+    const goBack = () => {
+        switch (step) {
+            case 'title':
+            case 'done':
+                break;
+
+            case 'event_type':
+                setStep('title');
+                break;
+
+            case 'participants':
+                setStep('event_type');
+                break;
+
+            case 'facility':
+                setStep('participants');
+                break;
+
+            case 'date':
+                if (awaitingCustomDate) {
+                    setAwaitingCustomDate(false);
+                    break;
+                }
+                update({ date: '' });
+                setStep('facility');
+                break;
+
+            case 'time_start':
+                update({ time_start: '', time_end: '' });
+                setStep('date');
+                break;
+
+            case 'time_end':
+                if (awaitingCustomTime) {
+                    setAwaitingCustomTime(false);
+                    break;
+                }
+                update({ time_end: '' });
+                setStep('time_start');
+                break;
+
+            case 'equipment':
+                update({
+                    equipment: [],
+                    current_equipment_id: null,
+                    current_equipment_name: '',
+                });
+                setStep('time_end');
+                break;
+
+            case 'equipment_quantity':
+                update({
+                    current_equipment_id: null,
+                    current_equipment_name: '',
+                });
+                setStep('equipment');
+                break;
+
+            case 'description':
+                update({ description: '' });
+                setStep('equipment');
+                break;
+
+            case 'files':
+                setStep('description');
+                break;
+
+            case 'review':
+                setStep('files');
+                break;
+
+            case 'edit_pick':
+                setStep('review');
+                break;
+        }
+    };
+
+    const canGoBack = step !== 'title' && step !== 'done';
 
     const buildPayload = (): BookingPayload => ({
         title: data.title,
@@ -611,9 +763,12 @@ export function useBookingFlow(facilities: Facility[]) {
         data,
         isSubmitting,
         submitResult,
+        canGoBack,
         getStepConfig,
         handleInput,
         buildContextSummary,
+        getCurrentEquipmentMaxQuantity,
+        goBack,
         reset,
         update,
         goToStep: setStep,
