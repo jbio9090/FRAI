@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { CalendarIcon, X, Clock, User, AlertCircleIcon, Pen, ArrowLeftRight } from "lucide-react";
+import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, ArrowLeftRight, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EquipmentConflict } from "@/types/equipment";
 
@@ -51,18 +51,49 @@ interface BookingCardProps {
 
 function formatTime(time: string): string {
     return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
-        hour: 'numeric',
-        minute: '2-digit',
+        hour: "numeric",
+        minute: "2-digit",
         hour12: true,
     });
 }
 
-// Group borrowed equipment by name for a compact summary
-function groupBorrowed(borrowed: BorrowedEquipmentRequest[]): Record<string, BorrowedEquipmentRequest[]> {
-    return borrowed.reduce((groups, eq) => ({
-        ...groups,
-        [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq],
-    }), {} as Record<string, BorrowedEquipmentRequest[]>);
+function groupBorrowed(
+    borrowed: BorrowedEquipmentRequest[]
+): Record<string, BorrowedEquipmentRequest[]> {
+    return borrowed.reduce(
+        (groups, eq) => ({
+            ...groups,
+            [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq],
+        }),
+        {} as Record<string, BorrowedEquipmentRequest[]>
+    );
+}
+
+function Badge({
+    children,
+    variant = "neutral",
+}: {
+    children: React.ReactNode;
+    variant?: "neutral" | "warning" | "danger";
+}) {
+    const styles = {
+        neutral: "bg-primary/10 text-primary border-primary/20",
+        warning:
+            "bg-amber-500/10 text-amber-600 border-amber-500/25 dark:text-amber-400",
+        danger: "bg-destructive/10 text-destructive border-destructive/20",
+    };
+    return (
+        <span
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${styles[variant]}`}
+        >
+            {children}
+        </span>
+    );
+}
+
+// ── Thin divider ────────────────────────────────────────────────────────────
+function Divider() {
+    return <div className="h-px w-full bg-border/50" />;
 }
 
 export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardProps) {
@@ -70,164 +101,214 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
     const hasBorrowedEquipment = (booking.borrowed_equipment ?? []).length > 0;
     const hasExternalEquipment = (booking.external_equipment ?? []).length > 0;
     const hasAnyEquipment = hasOwnEquipment || hasBorrowedEquipment || hasExternalEquipment;
+    const hasConflicts =
+        booking.conflicts.length > 0 ||
+        Object.keys(booking.equipment_conflicts ?? {}).length > 0;
 
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
     return (
-        <div className="overflow-hidden border border-border rounded-lg bg-secondary/30 shadow-sm">
-            {/* ── Header ── */}
-            <div className="p-4">
-                <div className="flex items-center justify-between gap-4 mb-2">
-                    <h3 className="font-bold text-lg text-foreground truncate">
-                        {booking.facility_name}
-                    </h3>
- 
+        <div className="group relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm transition-shadow hover:shadow-md">
+            <div className="absolute inset-y-0 left-0 w-[3px] bg-primary/60 rounded-l-xl" />
+            <div className="px-5 pt-4 pb-3 pl-6">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        <h3 className="font-semibold text-base text-foreground truncate leading-snug">
+                            {booking.facility_name}
+                        </h3>
+                        {booking.has_outsiders && (
+                            <Badge variant="warning">Has Outsiders</Badge>
+                        )}
+                        {hasConflicts && (
+                            <Badge variant="danger">
+                                <AlertCircleIcon size={10} />
+                                Conflicts
+                            </Badge>
+                        )}
+                    </div>
+
                     {(onEdit || onRemove) && (
-                        <div className="flex items-center gap-1 bg-background/50 rounded-md p-1 border border-border/50 shrink-0">
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                             {onEdit && (
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7 hover:bg-background hover:text-primary transition-colors"
+                                    className="h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10"
                                     onClick={() => onEdit(index)}
                                 >
-                                    <Pen size={14} />
+                                    <Pen size={13} />
                                 </Button>
                             )}
-                            {onEdit && onRemove && <div className="w-[1px] h-4 bg-border/60" />}
                             {onRemove && (
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
-                                    className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                    className="h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                     onClick={() => onRemove(index)}
                                 >
-                                    <X size={14} />
+                                    <X size={13} />
                                 </Button>
                             )}
                         </div>
                     )}
                 </div>
 
-                {/* ── Meta row ── */}
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                        <CalendarIcon size={15} className="text-primary/70" />
-                        <span>{format(booking.date, "PPP")}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Clock size={15} className="text-primary/70" />
-                        <span>{formatTime(booking.time_start)} – {formatTime(booking.time_end)}</span>
-                    </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground">
+                    <span className="flex items-center gap-1.5 font-semibold">
+                        <CalendarIcon size={13} className="text-primary/60 shrink-0" />
+                        {format(booking.date, "PPP")}
+                    </span>
+                    <span className="flex items-center gap-1.5 font-semibold">
+                        <Clock size={13} className="text-primary/60 shrink-0" />
+                        <span>{formatTime(booking.time_start)}</span>
+                        <span>–</span>
+                        <span>{formatTime(booking.time_end)}</span>
+                    </span>
                     {booking.expected_capacity && (
-                        <div className="flex items-center gap-2">
-                            <User size={15} className="text-primary/70" />
-                            <span>{booking.expected_capacity} attendees</span>
-                        </div>
-                    )}
-                    {booking.has_outsiders && (
-                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-                            Has Outsiders
+                        <span className="font-semibold flex items-center gap-1.5">
+                            <Users size={13} className="text-primary/60 shrink-0" />
+                            {booking.expected_capacity} attendees
                         </span>
                     )}
                 </div>
-
-                {/* ── Schedule conflicts ── */}
-                {booking.conflicts.map((conflict, i) => (
-                    <div key={i} className="mt-3 flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-                        <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
-                        <span>
-                            <strong>Schedule Conflict:</strong> Overlaps with "{conflict.request_title}" ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
-                        </span>
-                    </div>
-                ))}
-
-                {/* ── Equipment conflicts ── */}
-                {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
-                    conflicts.map((c, i) => {
-                        const eqName = booking.equipment.find(e => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
-                        return (
-                            <div key={`eq-${eqId}-${i}`} className="mt-2 flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
-                                <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
-                                <span>
-                                    <strong>Equipment Conflict ({eqName}):</strong> Also requested by "{c.request_title}" ({c.status})
-                                </span>
-                            </div>
-                        );
-                    })
-                )}
             </div>
 
-            {/* ── Equipment footer ── */}
-            {hasAnyEquipment && (
-                <div className="bg-background/40 border-t border-border px-4 py-3 space-y-3">
-
-                    {/* Own equipment */}
-                    {hasOwnEquipment && (
-                        <div>
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                                Facility Equipment
-                            </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                {booking.equipment.map((eq, i) => (
-                                    <div key={i} className="text-sm flex items-center justify-between bg-background/50 px-2 py-1 rounded border border-border/40">
-                                        <span className="text-foreground/80">{eq.equipment_name}</span>
-                                        <span className="text-sm font-bold text-primary">×{eq.quantity_needed}</span>
-                                    </div>
-                                ))}
+            {hasConflicts && (
+                <>
+                    <Divider />
+                    <div className="px-5 py-3 pl-6 space-y-1.5">
+                        {booking.conflicts.map((conflict, i) => (
+                            <div
+                                key={i}
+                                className="flex items-start gap-2 rounded-lg bg-destructive/8 border border-destructive/15 px-3 py-2 text-[12px] text-destructive"
+                            >
+                                <AlertCircleIcon size={13} className="shrink-0 mt-0.5" />
+                                <span>
+                                    <strong className="font-semibold">Schedule conflict</strong> with "
+                                    {conflict.request_title}" (
+                                    {formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
+                                </span>
                             </div>
-                        </div>
-                    )}
+                        ))}
 
-                    {/* Borrowed equipment */}
-                    {hasBorrowedEquipment && (
-                        <div>
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                                <ArrowLeftRight size={11} />
-                                Borrowed Equipment
-                            </p>
-                            <div className="space-y-2">
-                                {Object.entries(borrowedGroups).map(([name, items]) => (
-                                    <div key={name} className="rounded border border-border/40 bg-background/50 px-2 py-1.5">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="text-sm text-foreground/80 font-medium">{name}</span>
-                                            <span className="text-sm font-bold text-primary">
+                        {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
+                            conflicts.map((c, i) => {
+                                const eqName =
+                                    booking.equipment.find(
+                                        (e) => e.equipment_id === Number(eqId)
+                                    )?.equipment_name ?? `Equipment #${eqId}`;
+                                return (
+                                    <div
+                                        key={`eq-${eqId}-${i}`}
+                                        className="flex items-start gap-2 rounded-lg bg-amber-500/8 border border-amber-500/15 px-3 py-2 text-[12px] text-amber-700 dark:text-amber-400"
+                                    >
+                                        <AlertCircleIcon size={13} className="shrink-0 mt-0.5" />
+                                        <span>
+                                            <strong className="font-semibold">
+                                                Equipment conflict ({eqName})
+                                            </strong>{" "}
+                                            — also requested by "{c.request_title}" ({c.status})
+                                        </span>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </>
+            )}
+
+            {hasAnyEquipment && (
+                <>
+                    <Divider />
+                    <div className="px-5 py-3 pl-6 space-y-3 bg-muted/20">
+
+                        {hasOwnEquipment && (
+                            <EquipmentSection label="Facility Equipment">
+                                <div className="flex flex-wrap gap-1.5">
+                                    {booking.equipment.map((eq, i) => (
+                                        <EquipmentChip key={i} name={eq.equipment_name} qty={eq.quantity_needed} />
+                                    ))}
+                                </div>
+                            </EquipmentSection>
+                        )}
+
+                        {hasBorrowedEquipment && (
+                            <EquipmentSection
+                                label="Borrowed Equipment"
+                                icon={<ArrowLeftRight size={11} />}
+                            >
+                                <div className="flex flex-wrap gap-1.5">
+                                    {Object.entries(borrowedGroups).map(([name, items]) => (
+                                        <div
+                                            key={name}
+                                            className="group/chip flex items-center gap-1.5 rounded-md border border-border/50 bg-background/60 px-2.5 py-1 text-[12px]"
+                                        >
+                                            <span className="text-foreground font-medium">{name}</span>
+                                            <span className="font-bold text-primary">
                                                 ×{items.reduce((s, e) => s + e.quantity_needed, 0)}
                                             </span>
+                                            <span className="text-muted-foreground/60">·</span>
+                                            <span className="text-muted-foreground text-sm flex items-center gap-0.5">
+                                                <MapPin size={13} />
+                                                <span>
+                                                    from {items.map((e) => e.source_facility_name).join(", ")}
+                                                </span>
+                                            </span>
                                         </div>
-                                        <div className="space-y-0.5">
-                                            {items.map((eq, i) => (
-                                                <div key={i} className="flex items-center justify-between text-xs text-muted-foreground pl-1">
-                                                    <span>from {eq.source_facility_name}</span>
-                                                    <span>×{eq.quantity_needed}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                                    ))}
+                                </div>
+                            </EquipmentSection>
+                        )}
 
-                    {/* External equipment */}
-                    {hasExternalEquipment && (
-                        <div>
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                                External Equipment
-                            </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                {booking.external_equipment.map((eq, i) => (
-                                    <div key={i} className="text-sm flex items-center bg-background/50 px-2 py-1 rounded border border-border/40 text-foreground/80">
-                                        {eq.name}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                        {hasExternalEquipment && (
+                            <EquipmentSection label="External Equipment">
+                                <div className="flex flex-wrap gap-1.5">
+                                    {booking.external_equipment.map((eq, i) => (
+                                        <span
+                                            key={i}
+                                            className="rounded-md border border-dashed border-border/60 bg-background/40 px-2.5 py-1 text-[12px] text-foreground/70"
+                                        >
+                                            {eq.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            </EquipmentSection>
+                        )}
+                    </div>
+                </>
             )}
+        </div>
+    );
+}
+
+
+function EquipmentSection({
+    label,
+    icon,
+    children,
+}: {
+    label: string;
+    icon?: React.ReactNode;
+    children: React.ReactNode;
+}) {
+    return (
+        <div className="space-y-1.5">
+            <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+                {icon}
+                {label}
+            </p>
+            {children}
+        </div>
+    );
+}
+
+function EquipmentChip({ name, qty }: { name: string; qty: number }) {
+    return (
+        <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-background/60 px-2.5 py-1 text-[12px]">
+            <span className="text-foreground/80">{name}</span>
+            <span className="font-bold text-primary">×{qty}</span>
         </div>
     );
 }

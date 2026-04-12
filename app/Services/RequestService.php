@@ -218,12 +218,25 @@ class RequestService
                 'priority_reason'
             ]);
 
+            $oldBookings = $facilityRequest->requestFacilities()
+                ->with('facility')
+                ->get()
+                ->map(fn($rf) => [
+                    'facility'          => $rf->facility?->name,
+                    'date'              => $rf->date_requested,
+                    'time_start'        => substr($rf->time_start, 0, 5),
+                    'time_end'          => substr($rf->time_end, 0, 5),
+                    'expected_capacity' => $rf->expected_capacity,
+                    'has_outsiders'     => (bool) $rf->has_outsiders,
+                ])
+                ->toArray();
+
             $facilityRequest->update([
-                'title'           => $validated['title'],
-                'description'     => $validated['description'],
-                'priority_level'  => $validated['priority_level'] ?? 0,
-                'priority_reason' => $validated['priority_reason'] ?? null,
-                'approved_by'     => $validated['approved_by'] ?? null,
+                'title'                     => $validated['title'],
+                'description'               => $validated['description'],
+                'priority_level'            => $validated['priority_level'] ?? 0,
+                'priority_reason'           => $validated['priority_reason'] ?? null,
+                'approved_by'               => $validated['approved_by'] ?? null,
                 'recommended_action'        => null,
                 'recommended_action_reason' => null,
             ]);
@@ -255,6 +268,26 @@ class RequestService
             }
 
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
+
+            $facilityRequest->load('requestFacilities.facility');
+
+            $newBookings = $facilityRequest->requestFacilities
+                ->map(fn($rf) => [
+                    'facility'          => $rf->facility?->name,
+                    'date'              => $rf->date_requested,
+                    'time_start'        => substr($rf->time_start, 0, 5),
+                    'time_end'          => substr($rf->time_end, 0, 5),
+                    'expected_capacity' => $rf->expected_capacity,
+                    'has_outsiders'     => (bool) $rf->has_outsiders,
+                ])
+                ->toArray();
+
+            if ($oldBookings !== $newBookings) {
+                $changes['bookings'] = [
+                    'from' => $oldBookings,
+                    'to'   => $newBookings,
+                ];
+            }
 
             $this->auditLogger::requestUpdated($facilityRequest, $changes);
             return $facilityRequest;

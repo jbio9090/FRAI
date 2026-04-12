@@ -41,6 +41,8 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
     const { hasRole } = usePermission();
     const isAdmin = hasRole("admin");
 
+    console.log(auditLogs);
+    
 
     const canEdit = request.status === 'Pending'
         && !request.on_hold
