@@ -186,7 +186,7 @@ export function useBookingFlow(facilities: Facility[]) {
             case 'date':
                 return {
                     botMessage: 'Please select the date of the event.',
-                    quickReplies: ['Today', 'Tomorrow', 'Pick Date'],
+                    quickReplies: ['In 3 days', 'In a week', 'In a month', 'Pick date'],
                     isTextInput: false,
                     showDatePicker: awaitingCustomDate,
                 };
@@ -294,11 +294,9 @@ export function useBookingFlow(facilities: Facility[]) {
         return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     };
 
-    const getTodayStr = (): string => new Date().toISOString().split('T')[0];
-
-    const getTomorrowStr = (): string => {
+    const getFutureDateStr = (daysToAdd: number): string => {
         const d = new Date();
-        d.setDate(d.getDate() + 1);
+        d.setDate(d.getDate() + daysToAdd);
         return d.toISOString().split('T')[0];
     };
 
@@ -332,13 +330,16 @@ export function useBookingFlow(facilities: Facility[]) {
             }
 
             case 'date':
-                if (value === 'Today') {
-                    update({ date: formatDate(getTodayStr()) });
+                if (value === 'In 3 days') {
+                    update({ date: formatDate(getFutureDateStr(3)) });
                     setStep('time_start');
-                } else if (value === 'Tomorrow') {
-                    update({ date: formatDate(getTomorrowStr()) });
+                } else if (value === 'In a week') {
+                    update({ date: formatDate(getFutureDateStr(7)) });
                     setStep('time_start');
-                } else if (value === 'Pick Date') {
+                } else if (value === 'In a month') {
+                    update({ date: formatDate(getFutureDateStr(30)) });
+                    setStep('time_start');
+                } else if (value === 'Pick date') {
                     setAwaitingCustomDate(true);
                 } else {
                     update({ date: formatDate(value) });
