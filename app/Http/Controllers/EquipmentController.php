@@ -126,28 +126,29 @@ class EquipmentController extends Controller
             'time_end'    => 'required|string',
         ]);
 
-        $date      = Carbon::parse($validated['date'])->format('Y-m-d');
-        $timeStart = substr($validated['time_start'], 0, 5);
-        $timeEnd   = substr($validated['time_end'], 0, 5);
+        $date       = Carbon::parse($validated['date'])->format('Y-m-d');
+        $timeStart  = substr($validated['time_start'], 0, 5);
+        $timeEnd    = substr($validated['time_end'], 0, 5);
+        $facilityId = (int) $validated['facility_id'];
 
-        $facility = Facility::findOrFail($validated['facility_id']);
+        $facility = Facility::findOrFail($facilityId);
 
         $equipmentAvailability = $facility->equipment
-            ->map(function ($equipment) use ($validated['facility_id'], $date, $timeStart, $timeEnd) {
-                $totalInFacility = $equipment->quantityInFacility($validated['facility_id']);
+            ->map(function ($equipment) use ($facilityId, $date, $timeStart, $timeEnd) {
+                $totalInFacility = $equipment->quantityInFacility($facilityId);
                 $available = $equipment->quantityAvailableInFacility(
-                    $validated['facility_id'],
+                    $facilityId,
                     $date,
                     $timeStart,
                     $timeEnd
                 );
 
                 return [
-                    'equipment_id'      => $equipment->id,
-                    'equipment_name'    => $equipment->name,
-                    'total_quantity'    => $totalInFacility,
+                    'equipment_id'       => $equipment->id,
+                    'equipment_name'     => $equipment->name,
+                    'total_quantity'     => $totalInFacility,
                     'available_quantity' => max(0, $available),
-                    'is_limited'        => $available < $totalInFacility,
+                    'is_limited'         => $available < $totalInFacility,
                 ];
             })
             ->values();

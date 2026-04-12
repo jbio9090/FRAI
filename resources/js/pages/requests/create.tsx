@@ -23,6 +23,7 @@ import { Facility } from '@/types/facility';
 import { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
 import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from "sonner";
+import { BookingCard } from '@/components/booking-card';
 
 
 interface BorrowedEquipmentRequest {
@@ -211,6 +212,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [checkingEquipmentConflicts, setCheckingEquipmentConflicts] = useState(false);
     const [equipmentAvailability, setEquipmentAvailability] = useState<Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>>({});
     const [checkingAvailability, setCheckingAvailability] = useState(false);
+    const [borrowableAvailability, setBorrowableAvailability] = useState<Record<number, Record<number, number>>>({});
 
     const handleCheckboxChange = (name: string) => {
         setData('approved_by', data.approved_by.includes(name)
@@ -289,7 +291,15 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         } else {
             setEquipmentAvailability({});
         }
-    }, [currentTimeStart, currentTimeEnd, currentDate]);
+    }, [currentTimeStart, currentTimeEnd, currentDate, selectedFacility]);
+
+    useEffect(() => {
+        if (currentDate && currentTimeStart && currentTimeEnd) {
+            fetchBorrowableAvailability();
+        } else {
+            setBorrowableAvailability({});
+        }
+    }, [currentTimeStart, currentTimeEnd, currentDate, selectedFacility]);
 
     function editBooking(index: number) {
         const booking = data.facility_bookings[index];
@@ -385,6 +395,44 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         })));
     }
 
+    async function fetchBorrowableAvailability() {
+        if (!currentDate || !currentTimeStart || !currentTimeEnd) return;
+
+        // selectedFacility may be null — filter handles both cases correctly
+        const sourceFacilities = facilities.filter(f => f.id !== selectedFacility);
+        if (sourceFacilities.length === 0) return;
+
+        const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content;
+
+        const results = await Promise.allSettled(
+            sourceFacilities.map(async (facility) => {
+                const res = await fetch(route('equipment.availability'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                    body: JSON.stringify({
+                        facility_id: facility.id,
+                        date: format(currentDate, 'yyyy-MM-dd'),
+                        time_start: currentTimeStart,
+                        time_end: currentTimeEnd,
+                    }),
+                });
+                const json = await res.json();
+                return { facilityId: facility.id, availability: json.availability ?? [] };
+            })
+        );
+
+        const map: Record<number, Record<number, number>> = {};
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                const { facilityId, availability } = result.value;
+                map[facilityId] = {};
+                for (const item of availability) {
+                    map[facilityId][item.equipment_id] = item.available_quantity;
+                }
+            }
+        }
+        setBorrowableAvailability(map);
+    }
 
     function handleEquipmentToggle(equipment: FacilityEquipment) {
         const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
@@ -1075,7 +1123,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                             <CollapsibleContent className="mt-3 space-y-4">
                                                 <div className="border rounded-md p-4 space-y-4 bg-muted/20">
 
-                                                    {/* Step 1 — pick equipment */}
                                                     <div className="space-y-2">
                                                         <div className="flex items-center justify-between">
                                                             <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1134,7 +1181,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                         </div>
                                                     </div>
 
-                                                    {/* Step 2 */}
                                                     {borrowingEquipmentId && (() => {
                                                         const equipment = allBorrowableEquipment.find(e => e.id === borrowingEquipmentId);
                                                         if (!equipment) return null;
@@ -1149,6 +1195,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                             const borrowed = selectedBorrowedEquipment.find(
                                                                                 e => e.equipment_id === equipment.id && e.source_facility_id === source.facilityId
                                                                             );
+
+                                                                            // ← the key change: use live available qty, fall back to total if not loaded yet
+                                                                            const availableFromSource =
+                                                                                borrowableAvailability[source.facilityId]?.[equipment.id] ?? source.quantity;
+                                                                            const isSourceLimited = availableFromSource < source.quantity;
+
                                                                             return (
                                                                                 <div
                                                                                     key={source.facilityId}
@@ -1170,7 +1222,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                                                         source_facility_id: source.facilityId,
                                                                                                         source_facility_name: source.facilityName,
                                                                                                         quantity_needed: 1,
-                                                                                                        max_quantity: source.quantity,
+                                                                                                        max_quantity: availableFromSource, // ← was source.quantity
                                                                                                     }]);
                                                                                                 }
                                                                                             }}
@@ -1179,8 +1231,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                                             <Label htmlFor={`borrow-${equipment.id}-${source.facilityId}`} className="text-sm font-medium cursor-pointer">
                                                                                                 {source.facilityName}
                                                                                             </Label>
-                                                                                            <p className="text-xs text-muted-foreground">
-                                                                                                Available: {source.quantity}
+                                                                                            <p className={cn("text-xs", isSourceLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
+                                                                                                Available: {availableFromSource}
+                                                                                                {isSourceLimited && ` (${source.quantity} total)`} {/* ← shows shortage */}
                                                                                             </p>
                                                                                         </div>
                                                                                     </div>
@@ -1190,10 +1243,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                                             <Input
                                                                                                 type="number"
                                                                                                 min="1"
-                                                                                                max={source.quantity}
+                                                                                                max={availableFromSource} // ← was source.quantity
                                                                                                 value={borrowed.quantity_needed}
                                                                                                 onChange={(e) => {
-                                                                                                    const qty = Math.min(Number(e.target.value), source.quantity);
+                                                                                                    const qty = Math.min(Number(e.target.value), availableFromSource); // ← was source.quantity
                                                                                                     setSelectedBorrowedEquipment(prev => prev.map(item =>
                                                                                                         item.equipment_id === equipment.id && item.source_facility_id === source.facilityId
                                                                                                             ? { ...item, quantity_needed: qty }
@@ -1314,98 +1367,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 </div>
 
                                 {data.facility_bookings.map((booking, index) => (
-                                    <div key={index} className="mb-4 overflow-hidden border border-border rounded-lg bg-secondary/30 shadow-sm">
-                                        <div className="p-4">
-                                            <div className="flex items-center justify-between gap-4 mb-2">
-                                                <h3 className="font-bold text-lg text-foreground truncate">
-                                                    {booking.facility_name}
-                                                </h3>
-
-                                                <div className="flex items-center gap-1 bg-background/50 rounded-md p-1 border border-border/50 shrink-0">
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-7 w-7 hover:bg-background hover:text-primary transition-colors"
-                                                        onClick={() => editBooking(index)}
-                                                    >
-                                                        <Pen size={14} />
-                                                    </Button>
-                                                    <div className="w-[1px] h-4 bg-border/60" />
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                                                        onClick={() => removeBooking(index)}
-                                                    >
-                                                        <X size={14} />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-                                                <div className="flex items-center gap-2">
-                                                    <CalendarIcon size={15} className="text-primary/70" />
-                                                    <span>{format(booking.date, "PPP")}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Clock size={15} className="text-primary/70" />
-                                                    <span>{formatTime(booking.time_start)} – {formatTime(booking.time_end)}</span>
-                                                </div>
-                                                {booking.expected_capacity && (
-                                                    <div className="flex items-center gap-2">
-                                                        <User size={15} className="text-primary/70" />
-                                                        <span>{booking.expected_capacity} attendees</span>
-                                                    </div>
-                                                )}
-                                                {booking.has_outsiders && (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-                                                            Has Outsiders
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
-                                                <div key={i} className="mt-3 flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-                                                    <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
-                                                    <span>
-                                                        <strong>Schedule Conflict:</strong> Overlaps with "{conflict.request_title}" ({formatTime(conflict.time_start)}-{formatTime(conflict.time_end)})
-                                                    </span>
-                                                </div>
-                                            ))}
-
-                                            {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
-                                                conflicts.map((c, i) => {
-                                                    const eqName = booking.equipment.find(e => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
-                                                    return (
-                                                        <div key={`eq-${eqId}-${i}`} className="mt-2 flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
-                                                            <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
-                                                            <span>
-                                                                <strong>Equipment Conflict ({eqName}):</strong> Also requested by "{c.request_title}" ({c.status})
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-
-                                        {(booking.equipment.length > 0 || booking.borrowed_equipment?.length > 0) && (
-                                            <div className="bg-background/40 border-t border-border px-4 py-3">
-                                                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Requested Equipment</p>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                    {booking.equipment.map((eq, i) => (
-                                                        <div key={i} className="text-sm flex items-center justify-between bg-background/50 px-2 py-1 rounded border border-border/40">
-                                                            <span className="text-foreground/80">{eq.equipment_name}</span>
-                                                            <span className="text-sm font-bold text-primary">x{eq.quantity_needed}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <BookingCard
+                                        key={index}
+                                        booking={booking}
+                                        index={index}
+                                        onEdit={editBooking}
+                                        onRemove={removeBooking}
+                                    />
                                 ))}
 
                                 <FacilityInfo
