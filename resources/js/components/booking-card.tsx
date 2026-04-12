@@ -45,8 +45,8 @@ interface FacilityBooking {
 interface BookingCardProps {
     booking: FacilityBooking;
     index: number;
-    onEdit: (index: number) => void;
-    onRemove: (index: number) => void;
+    onEdit?: (index: number) => void;
+    onRemove?: (index: number) => void;
 }
 
 function formatTime(time: string): string {
@@ -81,28 +81,34 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
                     <h3 className="font-bold text-lg text-foreground truncate">
                         {booking.facility_name}
                     </h3>
-
-                    <div className="flex items-center gap-1 bg-background/50 rounded-md p-1 border border-border/50 shrink-0">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 hover:bg-background hover:text-primary transition-colors"
-                            onClick={() => onEdit(index)}
-                        >
-                            <Pen size={14} />
-                        </Button>
-                        <div className="w-[1px] h-4 bg-border/60" />
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                            onClick={() => onRemove(index)}
-                        >
-                            <X size={14} />
-                        </Button>
-                    </div>
+ 
+                    {(onEdit || onRemove) && (
+                        <div className="flex items-center gap-1 bg-background/50 rounded-md p-1 border border-border/50 shrink-0">
+                            {onEdit && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 hover:bg-background hover:text-primary transition-colors"
+                                    onClick={() => onEdit(index)}
+                                >
+                                    <Pen size={14} />
+                                </Button>
+                            )}
+                            {onEdit && onRemove && <div className="w-[1px] h-4 bg-border/60" />}
+                            {onRemove && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                    onClick={() => onRemove(index)}
+                                >
+                                    <X size={14} />
+                                </Button>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Meta row ── */}

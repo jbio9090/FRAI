@@ -135,7 +135,7 @@ class RequestService
             "requestFacilities.externalEquipments",
             "comments" => fn($q) => $q->latest(),
             "comments.user",
-            "equipment" => fn($q) => $q->withPivot('quantity_needed'),
+            "equipment" => fn($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
             "equipment.facilities",
         ])->where("id", $request_id)->firstOrFail();
 

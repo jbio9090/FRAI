@@ -26,6 +26,7 @@ import Comment from '@/components/comment';
 import StatusTag from '@/components/status-tag';
 import { ActivityFeed } from '@/components/activity-feed';
 import { usePermission } from '@/hooks/use-permission';
+import { BookingCard } from '@/components/booking-card';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -262,165 +263,69 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
 
                     {/* Facilities Tab */}
                     <TabsContent value="facilities" className="flex flex-col gap-4 mt-6 lg:grid grid-cols-[1fr_1fr]">
-                        {request.request_facilities.map((rf) => {
+                        {request.request_facilities.map((rf, index) => {
                             const facility = request.facilities.find(f => f.id === rf.facility_id);
                             if (!facility) return null;
 
-                            const facilityEquipment = request.equipment.filter(eq =>
-                                eq.facilities?.some(f => f.id === rf.facility_id)
-                            );
+                            const ownEquipment = request.equipment
+                                ?.filter(eq => !eq.pivot?.is_borrowed && eq.facilities?.some(f => f.id === rf.facility_id))
+                                .map(eq => ({
+                                    equipment_id: eq.id,
+                                    equipment_name: eq.name,
+                                    quantity_needed: eq.pivot.quantity_needed,
+                                    max_quantity: eq.pivot.quantity_needed,
+                                })) ?? [];
 
-                            const date = new Date(rf.date_requested).toLocaleDateString('en-US', {
-                                month: 'long', day: 'numeric', year: 'numeric'
-                            });
+                            const borrowedEquipment = request.equipment
+                                ?.filter(eq => eq.pivot?.is_borrowed)
+                                .map(eq => ({
+                                    equipment_id: eq.id,
+                                    equipment_name: eq.name,
+                                    source_facility_id: eq.pivot.source_facility_id,
+                                    source_facility_name: eq.facilities?.find(f => f.id === eq.pivot.source_facility_id)?.name ?? '',
+                                    quantity_needed: eq.pivot.quantity_needed,
+                                    max_quantity: eq.pivot.quantity_needed,
+                                })) ?? [];
+
+                            const approvedConflicts = request.approved_conflicts
+                                ?.filter(c => c.facility_id === rf.facility_id)
+                                .map(c => ({
+                                    request_title: c.request.title,
+                                    status: c.request.status,
+                                    time_start: c.time_start,
+                                    time_end: c.time_end,
+                                })) ?? [];
+
+                            const pendingConflicts = request.pending_conflicts
+                                ?.filter(c => c.facility_id === rf.facility_id)
+                                .map(c => ({
+                                    request_title: c.request.title,
+                                    status: c.request.status,
+                                    time_start: c.time_start,
+                                    time_end: c.time_end,
+                                })) ?? [];
+
+                            const booking = {
+                                facility_id: rf.facility_id,
+                                facility_name: facility.name,
+                                date: rf.date_requested,
+                                time_start: rf.time_start,
+                                time_end: rf.time_end,
+                                expected_capacity: rf.expected_capacity ?? null,
+                                has_outsiders: rf.has_outsiders ?? false,
+                                equipment: ownEquipment,
+                                borrowed_equipment: borrowedEquipment,
+                                external_equipment: rf.external_equipments?.map(e => ({ name: e.name })) ?? [],
+                                conflicts: [...approvedConflicts, ...pendingConflicts],
+                                equipment_conflicts: {},
+                            };
 
                             return (
-                                <div
+                                <BookingCard
                                     key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
-                                    className="rounded-xl border border-border bg-card overflow-hidden"
-                                >
-                                    <div className="px-5 py-4 border-b border-border">
-                                        <Link href={route("facility.detail", [facility.id])}>
-                                            <h2 className="text-[15px] font-medium hover:underline mb-2">
-                                                {facility.name}
-                                            </h2>
-                                        </Link>
-                                        <div className="flex flex-wrap gap-3 mb-2">
-                                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-1">
-                                                <Calendar size={12} />
-                                                {date}
-                                            </span>
-                                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted border border-border rounded-full px-2.5 py-1">
-                                                <Clock size={12} />
-                                                {formatTime(rf.time_start)} – {formatTime(rf.time_end)}
-                                            </span>
-                                        </div>
-
-                                        {rf.has_outsiders && (
-                                            <span className="flex items-center w-fit gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-1">
-                                                <UsersRound size={12} />
-                                                With Outsiders
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {facilityEquipment.length > 0 && (
-                                        <div className="px-5 py-4">
-                                            <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
-                                                Equipment
-                                            </p>
-                                            <div className="flex flex-col divide-y divide-border">
-                                                {facilityEquipment.map((eq) => (
-                                                    <div key={eq.id} className="flex justify-between items-center py-2 text-sm">
-                                                        <span>{eq.name}</span>
-                                                        <span className="text-xs text-muted-foreground bg-muted rounded px-2 py-0.5">
-                                                            Qty: {eq.pivot.quantity_needed}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {rf.external_equipments?.length > 0 && (
-                                        <div className="px-5 py-4 border-t border-border">
-                                            <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
-                                                External equipment
-                                            </p>
-                                            <div className="flex flex-col divide-y divide-border">
-                                                {rf.external_equipments.map((item, i) => (
-                                                    <div key={i} className="text-sm py-2">{item.name}</div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {request.approved_conflicts?.filter(c => c.facility_id === rf.facility_id).length > 0 && (
-                                        <div className="px-5 py-4 border-t border-border">
-                                            <p className="text-[11px] font-medium uppercase tracking-widest text-red-600 dark:text-red-400 mb-3">
-                                                Approved conflicts
-                                            </p>
-                                            <div className="flex flex-col divide-y divide-border">
-                                                {request.approved_conflicts
-                                                    .filter(c => c.facility_id === rf.facility_id)
-                                                    .map((conflict) => (
-                                                        <div key={conflict.id} className="flex flex-col gap-1 py-2.5 text-sm">
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <Link
-                                                                    href={route("requests.detail", conflict.request.id)}
-                                                                    className="font-medium hover:underline truncate"
-                                                                >
-                                                                    {conflict.request.title}
-                                                                </Link>
-                                                                <Badge variant="destructive" className="shrink-0 text-[10px]">
-                                                                    {conflict.request.status}
-                                                                </Badge>
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                                                <span className="flex items-center gap-1">
-                                                                    <Calendar size={11} />
-                                                                    {new Date(conflict.date_requested).toLocaleDateString('en-US', {
-                                                                        month: 'long', day: 'numeric', year: 'numeric'
-                                                                    })}
-                                                                </span>
-                                                                <span className="flex items-center gap-1">
-                                                                    <Clock size={11} />
-                                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                By {conflict.request.user.name}
-                                                            </p>
-                                                        </div>
-                                                    ))
-                                                }
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {request.pending_conflicts?.filter(c => c.facility_id === rf.facility_id).length > 0 && (
-                                        <div className="px-5 py-4 border-t border-border">
-                                            <p className="text-[11px] font-medium uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-3">
-                                                Pending conflicts
-                                            </p>
-                                            <div className="flex flex-col divide-y divide-border">
-                                                {request.pending_conflicts
-                                                    .filter(c => c.facility_id === rf.facility_id)
-                                                    .map((conflict) => (
-                                                        <div key={conflict.id} className="flex flex-col gap-1 py-2.5 text-sm">
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <Link
-                                                                    href={route("requests.detail", conflict.request.id)}
-                                                                    className="font-medium hover:underline truncate"
-                                                                >
-                                                                    {conflict.request.title}
-                                                                </Link>
-                                                                <Badge variant="outline" className="shrink-0 text-[10px]">
-                                                                    {conflict.request.status}
-                                                                </Badge>
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                                                <span className="flex items-center gap-1">
-                                                                    <Calendar size={11} />
-                                                                    {new Date(conflict.date_requested).toLocaleDateString('en-US', {
-                                                                        month: 'long', day: 'numeric', year: 'numeric'
-                                                                    })}
-                                                                </span>
-                                                                <span className="flex items-center gap-1">
-                                                                    <Clock size={11} />
-                                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                By {conflict.request.user.name}
-                                                            </p>
-                                                        </div>
-                                                    ))
-                                                }
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                                    booking={booking}
+                                    index={index}
+                                />
                             );
                         })}
                     </TabsContent>
