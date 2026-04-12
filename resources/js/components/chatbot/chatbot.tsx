@@ -16,8 +16,9 @@ import MessageList from './components/MessageList';
 import LoadingIndicator from './components/LoadingIndicator';
 import ChatInput from './components/ChatInput';
 import BookingFlow from './components/BookingFlow';
+import AvailabilityQuickFlow from './components/AvailabilityQuickFlow';
 
-type ChatMode = 'idle' | 'booking' | 'ai';
+type ChatMode = 'idle' | 'booking' | 'availability' | 'ai';
 
 export default function Chatbot() {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -472,6 +473,16 @@ export default function Chatbot() {
             return;
         }
 
+        if (option.action === 'availability') {
+            setMode('availability');
+            return;
+        }
+
+        if (option.action === 'navigate' && option.href) {
+            window.location.href = option.href;
+            return;
+        }
+
         const userMessage: Message = { role: 'user', content: option.message };
 
         if (isLoading) {
@@ -489,7 +500,7 @@ export default function Chatbot() {
         const message = input.trim();
         if (!message) return;
         setInput('');
-        if (mode === 'idle' || mode === 'booking') setMode('ai');
+        if (mode === 'idle' || mode === 'booking' || mode === 'availability') setMode('ai');
 
         const userMessage: Message = { role: 'user', content: message };
         if (isLoading) {
@@ -513,6 +524,24 @@ export default function Chatbot() {
         addMessage({ role: 'assistant', content: resultMessage });
     };
 
+    const handleAvailabilityComplete = async (selection: { facility: Facility; date: string; startTime: string; endTime: string }) => {
+        const userMessage: Message = {
+            role: 'user',
+            content: `Check availability for ${selection.facility.name} on ${selection.date} from ${selection.startTime} to ${selection.endTime}.`,
+        };
+        const context = `Quick reply collected availability details. Facility: ${selection.facility.name} (ID ${selection.facility.id}). Date: ${selection.date}. Start time: ${selection.startTime}. End time: ${selection.endTime}.`;
+
+        setMode('ai');
+
+        if (isLoading) {
+            addMessage(userMessage);
+            messageQueueRef.current.push({ message: userMessage, context });
+            return;
+        }
+
+        await processAndSend(userMessage, context);
+    };
+
     return (
         <div className="w-full h-full flex flex-col bg-background">
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -532,6 +561,14 @@ export default function Chatbot() {
                         onAttachFile={handleAttachFiles}
                         uploading={uploading}
                         uploadError={uploadError}
+                    />
+                )}
+
+                {mode === 'availability' && (
+                    <AvailabilityQuickFlow
+                        facilities={facilities}
+                        onComplete={handleAvailabilityComplete}
+                        onCancel={() => setMode('idle')}
                     />
                 )}
 

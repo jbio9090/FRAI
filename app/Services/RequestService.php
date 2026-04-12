@@ -326,16 +326,16 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $requestedDate  = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$booking['time_start']}");
-            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$booking['time_end']}");
+            $requestedStart = $this->parseBookingDateTime($requestedDate, $booking['time_start']);
+            $requestedEnd   = $this->parseBookingDateTime($requestedDate, $booking['time_end']);
 
             foreach ($existingBookings as $existing) {
                 if ($existing->facility_id != $booking['facility_id'] || $existing->date_requested != $requestedDate) {
                     continue;
                 }
 
-                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$existing->time_start}");
-                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$requestedDate} {$existing->time_end}");
+                $existingStart = $this->parseBookingDateTime($requestedDate, $existing->time_start);
+                $existingEnd   = $this->parseBookingDateTime($requestedDate, $existing->time_end);
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $status = $existing->request->status;
@@ -527,8 +527,8 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_start']}");
-            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_end']}");
+            $requestedStart = $this->parseBookingDateTime($dateOnly, $booking['time_start']);
+            $requestedEnd   = $this->parseBookingDateTime($dateOnly, $booking['time_end']);
 
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
@@ -541,8 +541,8 @@ class RequestService
                 ->get();
 
             foreach ($existingBookings as $existing) {
-                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_start}");
-                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_end}");
+                $existingStart = $this->parseBookingDateTime($dateOnly, $existing->time_start);
+                $existingEnd   = $this->parseBookingDateTime($dateOnly, $existing->time_end);
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $conflictingIds->push($existing->request_id);
@@ -585,8 +585,8 @@ class RequestService
 
         foreach ($bookings as $booking) {
             $dateOnly       = Carbon::parse($booking['date'])->format('Y-m-d');
-            $requestedStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_start']}");
-            $requestedEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$booking['time_end']}");
+            $requestedStart = $this->parseBookingDateTime($dateOnly, $booking['time_start']);
+            $requestedEnd   = $this->parseBookingDateTime($dateOnly, $booking['time_end']);
 
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
@@ -599,8 +599,8 @@ class RequestService
                 ->get();
 
             foreach ($existingBookings as $existing) {
-                $existingStart = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_start}");
-                $existingEnd   = Carbon::createFromFormat('Y-m-d H:i', "{$dateOnly} {$existing->time_end}");
+                $existingStart = $this->parseBookingDateTime($dateOnly, $existing->time_start);
+                $existingEnd   = $this->parseBookingDateTime($dateOnly, $existing->time_end);
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $conflictingIds->push($existing->request_id);
@@ -613,6 +613,22 @@ class RequestService
         }
 
         return FacilityRequest::whereIn('id', $conflictingIds->unique())->get();
+    }
+
+    private function parseBookingDateTime(string $date, string $time): Carbon
+    {
+        $dateOnly = Carbon::parse($date)->format('Y-m-d');
+        $timeOnly = trim($time);
+
+        foreach (['Y-m-d H:i:s', 'Y-m-d H:i'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, "{$dateOnly} {$timeOnly}");
+            } catch (\Carbon\Exceptions\InvalidFormatException) {
+                continue;
+            }
+        }
+
+        return Carbon::parse("{$dateOnly} {$timeOnly}");
     }
 
     public function putOnHold(FacilityRequest $target, FacilityRequest $heldBy, string $reason): void
