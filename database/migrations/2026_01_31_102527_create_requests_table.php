@@ -23,6 +23,8 @@ return new class extends Migration
             $table->json('pending_conflict_rf_ids')->nullable();
             $table->json('approved_conflict_rf_ids')->nullable();
             $table->json("approved_by")->nullable();
+            $table->json('pending_equipment_conflict_request_ids')->nullable();
+            $table->json('approved_equipment_conflict_request_ids')->nullable();
         });
     }
 

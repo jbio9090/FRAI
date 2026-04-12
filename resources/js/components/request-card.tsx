@@ -205,19 +205,26 @@ export default function RequestCard({
                             <div className="flex flex-col">
                                 <span className='text-xs font-semibold text-muted-foreground'>Recommendation</span>
 
-                                {isLoadingRecommendation ? (
-                                    <AnimatedText italize={true} />
-                                ) : (
-                                    <>
-                                        <motion.span
-                                            initial={{ y: 10, opacity: 0 }}
-                                            animate={{ y: 0, opacity: 1 }}
-                                            transition={{ duration: 0.2, ease: "easeIn" }}
-                                            className={cn('font-black overflow-hidden', request.recommended_action === "Denied" && "text-destructive")}>
-                                            {recommendedActionToPresentTense(request.recommended_action)}
-                                        </motion.span>
-                                    </>
-                                )}
+                                <div className="w-full overflow-hidden">
+                                    {isLoadingRecommendation ? (
+                                        <AnimatedText italize={true} />
+                                    ) : (
+                                        <div className="overflow-hidden">
+                                            <motion.span
+                                                initial={{ y: "100%" }}
+                                                animate={{ y: "0%" }}
+                                                transition={{ duration: 0.4, ease: "easeOut" }}
+                                                className={cn(
+                                                    'font-black inline-block',
+                                                    request.recommended_action === "Denied" && "text-destructive"
+                                                )}
+                                            >
+                                                {recommendedActionToPresentTense(request.recommended_action)}
+                                            </motion.span>
+                                        </div>
+                                    )}
+                                </div>
+
                             </div>
 
                             <div className="flex justify-end gap-2 w-content ml-auto">

@@ -6,6 +6,13 @@ export interface Equipment {
     facility_id: number;
 }
 
+export interface EquipmentConflict {
+    request_id: number;
+    request_title: string;
+    requester: string;
+    status: string;
+}
+
 export interface FacilityEquipment extends Equipment {
     pivot: {
         quantity: number; // how many this facility holds

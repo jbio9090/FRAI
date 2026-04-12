@@ -36,6 +36,8 @@ class Request extends Model
         'pending_conflict_rf_ids',
         'approved_conflict_rf_ids',
         'approved_by',
+        'pending_equipment_conflict_request_ids',
+        'approved_equipment_conflict_request_ids',
     ];
 
     protected $casts = [
@@ -46,6 +48,8 @@ class Request extends Model
         'pending_conflict_rf_ids' => 'array',
         'approved_conflict_rf_ids' => 'array',
         'approved_by' => 'array',
+        'pending_equipment_conflict_request_ids'  => 'array',
+        'approved_equipment_conflict_request_ids' => 'array',
     ];
 
     /* =========================================

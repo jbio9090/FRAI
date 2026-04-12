@@ -117,6 +117,8 @@ class RequestService
                     ->filter()->values()
             );
 
+            $this->loadEquipmentConflictRelations($request);
+
             return $request;
         });
 
@@ -164,6 +166,8 @@ class RequestService
                 ->filter()
                 ->values()
         );
+
+        $this->loadEquipmentConflictRelations($request);
 
         return $request;
     }
@@ -381,6 +385,19 @@ class RequestService
         $pendingConflictRfIds  = $pendingConflicts->pluck('request_facility_id')->unique()->values()->toArray();
         $approvedConflictRfIds = $approvedConflicts->pluck('request_facility_id')->unique()->values()->toArray();
 
+        $equipmentConflicts = $this->checkForEquipmentConflicts(
+            $validated['facility_bookings'],
+            [RequestStatus::PENDING, RequestStatus::APPROVED],
+            $saved_request->id
+        );
+        $pendingEquipmentRequestIds  = collect($equipmentConflicts)
+            ->filter(fn($c) => $c['status'] === RequestStatus::PENDING)
+            ->pluck('request_id')->unique()->values()->toArray();
+
+        $approvedEquipmentRequestIds = collect($equipmentConflicts)
+            ->filter(fn($c) => $c['status'] === RequestStatus::APPROVED)
+            ->pluck('request_id')->unique()->values()->toArray();
+
         foreach ($validated['facility_bookings'] as $booking) {
             if (!empty($booking['external_equipment'])) {
                 $hasExternalEquipment = true;
@@ -389,9 +406,12 @@ class RequestService
         }
 
         $saved_request->update([
-            'pending_conflict_rf_ids'  => $pendingConflictRfIds ?: [],
-            'approved_conflict_rf_ids' => $approvedConflictRfIds ?: [],
+            'pending_conflict_rf_ids'                => $pendingConflictRfIds ?: [],
+            'approved_conflict_rf_ids'               => $approvedConflictRfIds ?: [],
+            'pending_equipment_conflict_request_ids'  => $pendingEquipmentRequestIds ?: [],
+            'approved_equipment_conflict_request_ids' => $approvedEquipmentRequestIds ?: [],
         ]);
+
         $saved_request->refresh();
 
         $saved_request->loadMissing(['requestFacilities.facility', 'requestFacilities.externalEquipments', 'equipment']);
@@ -745,5 +765,92 @@ class RequestService
                 },
             )->values(),
         ];
+    }
+
+    public function checkForEquipmentConflicts(
+        array $bookings,
+        array $statuses = [RequestStatus::APPROVED],
+        ?int $excludeRequestId = null
+    ): array {
+        $conflicts = [];
+
+        foreach ($bookings as $booking) {
+            $date      = Carbon::parse($booking['date'])->format('Y-m-d');
+            $timeStart = substr($booking['time_start'], 0, 5);
+            $timeEnd   = substr($booking['time_end'], 0, 5);
+
+            $equipmentIds = array_unique(array_merge(
+                array_column($booking['equipment'] ?? [], 'equipment_id'),
+                array_column($booking['borrowed_equipment'] ?? [], 'equipment_id'),
+            ));
+
+            if (empty($equipmentIds)) continue;
+
+            $conflictingRequests = FacilityRequest::whereIn('status', $statuses)
+                ->where('on_hold', false)
+                ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId))
+                ->whereHas('equipment', fn($q) => $q->whereIn('equipments.id', $equipmentIds))
+                ->whereHas(
+                    'requestFacilities',
+                    fn($q) => $q
+                        ->where('date_requested', $date)
+                        ->where('time_start', '<', $timeEnd)
+                        ->where('time_end', '>', $timeStart)
+                )
+                ->with(['user', 'equipment'])
+                ->get();
+
+            foreach ($conflictingRequests as $conflicting) {
+                $overlappingEquipmentIds = $conflicting->equipment
+                    ->pluck('id')
+                    ->intersect($equipmentIds)
+                    ->values();
+
+                foreach ($overlappingEquipmentIds as $eqId) {
+                    $conflicts[] = [
+                        'request_id'         => $conflicting->id,
+                        'request_title'      => $conflicting->title,
+                        'requester'          => $conflicting->user->name,
+                        'equipment_id'       => $eqId,
+                        'equipment_name'     => $conflicting->equipment->firstWhere('id', $eqId)?->name,
+                        'status'             => $conflicting->status,
+                        'date'               => $date,
+                        'time_start'         => $timeStart,
+                        'time_end'           => $timeEnd,
+                    ];
+                }
+            }
+        }
+
+        return $conflicts;
+    }
+
+    private function loadEquipmentConflictRelations(FacilityRequest $request): void
+    {
+        $allIds = array_unique(array_merge(
+            $request->pending_equipment_conflict_request_ids ?? [],
+            $request->approved_equipment_conflict_request_ids ?? [],
+        ));
+
+        $conflictRequests = $allIds
+            ? FacilityRequest::whereIn('id', $allIds)
+            ->with(['user', 'equipment', 'requestFacilities.facility'])
+            ->get()
+            ->keyBy('id')
+            : collect();
+
+        $request->setRelation(
+            'pending_equipment_conflicts',
+            collect($request->pending_equipment_conflict_request_ids ?? [])
+                ->map(fn($id) => $conflictRequests->get($id))
+                ->filter()->values()
+        );
+
+        $request->setRelation(
+            'approved_equipment_conflicts',
+            collect($request->approved_equipment_conflict_request_ids ?? [])
+                ->map(fn($id) => $conflictRequests->get($id))
+                ->filter()->values()
+        );
     }
 }

@@ -2,9 +2,8 @@ import { motion } from "motion/react";
 
 export default function AnimatedText({ label = "Analyzing Request...", italize = false }: { label?: string, italize?: boolean }) {
     const colors = [
-        "#00ccff",
-        "#004dff",
-        "#3300ff",
+        "#8e8e8e",
+        "#484848",
     ];
 
     return (

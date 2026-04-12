@@ -20,7 +20,7 @@ import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from "@/lib/utils";
 import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { Facility } from '@/types/facility';
-import { FacilityEquipment } from '@/types/equipment';
+import { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
 import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from "sonner";
 
@@ -46,6 +46,7 @@ interface FacilityBooking {
     external_equipment: { name: string }[];
     expected_capacity: number | null;
     has_outsiders: boolean;
+    equipment_conflicts: Record<number, EquipmentConflict[]>;
 }
 
 interface EquipmentRequest {
@@ -53,6 +54,7 @@ interface EquipmentRequest {
     equipment_name: string;
     quantity_needed: number;
     max_quantity: number;
+    conflicts?: EquipmentConflict[];
 }
 
 interface BookingSchedule {
@@ -205,6 +207,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [approvedBy, setApprovedBy] = useState<string[]>(
         existingRequest?.approved_by ?? []
     );
+    const [equipmentConflicts, setEquipmentConflicts] = useState<Record<number, EquipmentConflict[]>>({});
+    const [checkingEquipmentConflicts, setCheckingEquipmentConflicts] = useState(false);
 
     const handleCheckboxChange = (name: string) => {
         setData('approved_by', data.approved_by.includes(name)
@@ -272,6 +276,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
         return () => clearTimeout(timeout);
     }, [data.title, data.description, data.priority_level, data.priority_reason, data.facility_bookings, data.approved_by, showDraftBanner]);
+
+    useEffect(() => {
+        const ids = selectedEquipment.map(e => e.equipment_id);
+        if (ids.length > 0) fetchEquipmentConflicts(ids);
+        else setEquipmentConflicts({});
+    }, [currentTimeStart, currentTimeEnd, currentDate]);
 
     function editBooking(index: number) {
         const booking = data.facility_bookings[index];
@@ -367,18 +377,23 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         })));
     }
 
+
     function handleEquipmentToggle(equipment: FacilityEquipment) {
         const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
+        let updated: EquipmentRequest[];
         if (exists) {
-            setSelectedEquipment(selectedEquipment.filter(e => e.equipment_id !== equipment.id));
+            updated = selectedEquipment.filter(e => e.equipment_id !== equipment.id);
+            setEquipmentConflicts(prev => { const n = { ...prev }; delete n[equipment.id]; return n; });
         } else {
-            setSelectedEquipment([...selectedEquipment, {
+            updated = [...selectedEquipment, {
                 equipment_id: equipment.id,
                 equipment_name: equipment.name,
                 quantity_needed: equipment.pivot.quantity,
                 max_quantity: equipment.pivot.quantity,
-            }]);
+            }];
         }
+        setSelectedEquipment(updated);
+        fetchEquipmentConflicts(updated.map(e => e.equipment_id));
     }
 
     function updateEquipmentQuantity(equipmentId: number, quantity: number) {
@@ -442,6 +457,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             external_equipment: externalEquipment,
             expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
             has_outsiders: hasOutsiders,
+            equipment_conflicts: equipmentConflicts,
         };
 
         const updatedBookings = [...data.facility_bookings, newBooking];
@@ -460,6 +476,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setExternalEquipmentInput('');
         setExpectedCapacity('');
         setHasOutsiders(false);
+        setEquipmentConflicts({});
     }
 
     function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -510,6 +527,30 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             onSuccess: () => clearDraft(existingRequest?.id),
             onError: (errs) => console.log('validation errors:', errs),
         });
+    }
+
+    async function fetchEquipmentConflicts(equipmentIds: number[]) {
+        if (!currentDate || !currentTimeStart || !currentTimeEnd || equipmentIds.length === 0) return;
+
+        setCheckingEquipmentConflicts(true);
+        try {
+            const res = await fetch(route('equipment.check-conflicts'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content },
+                body: JSON.stringify({
+                    equipment_ids: equipmentIds,
+                    date: format(currentDate, 'yyyy-MM-dd'),
+                    time_start: currentTimeStart,
+                    time_end: currentTimeEnd,
+                }),
+            });
+            const data = await res.json();
+            setEquipmentConflicts(data.conflicts ?? {});
+        } catch (err) {
+            console.error('Failed to check equipment conflicts', err);
+        } finally {
+            setCheckingEquipmentConflicts(false);
+        }
     }
 
     return (
@@ -819,37 +860,55 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
                                             {availableEquipment.map((equipment) => {
                                                 const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
+                                                const conflicts = equipmentConflicts[equipment.id] ?? [];
+
                                                 return (
-                                                    <div key={equipment.id} className="flex items-center justify-between gap-4">
-                                                        <div className="flex items-center space-x-3 flex-1">
-                                                            <Checkbox
-                                                                id={`equipment-${equipment.id}`}
-                                                                checked={!!selected}
-                                                                onCheckedChange={() => handleEquipmentToggle(equipment)}
-                                                            />
-                                                            <div className="flex-1">
-                                                                <Label htmlFor={`equipment-${equipment.id}`} className="text-sm text-foreground font-medium cursor-pointer">
-                                                                    {equipment.name}
-                                                                </Label>
-                                                                <Label className="text-xs text-muted-foreground">
-                                                                    Available in facility: {equipment.pivot.quantity}
-                                                                </Label>
-                                                            </div>
-                                                        </div>
-                                                        {selected && (
-                                                            <div className="flex items-center gap-4">
-                                                                <Label className="text-sm">Qty:</Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    min="1"
-                                                                    max={equipment.pivot.quantity}
-                                                                    value={selected.quantity_needed}
-                                                                    onChange={(e) => updateEquipmentQuantity(
-                                                                        equipment.id,
-                                                                        Math.min(Number(e.target.value), equipment.pivot.quantity)
-                                                                    )}
-                                                                    className="w-20 text-sm p-2"
+                                                    <div key={equipment.id} className="space-y-1">
+                                                        <div className="flex items-center justify-between gap-4">
+                                                            <div className="flex items-center space-x-3 flex-1">
+                                                                <Checkbox
+                                                                    id={`equipment-${equipment.id}`}
+                                                                    checked={!!selected}
+                                                                    onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                                 />
+                                                                <div className="flex-1">
+                                                                    <Label htmlFor={`equipment-${equipment.id}`} className="text-sm text-foreground font-medium cursor-pointer">
+                                                                        {equipment.name}
+                                                                    </Label>
+                                                                    <Label className="text-xs text-muted-foreground block">
+                                                                        Available: {equipment.pivot.quantity}
+                                                                    </Label>
+                                                                </div>
+                                                            </div>
+                                                            {selected && (
+                                                                <div className="flex items-center gap-4">
+                                                                    <Label className="text-sm">Qty:</Label>
+                                                                    <Input
+                                                                        type="number"
+                                                                        min="1"
+                                                                        max={equipment.pivot.quantity}
+                                                                        value={selected.quantity_needed}
+                                                                        onChange={(e) => updateEquipmentQuantity(equipment.id, Math.min(Number(e.target.value), equipment.pivot.quantity))}
+                                                                        className="w-20 text-sm p-2"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Equipment conflict warning */}
+                                                        {selected && conflicts.length > 0 && (
+                                                            <div className="ml-7 space-y-1">
+                                                                {conflicts.map((c, i) => (
+                                                                    <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
+                                                                        <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
+                                                                        <span>
+                                                                            Also requested by <strong>{c.requester}</strong> ("{c.request_title}") —{' '}
+                                                                            <span className={c.status === 'Approved' ? 'text-red-600 font-semibold' : ''}>
+                                                                                {c.status}
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
                                                             </div>
                                                         )}
                                                     </div>
@@ -1263,6 +1322,20 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     </span>
                                                 </div>
                                             ))}
+
+                                            {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
+                                                conflicts.map((c, i) => {
+                                                    const eqName = booking.equipment.find(e => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
+                                                    return (
+                                                        <div key={`eq-${eqId}-${i}`} className="mt-2 flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+                                                            <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
+                                                            <span>
+                                                                <strong>Equipment Conflict ({eqName}):</strong> Also requested by "{c.request_title}" ({c.status})
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
                                         </div>
 
                                         {(booking.equipment.length > 0 || booking.borrowed_equipment?.length > 0) && (
