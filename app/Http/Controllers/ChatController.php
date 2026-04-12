@@ -325,6 +325,44 @@ class ChatController extends Controller
         return $normalized;
     }
 
+    private function isFacilityRecommendationIntent(?string $message): bool
+    {
+        if (!$message) {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/\b(room|rooms|facility|facilities|hall|venue)\b/i',
+            $message
+        ) && (bool) preg_match(
+            '/\b(need|looking for|recommend|suggest|available|have|show|list|other)\b/i',
+            $message
+        );
+    }
+
+    private function buildFacilityRecommendationResponse($facilitiesToDisplay, int $participantCount): string
+    {
+        if ($facilitiesToDisplay->isEmpty()) {
+            return "I checked the facilities for {$participantCount} participants, and there are no rooms with capacity between {$participantCount} and " . ($participantCount * 2) . ".";
+        }
+
+        $lines = $facilitiesToDisplay->map(function ($facility) {
+            return "- ID {$facility->id}: {$facility->name} (Building: {$facility->building}, Capacity: {$facility->capacity})";
+        })->implode("\n");
+
+        return "For {$participantCount} participants, the valid facility capacity range is {$participantCount}-" . ($participantCount * 2) . ".\n\nHere are all matching facilities:\n{$lines}\n\nWhich room would you like to consider?";
+    }
+
+    private function storeAssistantReply(array $incomingMessages, string $content): void
+    {
+        $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
+        $userAndAssistantMessages[] = [
+            'role' => 'assistant',
+            'content' => $content,
+        ];
+        $this->saveSession(array_values($userAndAssistantMessages));
+    }
+
     public function chat(Request $request): JsonResponse
     {
         try {
@@ -451,6 +489,23 @@ class ChatController extends Controller
                 if ($allRequests->isNotEmpty()) {
                     $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
                     $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
+                }
+
+                $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
+                if (
+                    $filterApplied &&
+                    $latestUserMessage &&
+                    $this->isFacilityRecommendationIntent($latestUserMessage)
+                ) {
+                    $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
+                    $this->storeAssistantReply($incomingMessages, $content);
+
+                    return response()->json([
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => $content,
+                        ],
+                    ]);
                 }
 
                 array_unshift($messages, [
@@ -684,6 +739,31 @@ class ChatController extends Controller
             if ($allRequests->isNotEmpty()) {
                 $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
                 $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
+            }
+
+            $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
+            if (
+                $filterApplied &&
+                $latestUserMessage &&
+                $this->isFacilityRecommendationIntent($latestUserMessage)
+            ) {
+                $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
+                $incomingMessages = $request->input('messages', []);
+                $this->storeAssistantReply($incomingMessages, $content);
+
+                return response()->stream(function () use ($content) {
+                    echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                    ob_flush();
+                    flush();
+                    echo "data: " . json_encode(['done' => true]) . "\n\n";
+                    ob_flush();
+                    flush();
+                }, 200, [
+                    'Content-Type'      => 'text/event-stream',
+                    'Cache-Control'     => 'no-cache',
+                    'X-Accel-Buffering' => 'no',
+                    'Connection'        => 'keep-alive',
+                ]);
             }
 
             array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. The valid capacity rule is:\n- Minimum: Facility capacity must be at least 100% of the participant count\n- Maximum: Facility capacity must be at most 200% of the participant count\nFor example, for 40 participants, only facilities with capacity 40-80 are valid. Never describe this as 40%-80% of the participant count. Never recommend facilities outside the filtered results. Always present the filtered results exactly as provided."]);

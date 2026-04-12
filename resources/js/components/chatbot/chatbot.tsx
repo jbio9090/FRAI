@@ -155,7 +155,7 @@ export default function Chatbot() {
         }
 
         try {
-            extractAndSet(userMessage.content);
+            const extractedCount = extractAndSet(userMessage.content);
 
             const allMessages: Message[] = [
                 ...(contextNote ? [{ role: 'system' as const, content: `QUICK REPLY CONTEXT: ${contextNote}` }] : []),
@@ -163,7 +163,10 @@ export default function Chatbot() {
                 userMessage,
             ];
 
-            const currentCount = getCurrentCount(getMessagesText()) ?? undefined;
+            const currentCount =
+                extractedCount ??
+                getCurrentCount(`${getMessagesText()} ${userMessage.content}`) ??
+                undefined;
             const activeBookingContext = bookingFlow.step !== 'title' && bookingFlow.step !== 'done'
                 ? bookingFlow.buildContextSummary()
                 : undefined;
