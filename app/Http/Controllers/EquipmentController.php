@@ -53,6 +53,7 @@ class EquipmentController extends Controller
         return redirect()->back()->with('success', 'Equipment deleted.');
     }
 
+    // Sync all facility assignments for one equipment at once
     public function syncFacilities(Request $request, Equipment $equipment)
     {
         $validated = $request->validate([

@@ -23,7 +23,6 @@ import { Facility } from '@/types/facility';
 import { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
 import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from "sonner";
-import { FacilityBookingList } from '@/components/facility-booking-list';
 
 
 interface BorrowedEquipmentRequest {
@@ -1310,18 +1309,104 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
                                         className="w-full"
                                     >
-                                        <span>
-                                            Add Facility Booking
-                                        </span>
+                                        Add Facility Booking
                                     </Button>
                                 </div>
 
-                                <FacilityBookingList
-                                    bookings={data.facility_bookings}
-                                    onEdit={editBooking}
-                                    onRemove={removeBooking}
-                                    formatTime={formatTime}
-                                />
+                                {data.facility_bookings.map((booking, index) => (
+                                    <div key={index} className="mb-4 overflow-hidden border border-border rounded-lg bg-secondary/30 shadow-sm">
+                                        <div className="p-4">
+                                            <div className="flex items-center justify-between gap-4 mb-2">
+                                                <h3 className="font-bold text-lg text-foreground truncate">
+                                                    {booking.facility_name}
+                                                </h3>
+
+                                                <div className="flex items-center gap-1 bg-background/50 rounded-md p-1 border border-border/50 shrink-0">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 hover:bg-background hover:text-primary transition-colors"
+                                                        onClick={() => editBooking(index)}
+                                                    >
+                                                        <Pen size={14} />
+                                                    </Button>
+                                                    <div className="w-[1px] h-4 bg-border/60" />
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                                        onClick={() => removeBooking(index)}
+                                                    >
+                                                        <X size={14} />
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                                                <div className="flex items-center gap-2">
+                                                    <CalendarIcon size={15} className="text-primary/70" />
+                                                    <span>{format(booking.date, "PPP")}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Clock size={15} className="text-primary/70" />
+                                                    <span>{formatTime(booking.time_start)} – {formatTime(booking.time_end)}</span>
+                                                </div>
+                                                {booking.expected_capacity && (
+                                                    <div className="flex items-center gap-2">
+                                                        <User size={15} className="text-primary/70" />
+                                                        <span>{booking.expected_capacity} attendees</span>
+                                                    </div>
+                                                )}
+                                                {booking.has_outsiders && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                                                            Has Outsiders
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {booking.conflicts.length > 0 && booking.conflicts.map((conflict, i) => (
+                                                <div key={i} className="mt-3 flex items-start gap-2 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+                                                    <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
+                                                    <span>
+                                                        <strong>Schedule Conflict:</strong> Overlaps with "{conflict.request_title}" ({formatTime(conflict.time_start)}-{formatTime(conflict.time_end)})
+                                                    </span>
+                                                </div>
+                                            ))}
+
+                                            {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
+                                                conflicts.map((c, i) => {
+                                                    const eqName = booking.equipment.find(e => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
+                                                    return (
+                                                        <div key={`eq-${eqId}-${i}`} className="mt-2 flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+                                                            <AlertCircleIcon size={14} className="shrink-0 mt-0.5" />
+                                                            <span>
+                                                                <strong>Equipment Conflict ({eqName}):</strong> Also requested by "{c.request_title}" ({c.status})
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+
+                                        {(booking.equipment.length > 0 || booking.borrowed_equipment?.length > 0) && (
+                                            <div className="bg-background/40 border-t border-border px-4 py-3">
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Requested Equipment</p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {booking.equipment.map((eq, i) => (
+                                                        <div key={i} className="text-sm flex items-center justify-between bg-background/50 px-2 py-1 rounded border border-border/40">
+                                                            <span className="text-foreground/80">{eq.equipment_name}</span>
+                                                            <span className="text-sm font-bold text-primary">x{eq.quantity_needed}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
 
                                 <FacilityInfo
                                     selectedFacility={selectedFacility}
