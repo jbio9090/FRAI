@@ -133,6 +133,46 @@ function addHours(time: string, hours: number): string {
     return `${displayH}:${String(m).padStart(2, '0')} ${newModifier}`;
 }
 
+function toMinutes(time: string): number {
+    const [timePart, modifier] = time.split(' ');
+    let [hours, minutes] = timePart.split(':').map(Number);
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    return (hours * 60) + minutes;
+}
+
+const MAX_END_TIME = '5:00 PM';
+const MAX_END_TIME_MINUTES = toMinutes(MAX_END_TIME);
+const START_TIME_OPTIONS = TIME_OPTIONS.filter(time => toMinutes(time) < MAX_END_TIME_MINUTES);
+
+function getAvailableEndTimeOptions(startTime: string): string[] {
+    if (!startTime) {
+        return TIME_OPTIONS;
+    }
+
+    const startMinutes = toMinutes(startTime);
+
+    return TIME_OPTIONS.filter(time => {
+        const endMinutes = toMinutes(time);
+        return endMinutes > startMinutes && endMinutes <= MAX_END_TIME_MINUTES;
+    });
+}
+
+function getAvailableDurationOptions(startTime: string): string[] {
+    if (!startTime) {
+        return ['+1 Hour', '+2 Hours', '+3 Hours', 'Custom'];
+    }
+
+    const startMinutes = toMinutes(startTime);
+    const availableHours = Math.floor((MAX_END_TIME_MINUTES - startMinutes) / 60);
+    const durationOptions = Array.from(
+        { length: Math.max(availableHours, 0) },
+        (_, index) => `+${index + 1} ${index === 0 ? 'Hour' : 'Hours'}`
+    );
+
+    return [...durationOptions, 'Custom'];
+}
+
 export function useBookingFlow(facilities: Facility[]) {
     const [step, setStep] = useState<BookingStep>('title');
     const [data, setData] = useState<BookingData>({ ...INITIAL_DATA });
@@ -193,7 +233,7 @@ export function useBookingFlow(facilities: Facility[]) {
             case 'time_start':
                 return {
                     botMessage: 'What time will the event start?',
-                    quickReplies: TIME_OPTIONS,
+                    quickReplies: START_TIME_OPTIONS,
                     isTextInput: false,
                     showDatePicker: false,
                 };
@@ -201,8 +241,8 @@ export function useBookingFlow(facilities: Facility[]) {
                 return {
                     botMessage: `What time will the event end? Start time is ${data.time_start}.`,
                     quickReplies: awaitingCustomTime
-                        ? TIME_OPTIONS
-                        : ['+1 Hour', '+2 Hours', '+3 Hours', 'Custom'],
+                        ? getAvailableEndTimeOptions(data.time_start)
+                        : getAvailableDurationOptions(data.time_start),
                     isTextInput: false,
                     showDatePicker: false,
                 };
@@ -230,7 +270,7 @@ export function useBookingFlow(facilities: Facility[]) {
             case 'description':
                 return {
                     botMessage: 'Is there any additional information you would like to provide?',
-                    quickReplies: [],
+                    quickReplies: ['None'],
                     isTextInput: true,
                     showDatePicker: false,
                 };
@@ -359,9 +399,12 @@ export function useBookingFlow(facilities: Facility[]) {
                     setAwaitingCustomTime(true);
                 } else if (value.startsWith('+')) {
                     const hours = parseInt(value.replace(/\D/g, ''));
-                    update({ time_end: addHours(data.time_start, hours) });
+                    const calculatedEndTime = addHours(data.time_start, hours);
+                    if (toMinutes(calculatedEndTime) > MAX_END_TIME_MINUTES) break;
+                    update({ time_end: calculatedEndTime });
                     setStep('equipment');
                 } else {
+                    if (!getAvailableEndTimeOptions(data.time_start).includes(value)) break;
                     update({ time_end: value });
                     setAwaitingCustomTime(false);
                     setStep('equipment');
@@ -399,7 +442,7 @@ export function useBookingFlow(facilities: Facility[]) {
             }
 
             case 'description':
-                update({ description: value });
+                update({ description: value === 'None' ? '' : value });
                 setStep('files');
                 break;
 
@@ -457,7 +500,6 @@ export function useBookingFlow(facilities: Facility[]) {
     const getEmptyFields = (): string[] => {
         const empty: string[] = [];
         if (!data.title) empty.push('Title');
-        if (!data.description) empty.push('Additional Information');
         return empty;
     };
 
