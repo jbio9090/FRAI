@@ -91,7 +91,6 @@ function Badge({
     );
 }
 
-// ── Thin divider ────────────────────────────────────────────────────────────
 function Divider() {
     return <div className="h-px w-full bg-border/50" />;
 }
@@ -108,9 +107,9 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
     return (
-        <div className="group relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm transition-shadow hover:shadow-md">
+        <div className="group relative overflow-hidden rounded-xl border border-border/60 shadow-sm transition-shadow hover:shadow-md">
             <div className="absolute inset-y-0 left-0 w-[3px] bg-primary/60 rounded-l-xl" />
-            <div className="px-5 pt-4 pb-3 pl-6">
+            <div className="px-5 pt-4 pb-3 pl-6 bg-card">
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2 min-w-0">
                         <h3 className="font-semibold text-base text-foreground truncate leading-snug">
