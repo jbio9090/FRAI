@@ -15,6 +15,7 @@ use App\Models\Facility;
 use App\Models\Equipment;
 use App\RequestStatus;
 use App\PriorityLevel;
+use App\Services\ChatbotLogService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -26,7 +27,9 @@ class ChatController extends Controller
 
     private const SESSION_TTL_MINUTES = 15;
 
-    public function __construct()
+    public function __construct(
+        protected ChatbotLogService $chatbotLogService
+    )
     {
         $this->ollamaUrl = config('ollama-laravel.url');
         $this->model     = config('ollama-laravel.model', 'FRAI');
@@ -363,6 +366,67 @@ class ChatController extends Controller
         $this->saveSession(array_values($userAndAssistantMessages));
     }
 
+    private function extractSelectedContext(?string $latestUserMessage, $allFacilities): array
+    {
+        $parsed = $this->extractFacilityAndDateFromMessage($latestUserMessage, $allFacilities);
+
+        return [
+            'selected_facility' => $parsed['facility']
+                ? [
+                    'id' => $parsed['facility']->id,
+                    'name' => $parsed['facility']->name,
+                ]
+                : null,
+            'selected_date' => $parsed['date'],
+        ];
+    }
+
+    private function buildLogContext(
+        ?string $latestUserMessage,
+        mixed $participantCount,
+        mixed $bookingContext,
+        $allRequests,
+        $allFacilities,
+        int $equipmentCount,
+        int $rulesCount,
+        bool $rulesInjected,
+        bool $approvedBookingContextInjected,
+        bool $deterministicAvailabilityInjected,
+        bool $facilityFilterApplied,
+        array $extra = [],
+    ): array {
+        return array_merge([
+            'participant_count' => is_numeric($participantCount) ? (int) $participantCount : null,
+            'booking_context' => $bookingContext ? Str::limit(trim((string) $bookingContext), 500) : null,
+            'rules_injected' => $rulesInjected,
+            'rules_loaded' => $rulesCount,
+            'approved_booking_context_injected' => $approvedBookingContextInjected,
+            'deterministic_availability_injected' => $deterministicAvailabilityInjected,
+            'facility_filter_applied' => $facilityFilterApplied,
+            'facility_count_loaded' => $allFacilities->count(),
+            'equipment_count_loaded' => $equipmentCount,
+            'request_count_loaded' => $allRequests->count(),
+            'approved_request_count' => $allRequests->filter(fn($request) => $request->status->value === 'Approved')->count(),
+            ...$this->extractSelectedContext($latestUserMessage, $allFacilities),
+        ], $extra);
+    }
+
+    private function extractStructuredPayload(?string $assistantMessage): ?array
+    {
+        if (!$assistantMessage) {
+            return null;
+        }
+
+        $trimmed = trim($assistantMessage);
+        $decoded = json_decode($trimmed, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && isset($decoded['facility_bookings'])) {
+            return $decoded;
+        }
+
+        return null;
+    }
+
     public function chat(Request $request): JsonResponse
     {
         try {
@@ -370,6 +434,8 @@ class ChatController extends Controller
 
             $sessionMessages  = $this->loadSession();
             $incomingMessages = $request->input('messages', []);
+            $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
+            $sessionId = $request->session()->getId();
 
             $sessionMessages = array_filter($sessionMessages, function($msg) {
                 $content = $msg['content'] ?? '';
@@ -392,6 +458,12 @@ class ChatController extends Controller
             $bookingContext   = $request->input('booking_context');
             $allRequests      = collect();
             $allFacilities    = collect();
+            $rules = [];
+            $rulesInjected = false;
+            $approvedBookingContextInjected = false;
+            $deterministicAvailabilityInjected = false;
+            $facilityFilterApplied = false;
+            $equipmentCount = 0;
 
             try {
                 // Fetch recent requests (both pending and approved) for context
@@ -423,6 +495,7 @@ class ChatController extends Controller
                         'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines),
                     ]);
                     $this->injectApprovedBookingTable($messages, $allRequests);
+                    $approvedBookingContextInjected = true;
                 } else {
                     array_unshift($messages, [
                         'role'    => 'system',
@@ -478,6 +551,7 @@ class ChatController extends Controller
                     ->map(function ($e) {
                         return "ID {$e->id}: {$e->name} (Facility: " . ($e->facility->name ?? 'Unknown') . ", Available: {$e->quantity})";
                     })->toArray();
+                $equipmentCount = count($equipment);
 
                 if (!empty($equipment)) {
                     array_unshift($messages, [
@@ -487,11 +561,11 @@ class ChatController extends Controller
                 }
 
                 if ($allRequests->isNotEmpty()) {
-                    $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
                     $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
+                    $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
+                    $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
                 }
 
-                $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
                 if (
                     $filterApplied &&
                     $latestUserMessage &&
@@ -499,6 +573,26 @@ class ChatController extends Controller
                 ) {
                     $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
                     $this->storeAssistantReply($incomingMessages, $content);
+                    $this->chatbotLogService->logAssistantReply(
+                        $latestUserMessage,
+                        $content,
+                        $this->buildLogContext(
+                            $latestUserMessage,
+                            $participantCount,
+                            $bookingContext,
+                            $allRequests,
+                            $allFacilities,
+                            $equipmentCount,
+                            count($rules),
+                            $rulesInjected,
+                            $approvedBookingContextInjected,
+                            $deterministicAvailabilityInjected,
+                            $filterApplied
+                        ),
+                        $sessionId,
+                        'facility_recommendation',
+                        'facility_recommendation',
+                    );
 
                     return response()->json([
                         'message' => [
@@ -521,7 +615,6 @@ class ChatController extends Controller
                 \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
             }
 
-            $rules = [];
             try {
                 $limitRules = max(1, min(200, (int) $request->input('rules_limit', 50)));
                 $rules = RuleModel::orderBy('id', 'asc')->limit($limitRules)->get(['id', 'rule'])
@@ -532,6 +625,7 @@ class ChatController extends Controller
                 $rulesSummary .= !empty($rulesListText) ? "\nGuidelines:\n- " . $rulesListText : "\n(There are currently no configured guidelines.)";
 
                 array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
+                $rulesInjected = true;
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch Rules for chat: ' . $e->getMessage());
                 array_unshift($messages, [
@@ -624,16 +718,61 @@ class ChatController extends Controller
                 }
             }
 
+            $assistantMessage = $data['message']['content'] ?? $data['response'] ?? null;
+            $logContext = $this->buildLogContext(
+                $latestUserMessage,
+                $participantCount,
+                $bookingContext,
+                $allRequests,
+                $allFacilities,
+                $equipmentCount,
+                count($rules),
+                $rulesInjected,
+                $approvedBookingContextInjected,
+                $deterministicAvailabilityInjected,
+                $filterApplied
+            );
+            $payload = $this->extractStructuredPayload($assistantMessage);
+
+            if ($payload) {
+                $this->chatbotLogService->logPayloadGenerated(
+                    $latestUserMessage,
+                    $assistantMessage,
+                    $payload,
+                    array_merge($logContext, ['generated_payload' => true, 'request_creation' => true]),
+                    $sessionId
+                );
+            } else {
+                $this->chatbotLogService->logAssistantReply(
+                    $latestUserMessage,
+                    $assistantMessage,
+                    $logContext,
+                    $sessionId
+                );
+            }
+
             return response()->json($data);
 
         } catch (RequestException $e) {
             \Log::error('Chat error: ' . $e->getMessage());
+            $this->chatbotLogService->logError(
+                $latestUserMessage ?? null,
+                $e->getMessage(),
+                [],
+                $request->session()->getId(),
+            );
             return response()->json([
                 'error'   => 'Failed to connect to Ollama',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         } catch (\Exception $e) {
             \Log::error('Chat error: ' . $e->getMessage());
+            $this->chatbotLogService->logError(
+                $latestUserMessage ?? null,
+                $e->getMessage(),
+                [],
+                $request->session()->getId(),
+            );
             return response()->json([
                 'error'   => 'Failed to process chat request',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
@@ -649,6 +788,13 @@ class ChatController extends Controller
             $bookingContext   = $request->input('booking_context');
             $allRequests      = collect();
             $allFacilities    = collect();
+            $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
+            $sessionId = $request->session()->getId();
+            $rulesInjected = false;
+            $approvedBookingContextInjected = false;
+            $deterministicAvailabilityInjected = false;
+            $equipmentCount = 0;
+            $facilityFilterApplied = false;
 
         // Load session history and merge
         $sessionMessages = $this->loadSession();
@@ -691,6 +837,7 @@ class ChatController extends Controller
             if (!empty($lines)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines)]);
                 $this->injectApprovedBookingTable($messages, $allRequests);
+                $approvedBookingContextInjected = true;
             } else {
                 array_unshift($messages, ['role' => 'system', 'content' => "There are currently NO pending or approved facility bookings in the system. All facilities are available unless specified otherwise."]);
             }
@@ -708,6 +855,7 @@ class ChatController extends Controller
                 $facilitiesToDisplay = $this->filterFacilitiesByCapacity($allFacilities, $participantCount);
                 $filterApplied       = true;
             }
+            $facilityFilterApplied = $filterApplied;
 
             $facilities = $facilitiesToDisplay->map(fn($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
             $facilityCount = count($facilities);
@@ -731,17 +879,18 @@ class ChatController extends Controller
 
             $equipment = Equipment::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'quantity', 'facility_id'])
                 ->map(fn($e) => "ID {$e->id}: {$e->name} (Facility: " . ($e->facility->name ?? 'Unknown') . ", Available: {$e->quantity})")->toArray();
+            $equipmentCount = count($equipment);
 
             if (!empty($equipment)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
             }
 
             if ($allRequests->isNotEmpty()) {
-                $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
                 $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
+                $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
+                $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
             }
 
-            $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
             if (
                 $filterApplied &&
                 $latestUserMessage &&
@@ -750,6 +899,26 @@ class ChatController extends Controller
                 $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
                 $incomingMessages = $request->input('messages', []);
                 $this->storeAssistantReply($incomingMessages, $content);
+                $this->chatbotLogService->logAssistantReply(
+                    $latestUserMessage,
+                    $content,
+                    $this->buildLogContext(
+                        $latestUserMessage,
+                        $participantCount,
+                        $bookingContext,
+                        $allRequests,
+                        $allFacilities,
+                        $equipmentCount,
+                        0,
+                        $rulesInjected,
+                        $approvedBookingContextInjected,
+                        $deterministicAvailabilityInjected,
+                        $filterApplied
+                    ),
+                    $sessionId,
+                    'facility_recommendation',
+                    'facility_recommendation',
+                );
 
                 return response()->stream(function () use ($content) {
                     echo "data: " . json_encode(['token' => $content]) . "\n\n";
@@ -783,6 +952,7 @@ class ChatController extends Controller
             $rulesSummary = "You MUST follow the following rules exactly. If a user request would violate any rule, you MUST refuse and reply with a short explanation stating which rule would be violated. Do NOT provide prohibited content.";
             $rulesSummary .= !empty($rules) ? "\nRules:\n- " . implode("\n- ", $rules) : "\n(There are currently no configured rules.)";
             array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
+            $rulesInjected = true;
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch rules: ' . $e->getMessage());
         }
@@ -794,11 +964,26 @@ class ChatController extends Controller
         // Capture incoming user messages to save to session ltr
         $incomingMessages = $request->input('messages', []);
 
-        return response()->stream(function () use ($messages, $incomingMessages, $rules) {
+        $logContext = $this->buildLogContext(
+            $latestUserMessage,
+            $participantCount,
+            $bookingContext,
+            $allRequests,
+            $allFacilities,
+            $equipmentCount,
+            count($rules),
+            $rulesInjected,
+            $approvedBookingContextInjected,
+            $deterministicAvailabilityInjected,
+            $facilityFilterApplied
+        );
+
+        return response()->stream(function () use ($messages, $incomingMessages, $rules, $latestUserMessage, $sessionId, $logContext) {
             set_time_limit(300);
 
             $client = new Client(['timeout' => 580]);
             $fullContent = '';
+            $generatedPayload = null;
 
             try {
                 $response = $client->post($this->ollamaUrl . '/api/chat', [
@@ -853,6 +1038,7 @@ class ChatController extends Controller
                                 $parsed = json_decode($jsonBuffer, true);
                                 if ($parsed !== null && is_array($parsed)) {
                                     // Valid JSON found - send as booking_payload
+                                    $generatedPayload = $parsed;
                                     echo "data: " . json_encode(['booking_payload' => $jsonBuffer]) . "\n\n";
                                     ob_flush();
                                     flush();
@@ -919,12 +1105,35 @@ class ChatController extends Controller
                 $userAndAssistant[] = ['role' => 'assistant', 'content' => $fullContent];
                 $this->saveSession(array_values($userAndAssistant));
 
+                if (is_array($generatedPayload) && isset($generatedPayload['facility_bookings'])) {
+                    $this->chatbotLogService->logPayloadGenerated(
+                        $latestUserMessage,
+                        $fullContent,
+                        $generatedPayload,
+                        array_merge($logContext, ['generated_payload' => true, 'request_creation' => true]),
+                        $sessionId
+                    );
+                } else {
+                    $this->chatbotLogService->logAssistantReply(
+                        $latestUserMessage,
+                        $fullContent,
+                        $logContext,
+                        $sessionId
+                    );
+                }
+
                 echo "data: " . json_encode(['done' => true]) . "\n\n";
                 ob_flush();
                 flush();
 
             } catch (\Exception $e) {
                 \Log::error('Stream error: ' . $e->getMessage());
+                $this->chatbotLogService->logError(
+                    $latestUserMessage,
+                    $e->getMessage(),
+                    $logContext,
+                    $sessionId
+                );
                 echo "data: " . json_encode(['error' => 'Stream failed']) . "\n\n";
                 ob_flush();
                 flush();
@@ -1166,6 +1375,9 @@ class ChatController extends Controller
 
     public function createRequestApi(Request $request): JsonResponse
     {
+        $sessionId = $request->session()->getId();
+        $latestUserMessage = $this->getLatestUserMessageContent($this->loadSession());
+
         try {
             $normalizedInput = $this->normalizeCreateRequestPayload($request->all());
             $request->replace($normalizedInput);
@@ -1296,6 +1508,27 @@ class ChatController extends Controller
 
             $this->clearSession();
 
+            $this->chatbotLogService->logSubmissionResult(
+                $validated,
+                [
+                    'passed' => true,
+                    'errors' => [],
+                ],
+                [
+                    'user_message' => $latestUserMessage,
+                    'validation_passed' => true,
+                    'held_count' => $heldCount,
+                    'files_attached' => $fileCount,
+                    'request_id' => $facilityRequest->id,
+                    'selected_facility' => optional($facilityRequest->requestFacilities->first()?->facility)->only(['id', 'name']),
+                    'selected_date' => $validated['facility_bookings'][0]['date'] ?? null,
+                    'selected_time_start' => $validated['facility_bookings'][0]['time_start'] ?? null,
+                    'selected_time_end' => $validated['facility_bookings'][0]['time_end'] ?? null,
+                ],
+                $sessionId,
+                $facilityRequest->id
+            );
+
             return response()->json([
                 'success'        => true,
                 'message'        => 'Request created successfully' . ($heldCount > 0 ? " ({$heldCount} conflicting request(s) put on hold)" : ''),
@@ -1307,9 +1540,33 @@ class ChatController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Log::warning('Validation error in createRequestApi: ' . json_encode($e->errors()));
+            $failedPayload = is_array($request->all()) ? $request->all() : [];
+            $this->chatbotLogService->logValidationFailure(
+                $failedPayload,
+                [
+                    'passed' => false,
+                    'errors' => $e->errors(),
+                ],
+                [
+                    'user_message' => $latestUserMessage,
+                    'validation_passed' => false,
+                ],
+                $sessionId
+            );
             return response()->json(['error' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             \Log::error('Request creation error: ' . $e->getMessage());
+            $this->chatbotLogService->logError(
+                $latestUserMessage,
+                $e->getMessage(),
+                [
+                    'request_creation' => true,
+                ],
+                $sessionId,
+                'request_creation',
+                'request_creation',
+                is_array($request->all()) ? $request->all() : null,
+            );
             return response()->json([
                 'error'   => 'Failed to create request',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',

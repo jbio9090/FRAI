@@ -14,8 +14,10 @@ import {
   Sparkles,
   Cable,
   IterationCw,
+  MessagesSquare,
 } from "lucide-react"
 import * as React from "react"
+import ChatbotSessionModal from "@/components/ChatbotSessionModal"
 import {
   Sidebar,
   SidebarContent,
@@ -29,7 +31,6 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { usePermission } from "@/hooks/use-permission"
-import ChatbotSessionModal from "@/components/ChatbotSessionModal"
 
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -62,6 +63,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           title: "Accounts",
           url: "accounts.index",
           icon: User,
+        }]
+        : []),
+      ...(hasPermission("view chatbot logs")
+        ? [{
+          title: "Chatbot Logs",
+          url: "chatbot.logs.index",
+          icon: MessagesSquare,
         }]
         : [])
     ],

@@ -9,6 +9,7 @@ use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\ChatbotLogController;
 use App\Http\Controllers\EquipmentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -81,6 +82,10 @@ Route::middleware("auth")->group(function () {
         Route::post("/accounts/create", [AccountController::class, 'store'])->name("accounts.store");
         Route::put('/accounts/{user}', [AccountController::class, 'update'])->name('accounts.update');
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+    });
+
+    Route::middleware('permission:view chatbot logs')->group(function () {
+        Route::get('/chatbot-logs', [ChatbotLogController::class, 'index'])->name('chatbot.logs.index');
     });
 
     Route::middleware("permission:manage facilities")->group(function () {
