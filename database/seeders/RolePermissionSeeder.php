@@ -23,6 +23,7 @@ class RolePermissionSeeder extends Seeder
         Permission::create(['name' => 'manage facilities']);
         Permission::create(['name' => 'manage users']);
         Permission::create(['name' => 'modify rules']);
+        Permission::create(['name' => 'view chatbot logs']);
 
         // Create roles and assign permissions
         $userRole = Role::create(['name' => 'Department Head']);

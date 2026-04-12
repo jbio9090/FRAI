@@ -15,6 +15,7 @@ use App\Models\Facility;
 use App\Models\Equipment;
 use App\RequestStatus;
 use App\PriorityLevel;
+use App\Services\ChatbotLogService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -26,7 +27,9 @@ class ChatController extends Controller
 
     private const SESSION_TTL_MINUTES = 15;
 
-    public function __construct()
+    public function __construct(
+        protected ChatbotLogService $chatbotLogService
+    )
     {
         $this->ollamaUrl = config('ollama-laravel.url');
         $this->model     = config('ollama-laravel.model', 'FRAI');
@@ -216,6 +219,36 @@ class ChatController extends Controller
         ]);
     }
 
+    private function resolveFacilityIdFromValue(mixed $facilityValue): mixed
+    {
+        if (is_int($facilityValue) || (is_string($facilityValue) && ctype_digit(trim($facilityValue)))) {
+            return (int) $facilityValue;
+        }
+
+        if (!is_string($facilityValue) || trim($facilityValue) === '') {
+            return $facilityValue;
+        }
+
+        $normalizedValue = trim($facilityValue);
+
+        if (preg_match('/\b(?:facility\s*)?id\s*(\d+)\b/i', $normalizedValue, $matches)) {
+            return (int) $matches[1];
+        }
+
+        $facility = Facility::query()
+            ->orderByRaw('LENGTH(name) DESC')
+            ->get(['id', 'name'])
+            ->first(function ($facility) use ($normalizedValue) {
+                $facilityName = (string) $facility->name;
+
+                return strcasecmp($facilityName, $normalizedValue) === 0
+                    || stripos($facilityName, $normalizedValue) !== false
+                    || stripos($normalizedValue, $facilityName) !== false;
+            });
+
+        return $facility?->id ?? $facilityValue;
+    }
+
     private function normalizeCreateRequestPayload(array $input): array
     {
         $normalized = $input;
@@ -234,22 +267,45 @@ class ChatController extends Controller
                     $booking['time_end'] = $booking['end_time'];
                 }
 
+                if (isset($booking['facility_id'])) {
+                    $booking['facility_id'] = $this->resolveFacilityIdFromValue($booking['facility_id']);
+                }
+
                 if (!empty($booking['equipment']) && is_array($booking['equipment'])) {
-                    $booking['equipment'] = array_map(function ($equipment) {
-                        if (!is_array($equipment)) {
-                            return $equipment;
+                    $normalizedEquipment = [];
+
+                    foreach ($booking['equipment'] as $equipmentKey => $equipmentValue) {
+                        if (is_array($equipmentValue)) {
+                            if (!isset($equipmentValue['equipment_id']) && isset($equipmentValue['id'])) {
+                                $equipmentValue['equipment_id'] = $equipmentValue['id'];
+                            }
+
+                            if (!isset($equipmentValue['quantity_needed']) && isset($equipmentValue['quantity'])) {
+                                $equipmentValue['quantity_needed'] = $equipmentValue['quantity'];
+                            }
+
+                            if (
+                                isset($equipmentValue['equipment_id'], $equipmentValue['quantity_needed']) &&
+                                (int) $equipmentValue['quantity_needed'] > 0
+                            ) {
+                                $normalizedEquipment[] = [
+                                    'equipment_id' => (int) $equipmentValue['equipment_id'],
+                                    'quantity_needed' => (int) $equipmentValue['quantity_needed'],
+                                ];
+                            }
+
+                            continue;
                         }
 
-                        if (!isset($equipment['equipment_id']) && isset($equipment['id'])) {
-                            $equipment['equipment_id'] = $equipment['id'];
+                        if (is_numeric($equipmentKey) && is_numeric($equipmentValue) && (int) $equipmentValue > 0) {
+                            $normalizedEquipment[] = [
+                                'equipment_id' => (int) $equipmentKey,
+                                'quantity_needed' => (int) $equipmentValue,
+                            ];
                         }
+                    }
 
-                        if (!isset($equipment['quantity_needed']) && isset($equipment['quantity'])) {
-                            $equipment['quantity_needed'] = $equipment['quantity'];
-                        }
-
-                        return $equipment;
-                    }, $booking['equipment']);
+                    $booking['equipment'] = $normalizedEquipment;
                 }
 
                 return $booking;
@@ -272,6 +328,105 @@ class ChatController extends Controller
         return $normalized;
     }
 
+    private function isFacilityRecommendationIntent(?string $message): bool
+    {
+        if (!$message) {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/\b(room|rooms|facility|facilities|hall|venue)\b/i',
+            $message
+        ) && (bool) preg_match(
+            '/\b(need|looking for|recommend|suggest|available|have|show|list|other)\b/i',
+            $message
+        );
+    }
+
+    private function buildFacilityRecommendationResponse($facilitiesToDisplay, int $participantCount): string
+    {
+        if ($facilitiesToDisplay->isEmpty()) {
+            return "I checked the facilities for {$participantCount} participants, and there are no rooms with capacity between {$participantCount} and " . ($participantCount * 2) . ".";
+        }
+
+        $lines = $facilitiesToDisplay->map(function ($facility) {
+            return "- ID {$facility->id}: {$facility->name} (Building: {$facility->building}, Capacity: {$facility->capacity})";
+        })->implode("\n");
+
+        return "For {$participantCount} participants, the valid facility capacity range is {$participantCount}-" . ($participantCount * 2) . ".\n\nHere are all matching facilities:\n{$lines}\n\nWhich room would you like to consider?";
+    }
+
+    private function storeAssistantReply(array $incomingMessages, string $content): void
+    {
+        $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
+        $userAndAssistantMessages[] = [
+            'role' => 'assistant',
+            'content' => $content,
+        ];
+        $this->saveSession(array_values($userAndAssistantMessages));
+    }
+
+    private function extractSelectedContext(?string $latestUserMessage, $allFacilities): array
+    {
+        $parsed = $this->extractFacilityAndDateFromMessage($latestUserMessage, $allFacilities);
+
+        return [
+            'selected_facility' => $parsed['facility']
+                ? [
+                    'id' => $parsed['facility']->id,
+                    'name' => $parsed['facility']->name,
+                ]
+                : null,
+            'selected_date' => $parsed['date'],
+        ];
+    }
+
+    private function buildLogContext(
+        ?string $latestUserMessage,
+        mixed $participantCount,
+        mixed $bookingContext,
+        $allRequests,
+        $allFacilities,
+        int $equipmentCount,
+        int $rulesCount,
+        bool $rulesInjected,
+        bool $approvedBookingContextInjected,
+        bool $deterministicAvailabilityInjected,
+        bool $facilityFilterApplied,
+        array $extra = [],
+    ): array {
+        return array_merge([
+            'participant_count' => is_numeric($participantCount) ? (int) $participantCount : null,
+            'booking_context' => $bookingContext ? Str::limit(trim((string) $bookingContext), 500) : null,
+            'rules_injected' => $rulesInjected,
+            'rules_loaded' => $rulesCount,
+            'approved_booking_context_injected' => $approvedBookingContextInjected,
+            'deterministic_availability_injected' => $deterministicAvailabilityInjected,
+            'facility_filter_applied' => $facilityFilterApplied,
+            'facility_count_loaded' => $allFacilities->count(),
+            'equipment_count_loaded' => $equipmentCount,
+            'request_count_loaded' => $allRequests->count(),
+            'approved_request_count' => $allRequests->filter(fn($request) => $request->status->value === 'Approved')->count(),
+            ...$this->extractSelectedContext($latestUserMessage, $allFacilities),
+        ], $extra);
+    }
+
+    private function extractStructuredPayload(?string $assistantMessage): ?array
+    {
+        if (!$assistantMessage) {
+            return null;
+        }
+
+        $trimmed = trim($assistantMessage);
+        $decoded = json_decode($trimmed, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && isset($decoded['facility_bookings'])) {
+            return $decoded;
+        }
+
+        return null;
+    }
+
     public function chat(Request $request): JsonResponse
     {
         try {
@@ -279,6 +434,8 @@ class ChatController extends Controller
 
             $sessionMessages  = $this->loadSession();
             $incomingMessages = $request->input('messages', []);
+            $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
+            $sessionId = $request->session()->getId();
 
             $sessionMessages = array_filter($sessionMessages, function($msg) {
                 $content = $msg['content'] ?? '';
@@ -301,6 +458,12 @@ class ChatController extends Controller
             $bookingContext   = $request->input('booking_context');
             $allRequests      = collect();
             $allFacilities    = collect();
+            $rules = [];
+            $rulesInjected = false;
+            $approvedBookingContextInjected = false;
+            $deterministicAvailabilityInjected = false;
+            $facilityFilterApplied = false;
+            $equipmentCount = 0;
 
             try {
                 // Fetch recent requests (both pending and approved) for context
@@ -332,6 +495,7 @@ class ChatController extends Controller
                         'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines),
                     ]);
                     $this->injectApprovedBookingTable($messages, $allRequests);
+                    $approvedBookingContextInjected = true;
                 } else {
                     array_unshift($messages, [
                         'role'    => 'system',
@@ -387,6 +551,7 @@ class ChatController extends Controller
                     ->map(function ($e) {
                         return "ID {$e->id}: {$e->name} (Facility: " . ($e->facility->name ?? 'Unknown') . ", Available: {$e->quantity})";
                     })->toArray();
+                $equipmentCount = count($equipment);
 
                 if (!empty($equipment)) {
                     array_unshift($messages, [
@@ -396,8 +561,45 @@ class ChatController extends Controller
                 }
 
                 if ($allRequests->isNotEmpty()) {
-                    $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
                     $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
+                    $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
+                    $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
+                }
+
+                if (
+                    $filterApplied &&
+                    $latestUserMessage &&
+                    $this->isFacilityRecommendationIntent($latestUserMessage)
+                ) {
+                    $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
+                    $this->storeAssistantReply($incomingMessages, $content);
+                    $this->chatbotLogService->logAssistantReply(
+                        $latestUserMessage,
+                        $content,
+                        $this->buildLogContext(
+                            $latestUserMessage,
+                            $participantCount,
+                            $bookingContext,
+                            $allRequests,
+                            $allFacilities,
+                            $equipmentCount,
+                            count($rules),
+                            $rulesInjected,
+                            $approvedBookingContextInjected,
+                            $deterministicAvailabilityInjected,
+                            $filterApplied
+                        ),
+                        $sessionId,
+                        'facility_recommendation',
+                        'facility_recommendation',
+                    );
+
+                    return response()->json([
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => $content,
+                        ],
+                    ]);
                 }
 
                 array_unshift($messages, [
@@ -407,13 +609,12 @@ class ChatController extends Controller
 
                 array_unshift($messages, [
                     'role' => 'system',
-                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
+                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
                 ]);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
             }
 
-            $rules = [];
             try {
                 $limitRules = max(1, min(200, (int) $request->input('rules_limit', 50)));
                 $rules = RuleModel::orderBy('id', 'asc')->limit($limitRules)->get(['id', 'rule'])
@@ -424,6 +625,7 @@ class ChatController extends Controller
                 $rulesSummary .= !empty($rulesListText) ? "\nGuidelines:\n- " . $rulesListText : "\n(There are currently no configured guidelines.)";
 
                 array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
+                $rulesInjected = true;
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch Rules for chat: ' . $e->getMessage());
                 array_unshift($messages, [
@@ -516,16 +718,61 @@ class ChatController extends Controller
                 }
             }
 
+            $assistantMessage = $data['message']['content'] ?? $data['response'] ?? null;
+            $logContext = $this->buildLogContext(
+                $latestUserMessage,
+                $participantCount,
+                $bookingContext,
+                $allRequests,
+                $allFacilities,
+                $equipmentCount,
+                count($rules),
+                $rulesInjected,
+                $approvedBookingContextInjected,
+                $deterministicAvailabilityInjected,
+                $filterApplied
+            );
+            $payload = $this->extractStructuredPayload($assistantMessage);
+
+            if ($payload) {
+                $this->chatbotLogService->logPayloadGenerated(
+                    $latestUserMessage,
+                    $assistantMessage,
+                    $payload,
+                    array_merge($logContext, ['generated_payload' => true, 'request_creation' => true]),
+                    $sessionId
+                );
+            } else {
+                $this->chatbotLogService->logAssistantReply(
+                    $latestUserMessage,
+                    $assistantMessage,
+                    $logContext,
+                    $sessionId
+                );
+            }
+
             return response()->json($data);
 
         } catch (RequestException $e) {
             \Log::error('Chat error: ' . $e->getMessage());
+            $this->chatbotLogService->logError(
+                $latestUserMessage ?? null,
+                $e->getMessage(),
+                [],
+                $request->session()->getId(),
+            );
             return response()->json([
                 'error'   => 'Failed to connect to Ollama',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         } catch (\Exception $e) {
             \Log::error('Chat error: ' . $e->getMessage());
+            $this->chatbotLogService->logError(
+                $latestUserMessage ?? null,
+                $e->getMessage(),
+                [],
+                $request->session()->getId(),
+            );
             return response()->json([
                 'error'   => 'Failed to process chat request',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
@@ -541,6 +788,13 @@ class ChatController extends Controller
             $bookingContext   = $request->input('booking_context');
             $allRequests      = collect();
             $allFacilities    = collect();
+            $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
+            $sessionId = $request->session()->getId();
+            $rulesInjected = false;
+            $approvedBookingContextInjected = false;
+            $deterministicAvailabilityInjected = false;
+            $equipmentCount = 0;
+            $facilityFilterApplied = false;
 
         // Load session history and merge
         $sessionMessages = $this->loadSession();
@@ -583,6 +837,7 @@ class ChatController extends Controller
             if (!empty($lines)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines)]);
                 $this->injectApprovedBookingTable($messages, $allRequests);
+                $approvedBookingContextInjected = true;
             } else {
                 array_unshift($messages, ['role' => 'system', 'content' => "There are currently NO pending or approved facility bookings in the system. All facilities are available unless specified otherwise."]);
             }
@@ -600,6 +855,7 @@ class ChatController extends Controller
                 $facilitiesToDisplay = $this->filterFacilitiesByCapacity($allFacilities, $participantCount);
                 $filterApplied       = true;
             }
+            $facilityFilterApplied = $filterApplied;
 
             $facilities = $facilitiesToDisplay->map(fn($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
             $facilityCount = count($facilities);
@@ -623,21 +879,67 @@ class ChatController extends Controller
 
             $equipment = Equipment::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'quantity', 'facility_id'])
                 ->map(fn($e) => "ID {$e->id}: {$e->name} (Facility: " . ($e->facility->name ?? 'Unknown') . ", Available: {$e->quantity})")->toArray();
+            $equipmentCount = count($equipment);
 
             if (!empty($equipment)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
             }
 
             if ($allRequests->isNotEmpty()) {
-                $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
                 $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
+                $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
+                $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
+            }
+
+            if (
+                $filterApplied &&
+                $latestUserMessage &&
+                $this->isFacilityRecommendationIntent($latestUserMessage)
+            ) {
+                $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
+                $incomingMessages = $request->input('messages', []);
+                $this->storeAssistantReply($incomingMessages, $content);
+                $this->chatbotLogService->logAssistantReply(
+                    $latestUserMessage,
+                    $content,
+                    $this->buildLogContext(
+                        $latestUserMessage,
+                        $participantCount,
+                        $bookingContext,
+                        $allRequests,
+                        $allFacilities,
+                        $equipmentCount,
+                        0,
+                        $rulesInjected,
+                        $approvedBookingContextInjected,
+                        $deterministicAvailabilityInjected,
+                        $filterApplied
+                    ),
+                    $sessionId,
+                    'facility_recommendation',
+                    'facility_recommendation',
+                );
+
+                return response()->stream(function () use ($content) {
+                    echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                    ob_flush();
+                    flush();
+                    echo "data: " . json_encode(['done' => true]) . "\n\n";
+                    ob_flush();
+                    flush();
+                }, 200, [
+                    'Content-Type'      => 'text/event-stream',
+                    'Cache-Control'     => 'no-cache',
+                    'X-Accel-Buffering' => 'no',
+                    'Connection'        => 'keep-alive',
+                ]);
             }
 
             array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. The valid capacity rule is:\n- Minimum: Facility capacity must be at least 100% of the participant count\n- Maximum: Facility capacity must be at most 200% of the participant count\nFor example, for 40 participants, only facilities with capacity 40-80 are valid. Never describe this as 40%-80% of the participant count. Never recommend facilities outside the filtered results. Always present the filtered results exactly as provided."]);
             // Updated flow: ask for event type and map to priority level, no separate priority reason
             // Updated order: Description moved after Event Type, and Additional Message retained at end.
                 // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
-                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": ID, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
+                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch facilities/equipment: ' . $e->getMessage());
         }
@@ -650,6 +952,7 @@ class ChatController extends Controller
             $rulesSummary = "You MUST follow the following rules exactly. If a user request would violate any rule, you MUST refuse and reply with a short explanation stating which rule would be violated. Do NOT provide prohibited content.";
             $rulesSummary .= !empty($rules) ? "\nRules:\n- " . implode("\n- ", $rules) : "\n(There are currently no configured rules.)";
             array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
+            $rulesInjected = true;
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch rules: ' . $e->getMessage());
         }
@@ -661,11 +964,26 @@ class ChatController extends Controller
         // Capture incoming user messages to save to session ltr
         $incomingMessages = $request->input('messages', []);
 
-        return response()->stream(function () use ($messages, $incomingMessages, $rules) {
+        $logContext = $this->buildLogContext(
+            $latestUserMessage,
+            $participantCount,
+            $bookingContext,
+            $allRequests,
+            $allFacilities,
+            $equipmentCount,
+            count($rules),
+            $rulesInjected,
+            $approvedBookingContextInjected,
+            $deterministicAvailabilityInjected,
+            $facilityFilterApplied
+        );
+
+        return response()->stream(function () use ($messages, $incomingMessages, $rules, $latestUserMessage, $sessionId, $logContext) {
             set_time_limit(300);
 
             $client = new Client(['timeout' => 580]);
             $fullContent = '';
+            $generatedPayload = null;
 
             try {
                 $response = $client->post($this->ollamaUrl . '/api/chat', [
@@ -720,6 +1038,7 @@ class ChatController extends Controller
                                 $parsed = json_decode($jsonBuffer, true);
                                 if ($parsed !== null && is_array($parsed)) {
                                     // Valid JSON found - send as booking_payload
+                                    $generatedPayload = $parsed;
                                     echo "data: " . json_encode(['booking_payload' => $jsonBuffer]) . "\n\n";
                                     ob_flush();
                                     flush();
@@ -786,12 +1105,35 @@ class ChatController extends Controller
                 $userAndAssistant[] = ['role' => 'assistant', 'content' => $fullContent];
                 $this->saveSession(array_values($userAndAssistant));
 
+                if (is_array($generatedPayload) && isset($generatedPayload['facility_bookings'])) {
+                    $this->chatbotLogService->logPayloadGenerated(
+                        $latestUserMessage,
+                        $fullContent,
+                        $generatedPayload,
+                        array_merge($logContext, ['generated_payload' => true, 'request_creation' => true]),
+                        $sessionId
+                    );
+                } else {
+                    $this->chatbotLogService->logAssistantReply(
+                        $latestUserMessage,
+                        $fullContent,
+                        $logContext,
+                        $sessionId
+                    );
+                }
+
                 echo "data: " . json_encode(['done' => true]) . "\n\n";
                 ob_flush();
                 flush();
 
             } catch (\Exception $e) {
                 \Log::error('Stream error: ' . $e->getMessage());
+                $this->chatbotLogService->logError(
+                    $latestUserMessage,
+                    $e->getMessage(),
+                    $logContext,
+                    $sessionId
+                );
                 echo "data: " . json_encode(['error' => 'Stream failed']) . "\n\n";
                 ob_flush();
                 flush();
@@ -1033,6 +1375,9 @@ class ChatController extends Controller
 
     public function createRequestApi(Request $request): JsonResponse
     {
+        $sessionId = $request->session()->getId();
+        $latestUserMessage = $this->getLatestUserMessageContent($this->loadSession());
+
         try {
             $normalizedInput = $this->normalizeCreateRequestPayload($request->all());
             $request->replace($normalizedInput);
@@ -1163,6 +1508,27 @@ class ChatController extends Controller
 
             $this->clearSession();
 
+            $this->chatbotLogService->logSubmissionResult(
+                $validated,
+                [
+                    'passed' => true,
+                    'errors' => [],
+                ],
+                [
+                    'user_message' => $latestUserMessage,
+                    'validation_passed' => true,
+                    'held_count' => $heldCount,
+                    'files_attached' => $fileCount,
+                    'request_id' => $facilityRequest->id,
+                    'selected_facility' => optional($facilityRequest->requestFacilities->first()?->facility)->only(['id', 'name']),
+                    'selected_date' => $validated['facility_bookings'][0]['date'] ?? null,
+                    'selected_time_start' => $validated['facility_bookings'][0]['time_start'] ?? null,
+                    'selected_time_end' => $validated['facility_bookings'][0]['time_end'] ?? null,
+                ],
+                $sessionId,
+                $facilityRequest->id
+            );
+
             return response()->json([
                 'success'        => true,
                 'message'        => 'Request created successfully' . ($heldCount > 0 ? " ({$heldCount} conflicting request(s) put on hold)" : ''),
@@ -1174,9 +1540,33 @@ class ChatController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Log::warning('Validation error in createRequestApi: ' . json_encode($e->errors()));
+            $failedPayload = is_array($request->all()) ? $request->all() : [];
+            $this->chatbotLogService->logValidationFailure(
+                $failedPayload,
+                [
+                    'passed' => false,
+                    'errors' => $e->errors(),
+                ],
+                [
+                    'user_message' => $latestUserMessage,
+                    'validation_passed' => false,
+                ],
+                $sessionId
+            );
             return response()->json(['error' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             \Log::error('Request creation error: ' . $e->getMessage());
+            $this->chatbotLogService->logError(
+                $latestUserMessage,
+                $e->getMessage(),
+                [
+                    'request_creation' => true,
+                ],
+                $sessionId,
+                'request_creation',
+                'request_creation',
+                is_array($request->all()) ? $request->all() : null,
+            );
             return response()->json([
                 'error'   => 'Failed to create request',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',

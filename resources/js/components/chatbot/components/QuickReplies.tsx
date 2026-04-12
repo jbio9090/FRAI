@@ -3,7 +3,7 @@ interface QuickReply {
     label: string;
     message: string;
     context: string;
-    action?: 'navigate' | 'chat';
+    action?: 'navigate' | 'chat' | 'availability';
     href?: string;
 }
 
@@ -21,11 +21,10 @@ const QUICK_REPLIES: QuickReply[] = [
     },
     {
         id: 'check_availability',
-        label: 'Check Availability',
-        message: 'Check facility availability',
-        context: 'User navigated to the dashboard schedule.',
-        action: 'navigate',
-        href: route('dashboard'),
+        label: 'Check room availability',
+        message: 'Check room availability',
+        context: 'User wants to check room availability by selecting a room, date, and time first.',
+        action: 'availability',
     },
     {
         id: 'view_requests',
@@ -33,7 +32,7 @@ const QUICK_REPLIES: QuickReply[] = [
         message: 'View my pending requests',
         context: 'User navigated to their pending requests page.',
         action: 'navigate',
-        href: route('requests.index'),
+        href: route('requests.index', { status: 'pending' }),
     },
     {
         id: 'ask_rules',
