@@ -1,18 +1,20 @@
 import chroma from "chroma-js";
 import randomColor from "randomcolor";
 
-export default function wordToColor(word: string, isDark: boolean) {
-    const base = chroma(randomColor({ seed: word, luminosity: "bright" }));
+export default function wordToColor(word: string) {
+    const base = chroma(
+        randomColor({
+            seed: word,
+            luminosity: "light", // already nudges toward pastel
+        })
+    );
 
-    if (isDark) {
-        return {
-            text: base.brighten(2).desaturate(0.5).css("oklch"),
-            background: base.darken(3).desaturate(1).alpha(0.3).css("oklch"),
-        };
-    }
+    const pastel = base
+        .set("oklch.l", 0.85)
+        .set("oklch.c", 0.13);
 
     return {
-        text: base.darken(2).saturate(1).css("oklch"),
-        background: base.brighten(2).desaturate(0.5).css("oklch"),
+        text: pastel.darken(1.5).css("oklch"),
+        background: pastel.alpha(0.4).css("oklch"),
     };
 }

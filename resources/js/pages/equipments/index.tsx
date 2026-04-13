@@ -537,7 +537,8 @@ export default function EquipmentsPage({
                     <TableRow className="text-sm">
                         <TableHead className="w-10 px-4"></TableHead>
                         <TableHead>Name</TableHead>
-                        <TableHead className="w-52">Quantity</TableHead>
+                        <TableHead className="w-36">Total Qty</TableHead>
+                        <TableHead className="w-36">Assigned</TableHead>
                         <TableHead>Assigned To Facility</TableHead>
                         <TableHead className="w-12" />
                     </TableRow>
@@ -566,14 +567,28 @@ export default function EquipmentsPage({
                                     <TableCell className="text-muted-foreground text-sm px-4">
                                         {i + 1}
                                     </TableCell>
-                                    <TableCell className="font-medium">{eq.name}</TableCell>
+                                    <TableCell className="text-sm font-medium">{eq.name}</TableCell>
                                     <TableCell>
-                                        <div className="space-y-1">
-                                            <Progress value={pct} className="h-1.5" />
-                                            <p className="text-xs text-muted-foreground">
-                                                {assigned} of {eq.quantity} assigned
-                                            </p>
-                                        </div>
+                                        <span className="text-sm font-medium text-right">{eq.quantity}</span>
+                                    </TableCell>
+                                    <TableCell>
+                                        {(() => {
+                                            const assigned = eq.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
+                                            const over = assigned > eq.quantity;
+                                            const empty = assigned === 0;
+                                            return (
+                                                <div className={`inline-flex items-center gap-0.5 rounded-md border px-2.5 py-1 text-sm
+                ${over ? "border-destructive/30" : "border-border bg-muted/40"}`}
+                                                >
+                                                    <span className={`font-medium ${over ? "text-destructive" : empty ? "text-muted-foreground" : "text-green-700"
+                                                        }`}>
+                                                        {assigned}
+                                                    </span>
+                                                    <span className="text-sm text-muted-foreground/50 mx-0.5">/</span>
+                                                    <span className="text-sm text-muted-foreground">{eq.quantity}</span>
+                                                </div>
+                                            );
+                                        })()}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-wrap gap-1">
@@ -589,7 +604,7 @@ export default function EquipmentsPage({
                                                             key={f.id}
                                                             variant="secondary"
                                                             className="text-xs flex items-center"
-                                                            style={{ background, color: text, border: text, borderWidth: 1, borderStyle: "solid" }}
+                                                            style={{ background, color: text }}
                                                         >
                                                             {(f.pivot?.quantity && f.pivot.quantity > 1)
                                                                 ? (<span className="font-extrabold">{`${f.pivot.quantity} -`}</span>)

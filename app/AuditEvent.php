@@ -17,4 +17,21 @@ enum AuditEvent: string
 
     case RequestHeld                 = 'request.held';
     case RequestCommentAdded         = 'request.comment_added';
+ 
+    public function label(): string
+    {
+        return match ($this) {
+            self::AuthLogin               => 'Login',
+            self::AuthLoginFailed         => 'Failed Login',
+            self::AuthLogout              => 'Logout',
+            self::RequestCreated          => 'Request Created',
+            self::RequestUpdated          => 'Request Updated',
+            self::RequestApproved         => 'Request Approved',
+            self::RequestDenied           => 'Request Denied',
+            self::RequestConditionallyApproved => 'Cond. Approved',
+            self::RequestHeld             => 'Request Held',
+            self::RequestCommentAdded     => 'Comment Added',
+            self::RequestMarkedForReschedule   => 'Marked Reschedule',
+        };
+    }
 }

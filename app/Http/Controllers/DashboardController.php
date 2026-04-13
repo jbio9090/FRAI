@@ -9,7 +9,6 @@ use App\Services\RequestService;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 
-
 class DashboardController extends Controller
 {
     public function __construct(protected RequestService $requestService, protected FacilityService $facilityService) {}
