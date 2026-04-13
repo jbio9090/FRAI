@@ -35,9 +35,28 @@ class RequestService
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
         $query = $user->hasRole('admin')
-            ? FacilityRequest::with(['user', 'processedBy', 'facilities', 'requestFacilities', 'files', 'comments.user'])
-            : FacilityRequest::with(['user', 'processedBy', 'facilities', 'requestFacilities', 'files', 'comments.user'])
-            ->where('requests.user_id', $user->id);
+            ? FacilityRequest::with([
+                'user',
+                'processedBy',
+                'facilities',
+                'files',
+                'comments.user',
+                'requestFacilities',
+                'requestFacilities.externalEquipments',
+                'equipment' => fn($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
+                'equipment.facilities',
+            ])
+            : FacilityRequest::with([
+                'user',
+                'processedBy',
+                'facilities',
+                'files',
+                'comments.user',
+                'requestFacilities',
+                'requestFacilities.externalEquipments',
+                'equipment' => fn($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
+                'equipment.facilities',
+            ])->where('requests.user_id', $user->id);
 
         $query = match ($filter) {
             'today'      => $query->whereDate('requests.updated_at', Carbon::today()),
@@ -118,6 +137,7 @@ class RequestService
             );
 
             $this->loadEquipmentConflictRelations($request);
+            $this->attachPerFacilityEquipment($request);
 
             return $request;
         });
@@ -168,6 +188,7 @@ class RequestService
         );
 
         $this->loadEquipmentConflictRelations($request);
+        $this->attachPerFacilityEquipment($request);
 
         return $request;
     }
@@ -901,5 +922,43 @@ class RequestService
                 ->map(fn($id) => $conflictRequests->get($id))
                 ->filter()->values()
         );
+    }
+
+    private function attachPerFacilityEquipment(FacilityRequest $request): void
+    {
+        $sourceFacilities = $request->equipment
+            ->flatMap(fn($eq) => $eq->facilities)
+            ->keyBy('id');
+
+        foreach ($request->requestFacilities as $rf) {
+            $ownEquipment = $request->equipment
+                ->filter(
+                    fn($eq) =>
+                    !$eq->pivot->is_borrowed &&
+                        $eq->facilities->contains('id', $rf->facility_id)
+                )
+                ->map(fn($eq) => [
+                    'equipment_id'    => $eq->id,
+                    'equipment_name'  => $eq->name,
+                    'quantity_needed' => $eq->pivot->quantity_needed,
+                    'max_quantity'    => $eq->facilities
+                        ->firstWhere('id', $rf->facility_id)
+                        ?->pivot->quantity ?? $eq->quantity,
+                ])->values();
+
+            $borrowedEquipment = $request->equipment
+                ->filter(fn($eq) => (bool) $eq->pivot->is_borrowed)
+                ->map(fn($eq) => [
+                    'equipment_id'         => $eq->id,
+                    'equipment_name'       => $eq->name,
+                    'source_facility_id'   => $eq->pivot->source_facility_id,
+                    'source_facility_name' => $sourceFacilities->get($eq->pivot->source_facility_id)?->name ?? '',
+                    'quantity_needed'      => $eq->pivot->quantity_needed,
+                    'max_quantity'         => $eq->pivot->quantity_needed,
+                ])->values();
+
+            $rf->setRelation('equipment', $ownEquipment);
+            $rf->setRelation('borrowed_equipment', $borrowedEquipment);
+        }
     }
 }

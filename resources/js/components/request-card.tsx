@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
-import { ArrowUpRight, Calendar, Clock, MessageCircleWarning, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, IterationCw } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircle, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, IterationCw } from 'lucide-react';
 import { PRIORITY_LABELS } from '@/types/request';
 import { motion } from 'motion/react';
 import { Request } from '@/types/request';
@@ -19,6 +19,7 @@ import AvatarWithInitials from './avatar-with-initials';
 import Comment from './comment';
 import StatusTag from './status-tag';
 import AnimatedText from './animated-text';
+import { BookingCard } from './booking-card';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -303,100 +304,45 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                     {request.request_facilities.map((rf) => {
                         const facility = request.facilities.find(f => f.id === rf.facility_id);
 
-                        const pendingConflicts = request.pending_conflicts?.filter(
-                            c => c.facility_id === rf.facility_id
-                        ) ?? [];
-                        const approvedConflicts = request.approved_conflicts?.filter(
-                            c => c.facility_id === rf.facility_id
-                        ) ?? [];
+                        const pendingConflicts = (request.pending_conflicts ?? [])
+                            .filter(c => c.facility_id === rf.facility_id)
+                            .map(c => ({
+                                request_title: c.request.title,
+                                status: "Pending",
+                                time_start: c.time_start,
+                                time_end: c.time_end,
+                            }));
+
+                        const approvedConflicts = (request.approved_conflicts ?? [])
+                            .filter(c => c.facility_id === rf.facility_id)
+                            .map(c => ({
+                                request_title: c.request.title,
+                                status: "Approved",
+                                time_start: c.time_start,
+                                time_end: c.time_end,
+                            }));
+
+                        const booking = {
+                            facility_id: rf.facility_id,
+                            facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
+                            date: rf.date_requested,
+                            time_start: rf.time_start,
+                            time_end: rf.time_end,
+                            expected_capacity: rf.expected_capacity ?? null,
+                            has_outsiders: rf.has_outsiders ?? false,
+                            conflicts: [...pendingConflicts, ...approvedConflicts],
+                            equipment: rf.equipment ?? [],
+                            borrowed_equipment: rf.borrowed_equipment ?? [],
+                            external_equipment: rf.external_equipments ?? [], 
+                            equipment_conflicts: rf.equipment_conflicts ?? {},
+                        };
 
                         return (
-                            <div
-                                className='flex flex-col text-sm border border-border rounded-lg overflow-hidden'
+                            <BookingCard
                                 key={rf.date_requested + rf.time_start}
-                            >
-                                <div className="px-3 py-2.5 flex flex-col gap-1">
-                                    <Link href={route("facility.detail", [rf.facility_id])} className='hover:underline'>
-                                        <span className='font-semibold'>{facility?.name}</span>
-                                    </Link>
-
-                                    <div className="flex flex-wrap gap-1">
-                                        {facility?.capacity < rf.expected_capacity && (
-                                            <div className="self-start py-0.5 px-2 text-xs border rounded-full text-amber-700 border-amber-700 dark:border-amber-400 dark:text-amber-400 bg-amber-500/10">
-                                                Capacity Exceeded
-                                            </div>
-                                        )}
-
-                                        {rf.has_outsiders && (
-                                            <div className="self-start py-0.5 px-2 text-xs border rounded-full text-slate-600 border-slate-600 dark:border-slate-400 dark:text-slate-400 bg-slate-500/10 flex items-center gap-1">
-                                                <UsersRound size={10} />
-                                                <span>With Outsiders</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex items-center flex-wrap gap-x-2 text-foreground/70 font-medium">
-                                        <div className="flex gap-1 items-center">
-                                            <Calendar size={12} />
-                                            <span>{moment(rf.date_requested).format("MMM D, YYYY")}</span>
-                                        </div>
-                                        <div className="flex gap-1 items-center">
-                                            <Clock size={12} />
-                                            <span>{formatTime(rf.time_start)} – {formatTime(rf.time_end)}</span>
-                                        </div>
-                                        {rf.expected_capacity && (
-                                            <div className="flex gap-1 items-center">
-                                                <User size={12} />
-                                                <span>{rf.expected_capacity} attendees</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {pendingConflicts.length > 0 && (
-                                    <div className="border-t border-border px-3 py-2 flex flex-col gap-1.5">
-                                        <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-                                            Pending conflicts
-                                        </p>
-                                        {pendingConflicts.map((conflict) => (
-                                            <div key={conflict.id} className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-                                                <Link
-                                                    href={route("requests.detail", conflict.request.id)}
-                                                    className="hover:underline truncate font-medium text-foreground"
-                                                >
-                                                    {conflict.request.title}
-                                                </Link>
-                                                <span className="shrink-0 flex items-center gap-1">
-                                                    <Clock size={10} />
-                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {approvedConflicts.length > 0 && (
-                                    <div className="border-t border-border px-3 py-2 flex flex-col gap-1.5">
-                                        <p className="text-xs font-semibold text-red-600 dark:text-red-400">
-                                            Approved conflicts
-                                        </p>
-                                        {approvedConflicts.map((conflict) => (
-                                            <div key={conflict.id} className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-                                                <Link
-                                                    href={route("requests.detail", conflict.request.id)}
-                                                    className="hover:underline truncate font-medium text-foreground"
-                                                >
-                                                    {conflict.request.title}
-                                                </Link>
-                                                <span className="shrink-0 flex items-center gap-1">
-                                                    <Clock size={10} />
-                                                    {formatTime(conflict.time_start)} – {formatTime(conflict.time_end)}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                                booking={booking}
+                                index={0}
+                            />
                         );
                     })}
                 </div>
@@ -404,7 +350,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
         },
         {
             value: "comment",
-            icon: <MessageCircleWarning size={16} />,
+            icon: <MessageCircle size={16} />,
             label: "Comments",
             badge: request.comments?.length || undefined,
             content: request.comments?.length > 0 ? (
