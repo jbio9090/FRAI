@@ -356,6 +356,76 @@ class ChatController extends Controller
         return "For {$participantCount} participants, the valid facility capacity range is {$participantCount}-" . ($participantCount * 2) . ".\n\nHere are all matching facilities:\n{$lines}\n\nWhich room would you like to consider?";
     }
 
+    private function isAvailabilityIntent(?string $message): bool
+    {
+        if (!$message) {
+            return false;
+        }
+
+        return (bool) preg_match('/\b(available|availability|free|open|booked|conflict|occupied|check again|re-check|recheck|double check|are you sure|is that available)\b/i', $message);
+    }
+
+    private function resolveFacilityAndDateFromConversation(array $messages, $facilities): array
+    {
+        $facility = null;
+        $date = null;
+
+        for ($i = count($messages) - 1; $i >= 0; $i--) {
+            $content = trim((string) ($messages[$i]['content'] ?? ''));
+            if ($content === '') {
+                continue;
+            }
+
+            $parsed = $this->extractFacilityAndDateFromMessage($content, $facilities);
+
+            if (!$facility && !empty($parsed['facility'])) {
+                $facility = $parsed['facility'];
+            }
+
+            if (!$date && !empty($parsed['date'])) {
+                $date = $parsed['date'];
+            }
+
+            if ($facility && $date) {
+                break;
+            }
+        }
+
+        return ['facility' => $facility, 'date' => $date];
+    }
+
+    private function buildAvailabilityResponse($facility, string $date, $allRequests): string
+    {
+        $approvedBookings = $allRequests
+            ->filter(fn($r) => $r->status->value === 'Approved')
+            ->flatMap(function ($r) use ($facility) {
+                return $r->requestFacilities
+                    ->where('facility_id', $facility->id)
+                    ->map(function ($rf) use ($r) {
+                        return [
+                            'request_id' => $r->id,
+                            'title' => $r->title,
+                            'date' => $rf->date_requested,
+                            'time_start' => $rf->time_start,
+                            'time_end' => $rf->time_end,
+                        ];
+                    });
+            })
+            ->where('date', $date)
+            ->sortBy('time_start')
+            ->values();
+
+        if ($approvedBookings->isEmpty()) {
+            return "{$facility->name} is available on {$date} based on the current approved bookings. I do not see any approved booking for that room on that date.\n\nIf you want, I can help you continue with the booking details.";
+        }
+
+        $bookingLines = $approvedBookings->map(function ($booking) {
+            return "- {$booking['time_start']} - {$booking['time_end']} | Request #{$booking['request_id']} | {$booking['title']}";
+        })->implode("\n");
+
+        return "{$facility->name} has approved bookings on {$date} during these time slots:\n{$bookingLines}\n\nI cannot say the room is unavailable for the whole day based on this alone. If you tell me your preferred start and end time, I can check whether your time slot overlaps with any existing booking.";
+    }
+
     private function storeAssistantReply(array $incomingMessages, string $content): void
     {
         $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
@@ -564,6 +634,46 @@ class ChatController extends Controller
                     $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
                     $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
                     $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
+                }
+
+                if (
+                    $allRequests->isNotEmpty() &&
+                    $latestUserMessage &&
+                    $this->isAvailabilityIntent($latestUserMessage)
+                ) {
+                    $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
+
+                    if (!empty($resolved['facility']) && !empty($resolved['date'])) {
+                        $content = $this->buildAvailabilityResponse($resolved['facility'], $resolved['date'], $allRequests);
+                        $this->storeAssistantReply($incomingMessages, $content);
+                        $this->chatbotLogService->logAssistantReply(
+                            $latestUserMessage,
+                            $content,
+                            $this->buildLogContext(
+                                $latestUserMessage,
+                                $participantCount,
+                                $bookingContext,
+                                $allRequests,
+                                $allFacilities,
+                                $equipmentCount,
+                                count($rules),
+                                $rulesInjected,
+                                $approvedBookingContextInjected,
+                                $deterministicAvailabilityInjected,
+                                $filterApplied
+                            ),
+                            $sessionId,
+                            'availability_check',
+                            'availability_check',
+                        );
+
+                        return response()->json([
+                            'message' => [
+                                'role' => 'assistant',
+                                'content' => $content,
+                            ],
+                        ]);
+                    }
                 }
 
                 if (
@@ -889,6 +999,54 @@ class ChatController extends Controller
                 $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
                 $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
                 $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
+            }
+
+            if (
+                $allRequests->isNotEmpty() &&
+                $latestUserMessage &&
+                $this->isAvailabilityIntent($latestUserMessage)
+            ) {
+                $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
+
+                if (!empty($resolved['facility']) && !empty($resolved['date'])) {
+                    $content = $this->buildAvailabilityResponse($resolved['facility'], $resolved['date'], $allRequests);
+                    $incomingMessages = $request->input('messages', []);
+                    $this->storeAssistantReply($incomingMessages, $content);
+                    $this->chatbotLogService->logAssistantReply(
+                        $latestUserMessage,
+                        $content,
+                        $this->buildLogContext(
+                            $latestUserMessage,
+                            $participantCount,
+                            $bookingContext,
+                            $allRequests,
+                            $allFacilities,
+                            $equipmentCount,
+                            0,
+                            $rulesInjected,
+                            $approvedBookingContextInjected,
+                            $deterministicAvailabilityInjected,
+                            $filterApplied
+                        ),
+                        $sessionId,
+                        'availability_check',
+                        'availability_check',
+                    );
+
+                    return response()->stream(function () use ($content) {
+                        echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                        ob_flush();
+                        flush();
+                        echo "data: " . json_encode(['done' => true]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    }, 200, [
+                        'Content-Type'      => 'text/event-stream',
+                        'Cache-Control'     => 'no-cache',
+                        'X-Accel-Buffering' => 'no',
+                        'Connection'        => 'keep-alive',
+                    ]);
+                }
             }
 
             if (

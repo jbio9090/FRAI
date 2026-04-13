@@ -36,7 +36,7 @@ export default function Chatbot() {
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
     const { extractAndSet, getCurrentCount } = useParticipantCount();
-    const bookingFlow = useBookingFlow(facilities);
+    const bookingFlow = useBookingFlow(facilities, equipmentOptions);
     const { isLoading, sendMessage, submitRequest } = useChatAPI();
     const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
@@ -101,7 +101,21 @@ export default function Chatbot() {
             credentials: 'same-origin',
         })
             .then(res => res.json())
-            .then(json => { if (json.data) setEquipmentOptions(json.data); })
+            .then(json => {
+                if (json.data) {
+                    const normalizedEquipment = json.data.map((item: Equipment) => ({
+                        ...item,
+                        id: Number(item.id),
+                        facility_id: Number(item.facility_id),
+                        quantity: Number(item.quantity),
+                    }));
+
+                    console.log('[Chatbot equipment fetch] Raw equipment payload:', json.data);
+                    console.log('[Chatbot equipment fetch] Normalized equipment payload:', normalizedEquipment);
+
+                    setEquipmentOptions(normalizedEquipment);
+                }
+            })
             .catch(() => {});
     }, []);
 
