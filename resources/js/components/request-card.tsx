@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
-import { ArrowUpRight, Calendar, Clock, MessageCircle, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, IterationCw } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircle, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, IterationCw, Sparkles } from 'lucide-react';
 import { PRIORITY_LABELS } from '@/types/request';
 import { motion } from 'motion/react';
 import { Request } from '@/types/request';
@@ -333,7 +333,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                             conflicts: [...pendingConflicts, ...approvedConflicts],
                             equipment: rf.equipment ?? [],
                             borrowed_equipment: rf.borrowed_equipment ?? [],
-                            external_equipment: rf.external_equipments ?? [], 
+                            external_equipment: rf.external_equipments ?? [],
                             equipment_conflicts: rf.equipment_conflicts ?? {},
                         };
 
@@ -367,22 +367,57 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
             value: "recommend",
             icon: <ThumbsUp size={16} />,
             label: "Recommendation",
-            content: (
-                <div className="mt-4">
-                    <p className='font-semibold text-muted-foreground'>Recommended Action</p>
+            content: (() => {
+                const actionColor: Record<string, string> = {
+                    Approve: "text-emerald-600 dark:text-emerald-400",
+                    "Conditionally Approve": "text-amber-600 dark:text-amber-400",
+                    Deny: "text-destructive",
+                    "For Reschedule": "text-blue-600 dark:text-blue-400",
+                };
 
-                    {isLoadingRecommendation ? (
-                        <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                            <AnimatedText />
-                        </div>
-                    ) : (
-                        <>
-                            <p className='font-bold'>{request.recommended_action}</p>
-                            <p className='text-sm text-muted-foreground'>{request.recommended_action_reason}</p>
-                        </>
-                    )}
-                </div>
-            ),
+                const verdictColor = actionColor[request.recommended_action ?? ""] ?? "text-foreground";
+
+                return (
+                    <div className="mt-4 rounded-xl border border-dashed p-5 flex flex-col gap-3">
+                        {isLoadingRecommendation ? (
+                            <>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded bg-muted animate-pulse" />
+                                    <div className="w-28 h-3.5 rounded bg-muted animate-pulse" />
+                                </div>
+                                <div className="w-32 h-8 rounded bg-muted animate-pulse" />
+                                <div className="flex flex-col gap-1.5">
+                                    <div className="h-3 w-full rounded bg-muted animate-pulse" />
+                                    <div className="h-3 w-5/6 rounded bg-muted animate-pulse" />
+                                    <div className="h-3 w-3/4 rounded bg-muted animate-pulse" />
+                                </div>
+                            </>
+                        ) : (
+                            <motion.div
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.35, ease: "easeOut" }}
+                                className="flex flex-col gap-2"
+                            >
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Sparkles size={15} />
+                                    <span className="text-sm">Recommendation</span>
+                                </div>
+
+                                <p className={cn("text-2xl font-bold", verdictColor)}>
+                                    {request.recommended_action}
+                                </p>
+
+                                {request.recommended_action_reason && (
+                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                        {request.recommended_action_reason}
+                                    </p>
+                                )}
+                            </motion.div>
+                        )}
+                    </div>
+                );
+            })(),
         }] : []),
     ];
 

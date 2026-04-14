@@ -86,7 +86,11 @@ class RequestController extends Controller
         if ($action === 'approve') {
             $facilityRequest = $this->service->approve($id);
         } else {
-            $facilityRequest->update(['status' => $statusMap[$action]]);
+            $facilityRequest->update([
+                'status'       => $statusMap[$action],
+                'processed_by' => auth()->id(),
+                'processed_at' => now(),
+            ]);
 
             match ($action) {
                 'reject'                => $this->auditLogger::requestDenied($facilityRequest),

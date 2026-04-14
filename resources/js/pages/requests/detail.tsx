@@ -26,6 +26,7 @@ import { ActivityFeed } from '@/components/activity-feed';
 import { usePermission } from '@/hooks/use-permission';
 import { BookingCard } from '@/components/booking-card';
 import { cn } from '@/lib/utils';
+import AnimatedText from '@/components/animated-text';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -161,9 +162,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                                             )}
                                         </>
                                     ) : (
-                                        <span className="text-muted-foreground italic">
-                                            Analyzing...
-                                        </span>
+                                        <AnimatedText italize={true} />
                                     )}
                                 </div>
 
