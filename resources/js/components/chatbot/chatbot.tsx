@@ -19,6 +19,13 @@ import BookingFlow from './components/BookingFlow';
 import AvailabilityQuickFlow from './components/AvailabilityQuickFlow';
 
 type ChatMode = 'idle' | 'booking' | 'availability' | 'ai';
+type SelectedEquipmentItem = {
+    equipment_id: number;
+    equipment_name: string;
+    facility_id: number;
+    facility_name: string | null;
+    quantity_needed: number;
+};
 
 export default function Chatbot() {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -26,9 +33,7 @@ export default function Chatbot() {
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment>>([]);
-    const [selectedEquipment, setSelectedEquipment] = useState<
-        Array<{ equipment_id: number; equipment_name: string; quantity_needed: number }>
-    >([]);
+    const [selectedEquipment, setSelectedEquipment] = useState<SelectedEquipmentItem[]>([]);
     // NEW: Track the message index of the last equipment question we responded to
     const [lastEquipmentQuestionIndex, setLastEquipmentQuestionIndex] = useState<number>(-1);
     // NEW: Track whether to show equipment selection UI
@@ -109,6 +114,7 @@ export default function Chatbot() {
                             id: Number(item.id),
                             facility_id: Number(item.facility_id),
                             quantity: Number(item.quantity),
+                            facility: typeof item.facility === 'string' ? item.facility : null,
                         }))
                         .filter((item: Equipment) =>
                             Number.isFinite(item.id) &&
@@ -302,7 +308,7 @@ export default function Chatbot() {
 
     const getFilteredEquipment = () => {
         const facilityId = getCurrentFacilityId();
-        if (!facilityId) return [];
+        if (!facilityId) return equipmentOptions;
         return equipmentOptions.filter(eq => eq.facility_id === facilityId);
     };
 
@@ -348,9 +354,6 @@ export default function Chatbot() {
     };
 
     const shouldShowEquipmentPicker = (): boolean => {
-        const facilityId = getCurrentFacilityId();
-        if (!facilityId) return false;
-
         const latest = getLatestAssistantMessage();
         if (!latest) return false;
 
@@ -369,38 +372,54 @@ export default function Chatbot() {
         );
     };
 
+    useEffect(() => {
+        if (mode !== 'ai' || showEquipmentSelection) {
+            return;
+        }
+
+        if (shouldShowEquipmentPicker()) {
+            setShowEquipmentSelection(true);
+        }
+    }, [mode, showEquipmentSelection, messages, equipmentOptions, bookingFlow.data.facility_id, pendingPayload]);
+
     const handleEquipmentToggle = (equipment: Equipment) => {
         setSelectedEquipment(prev => {
-            const exists = prev.find(item => item.equipment_id === equipment.id);
+            const exists = prev.find(item =>
+                item.equipment_id === equipment.id && item.facility_id === equipment.facility_id
+            );
             if (exists) {
-                return prev.filter(item => item.equipment_id !== equipment.id);
+                return prev.filter(item =>
+                    !(item.equipment_id === equipment.id && item.facility_id === equipment.facility_id)
+                );
             } else {
                 return [...prev, {
                     equipment_id: equipment.id,
                     equipment_name: equipment.name,
+                    facility_id: equipment.facility_id,
+                    facility_name: equipment.facility ?? null,
                     quantity_needed: 1,
                 }];
             }
         });
     };
 
-    const updateEquipmentQuantity = (equipmentId: number, quantity: number) => {
+    const updateEquipmentQuantity = (equipmentId: number, facilityId: number, quantity: number) => {
         setSelectedEquipment(prev =>
             prev.map(item =>
-                item.equipment_id === equipmentId
+                item.equipment_id === equipmentId && item.facility_id === facilityId
                     ? { ...item, quantity_needed: quantity }
                     : item
             )
         );
     };
 
-    const buildEquipmentSelectionMessage = (): string => {
-        if (selectedEquipment.length === 0) {
+    const buildEquipmentSelectionMessage = (selection: SelectedEquipmentItem[]): string => {
+        if (selection.length === 0) {
             return "I don't need any additional equipment.";
         }
-        const items = selectedEquipment
+        const items = selection
             .map(
-                (e) => `${e.equipment_name} (ID: ${e.equipment_id}, quantity: ${e.quantity_needed})`
+                (e) => `${e.equipment_name} (ID: ${e.equipment_id}, Facility ID: ${e.facility_id}, quantity: ${e.quantity_needed})`
             )
             .join(', ');
         return `I need the following equipment: ${items}`;
@@ -463,10 +482,11 @@ export default function Chatbot() {
         }
     };
 
-    const submitEquipmentSelection = async () => {
-        const message = buildEquipmentSelectionMessage();
-        const serializedSelection = selectedEquipment.map((equipment) => ({
+    const submitEquipmentSelection = async (selection: SelectedEquipmentItem[] = selectedEquipment) => {
+        const message = buildEquipmentSelectionMessage(selection);
+        const serializedSelection = selection.map((equipment) => ({
             equipment_id: equipment.equipment_id,
+            facility_id: equipment.facility_id,
             quantity_needed: equipment.quantity_needed,
         }));
         const equipmentMsg =
@@ -476,7 +496,7 @@ export default function Chatbot() {
         const noEquipmentMsg =
             'The user selected no additional equipment. ' +
             'Do not ask for equipment again unless it is required later.';
-        const context = selectedEquipment.length > 0 ? equipmentMsg : noEquipmentMsg;
+        const context = selection.length > 0 ? equipmentMsg : noEquipmentMsg;
 
         // NEW: Mark this equipment question as answered by storing the message index
         const latest = getLatestAssistantMessage();
@@ -487,6 +507,10 @@ export default function Chatbot() {
         setSelectedEquipment([]);
         setShowEquipmentSelection(false); // Reset the selection UI
         await processAndSend({ role: 'user', content: message }, context);
+    };
+
+    const submitNoEquipmentSelection = async () => {
+        await submitEquipmentSelection([]);
     };
 
     const handleQuickReply = (option: QuickReply) => {
@@ -565,6 +589,9 @@ export default function Chatbot() {
         await processAndSend(userMessage, context);
     };
 
+    const shouldRenderEquipmentPicker = showEquipmentSelection || shouldShowEquipmentPicker();
+    const currentFacilityId = getCurrentFacilityId();
+
     return (
         <div className="w-full h-full flex flex-col bg-background">
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -598,6 +625,17 @@ export default function Chatbot() {
                 {/* AI chat mode */}
                 {mode === 'ai' && (
                     <>
+                        <div className="mb-3 flex justify-end">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setShowEquipmentSelection(true)}
+                                disabled={isLoading || getFilteredEquipment().length === 0}
+                            >
+                                Select Equipment
+                            </Button>
+                        </div>
+
                         <MessageList 
                             messages={messages} 
                             messagesEndRef={messagesEndRef} 
@@ -606,7 +644,7 @@ export default function Chatbot() {
                             onCancel={handleCancelRequest}
                         />
 
-                        {shouldShowEquipmentPicker() && (
+                        {shouldRenderEquipmentPicker && (
                             <div className="mb-4 rounded-lg border border-border bg-background p-4">
                                 {!showEquipmentSelection ? (
                                     <div className="flex items-center justify-between">
@@ -632,6 +670,11 @@ export default function Chatbot() {
                                                 <p className="text-xs text-muted-foreground">
                                                     Tick the items you need, adjust quantities, then submit your selection.
                                                 </p>
+                                                {!currentFacilityId && (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Showing equipment across all facilities.
+                                                    </p>
+                                                )}
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 <Button
@@ -644,17 +687,30 @@ export default function Chatbot() {
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    onClick={submitEquipmentSelection}
+                                                    onClick={submitNoEquipmentSelection}
                                                     disabled={isLoading}
                                                 >
-                                                    {selectedEquipment.length > 0 ? 'Send equipment' : 'No equipment needed'}
+                                                    No Equipment Needed
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={submitEquipmentSelection}
+                                                    disabled={isLoading || selectedEquipment.length === 0}
+                                                >
+                                                    Send equipment
                                                 </Button>
                                             </div>
                                         </div>
                                         <div className="space-y-3 max-h-64 overflow-y-auto">
+                                            {getFilteredEquipment().length === 0 && (
+                                                <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                                                    No equipment options are available right now.
+                                                </div>
+                                            )}
                                             {getFilteredEquipment().map((equipment) => {
                                                 const selected = selectedEquipment.find(
-                                                    item => item.equipment_id === equipment.id
+                                                    item => item.equipment_id === equipment.id && item.facility_id === equipment.facility_id
                                                 );
                                                 return (
                                                     <div key={`${equipment.id}-${equipment.facility_id}`} className="rounded-lg border border-border p-3">
@@ -672,7 +728,7 @@ export default function Chatbot() {
                                                                     {equipment.name}
                                                                 </Label>
                                                                 <p className="text-xs text-muted-foreground">
-                                                                    Available: {equipment.quantity}
+                                                                    Facility: {equipment.facility ?? `Facility #${equipment.facility_id}`} | Available: {equipment.quantity}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -691,7 +747,7 @@ export default function Chatbot() {
                                                                             Math.max(1, value),
                                                                             equipment.quantity
                                                                         );
-                                                                        updateEquipmentQuantity(equipment.id, bounded);
+                                                                        updateEquipmentQuantity(equipment.id, equipment.facility_id, bounded);
                                                                     }}
                                                                     className="w-24"
                                                                 />
