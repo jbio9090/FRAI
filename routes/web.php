@@ -20,6 +20,7 @@ Route::middleware("auth")->group(function () {
 
     Route::get("/", [DashboardController::class, 'index'])->name('dashboard');
     Route::get("/dashboard/calendar", [DashboardController::class, "calendarEvents"])->name("dashboard.calendar");
+    Route::get('/dashboard/chart-data', [DashboardController::class, 'chartData'])->name('dashboard.chart-data');
 
     Route::get("/requests/create", [RequestController::class, "createPage"])->name("request.create");
 
