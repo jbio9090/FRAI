@@ -58,6 +58,7 @@ export interface BookingData {
 export interface Facility {
     id: number;
     name: string;
+    capacity?: number;
 }
 
 export interface Equipment {
@@ -221,7 +222,13 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
         setData(prev => ({ ...prev, ...patch }));
 
     const getBookingEquipmentOptions = (): Equipment[] => {
-        return equipmentOptions;
+        if (!data.facility_id) {
+            return [];
+        }
+
+        return equipmentOptions.filter(
+            equipment => Number(equipment.facility_id) === Number(data.facility_id)
+        );
     };
 
     const getCurrentEquipmentMaxQuantity = (): number => {
@@ -275,7 +282,7 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
                 };
             case 'facility': {
                 const options = facilities.length > 0
-                    ? facilities.map(f => `${f.name} (Capacity: ${f.capacity})`)
+                    ? facilities.map(f => `${f.name} (Capacity: ${f.capacity ?? 'N/A'})`)
                     : ['Loading facilities...'];
                 return {
                     botMessage: 'Please choose a facility suitable for your event.',

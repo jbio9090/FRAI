@@ -103,12 +103,18 @@ export default function Chatbot() {
             .then(res => res.json())
             .then(json => {
                 if (json.data) {
-                    const normalizedEquipment = json.data.map((item: Equipment) => ({
-                        ...item,
-                        id: Number(item.id),
-                        facility_id: Number(item.facility_id),
-                        quantity: Number(item.quantity),
-                    }));
+                    const normalizedEquipment = json.data
+                        .map((item: Equipment) => ({
+                            ...item,
+                            id: Number(item.id),
+                            facility_id: Number(item.facility_id),
+                            quantity: Number(item.quantity),
+                        }))
+                        .filter((item: Equipment) =>
+                            Number.isFinite(item.id) &&
+                            Number.isFinite(item.facility_id) &&
+                            item.facility_id > 0
+                        );
 
                     console.log('[Chatbot equipment fetch] Raw equipment payload:', json.data);
                     console.log('[Chatbot equipment fetch] Normalized equipment payload:', normalizedEquipment);
@@ -296,7 +302,7 @@ export default function Chatbot() {
 
     const getFilteredEquipment = () => {
         const facilityId = getCurrentFacilityId();
-        if (!facilityId) return equipmentOptions;
+        if (!facilityId) return [];
         return equipmentOptions.filter(eq => eq.facility_id === facilityId);
     };
 
@@ -342,6 +348,9 @@ export default function Chatbot() {
     };
 
     const shouldShowEquipmentPicker = (): boolean => {
+        const facilityId = getCurrentFacilityId();
+        if (!facilityId) return false;
+
         const latest = getLatestAssistantMessage();
         if (!latest) return false;
 
@@ -648,16 +657,16 @@ export default function Chatbot() {
                                                     item => item.equipment_id === equipment.id
                                                 );
                                                 return (
-                                                    <div key={equipment.id} className="rounded-lg border border-border p-3">
+                                                    <div key={`${equipment.id}-${equipment.facility_id}`} className="rounded-lg border border-border p-3">
                                                         <div className="flex items-start gap-3">
                                                             <Checkbox
-                                                                id={`equipment-${equipment.id}`}
+                                                                id={`equipment-${equipment.id}-${equipment.facility_id}`}
                                                                 checked={!!selected}
                                                                 onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                             />
                                                             <div className="min-w-0 flex-1">
                                                                 <Label
-                                                                htmlFor={`equipment-${equipment.id}`}
+                                                                htmlFor={`equipment-${equipment.id}-${equipment.facility_id}`}
                                                                 className="text-sm font-medium cursor-pointer"
                                                             >
                                                                     {equipment.name}

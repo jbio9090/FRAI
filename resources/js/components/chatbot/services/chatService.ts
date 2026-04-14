@@ -1,6 +1,45 @@
 import { ChatRequest } from '../types';
 import { getCsrfToken } from '../utils/csrfToken';
 
+function extractBookingPayloadFromText(content: string): string | null {
+    let depth = 0;
+    let start = -1;
+
+    for (let index = 0; index < content.length; index += 1) {
+        const char = content[index];
+
+        if (char === '{') {
+            if (depth === 0) {
+                start = index;
+            }
+            depth += 1;
+            continue;
+        }
+
+        if (char !== '}' || depth === 0) {
+            continue;
+        }
+
+        depth -= 1;
+        if (depth !== 0 || start < 0) {
+            continue;
+        }
+
+        const candidate = content.slice(start, index + 1);
+
+        try {
+            const parsed = JSON.parse(candidate);
+            if (parsed?.title && Array.isArray(parsed?.facility_bookings)) {
+                return JSON.stringify(parsed);
+            }
+        } catch {
+            // Continue scanning until a full valid JSON object is found.
+        }
+    }
+
+    return null;
+}
+
 export async function sendChatMessageStream(
     payload: ChatRequest,
     onToken: (token: string) => void,
@@ -38,6 +77,7 @@ export async function sendChatMessageStream(
 
     let buffer = '';
     let fullContent = '';
+    let bookingPayloadEmitted = false;
 
     while (true) {
         const { done, value } = await reader.read();
@@ -61,18 +101,11 @@ export async function sendChatMessageStream(
                     const token: string = event.token;
                     fullContent += token;
 
-                    // Try to extract JSON from the accumulated content
-                    const jsonMatch = fullContent.match(/\{[\s\S]*?\}/);
-                    if (jsonMatch) {
-                        try {
-                            const parsed = JSON.parse(jsonMatch[0]);
-                            if (parsed.title && parsed.facility_bookings && Array.isArray(parsed.facility_bookings)) {
-                                onBookingPayload(JSON.stringify(parsed));
-                                // Remove the JSON from the content so it doesn't appear in the message
-                                fullContent = fullContent.replace(jsonMatch[0], '').trim();
-                            }
-                        } catch (e) {
-                            // Not valid JSON yet, continue accumulating
+                    if (!bookingPayloadEmitted) {
+                        const payload = extractBookingPayloadFromText(fullContent);
+                        if (payload) {
+                            bookingPayloadEmitted = true;
+                            onBookingPayload(payload);
                         }
                     }
 
@@ -84,6 +117,7 @@ export async function sendChatMessageStream(
                     const payloadStr = typeof event.booking_payload === 'string' 
                         ? event.booking_payload 
                         : JSON.stringify(event.booking_payload);
+                    bookingPayloadEmitted = true;
                     onBookingPayload(payloadStr);
                 }
 

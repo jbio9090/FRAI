@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Http\File as HttpFile;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\ValidationException;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
 use App\Models\Facility;
@@ -115,7 +117,7 @@ class ChatController extends Controller
 
         if (preg_match('/\b\d{4}-\d{2}-\d{2}\b/', $message, $matches)) {
             try {
-                $date = \Illuminate\Support\Carbon::parse($matches[0])->format('Y-m-d');
+                $date = Carbon::parse($matches[0])->format('Y-m-d');
             } catch (\Exception $e) {
                 $date = null;
             }
@@ -123,13 +125,130 @@ class ChatController extends Controller
 
         if (!$date && preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*|\s+)\d{4}\b/i', $message, $matches)) {
             try {
-                $date = \Illuminate\Support\Carbon::parse($matches[0])->format('Y-m-d');
+                $date = Carbon::parse($matches[0])->format('Y-m-d');
             } catch (\Exception $e) {
                 $date = null;
             }
         }
 
+        if (!$date && preg_match('/\b(today|tomorrow)\b/i', $message, $matches)) {
+            $keyword = strtolower($matches[1]);
+            $date = $keyword === 'tomorrow'
+                ? Carbon::tomorrow()->format('Y-m-d')
+                : Carbon::today()->format('Y-m-d');
+        }
+
         return ['facility' => $facility, 'date' => $date];
+    }
+
+    private function normalizeDateValue(mixed $value): mixed
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        $candidate = trim($value);
+        if ($candidate === '') {
+            return $value;
+        }
+
+        try {
+            return Carbon::parse($candidate)->format('Y-m-d');
+        } catch (\Exception) {
+            return $value;
+        }
+    }
+
+    private function normalizeTimeValue(mixed $value): mixed
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        $candidate = trim($value);
+        if ($candidate === '') {
+            return $value;
+        }
+
+        if (preg_match('/^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $candidate, $matches)) {
+            return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+        }
+
+        $normalizedMeridian = strtoupper(preg_replace('/\s+/', ' ', $candidate));
+        foreach (['g:i A', 'g:iA', 'g A', 'gA', 'h:i A', 'h:iA', 'h A', 'hA'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, $normalizedMeridian)->format('H:i');
+            } catch (\Exception) {
+                continue;
+            }
+        }
+
+        return $value;
+    }
+
+    private function extractTimeRangeFromMessage(?string $message): array
+    {
+        if (!$message) {
+            return ['time_start' => null, 'time_end' => null];
+        }
+
+        $timePattern = '(?:[0-9]{1,2}:[0-9]{2}\s*(?:am|pm)?|[0-9]{1,2}\s*(?:am|pm))';
+        $patterns = [
+            "/\bfrom\s+($timePattern)\s*(?:to|until|-)\s*($timePattern)\b/i",
+            "/\b($timePattern)\s+to\s+($timePattern)\b/i",
+            "/\b($timePattern)\s*-\s*($timePattern)\b/i",
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (!preg_match($pattern, $message, $matches)) {
+                continue;
+            }
+
+            $start = $this->normalizeTimeValue($matches[1] ?? null);
+            $end = $this->normalizeTimeValue($matches[2] ?? null);
+
+            return [
+                'time_start' => is_string($start) ? $start : null,
+                'time_end' => is_string($end) ? $end : null,
+            ];
+        }
+
+        return ['time_start' => null, 'time_end' => null];
+    }
+
+    private function getEquipmentContextRows(int $limit = 50): array
+    {
+        return Equipment::with(['facilities:id,name'])
+            ->orderBy('id', 'asc')
+            ->limit($limit)
+            ->get(['id', 'name', 'quantity'])
+            ->flatMap(function ($equipment) {
+                if ($equipment->facilities->isEmpty()) {
+                    return [[
+                        'id' => $equipment->id,
+                        'name' => $equipment->name,
+                        'facility_id' => null,
+                        'facility' => null,
+                        'quantity' => 0,
+                        'line' => "ID {$equipment->id}: {$equipment->name} (No facility assignment, Available: 0)",
+                    ]];
+                }
+
+                return $equipment->facilities->map(function ($facility) use ($equipment) {
+                    $facilityQuantity = (int) ($facility->pivot->quantity ?? 0);
+
+                    return [
+                        'id' => $equipment->id,
+                        'name' => $equipment->name,
+                        'facility_id' => $facility->id,
+                        'facility' => $facility->name,
+                        'quantity' => $facilityQuantity,
+                        'line' => "ID {$equipment->id}: {$equipment->name} (Facility: {$facility->name}, Facility ID: {$facility->id}, Available: {$facilityQuantity})",
+                    ];
+                })->values();
+            })
+            ->values()
+            ->all();
     }
 
     private function injectDeterministicAvailabilityContext(array &$messages, ?string $latestUserMessage, $allFacilities, $allRequests): void
@@ -249,6 +368,85 @@ class ChatController extends Controller
         return $facility?->id ?? $facilityValue;
     }
 
+    private function resolveEquipmentIdFromValue(mixed $equipmentValue, ?int $facilityId = null): mixed
+    {
+        if (is_int($equipmentValue) || (is_string($equipmentValue) && ctype_digit(trim($equipmentValue)))) {
+            return (int) $equipmentValue;
+        }
+
+        if (!is_string($equipmentValue) || trim($equipmentValue) === '') {
+            return $equipmentValue;
+        }
+
+        $normalizedValue = trim($equipmentValue);
+
+        if (preg_match('/\b(?:equipment\s*)?id\s*(\d+)\b/i', $normalizedValue, $matches)) {
+            return (int) $matches[1];
+        }
+
+        $query = Equipment::query()
+            ->orderByRaw('LENGTH(name) DESC');
+
+        if ($facilityId) {
+            $query->whereHas('facilities', fn($q) => $q->where('facilities.id', $facilityId));
+        }
+
+        $equipment = $query
+            ->get(['id', 'name'])
+            ->first(function ($equipment) use ($normalizedValue) {
+                $equipmentName = (string) $equipment->name;
+
+                return strcasecmp($equipmentName, $normalizedValue) === 0
+                    || stripos($equipmentName, $normalizedValue) !== false
+                    || stripos($normalizedValue, $equipmentName) !== false;
+            });
+
+        return $equipment?->id ?? $equipmentValue;
+    }
+
+    private function validateFacilityEquipmentSelections(array $facilityBookings): array
+    {
+        $errors = [];
+
+        foreach ($facilityBookings as $bookingIndex => $booking) {
+            $facilityId = (int) ($booking['facility_id'] ?? 0);
+            if ($facilityId <= 0 || empty($booking['equipment']) || !is_array($booking['equipment'])) {
+                continue;
+            }
+
+            $date = Carbon::parse($booking['date'])->format('Y-m-d');
+            $timeStart = (string) ($this->normalizeTimeValue($booking['time_start'] ?? '') ?? '');
+            $timeEnd = (string) ($this->normalizeTimeValue($booking['time_end'] ?? '') ?? '');
+
+            foreach ($booking['equipment'] as $equipmentIndex => $selection) {
+                $equipmentId = (int) ($selection['equipment_id'] ?? 0);
+                $quantityNeeded = (int) ($selection['quantity_needed'] ?? 0);
+                if ($equipmentId <= 0 || $quantityNeeded <= 0) {
+                    continue;
+                }
+
+                $equipment = Equipment::with('facilities:id')->find($equipmentId);
+                if (!$equipment) {
+                    continue;
+                }
+
+                if (!$equipment->facilities->contains('id', $facilityId)) {
+                    $errors["facility_bookings.{$bookingIndex}.equipment.{$equipmentIndex}.equipment_id"][] =
+                        "{$equipment->name} is not assigned to the selected facility.";
+                    continue;
+                }
+
+                $available = $equipment->quantityAvailableInFacility($facilityId, $date, $timeStart, $timeEnd);
+                if ($quantityNeeded > $available) {
+                    $errors["facility_bookings.{$bookingIndex}.equipment.{$equipmentIndex}.quantity_needed"][] =
+                        "{$equipment->name} only has {$available} available unit(s) in this facility for the selected time slot.";
+                }
+            }
+        }
+
+        return $errors;
+    }
+
     private function normalizeCreateRequestPayload(array $input): array
     {
         $normalized = $input;
@@ -267,9 +465,25 @@ class ChatController extends Controller
                     $booking['time_end'] = $booking['end_time'];
                 }
 
+                if (isset($booking['date'])) {
+                    $booking['date'] = $this->normalizeDateValue($booking['date']);
+                }
+
+                if (isset($booking['time_start'])) {
+                    $booking['time_start'] = $this->normalizeTimeValue($booking['time_start']);
+                }
+
+                if (isset($booking['time_end'])) {
+                    $booking['time_end'] = $this->normalizeTimeValue($booking['time_end']);
+                }
+
                 if (isset($booking['facility_id'])) {
                     $booking['facility_id'] = $this->resolveFacilityIdFromValue($booking['facility_id']);
                 }
+
+                $facilityId = isset($booking['facility_id']) && is_numeric($booking['facility_id'])
+                    ? (int) $booking['facility_id']
+                    : null;
 
                 if (!empty($booking['equipment']) && is_array($booking['equipment'])) {
                     $normalizedEquipment = [];
@@ -284,12 +498,18 @@ class ChatController extends Controller
                                 $equipmentValue['quantity_needed'] = $equipmentValue['quantity'];
                             }
 
+                            $resolvedEquipmentId = $this->resolveEquipmentIdFromValue(
+                                $equipmentValue['equipment_id'] ?? null,
+                                $facilityId
+                            );
+
                             if (
-                                isset($equipmentValue['equipment_id'], $equipmentValue['quantity_needed']) &&
+                                is_numeric($resolvedEquipmentId) &&
+                                isset($equipmentValue['quantity_needed']) &&
                                 (int) $equipmentValue['quantity_needed'] > 0
                             ) {
                                 $normalizedEquipment[] = [
-                                    'equipment_id' => (int) $equipmentValue['equipment_id'],
+                                    'equipment_id' => (int) $resolvedEquipmentId,
                                     'quantity_needed' => (int) $equipmentValue['quantity_needed'],
                                 ];
                             }
@@ -298,8 +518,14 @@ class ChatController extends Controller
                         }
 
                         if (is_numeric($equipmentKey) && is_numeric($equipmentValue) && (int) $equipmentValue > 0) {
+                            $resolvedEquipmentId = $this->resolveEquipmentIdFromValue((int) $equipmentKey, $facilityId);
+
+                            if (!is_numeric($resolvedEquipmentId)) {
+                                continue;
+                            }
+
                             $normalizedEquipment[] = [
-                                'equipment_id' => (int) $equipmentKey,
+                                'equipment_id' => (int) $resolvedEquipmentId,
                                 'quantity_needed' => (int) $equipmentValue,
                             ];
                         }
@@ -313,6 +539,10 @@ class ChatController extends Controller
         }
 
         if (!empty($normalized['equipment']) && is_array($normalized['equipment']) && !empty($normalized['facility_bookings'][0]) && empty($normalized['facility_bookings'][0]['equipment'])) {
+            $firstFacilityId = isset($normalized['facility_bookings'][0]['facility_id']) && is_numeric($normalized['facility_bookings'][0]['facility_id'])
+                ? (int) $normalized['facility_bookings'][0]['facility_id']
+                : null;
+
             $normalized['facility_bookings'][0]['equipment'] = array_map(function ($equipment) {
                 if (!is_array($equipment)) {
                     return $equipment;
@@ -323,6 +553,24 @@ class ChatController extends Controller
                     'quantity_needed' => $equipment['quantity_needed'] ?? $equipment['quantity'] ?? null,
                 ];
             }, $normalized['equipment']);
+
+            $normalized['facility_bookings'][0]['equipment'] = array_values(array_filter(array_map(function ($equipment) use ($firstFacilityId) {
+                if (!is_array($equipment)) {
+                    return null;
+                }
+
+                $resolvedEquipmentId = $this->resolveEquipmentIdFromValue($equipment['equipment_id'] ?? null, $firstFacilityId);
+                $quantityNeeded = isset($equipment['quantity_needed']) ? (int) $equipment['quantity_needed'] : 0;
+
+                if (!is_numeric($resolvedEquipmentId) || $quantityNeeded <= 0) {
+                    return null;
+                }
+
+                return [
+                    'equipment_id' => (int) $resolvedEquipmentId,
+                    'quantity_needed' => $quantityNeeded,
+                ];
+            }, $normalized['facility_bookings'][0]['equipment'])));
         }
 
         return $normalized;
@@ -369,8 +617,15 @@ class ChatController extends Controller
     {
         $facility = null;
         $date = null;
+        $timeStart = null;
+        $timeEnd = null;
 
         for ($i = count($messages) - 1; $i >= 0; $i--) {
+            $role = $messages[$i]['role'] ?? null;
+            if ($role === 'system') {
+                continue;
+            }
+
             $content = trim((string) ($messages[$i]['content'] ?? ''));
             if ($content === '') {
                 continue;
@@ -386,15 +641,44 @@ class ChatController extends Controller
                 $date = $parsed['date'];
             }
 
-            if ($facility && $date) {
+            if (!$timeStart || !$timeEnd) {
+                $timeRange = $this->extractTimeRangeFromMessage($content);
+                if (!$timeStart && !empty($timeRange['time_start'])) {
+                    $timeStart = $timeRange['time_start'];
+                }
+                if (!$timeEnd && !empty($timeRange['time_end'])) {
+                    $timeEnd = $timeRange['time_end'];
+                }
+            }
+
+            if ($facility && $date && $timeStart && $timeEnd) {
                 break;
             }
         }
 
-        return ['facility' => $facility, 'date' => $date];
+        return [
+            'facility' => $facility,
+            'date' => $date,
+            'time_start' => $timeStart,
+            'time_end' => $timeEnd,
+        ];
     }
 
-    private function buildAvailabilityResponse($facility, string $date, $allRequests): string
+    private function hasTimeOverlap(string $date, string $requestedStart, string $requestedEnd, string $existingStart, string $existingEnd): bool
+    {
+        try {
+            $requestedStartAt = Carbon::parse("{$date} {$requestedStart}");
+            $requestedEndAt = Carbon::parse("{$date} {$requestedEnd}");
+            $existingStartAt = Carbon::parse("{$date} {$existingStart}");
+            $existingEndAt = Carbon::parse("{$date} {$existingEnd}");
+        } catch (\Exception) {
+            return false;
+        }
+
+        return $requestedStartAt->lt($existingEndAt) && $requestedEndAt->gt($existingStartAt);
+    }
+
+    private function buildAvailabilityResponse($facility, string $date, $allRequests, ?string $requestedStart = null, ?string $requestedEnd = null): string
     {
         $approvedBookings = $allRequests
             ->filter(fn($r) => $r->status->value === 'Approved')
@@ -414,6 +698,46 @@ class ChatController extends Controller
             ->where('date', $date)
             ->sortBy('time_start')
             ->values();
+
+        $normalizedRequestedStart = is_string($requestedStart) ? $this->normalizeTimeValue($requestedStart) : null;
+        $normalizedRequestedEnd = is_string($requestedEnd) ? $this->normalizeTimeValue($requestedEnd) : null;
+
+        if (is_string($normalizedRequestedStart) && is_string($normalizedRequestedEnd)) {
+            try {
+                $requestedStartAt = Carbon::parse("{$date} {$normalizedRequestedStart}");
+                $requestedEndAt = Carbon::parse("{$date} {$normalizedRequestedEnd}");
+            } catch (\Exception) {
+                return "I can check availability for {$facility->name} on {$date}, but I couldn't understand the requested time format. Please provide start and end time in HH:MM or AM/PM format.";
+            }
+
+            if ($requestedEndAt->lte($requestedStartAt)) {
+                return "The requested time window for {$facility->name} on {$date} is invalid because the end time is not after the start time. Please provide a valid time range.";
+            }
+
+            if ($approvedBookings->isEmpty()) {
+                return "{$facility->name} is available on {$date} from {$normalizedRequestedStart} to {$normalizedRequestedEnd}. I do not see any approved booking that overlaps that time slot.";
+            }
+
+            $conflicts = $approvedBookings
+                ->filter(fn($booking) => $this->hasTimeOverlap(
+                    $date,
+                    $normalizedRequestedStart,
+                    $normalizedRequestedEnd,
+                    (string) $booking['time_start'],
+                    (string) $booking['time_end'],
+                ))
+                ->values();
+
+            if ($conflicts->isEmpty()) {
+                return "{$facility->name} is available on {$date} from {$normalizedRequestedStart} to {$normalizedRequestedEnd}. Existing approved bookings on that date do not overlap your requested time.";
+            }
+
+            $conflictLines = $conflicts->map(function ($booking) {
+                return "- {$booking['time_start']} - {$booking['time_end']} | Request #{$booking['request_id']} | {$booking['title']}";
+            })->implode("\n");
+
+            return "{$facility->name} is NOT available on {$date} from {$normalizedRequestedStart} to {$normalizedRequestedEnd} because it overlaps with these approved bookings:\n{$conflictLines}\n\nIf you want, I can help find another time slot or facility.";
+        }
 
         if ($approvedBookings->isEmpty()) {
             return "{$facility->name} is available on {$date} based on the current approved bookings. I do not see any approved booking for that room on that date.\n\nIf you want, I can help you continue with the booking details.";
@@ -492,6 +816,40 @@ class ChatController extends Controller
 
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded) && isset($decoded['facility_bookings'])) {
             return $decoded;
+        }
+
+        $length = strlen($assistantMessage);
+        $depth = 0;
+        $start = null;
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $assistantMessage[$i];
+
+            if ($char === '{') {
+                if ($depth === 0) {
+                    $start = $i;
+                }
+                $depth++;
+                continue;
+            }
+
+            if ($char !== '}' || $depth === 0) {
+                continue;
+            }
+
+            $depth--;
+            if ($depth !== 0 || $start === null) {
+                continue;
+            }
+
+            $candidate = substr($assistantMessage, $start, $i - $start + 1);
+            $parsed = json_decode($candidate, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($parsed) && isset($parsed['facility_bookings'])) {
+                return $parsed;
+            }
+
+            $start = null;
         }
 
         return null;
@@ -616,12 +974,9 @@ class ChatController extends Controller
                     ]);
                 }
 
-                $equipment = Equipment::orderBy('id', 'asc')->limit(50)
-                    ->get(['id', 'name', 'quantity', 'facility_id'])
-                    ->map(function ($e) {
-                        return "ID {$e->id}: {$e->name} (Facility: " . ($e->facility->name ?? 'Unknown') . ", Available: {$e->quantity})";
-                    })->toArray();
-                $equipmentCount = count($equipment);
+                $equipmentRows = $this->getEquipmentContextRows(50);
+                $equipment = array_map(fn($row) => $row['line'], $equipmentRows);
+                $equipmentCount = count($equipmentRows);
 
                 if (!empty($equipment)) {
                     array_unshift($messages, [
@@ -644,7 +999,13 @@ class ChatController extends Controller
                     $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
 
                     if (!empty($resolved['facility']) && !empty($resolved['date'])) {
-                        $content = $this->buildAvailabilityResponse($resolved['facility'], $resolved['date'], $allRequests);
+                        $content = $this->buildAvailabilityResponse(
+                            $resolved['facility'],
+                            $resolved['date'],
+                            $allRequests,
+                            $resolved['time_start'] ?? null,
+                            $resolved['time_end'] ?? null
+                        );
                         $this->storeAssistantReply($incomingMessages, $content);
                         $this->chatbotLogService->logAssistantReply(
                             $latestUserMessage,
@@ -987,9 +1348,9 @@ class ChatController extends Controller
                 array_unshift($messages, ['role' => 'system', 'content' => "No facilities available with capacity suitable for {$participantCount} participants."]);
             }
 
-            $equipment = Equipment::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'quantity', 'facility_id'])
-                ->map(fn($e) => "ID {$e->id}: {$e->name} (Facility: " . ($e->facility->name ?? 'Unknown') . ", Available: {$e->quantity})")->toArray();
-            $equipmentCount = count($equipment);
+            $equipmentRows = $this->getEquipmentContextRows(50);
+            $equipment = array_map(fn($row) => $row['line'], $equipmentRows);
+            $equipmentCount = count($equipmentRows);
 
             if (!empty($equipment)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
@@ -1009,7 +1370,13 @@ class ChatController extends Controller
                 $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
 
                 if (!empty($resolved['facility']) && !empty($resolved['date'])) {
-                    $content = $this->buildAvailabilityResponse($resolved['facility'], $resolved['date'], $allRequests);
+                    $content = $this->buildAvailabilityResponse(
+                        $resolved['facility'],
+                        $resolved['date'],
+                        $allRequests,
+                        $resolved['time_start'] ?? null,
+                        $resolved['time_end'] ?? null
+                    );
                     $incomingMessages = $request->input('messages', []);
                     $this->storeAssistantReply($incomingMessages, $content);
                     $this->chatbotLogService->logAssistantReply(
@@ -1180,7 +1547,7 @@ class ChatController extends Controller
                         $fullContent .= $token;
 
                         // Detect start of JSON
-                        if (!$isCapturingJson && str_contains($token, '{')) {
+                        if (!$isCapturingJson && preg_match('/^\s*\{/', $token)) {
                             $isCapturingJson = true;
                             $jsonBuffer = $token;
                             // Don't send JSON tokens to UI
@@ -1194,7 +1561,7 @@ class ChatController extends Controller
                             // Try to parse complete JSON
                             try {
                                 $parsed = json_decode($jsonBuffer, true);
-                                if ($parsed !== null && is_array($parsed)) {
+                                if ($parsed !== null && is_array($parsed) && isset($parsed['facility_bookings'])) {
                                     // Valid JSON found - send as booking_payload
                                     $generatedPayload = $parsed;
                                     echo "data: " . json_encode(['booking_payload' => $jsonBuffer]) . "\n\n";
@@ -1219,6 +1586,14 @@ class ChatController extends Controller
                     }
 
                     if ($done) break;
+                }
+
+                if ($isCapturingJson && $jsonBuffer !== '') {
+                    echo "data: " . json_encode(['token' => $jsonBuffer]) . "\n\n";
+                    ob_flush();
+                    flush();
+                    $isCapturingJson = false;
+                    $jsonBuffer = '';
                 }
 
                 // Rule validation on full content
@@ -1255,6 +1630,15 @@ class ChatController extends Controller
                         }
                     } catch (\Exception $e) {
                         \Log::warning('Stream: Rule validation failed: ' . $e->getMessage());
+                    }
+                }
+
+                if (!is_array($generatedPayload)) {
+                    $generatedPayload = $this->extractStructuredPayload($fullContent);
+                    if (is_array($generatedPayload)) {
+                        echo "data: " . json_encode(['booking_payload' => json_encode($generatedPayload)]) . "\n\n";
+                        ob_flush();
+                        flush();
                     }
                 }
 
@@ -1417,16 +1801,15 @@ class ChatController extends Controller
         try {
             $limit = max(1, min(200, (int) $request->input('limit', 50)));
 
-            $rows = Equipment::orderBy('id', 'asc')
-                ->limit($limit)
-                ->get(['id', 'name', 'quantity', 'facility_id'])
-                ->map(fn($e) => [
-                    'id'       => $e->id,
-                    'name'     => $e->name,
-                    'quantity' => $e->quantity,
-                    'facility_id' => $e->facility_id,
-                    'facility' => $e->facility->name ?? $e->facility_id ?? null,
-                ]);
+            $rows = collect($this->getEquipmentContextRows($limit))
+                ->map(fn($row) => [
+                    'id' => $row['id'],
+                    'name' => $row['name'],
+                    'quantity' => $row['quantity'],
+                    'facility_id' => $row['facility_id'],
+                    'facility' => $row['facility'],
+                ])
+                ->values();
 
             return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
@@ -1557,6 +1940,11 @@ class ChatController extends Controller
                 'files.*'                                         => 'nullable|string',
             ]);
 
+            $equipmentSelectionErrors = $this->validateFacilityEquipmentSelections($validated['facility_bookings']);
+            if (!empty($equipmentSelectionErrors)) {
+                throw ValidationException::withMessages($equipmentSelectionErrors);
+            }
+
             $priorityLevel  = (int) ($validated['priority_level'] ?? 0);
             $priorityReason = $validated['priority_reason'] ?? null;
 
@@ -1570,7 +1958,7 @@ class ChatController extends Controller
             ]);
 
             foreach ($validated['facility_bookings'] as $booking) {
-                $dateOnly = \Illuminate\Support\Carbon::parse($booking['date'])->format('Y-m-d');
+                $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
                 $facilityRequest->requestFacilities()->create([
                     'facility_id'    => $booking['facility_id'],
                     'date_requested' => $dateOnly,
