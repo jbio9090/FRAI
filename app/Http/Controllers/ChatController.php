@@ -106,10 +106,26 @@ class ChatController extends Controller
 
         if (!$facility) {
             $normalizedMessage = Str::lower($message);
+            $messageSlug = (string) Str::of($normalizedMessage)
+                ->replaceMatches('/[^a-z0-9]+/', ' ')
+                ->squish();
             $facility = $facilities
                 ->sortByDesc(fn($f) => strlen((string) $f->name))
-                ->first(function ($f) use ($normalizedMessage) {
-                    return Str::contains($normalizedMessage, Str::lower((string) $f->name));
+                ->first(function ($f) use ($normalizedMessage, $messageSlug) {
+                    $facilityName = Str::lower((string) $f->name);
+                    $facilityBaseName = trim((string) preg_replace('/\s*\(.*?\)\s*/', ' ', $facilityName));
+
+                    $facilityNameSlug = (string) Str::of($facilityName)
+                        ->replaceMatches('/[^a-z0-9]+/', ' ')
+                        ->squish();
+                    $facilityBaseSlug = (string) Str::of($facilityBaseName)
+                        ->replaceMatches('/[^a-z0-9]+/', ' ')
+                        ->squish();
+
+                    return Str::contains($normalizedMessage, $facilityName)
+                        || ($facilityBaseName !== '' && Str::contains($normalizedMessage, $facilityBaseName))
+                        || ($facilityNameSlug !== '' && Str::contains($messageSlug, $facilityNameSlug))
+                        || ($facilityBaseSlug !== '' && Str::contains($messageSlug, $facilityBaseSlug));
                 });
         }
 
@@ -622,7 +638,8 @@ class ChatController extends Controller
 
         for ($i = count($messages) - 1; $i >= 0; $i--) {
             $role = $messages[$i]['role'] ?? null;
-            if ($role === 'system') {
+            // Prefer user-authored context to avoid matching facility names listed by the assistant.
+            if ($role !== 'user') {
                 continue;
             }
 
