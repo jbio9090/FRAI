@@ -17,6 +17,7 @@ import LoadingIndicator from './components/LoadingIndicator';
 import ChatInput from './components/ChatInput';
 import BookingFlow from './components/BookingFlow';
 import AvailabilityQuickFlow from './components/AvailabilityQuickFlow';
+import DatePicker from './components/DatePicker';
 
 type ChatMode = 'idle' | 'booking' | 'availability' | 'ai';
 type GuidedFlowMode = 'none' | 'booking' | 'availability';
@@ -194,8 +195,20 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
 };
 
 const toMinutes = (time: string): number => {
-    const [timePart, modifier] = time.split(' ');
+    const candidate = time.trim();
+    if (!candidate) return NaN;
+
+    if (/^\d{1,2}:\d{2}$/.test(candidate)) {
+        const [hours, minutes] = candidate.split(':').map(Number);
+        if (Number.isNaN(hours) || Number.isNaN(minutes)) return NaN;
+        return hours * 60 + minutes;
+    }
+
+    const [timePart, rawModifier] = candidate.split(' ');
+    const modifier = (rawModifier ?? '').toUpperCase();
     const [rawHours, rawMinutes] = timePart.split(':').map(Number);
+    if (Number.isNaN(rawHours) || Number.isNaN(rawMinutes)) return NaN;
+
     let hours = rawHours;
     const minutes = rawMinutes;
     if (modifier === 'PM' && hours !== 12) hours += 12;
@@ -232,6 +245,9 @@ export default function Chatbot() {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const messageQueueRef = useRef<Array<{ message: Message; context?: string }>>([]);
     const [guidedFlow, setGuidedFlow] = useState<GuidedFlowState>({ ...INITIAL_GUIDED_FLOW });
+    const [customParticipantCount, setCustomParticipantCount] = useState<string>('');
+    const [customStartTime, setCustomStartTime] = useState<string>('');
+    const [customEndTime, setCustomEndTime] = useState<string>('');
 
     const withAttachedFiles = (payload: CreateRequestPayload): CreateRequestPayload => {
         const fileIds = attachedFiles.map((file) => file.id);
@@ -285,6 +301,10 @@ export default function Chatbot() {
 
     const getGuidedEndTimeOptions = (startTime: string): string[] => {
         return GUIDED_TIME_OPTIONS.filter((option) => toMinutes(option) > toMinutes(startTime));
+    };
+
+    const normalizeGuidedTimeInput = (value: string): string => {
+        return value.trim();
     };
 
     const startGuidedFlow = (flowMode: Exclude<GuidedFlowMode, 'none'>) => {
@@ -387,6 +407,20 @@ export default function Chatbot() {
         });
     };
 
+    const handleCustomParticipantSubmit = () => {
+        const parsed = Number(customParticipantCount);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            addMessage({
+                role: 'assistant',
+                content: 'Please enter a valid participant count greater than zero.',
+            });
+            return;
+        }
+
+        setCustomParticipantCount('');
+        handleGuidedParticipantSelection(Math.floor(parsed));
+    };
+
     const handleGuidedFacilitySelection = (facilityId: number) => {
         const facility = facilities.find((item) => item.id === facilityId);
         if (!facility) {
@@ -435,6 +469,20 @@ export default function Chatbot() {
         });
     };
 
+    const handleCustomStartTimeSubmit = () => {
+        const normalized = normalizeGuidedTimeInput(customStartTime);
+        if (!normalized) {
+            addMessage({
+                role: 'assistant',
+                content: 'Please choose a custom start time first.',
+            });
+            return;
+        }
+
+        setCustomStartTime('');
+        handleGuidedStartTimeSelection(normalized);
+    };
+
     const handleGuidedEndTimeSelection = async (timeEnd: string) => {
         const currentFacility = facilities.find((item) => item.id === guidedFlow.facilityId);
         if (!currentFacility || !guidedFlow.date || !guidedFlow.timeStart) {
@@ -471,6 +519,28 @@ export default function Chatbot() {
             role: 'assistant',
             content: 'Schedule saved. Choose your equipment option below, then continue to request details.',
         });
+    };
+
+    const handleCustomEndTimeSubmit = async () => {
+        const normalized = normalizeGuidedTimeInput(customEndTime);
+        if (!normalized) {
+            addMessage({
+                role: 'assistant',
+                content: 'Please choose a custom end time first.',
+            });
+            return;
+        }
+
+        if (!guidedFlow.timeStart || toMinutes(normalized) <= toMinutes(guidedFlow.timeStart)) {
+            addMessage({
+                role: 'assistant',
+                content: 'End time must be later than start time.',
+            });
+            return;
+        }
+
+        setCustomEndTime('');
+        await handleGuidedEndTimeSelection(normalized);
     };
 
     const handleGuidedNoEquipment = () => {
@@ -533,6 +603,12 @@ export default function Chatbot() {
             setGuidedFlow({ ...INITIAL_GUIDED_FLOW });
         }
     }, [mode]);
+
+    useEffect(() => {
+        setCustomParticipantCount('');
+        setCustomStartTime('');
+        setCustomEndTime('');
+    }, [guidedFlow.mode, guidedFlow.step]);
 
     // Fetch facilities and equipment for the booking flow
     useEffect(() => {
@@ -1461,6 +1537,56 @@ export default function Chatbot() {
             {guidedQuickReplies.length > 0 && (
                 <div className="border-t border-border bg-background px-6 py-3">
                     <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{guidedQuickReplyHint}</p>
+
+                    {guidedFlow.mode !== 'none' && guidedFlow.step === 'participants' && (
+                        <div className="mb-3 flex flex-wrap items-end gap-2">
+                            <div>
+                                <Label className="mb-1 block text-xs text-muted-foreground">Custom participant count</Label>
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    value={customParticipantCount}
+                                    onChange={(e) => setCustomParticipantCount(e.target.value)}
+                                    className="w-44"
+                                />
+                            </div>
+                            <Button size="sm" variant="outline" onClick={handleCustomParticipantSubmit} disabled={isLoading}>
+                                Set Custom Count
+                            </Button>
+                        </div>
+                    )}
+
+                    {guidedFlow.mode !== 'none' && guidedFlow.step === 'date' && (
+                        <div className="mb-3 rounded-md border border-border p-3">
+                            <p className="mb-2 text-xs text-muted-foreground">Custom date (calendar)</p>
+                            <DatePicker onSelect={handleGuidedDateSelection} />
+                        </div>
+                    )}
+
+                    {guidedFlow.mode !== 'none' && guidedFlow.step === 'time_start' && (
+                        <div className="mb-3 flex flex-wrap items-end gap-2">
+                            <div>
+                                <Label className="mb-1 block text-xs text-muted-foreground">Custom start time</Label>
+                                <Input type="time" value={customStartTime} onChange={(e) => setCustomStartTime(e.target.value)} className="w-44" />
+                            </div>
+                            <Button size="sm" variant="outline" onClick={handleCustomStartTimeSubmit} disabled={isLoading}>
+                                Set Custom Start
+                            </Button>
+                        </div>
+                    )}
+
+                    {guidedFlow.mode !== 'none' && guidedFlow.step === 'time_end' && (
+                        <div className="mb-3 flex flex-wrap items-end gap-2">
+                            <div>
+                                <Label className="mb-1 block text-xs text-muted-foreground">Custom end time</Label>
+                                <Input type="time" value={customEndTime} onChange={(e) => setCustomEndTime(e.target.value)} className="w-44" />
+                            </div>
+                            <Button size="sm" variant="outline" onClick={() => void handleCustomEndTimeSubmit()} disabled={isLoading}>
+                                Set Custom End
+                            </Button>
+                        </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2">
                         {guidedQuickReplies.map((option) => (
                             <Button
