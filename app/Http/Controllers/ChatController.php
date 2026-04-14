@@ -104,6 +104,19 @@ class ChatController extends Controller
             $facility = $facilities->firstWhere('id', (int) $matches[1]);
         }
 
+        if (
+            !$facility &&
+            preg_match('/\b([a-z]{2,6})\s*([0-9]+[a-z])\b/i', $message, $codeMatches)
+        ) {
+            $requestedCode = strtolower($codeMatches[1] . $codeMatches[2]);
+            $facility = $facilities->first(function ($f) use ($requestedCode) {
+                $facilityCompactName = (string) Str::of(Str::lower((string) $f->name))
+                    ->replaceMatches('/[^a-z0-9]+/', '');
+
+                return $requestedCode !== '' && Str::contains($facilityCompactName, $requestedCode);
+            });
+        }
+
         if (!$facility) {
             $normalizedMessage = Str::lower($message);
             $messageSlug = (string) Str::of($normalizedMessage)
@@ -463,14 +476,102 @@ class ChatController extends Controller
         return $errors;
     }
 
+    private function normalizeEquipmentSelections(array $equipmentSelections, ?int $facilityId = null): array
+    {
+        $normalized = [];
+
+        foreach ($equipmentSelections as $equipmentKey => $equipmentValue) {
+            if (is_array($equipmentValue)) {
+                if (!isset($equipmentValue['equipment_id']) && isset($equipmentValue['id'])) {
+                    $equipmentValue['equipment_id'] = $equipmentValue['id'];
+                }
+
+                if (!isset($equipmentValue['quantity_needed']) && isset($equipmentValue['quantity'])) {
+                    $equipmentValue['quantity_needed'] = $equipmentValue['quantity'];
+                }
+
+                $resolvedEquipmentId = $this->resolveEquipmentIdFromValue(
+                    $equipmentValue['equipment_id'] ?? null,
+                    $facilityId
+                );
+                $quantityNeeded = isset($equipmentValue['quantity_needed'])
+                    ? (int) $equipmentValue['quantity_needed']
+                    : 0;
+
+                if (is_numeric($resolvedEquipmentId) && $quantityNeeded > 0) {
+                    $normalized[] = [
+                        'equipment_id' => (int) $resolvedEquipmentId,
+                        'quantity_needed' => $quantityNeeded,
+                    ];
+                }
+
+                continue;
+            }
+
+            if (!is_numeric($equipmentKey) || !is_numeric($equipmentValue)) {
+                continue;
+            }
+
+            $quantityNeeded = (int) $equipmentValue;
+            if ($quantityNeeded <= 0) {
+                continue;
+            }
+
+            $resolvedEquipmentId = $this->resolveEquipmentIdFromValue((int) $equipmentKey, $facilityId);
+            if (!is_numeric($resolvedEquipmentId)) {
+                continue;
+            }
+
+            $normalized[] = [
+                'equipment_id' => (int) $resolvedEquipmentId,
+                'quantity_needed' => $quantityNeeded,
+            ];
+        }
+
+        return $this->mergeNormalizedEquipment([], $normalized);
+    }
+
+    private function mergeNormalizedEquipment(array $base, array $extra): array
+    {
+        $totals = [];
+
+        foreach (array_merge($base, $extra) as $selection) {
+            if (!is_array($selection)) {
+                continue;
+            }
+
+            $equipmentId = isset($selection['equipment_id']) ? (int) $selection['equipment_id'] : 0;
+            $quantityNeeded = isset($selection['quantity_needed']) ? (int) $selection['quantity_needed'] : 0;
+
+            if ($equipmentId <= 0 || $quantityNeeded <= 0) {
+                continue;
+            }
+
+            $totals[$equipmentId] = ($totals[$equipmentId] ?? 0) + $quantityNeeded;
+        }
+
+        $merged = [];
+        foreach ($totals as $equipmentId => $quantityNeeded) {
+            $merged[] = [
+                'equipment_id' => (int) $equipmentId,
+                'quantity_needed' => (int) $quantityNeeded,
+            ];
+        }
+
+        return $merged;
+    }
+
     private function normalizeCreateRequestPayload(array $input): array
     {
         $normalized = $input;
+        $orphanEquipmentSelections = [];
 
         if (!empty($normalized['facility_bookings']) && is_array($normalized['facility_bookings'])) {
-            $normalized['facility_bookings'] = array_map(function ($booking) {
+            $normalizedBookings = [];
+
+            foreach ($normalized['facility_bookings'] as $booking) {
                 if (!is_array($booking)) {
-                    return $booking;
+                    continue;
                 }
 
                 if (!isset($booking['time_start']) && isset($booking['start_time'])) {
@@ -500,93 +601,57 @@ class ChatController extends Controller
                 $facilityId = isset($booking['facility_id']) && is_numeric($booking['facility_id'])
                     ? (int) $booking['facility_id']
                     : null;
+                $normalizedEquipment = !empty($booking['equipment']) && is_array($booking['equipment'])
+                    ? $this->normalizeEquipmentSelections($booking['equipment'], $facilityId)
+                    : [];
 
-                if (!empty($booking['equipment']) && is_array($booking['equipment'])) {
-                    $normalizedEquipment = [];
-
-                    foreach ($booking['equipment'] as $equipmentKey => $equipmentValue) {
-                        if (is_array($equipmentValue)) {
-                            if (!isset($equipmentValue['equipment_id']) && isset($equipmentValue['id'])) {
-                                $equipmentValue['equipment_id'] = $equipmentValue['id'];
-                            }
-
-                            if (!isset($equipmentValue['quantity_needed']) && isset($equipmentValue['quantity'])) {
-                                $equipmentValue['quantity_needed'] = $equipmentValue['quantity'];
-                            }
-
-                            $resolvedEquipmentId = $this->resolveEquipmentIdFromValue(
-                                $equipmentValue['equipment_id'] ?? null,
-                                $facilityId
-                            );
-
-                            if (
-                                is_numeric($resolvedEquipmentId) &&
-                                isset($equipmentValue['quantity_needed']) &&
-                                (int) $equipmentValue['quantity_needed'] > 0
-                            ) {
-                                $normalizedEquipment[] = [
-                                    'equipment_id' => (int) $resolvedEquipmentId,
-                                    'quantity_needed' => (int) $equipmentValue['quantity_needed'],
-                                ];
-                            }
-
-                            continue;
-                        }
-
-                        if (is_numeric($equipmentKey) && is_numeric($equipmentValue) && (int) $equipmentValue > 0) {
-                            $resolvedEquipmentId = $this->resolveEquipmentIdFromValue((int) $equipmentKey, $facilityId);
-
-                            if (!is_numeric($resolvedEquipmentId)) {
-                                continue;
-                            }
-
-                            $normalizedEquipment[] = [
-                                'equipment_id' => (int) $resolvedEquipmentId,
-                                'quantity_needed' => (int) $equipmentValue,
-                            ];
-                        }
-                    }
-
+                if (!empty($normalizedEquipment)) {
                     $booking['equipment'] = $normalizedEquipment;
+                } else {
+                    unset($booking['equipment']);
                 }
 
-                return $booking;
-            }, $normalized['facility_bookings']);
+                if ($facilityId && $facilityId > 0) {
+                    $booking['facility_id'] = $facilityId;
+                    $normalizedBookings[] = $booking;
+                    continue;
+                }
+
+                if (!empty($normalizedEquipment)) {
+                    $orphanEquipmentSelections = array_merge($orphanEquipmentSelections, $normalizedEquipment);
+                }
+            }
+
+            if (!empty($normalizedBookings) && !empty($orphanEquipmentSelections)) {
+                $firstFacilityId = (int) ($normalizedBookings[0]['facility_id'] ?? 0);
+                $resolvedOrphans = $this->normalizeEquipmentSelections($orphanEquipmentSelections, $firstFacilityId > 0 ? $firstFacilityId : null);
+                $normalizedBookings[0]['equipment'] = $this->mergeNormalizedEquipment(
+                    $normalizedBookings[0]['equipment'] ?? [],
+                    $resolvedOrphans
+                );
+            }
+
+            if (!empty($normalizedBookings)) {
+                $normalized['facility_bookings'] = array_values($normalizedBookings);
+            }
         }
 
-        if (!empty($normalized['equipment']) && is_array($normalized['equipment']) && !empty($normalized['facility_bookings'][0]) && empty($normalized['facility_bookings'][0]['equipment'])) {
+        if (!empty($normalized['equipment']) && is_array($normalized['equipment']) && !empty($normalized['facility_bookings'][0])) {
             $firstFacilityId = isset($normalized['facility_bookings'][0]['facility_id']) && is_numeric($normalized['facility_bookings'][0]['facility_id'])
                 ? (int) $normalized['facility_bookings'][0]['facility_id']
                 : null;
 
-            $normalized['facility_bookings'][0]['equipment'] = array_map(function ($equipment) {
-                if (!is_array($equipment)) {
-                    return $equipment;
-                }
+            $topLevelEquipment = $this->normalizeEquipmentSelections(
+                $normalized['equipment'],
+                $firstFacilityId
+            );
 
-                return [
-                    'equipment_id' => $equipment['equipment_id'] ?? $equipment['id'] ?? null,
-                    'quantity_needed' => $equipment['quantity_needed'] ?? $equipment['quantity'] ?? null,
-                ];
-            }, $normalized['equipment']);
+            $normalized['facility_bookings'][0]['equipment'] = $this->mergeNormalizedEquipment(
+                $normalized['facility_bookings'][0]['equipment'] ?? [],
+                $topLevelEquipment
+            );
 
-            $normalized['facility_bookings'][0]['equipment'] = array_values(array_filter(array_map(function ($equipment) use ($firstFacilityId) {
-                if (!is_array($equipment)) {
-                    return null;
-                }
-
-                $resolvedEquipmentId = $this->resolveEquipmentIdFromValue($equipment['equipment_id'] ?? null, $firstFacilityId);
-                $quantityNeeded = isset($equipment['quantity_needed']) ? (int) $equipment['quantity_needed'] : 0;
-
-                if (!is_numeric($resolvedEquipmentId) || $quantityNeeded <= 0) {
-                    return null;
-                }
-
-                return [
-                    'equipment_id' => (int) $resolvedEquipmentId,
-                    'quantity_needed' => $quantityNeeded,
-                ];
-            }, $normalized['facility_bookings'][0]['equipment'])));
+            unset($normalized['equipment']);
         }
 
         return $normalized;
@@ -1606,9 +1671,13 @@ class ChatController extends Controller
                 }
 
                 if ($isCapturingJson && $jsonBuffer !== '') {
-                    echo "data: " . json_encode(['token' => $jsonBuffer]) . "\n\n";
-                    ob_flush();
-                    flush();
+                    $parsed = json_decode($jsonBuffer, true);
+                    if (is_array($parsed) && isset($parsed['facility_bookings'])) {
+                        $generatedPayload = $parsed;
+                        echo "data: " . json_encode(['booking_payload' => $jsonBuffer]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    }
                     $isCapturingJson = false;
                     $jsonBuffer = '';
                 }
