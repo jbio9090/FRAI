@@ -204,6 +204,66 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
     };
 };
 
+const extractPayloadFromText = (content: string): CreateRequestPayload | null => {
+    const trimmed = content.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    const directCandidate = trimmed
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
+    const tryParse = (candidate: string): CreateRequestPayload | null => {
+        try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { facility_bookings?: unknown }).facility_bookings)) {
+                return parsed as CreateRequestPayload;
+            }
+        } catch (_) {}
+        return null;
+    };
+
+    const directParsed = tryParse(directCandidate);
+    if (directParsed) {
+        return directParsed;
+    }
+
+    let depth = 0;
+    let start = -1;
+
+    for (let index = 0; index < content.length; index += 1) {
+        const char = content[index];
+
+        if (char === '{') {
+            if (depth === 0) {
+                start = index;
+            }
+            depth += 1;
+            continue;
+        }
+
+        if (char !== '}' || depth === 0) {
+            continue;
+        }
+
+        depth -= 1;
+        if (depth !== 0 || start < 0) {
+            continue;
+        }
+
+        const candidate = content.slice(start, index + 1);
+        const parsed = tryParse(candidate);
+        if (parsed) {
+            return parsed;
+        }
+    }
+
+    return null;
+};
+
 const toMinutes = (time: string): number => {
     const candidate = time.trim();
     if (!candidate) return NaN;
@@ -850,7 +910,7 @@ export default function Chatbot() {
                 (json) => {
                     try {
                         const payload = JSON.parse(json);
-                        if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
+                        if (payload && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
                             setPendingPayload(withAttachedFiles(normalizePayloadForSubmission(payload)));
                         }
                     } catch (_) {}
@@ -1012,6 +1072,24 @@ export default function Chatbot() {
             setShowEquipmentSelection(true);
         }
     }, [mode, showEquipmentSelection, messages, equipmentOptions, bookingFlow.data.facility_id, guidedFlow.facilityId, pendingPayload]);
+
+    useEffect(() => {
+        if (pendingPayload || messages.length === 0) {
+            return;
+        }
+
+        const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+        if (!latestAssistant || !latestAssistant.content) {
+            return;
+        }
+
+        const extracted = extractPayloadFromText(latestAssistant.content);
+        if (!extracted) {
+            return;
+        }
+
+        setPendingPayload(withAttachedFiles(normalizePayloadForSubmission(extracted)));
+    }, [messages, pendingPayload, attachedFiles]);
 
     const handleEquipmentToggle = (equipment: Equipment) => {
         setSelectedEquipment((prev) => {
