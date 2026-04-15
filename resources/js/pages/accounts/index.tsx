@@ -282,8 +282,7 @@ export default function AccountsPage({ users, roles }: Props) {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            {/* --- New Profile Column Header --- */}
-                            <TableHead className="w-[50px]">Profile</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
                             <TableHead>Name</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead>Role</TableHead>
