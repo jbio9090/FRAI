@@ -404,12 +404,12 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                                     <span className="text-sm">Recommendation</span>
                                 </div>
 
-                                <p className={cn("text-2xl font-bold", verdictColor)}>
+                                <p className={cn("text-2xl font-bold text-center", verdictColor)}>
                                     {request.recommended_action}
                                 </p>
 
                                 {request.recommended_action_reason && (
-                                    <p className="text-sm text-muted-foreground leading-relaxed">
+                                    <p className="text-sm text-muted-foreground leading-relaxed px-2 text-center">
                                         {request.recommended_action_reason}
                                     </p>
                                 )}
@@ -424,7 +424,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
     return (
         <>
             <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full hidden xs:block'>
-                <TabsList className="w-full" variant={"line"}>
+                <TabsList className="w-fit" variant={"line"}>
                     {tabs.map((tab) => (
                         <TabsTrigger key={tab.value} value={tab.value}>
                             {tab.icon}

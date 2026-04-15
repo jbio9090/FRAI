@@ -2,11 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Carbon;
+use App\Models\Rule;
 
 class DatabaseSeeder extends Seeder
 {
@@ -26,15 +23,15 @@ class DatabaseSeeder extends Seeder
 
         //RULES
         $rules = [
-            [
-                "rule" => "No running in the bathroom",
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
+            "A request with no approved by, no file attachments shall, and no schedule conflicts shall be conditionally approved",
+            "A request with external equipments shall be conditionally approved",
         ];
 
-        foreach ($rules as $rule) {
-            DB::table("rules")->insert($rule);
+        for ($i = 0; $i < count($rules); $i++) {
+            Rule::create([
+                'rule' => $rules[$i],
+                'priority' => $i + 1
+            ]);
         }
     }
 }
