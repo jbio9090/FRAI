@@ -77,6 +77,12 @@ function preview(text: string | null, max = 90): string {
     return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
+function fullText(text: string | null): string {
+    if (!text) return '-';
+
+    return text;
+}
+
 function prettyJson(value: Record<string, unknown> | null): string {
     if (!value || Object.keys(value).length === 0) {
         return 'No data';
@@ -123,7 +129,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
 
     return (
         <DefaultLayout>
-            <div className="flex flex-col gap-6">
+            <div className="flex min-w-0 flex-col gap-6 overflow-x-hidden px-3 sm:px-4 md:px-0">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <h1 className="text-xl font-bold">Chatbot Interaction Logs</h1>
@@ -136,7 +142,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                     </div>
                 </div>
 
-                <div className="grid gap-3 rounded-xl border bg-card p-4 md:grid-cols-5">
+                <div className="grid gap-3 rounded-xl border bg-card p-3 sm:p-4 md:grid-cols-5">
                     <div className="md:col-span-2">
                         <label className="mb-1 block text-sm font-medium">Search</label>
                         <Input
@@ -206,17 +212,55 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border bg-card">
-                    <div className="overflow-x-auto">
-                        <Table>
+                <div className="overflow-hidden rounded-xl border bg-card xl:hidden">
+                    <div className="divide-y">
+                        {logs.data.length === 0 && (
+                            <div className="py-8 text-center text-muted-foreground">No chatbot logs found for the current filters.</div>
+                        )}
+
+                        {logs.data.map((log) => (
+                            <div key={`mobile-${log.id}`} className="space-y-3 p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <p className="text-sm font-semibold">Log #{log.id}</p>
+                                        <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
+                                    </div>
+                                    <span className="inline-flex rounded-full border px-2 py-1 text-xs font-medium capitalize">
+                                        {log.status.replace('_', ' ')}
+                                    </span>
+                                </div>
+
+                                <div className="text-xs text-muted-foreground">
+                                    <p>User: {log.user?.name ?? 'Guest / Unknown'}</p>
+                                    <p>Intent: {log.intent ?? log.interaction_type ?? '-'}</p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">User Message</p>
+                                        <p className="whitespace-pre-wrap break-words text-sm">{fullText(log.user_message)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Assistant Reply</p>
+                                        <p className="whitespace-pre-wrap break-words text-sm">{fullText(log.assistant_message)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="hidden overflow-hidden rounded-xl border bg-card xl:block">
+                    <div className="overflow-x-hidden">
+                        <Table className="table-fixed w-full">
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-40">Timestamp</TableHead>
-                                    <TableHead className="w-40">User</TableHead>
-                                    <TableHead className="w-36">Intent</TableHead>
+                                    <TableHead>Timestamp</TableHead>
+                                    <TableHead>User</TableHead>
+                                    <TableHead>Intent</TableHead>
                                     <TableHead>User Message</TableHead>
                                     <TableHead>Assistant Reply</TableHead>
-                                    <TableHead className="w-32">Status</TableHead>
+                                    <TableHead>Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -243,8 +287,12 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                                                 <div className="text-xs text-muted-foreground">{log.interaction_type}</div>
                                             )}
                                         </TableCell>
-                                        <TableCell className="max-w-xs whitespace-normal">{preview(log.user_message)}</TableCell>
-                                        <TableCell className="max-w-xs whitespace-normal">{preview(log.assistant_message)}</TableCell>
+                                        <TableCell className="max-w-md whitespace-normal">
+                                            <p className="whitespace-pre-wrap break-words text-sm">{fullText(log.user_message)}</p>
+                                        </TableCell>
+                                        <TableCell className="max-w-md whitespace-normal">
+                                            <p className="whitespace-pre-wrap break-words text-sm">{fullText(log.assistant_message)}</p>
+                                        </TableCell>
                                         <TableCell>
                                             <span className="inline-flex rounded-full border px-2 py-1 text-xs font-medium capitalize">
                                                 {log.status.replace('_', ' ')}
@@ -257,13 +305,13 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                     </div>
                 </div>
 
-                <Accordion type="single" collapsible className="rounded-xl border bg-card px-4">
+                <Accordion type="single" collapsible className="rounded-xl border bg-card px-3 sm:px-4">
                     {logs.data.map((log) => (
                         <AccordionItem key={`detail-${log.id}`} value={`log-${log.id}`}>
                             <AccordionTrigger className="text-left hover:no-underline">
                                 <div className="flex flex-col gap-1 pr-4">
                                     <span className="font-medium">
-                                        Log #{log.id} � {log.intent ?? log.interaction_type ?? 'general_chat'} � {log.status}
+                                        Log #{log.id} - {log.intent ?? log.interaction_type ?? 'general_chat'} - {log.status}
                                     </span>
                                     <span className="text-sm text-muted-foreground">
                                         {preview(log.user_message, 120)}
@@ -285,7 +333,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                                         {log.facility_request && (
                                             <div>
                                                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Linked Request</p>
-                                                <p className="text-sm">#{log.facility_request.id} � {log.facility_request.title}</p>
+                                                <p className="text-sm">#{log.facility_request.id} - {log.facility_request.title}</p>
                                             </div>
                                         )}
                                     </div>
@@ -331,3 +379,4 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
         </DefaultLayout>
     );
 }
+
