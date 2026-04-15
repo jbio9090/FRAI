@@ -516,6 +516,15 @@ export default function Chatbot() {
                 return prev;
             }
 
+            const hasLockedSchedule =
+                !!prev.facilityId &&
+                typeof prev.date === 'string' &&
+                prev.date.length > 0 &&
+                typeof prev.timeStart === 'string' &&
+                prev.timeStart.length > 0 &&
+                typeof prev.timeEnd === 'string' &&
+                prev.timeEnd.length > 0;
+
             if (prev.mode === 'booking') {
                 switch (prev.step) {
                     case 'attachments':
@@ -531,7 +540,9 @@ export default function Chatbot() {
                     case 'time_end':
                         return { ...prev, step: 'time_start', timeEnd: null };
                     case 'equipment':
-                        return { ...prev, step: 'time_end', equipmentDecision: 'unknown', eventType: null };
+                        return hasLockedSchedule
+                            ? { ...prev, step: 'participants', equipmentDecision: 'unknown', eventType: null }
+                            : { ...prev, step: 'time_end', equipmentDecision: 'unknown', eventType: null };
                     default:
                         return prev;
                 }
@@ -555,6 +566,27 @@ export default function Chatbot() {
     const handleGuidedParticipantSelection = (participantCount: number) => {
         setParticipantCount(participantCount);
         addMessage({ role: 'user', content: `Participants: ${participantCount}` });
+
+        const hasLockedSchedule =
+            !!guidedFlow.facilityId &&
+            !!guidedFlow.date &&
+            !!guidedFlow.timeStart &&
+            !!guidedFlow.timeEnd;
+
+        if (hasLockedSchedule) {
+            setGuidedFlow((prev) => ({
+                ...prev,
+                mode: 'booking',
+                step: 'equipment',
+                participantCount,
+            }));
+            addMessage({
+                role: 'assistant',
+                content: 'Participant count saved. Your facility, date, and time are locked from the availability check. Choose equipment and event type to continue.',
+            });
+            return;
+        }
+
         const recommendedCount = facilities.filter((facility) =>
             isFacilityRecommendedForParticipants(facility, participantCount),
         ).length;
@@ -1454,25 +1486,39 @@ export default function Chatbot() {
             return;
         }
 
-        const { facility, date, startTime, endTime } = availabilityFollowUp;
+        const { source, facility, date, startTime, endTime } = availabilityFollowUp;
         setAvailabilityFollowUp(null);
-        setMode('ai');
+        setShowEquipmentSelection(false);
 
-        const userMessage: Message = {
-            role: 'user',
-            content: `Proceed with booking for ${facility.name} on ${date} from ${startTime} to ${endTime}.`,
-        };
-        const context =
-            `Availability follow-up confirmed by user. Locked schedule details: facility_id=${facility.id} (${facility.name}), date=${date}, time_start=${startTime}, time_end=${endTime}. ` +
-            'Continue collecting the remaining request fields. Do not re-check availability for the same slot unless the user changes details.';
-
-        if (isLoading) {
-            addMessage(userMessage);
-            messageQueueRef.current.push({ message: userMessage, context });
+        if (source === 'guided') {
+            setMode('ai');
+            setGuidedFlow({
+                ...INITIAL_GUIDED_FLOW,
+                mode: 'booking',
+                step: 'attachments',
+                facilityId: facility.id,
+                date,
+                timeStart: startTime,
+                timeEnd: endTime,
+            });
+            addMessage({
+                role: 'assistant',
+                content:
+                    `Great, availability is confirmed for ${facility.name} on ${date} from ${startTime} to ${endTime}. ` +
+                    'Before we continue, do you have any approval paper or related supporting document to attach?',
+            });
             return;
         }
 
-        await processAndSend(userMessage, context);
+        setMode('booking');
+        bookingFlow.update({
+            facility_id: facility.id,
+            facility_name: facility.name,
+            date,
+            time_start: startTime,
+            time_end: endTime,
+        });
+        bookingFlow.goToStep('title');
     };
 
     const handleAvailabilityOtherFacility = () => {
@@ -1831,7 +1877,7 @@ export default function Chatbot() {
 
     return (
         <div className="flex h-full w-full flex-col bg-background">
-            <div className="flex-1 space-y-4 overflow-y-auto p-6">
+            <div className={`flex-1 space-y-4 p-6 ${mode === 'idle' ? 'overflow-visible' : 'overflow-y-auto'}`}>
                 {/* Idle — show welcome + quick reply buttons */}
                 {mode === 'idle' && <WelcomeMessage onQuickReply={handleQuickReply} />}
 
@@ -1872,6 +1918,7 @@ export default function Chatbot() {
                             showConfirmationButtons={!!pendingPayload}
                             onConfirm={handleConfirmRequest}
                             onCancel={handleCancelRequest}
+                            equipmentSelectorActive={shouldRenderEquipmentPicker}
                         />
 
                         {shouldRenderEquipmentPicker && (

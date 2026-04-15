@@ -10,14 +10,52 @@ interface MessageListProps {
     showConfirmationButtons?: boolean;
     onConfirm?: () => void;
     onCancel?: () => void;
+    equipmentSelectorActive?: boolean;
 }
+
+const looksLikeEquipmentListMessage = (content: string): boolean => {
+    const normalized = content.toLowerCase();
+    const hasEquipmentKeywords =
+        normalized.includes('equipment') ||
+        normalized.includes('facility id') ||
+        normalized.includes('quantity') ||
+        normalized.includes('id:');
+
+    if (!hasEquipmentKeywords) {
+        return false;
+    }
+
+    const hasListFormatting =
+        /(^|\n)\s*[-*]\s+/m.test(content) ||
+        /(^|\n)\s*\d+\.\s+/m.test(content) ||
+        content.includes(', ');
+
+    return hasListFormatting;
+};
+
+const getDisplayContent = (message: Message, equipmentSelectorActive: boolean): string => {
+    if (message.role !== 'assistant') {
+        return message.content;
+    }
+
+    if (!equipmentSelectorActive) {
+        return message.content;
+    }
+
+    if (!looksLikeEquipmentListMessage(message.content)) {
+        return message.content;
+    }
+
+    return 'Equipment options are available in the selector below.';
+};
 
 export default function MessageList({ 
     messages, 
     messagesEndRef, 
     showConfirmationButtons = false,
     onConfirm,
-    onCancel 
+    onCancel,
+    equipmentSelectorActive = false,
 }: MessageListProps) {
     return (
         <>
@@ -58,7 +96,7 @@ export default function MessageList({
                                     {msg.role}
                                 </Badge>
                                 <div className="text-sm whitespace-pre-wrap break-words text-card-foreground">
-                                    {msg.content}
+                                    {getDisplayContent(msg, equipmentSelectorActive)}
                                 </div>
                             </CardContent>
                         </Card>
