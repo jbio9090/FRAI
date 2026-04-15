@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 interface DatePickerProps {
     onSelect: (dateISO: string) => void;
+    minAdvanceDays?: number;
 }
 
 const MONTHS = [
@@ -9,19 +10,22 @@ const MONTHS = [
     'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export default function DatePicker({ onSelect }: DatePickerProps) {
+export default function DatePicker({ onSelect, minAdvanceDays = 0 }: DatePickerProps) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const minSelectableDate = new Date(today);
+    minSelectableDate.setDate(minSelectableDate.getDate() + minAdvanceDays);
+    minSelectableDate.setHours(0, 0, 0, 0);
 
-    const [viewYear, setViewYear] = useState(today.getFullYear());
-    const [viewMonth, setViewMonth] = useState(today.getMonth());
+    const [viewYear, setViewYear] = useState(minSelectableDate.getFullYear());
+    const [viewMonth, setViewMonth] = useState(minSelectableDate.getMonth());
     const [selected, setSelected] = useState<string | null>(null);
 
     const firstDay = new Date(viewYear, viewMonth, 1).getDay();
     const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
     const prevMonth = () => {
-        if (viewYear === today.getFullYear() && viewMonth === today.getMonth()) return;
+        if (viewYear === minSelectableDate.getFullYear() && viewMonth === minSelectableDate.getMonth()) return;
         if (viewMonth === 0) {
             setViewMonth(11);
             setViewYear(y => y - 1);
@@ -39,9 +43,10 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
         }
     };
 
-    const isPast = (day: number): boolean => {
+    const isBlocked = (day: number): boolean => {
         const d = new Date(viewYear, viewMonth, day);
-        return d < today;
+        d.setHours(0, 0, 0, 0);
+        return d < minSelectableDate;
     };
 
     const isSelected = (day: number): boolean => {
@@ -49,13 +54,13 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
     };
 
     const handleDayClick = (day: number) => {
-        if (isPast(day)) return;
+        if (isBlocked(day)) return;
         const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         setSelected(iso);
         onSelect(iso);
     };
 
-    const atCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
+    const atCurrentMonth = viewYear === minSelectableDate.getFullYear() && viewMonth === minSelectableDate.getMonth();
 
     return (
         <div className="mt-3 bg-background border border-border rounded-xl shadow-sm p-4 w-full max-w-xs mx-auto">
@@ -95,17 +100,17 @@ export default function DatePicker({ onSelect }: DatePickerProps) {
                 ))}
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                     const day = i + 1;
-                    const past = isPast(day);
+                    const blocked = isBlocked(day);
                     const sel = isSelected(day);
                     return (
                         <button
                             key={day}
                             onClick={() => handleDayClick(day)}
-                            disabled={past}
+                            disabled={blocked}
                             className={`
                                 text-xs rounded-lg py-1.5 transition-all font-medium
-                                ${past
-                                    ? 'text-muted-foreground/30 cursor-not-allowed'
+                                ${blocked
+                                    ? 'bg-black text-white/40 cursor-not-allowed'
                                     : 'hover:bg-muted cursor-pointer text-foreground'
                                 }
                                 ${sel

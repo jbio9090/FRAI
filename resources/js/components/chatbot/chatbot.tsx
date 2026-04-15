@@ -46,6 +46,7 @@ type GuidedFlowState = {
     timeStart: string | null;
     timeEnd: string | null;
     equipmentDecision: GuidedEquipmentDecision;
+    eventType: 0 | 1 | 2 | 3 | null;
 };
 
 type GuidedQuickReplyOption = {
@@ -54,6 +55,15 @@ type GuidedQuickReplyOption = {
     onSelect: () => void | Promise<void>;
     variant?: 'default' | 'outline';
     disabled?: boolean;
+};
+
+type AvailabilityFollowUpState = {
+    status: 'available' | 'unavailable';
+    facility: Facility;
+    date: string;
+    startTime: string;
+    endTime: string;
+    source: 'guided' | 'wizard';
 };
 
 const GUIDED_TIME_OPTIONS = ['8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
@@ -67,7 +77,15 @@ const INITIAL_GUIDED_FLOW: GuidedFlowState = {
     timeStart: null,
     timeEnd: null,
     equipmentDecision: 'unknown',
+    eventType: null,
 };
+
+const EVENT_TYPE_OPTIONS = [
+    { id: 0 as const, label: 'Academic', priority: 0 as const },
+    { id: 1 as const, label: 'Organizational', priority: 1 as const },
+    { id: 2 as const, label: 'University', priority: 1 as const },
+    { id: 3 as const, label: 'Government', priority: 2 as const },
+];
 
 const toPositiveInt = (value: unknown): number | null => {
     if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
@@ -293,6 +311,35 @@ const formatDateYmd = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+const getAvailabilityStatus = (content: string): 'available' | 'unavailable' | null => {
+    if (/\bis not available on\b/i.test(content) || /\bNOT available on\b/.test(content)) {
+        return 'unavailable';
+    }
+
+    if (/\bis available on\b/i.test(content) || /\bis available\b/i.test(content)) {
+        return 'available';
+    }
+
+    return null;
+};
+
+const parseAvailabilityUserMessage = (
+    content: string,
+): { facilityName: string; date: string; startTime: string; endTime: string } | null => {
+    const match = content.match(/check availability for (.+) on (\d{4}-\d{2}-\d{2}) from (.+) to (.+)\.?$/i);
+    if (!match) {
+        return null;
+    }
+
+    const [, facilityName, date, startTime, endTime] = match;
+    return {
+        facilityName: facilityName.trim(),
+        date: date.trim(),
+        startTime: startTime.trim(),
+        endTime: endTime.trim(),
+    };
+};
+
 export default function Chatbot() {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const [input, setInput] = React.useState('');
@@ -315,6 +362,7 @@ export default function Chatbot() {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const messageQueueRef = useRef<Array<{ message: Message; context?: string }>>([]);
     const [guidedFlow, setGuidedFlow] = useState<GuidedFlowState>({ ...INITIAL_GUIDED_FLOW });
+    const [availabilityFollowUp, setAvailabilityFollowUp] = useState<AvailabilityFollowUpState | null>(null);
     const [customParticipantCount, setCustomParticipantCount] = useState<string>('');
     const [customStartTime, setCustomStartTime] = useState<string>('');
     const [customEndTime, setCustomEndTime] = useState<string>('');
@@ -435,6 +483,7 @@ export default function Chatbot() {
     const startGuidedFlow = (flowMode: Exclude<GuidedFlowMode, 'none'>) => {
         setMode('ai');
         setShowEquipmentSelection(false);
+        setAvailabilityFollowUp(null);
         setGuidedFlow({
             ...INITIAL_GUIDED_FLOW,
             mode: flowMode,
@@ -453,6 +502,7 @@ export default function Chatbot() {
     const handleGuidedCancel = () => {
         resetGuidedFlow();
         setShowEquipmentSelection(false);
+        setAvailabilityFollowUp(null);
         addMessage({
             role: 'assistant',
             content: 'Guided flow cancelled. You can start a new guided flow or continue with normal chat.',
@@ -481,7 +531,7 @@ export default function Chatbot() {
                     case 'time_end':
                         return { ...prev, step: 'time_start', timeEnd: null };
                     case 'equipment':
-                        return { ...prev, step: 'time_end', equipmentDecision: 'unknown' };
+                        return { ...prev, step: 'time_end', equipmentDecision: 'unknown', eventType: null };
                     default:
                         return prev;
                 }
@@ -653,6 +703,7 @@ export default function Chatbot() {
             const context = `Guided quick reply collected availability details. Facility: ${currentFacility.name} (ID ${currentFacility.id}). Date: ${guidedFlow.date}. Start time: ${guidedFlow.timeStart}. End time: ${timeEnd}.`;
 
             resetGuidedFlow();
+            setAvailabilityFollowUp(null);
 
             if (isLoading) {
                 addMessage(userMessage);
@@ -671,7 +722,7 @@ export default function Chatbot() {
         }));
         addMessage({
             role: 'assistant',
-            content: 'Schedule saved. Choose your equipment option below, then continue to request details.',
+            content: 'Schedule saved. Choose equipment, then select event type before continuing to request details.',
         });
     };
 
@@ -707,7 +758,28 @@ export default function Chatbot() {
         addMessage({ role: 'user', content: 'No equipment needed.' });
         addMessage({
             role: 'assistant',
-            content: 'Noted. You can now continue to request details.',
+            content: 'Noted. Please select your event type, then continue to request details.',
+        });
+    };
+
+    const handleGuidedEventTypeSelection = (eventTypeId: 0 | 1 | 2 | 3) => {
+        const option = EVENT_TYPE_OPTIONS.find((eventType) => eventType.id === eventTypeId);
+        if (!option) {
+            return;
+        }
+
+        setGuidedFlow((prev) => ({
+            ...prev,
+            eventType: eventTypeId,
+        }));
+
+        addMessage({
+            role: 'user',
+            content: `Event type: ${option.label} (ID: ${eventTypeId}, priority_level: ${option.priority})`,
+        });
+        addMessage({
+            role: 'assistant',
+            content: `${option.label} selected. You can continue to request details now.`,
         });
     };
 
@@ -737,12 +809,16 @@ export default function Chatbot() {
                   : guidedFlow.equipmentDecision === 'none'
                     ? 'No equipment is needed for this request.'
                     : 'Ask once if equipment is needed. If not needed, proceed without equipment.';
+        const selectedEventType = EVENT_TYPE_OPTIONS.find((eventType) => eventType.id === guidedFlow.eventType);
+        const eventTypeInstruction = selectedEventType
+            ? `Use locked event_type=${selectedEventType.id} (${selectedEventType.label}) and priority_level=${selectedEventType.priority}. Do not ask event type again.`
+            : 'If event type is still missing, ask once and map it deterministically before final payload.';
 
         const userMessage: Message = {
             role: 'user',
             content:
                 `Continue request creation with these locked details: participant_count=${guidedFlow.participantCount}, facility_id=${facility.id} (${facility.name}), date=${guidedFlow.date}, time_start=${guidedFlow.timeStart}, time_end=${guidedFlow.timeEnd}. ` +
-                `${equipmentInstruction} Do not change these locked details. Collect only missing fields (title, event type, description, optional files), then prepare the confirmation JSON payload.`,
+                `${equipmentInstruction} ${eventTypeInstruction} Do not change these locked details. Collect only missing fields (title, description, optional files, and event type only if not provided), then prepare the confirmation JSON payload.`,
         };
         const context =
             'Guided flow locked booking details. The assistant must keep the selected participant count, facility ID, date, and time window unchanged while collecting only missing fields.';
@@ -845,7 +921,7 @@ export default function Chatbot() {
             .catch(() => {});
     }, []);
 
-    const processAndSend = async (userMessage: Message, contextNote?: string, skipUserAdd = false) => {
+    const processAndSend = async (userMessage: Message, contextNote?: string, skipUserAdd = false): Promise<string | null> => {
         if (!skipUserAdd) {
             addMessage(userMessage);
         }
@@ -862,7 +938,7 @@ export default function Chatbot() {
                 if (validationError) {
                     setPendingPayload(null);
                     addMessage({ role: 'assistant', content: validationError });
-                    return;
+                    return null;
                 }
 
                 const result = await submitRequest(payload);
@@ -873,7 +949,7 @@ export default function Chatbot() {
                 const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
                 addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
             }
-            return; // don't send to AI again
+            return null; // don't send to AI again
         }
 
         try {
@@ -890,7 +966,7 @@ export default function Chatbot() {
 
             let streamingContent = '';
 
-            await sendMessage(
+            const assistantContent = await sendMessage(
                 allMessages,
                 currentCount,
                 activeBookingContext,
@@ -917,12 +993,42 @@ export default function Chatbot() {
                 },
             );
 
+            if (
+                contextNote &&
+                (contextNote.startsWith('Quick reply collected availability details') ||
+                    contextNote.startsWith('Guided quick reply collected availability details'))
+            ) {
+                const status = getAvailabilityStatus(assistantContent);
+                const parsedSelection = parseAvailabilityUserMessage(userMessage.content);
+                if (status && parsedSelection) {
+                    const facility = facilities.find((item) => item.name.toLowerCase() === parsedSelection.facilityName.toLowerCase());
+                    if (facility) {
+                        setAvailabilityFollowUp({
+                            status,
+                            facility,
+                            date: parsedSelection.date,
+                            startTime: parsedSelection.startTime,
+                            endTime: parsedSelection.endTime,
+                            source: contextNote.startsWith('Guided quick reply collected availability details') ? 'guided' : 'wizard',
+                        });
+                        addMessage({
+                            role: 'assistant',
+                            content:
+                                status === 'available'
+                                    ? 'Would you like to proceed with booking, check another facility, change time slot, or cancel?'
+                                    : 'Would you like to check another facility, change time slot, or cancel?',
+                        });
+                    }
+                }
+            }
+
             if (messageQueueRef.current.length > 0) {
                 const next = messageQueueRef.current.shift();
                 if (next) {
                     await processAndSend(next.message, next.context, true);
                 }
             }
+            return assistantContent;
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
             setMessages((prev) => {
@@ -933,6 +1039,7 @@ export default function Chatbot() {
                 };
                 return updated;
             });
+            return null;
         }
     };
 
@@ -1232,6 +1339,8 @@ export default function Chatbot() {
     };
 
     const handleQuickReply = (option: QuickReply) => {
+        setAvailabilityFollowUp(null);
+
         if (option.id === 'guided_booking') {
             startGuidedFlow('booking');
             return;
@@ -1275,6 +1384,7 @@ export default function Chatbot() {
         const message = input.trim();
         if (!message) return;
         setInput('');
+        setAvailabilityFollowUp(null);
         if (mode === 'idle' || mode === 'booking' || mode === 'availability') setMode('ai');
 
         if (guidedFlow.mode !== 'none') {
@@ -1328,6 +1438,7 @@ export default function Chatbot() {
         const context = `Quick reply collected availability details. Facility: ${selection.facility.name} (ID ${selection.facility.id}). Date: ${selection.date}. Start time: ${selection.startTime}. End time: ${selection.endTime}.`;
 
         setMode('ai');
+        setAvailabilityFollowUp(null);
 
         if (isLoading) {
             addMessage(userMessage);
@@ -1338,13 +1449,94 @@ export default function Chatbot() {
         await processAndSend(userMessage, context);
     };
 
+    const handleAvailabilityProceedWithBooking = async () => {
+        if (!availabilityFollowUp) {
+            return;
+        }
+
+        const { facility, date, startTime, endTime } = availabilityFollowUp;
+        setAvailabilityFollowUp(null);
+        setMode('ai');
+
+        const userMessage: Message = {
+            role: 'user',
+            content: `Proceed with booking for ${facility.name} on ${date} from ${startTime} to ${endTime}.`,
+        };
+        const context =
+            `Availability follow-up confirmed by user. Locked schedule details: facility_id=${facility.id} (${facility.name}), date=${date}, time_start=${startTime}, time_end=${endTime}. ` +
+            'Continue collecting the remaining request fields. Do not re-check availability for the same slot unless the user changes details.';
+
+        if (isLoading) {
+            addMessage(userMessage);
+            messageQueueRef.current.push({ message: userMessage, context });
+            return;
+        }
+
+        await processAndSend(userMessage, context);
+    };
+
+    const handleAvailabilityOtherFacility = () => {
+        if (!availabilityFollowUp) {
+            return;
+        }
+
+        const source = availabilityFollowUp.source;
+        setAvailabilityFollowUp(null);
+
+        if (source === 'guided') {
+            startGuidedFlow('availability');
+            return;
+        }
+
+        setMode('availability');
+    };
+
+    const handleAvailabilityChangeTimeSlot = () => {
+        if (!availabilityFollowUp) {
+            return;
+        }
+
+        const { source, facility, date } = availabilityFollowUp;
+        setAvailabilityFollowUp(null);
+
+        if (source === 'guided') {
+            setMode('ai');
+            setGuidedFlow({
+                ...INITIAL_GUIDED_FLOW,
+                mode: 'availability',
+                step: 'time_start',
+                facilityId: facility.id,
+                date,
+            });
+            addMessage({
+                role: 'assistant',
+                content: `Okay, let’s change the time slot for ${facility.name} on ${date}. Please choose a new start time.`,
+            });
+            return;
+        }
+
+        setMode('availability');
+        addMessage({
+            role: 'assistant',
+            content: 'Please choose a new time slot for another availability check.',
+        });
+    };
+
+    const handleAvailabilityCancel = () => {
+        setAvailabilityFollowUp(null);
+        addMessage({
+            role: 'assistant',
+            content: 'Availability follow-up cancelled. You can continue chatting anytime.',
+        });
+    };
+
     const shouldRenderEquipmentPicker = showEquipmentSelection || shouldShowEquipmentPicker();
     const currentFacilityId = getCurrentFacilityId();
 
     const buildGuidedQuickReplies = (): GuidedQuickReplyOption[] => {
         const today = new Date();
-        const tomorrow = new Date();
-        tomorrow.setDate(today.getDate() + 1);
+        const plusTwoDays = new Date();
+        plusTwoDays.setDate(today.getDate() + 2);
         const plusThreeDays = new Date();
         plusThreeDays.setDate(today.getDate() + 3);
         const plusSevenDays = new Date();
@@ -1365,6 +1557,43 @@ export default function Chatbot() {
                     variant: 'outline',
                 },
             ];
+        }
+
+        if (availabilityFollowUp) {
+            const sharedReplies: GuidedQuickReplyOption[] = [
+                {
+                    id: 'availability-other-facility',
+                    label: 'Avail Other Facility',
+                    onSelect: handleAvailabilityOtherFacility,
+                    variant: 'outline',
+                },
+                {
+                    id: 'availability-change-timeslot',
+                    label: 'Change Time Slot',
+                    onSelect: handleAvailabilityChangeTimeSlot,
+                    variant: 'outline',
+                },
+                {
+                    id: 'availability-cancel',
+                    label: 'Cancel',
+                    onSelect: handleAvailabilityCancel,
+                    variant: 'outline',
+                },
+            ];
+
+            if (availabilityFollowUp.status === 'available') {
+                return [
+                    {
+                        id: 'availability-proceed-booking',
+                        label: 'Proceed with Booking',
+                        onSelect: () => void handleAvailabilityProceedWithBooking(),
+                        variant: 'default',
+                    },
+                    ...sharedReplies,
+                ];
+            }
+
+            return sharedReplies;
         }
 
         if (guidedFlow.mode === 'none') {
@@ -1450,14 +1679,9 @@ export default function Chatbot() {
             if (guidedFlow.step === 'date') {
                 return [
                     {
-                        id: 'guided-date-today',
-                        label: `Today (${formatDateYmd(today)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(today)),
-                    },
-                    {
-                        id: 'guided-date-tomorrow',
-                        label: `Tomorrow (${formatDateYmd(tomorrow)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(tomorrow)),
+                        id: 'guided-date-plus2',
+                        label: `In 2 Days (${formatDateYmd(plusTwoDays)})`,
+                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusTwoDays)),
                     },
                     {
                         id: 'guided-date-plus3',
@@ -1509,11 +1733,18 @@ export default function Chatbot() {
                         disabled: getFilteredEquipment().length === 0,
                     },
                     { id: 'guided-equipment-none', label: 'No Equipment Needed', onSelect: handleGuidedNoEquipment, variant: 'outline' },
+                    ...EVENT_TYPE_OPTIONS.map((eventType) => ({
+                        id: `guided-event-type-${eventType.id}`,
+                        label: `${eventType.label} Event`,
+                        onSelect: () => handleGuidedEventTypeSelection(eventType.id),
+                        variant: guidedFlow.eventType === eventType.id ? ('default' as const) : ('outline' as const),
+                    })),
                     {
                         id: 'guided-equipment-continue',
                         label: 'Continue to Request Details',
                         onSelect: handleGuidedContinueBooking,
                         variant: 'default',
+                        disabled: guidedFlow.eventType === null,
                     },
                     { id: 'guided-back', label: 'Back', onSelect: handleGuidedBack, variant: 'outline' },
                     { id: 'guided-cancel', label: 'Cancel Guided Flow', onSelect: handleGuidedCancel, variant: 'outline' },
@@ -1536,14 +1767,9 @@ export default function Chatbot() {
             if (guidedFlow.step === 'date') {
                 return [
                     {
-                        id: 'guided-av-date-today',
-                        label: `Today (${formatDateYmd(today)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(today)),
-                    },
-                    {
-                        id: 'guided-av-date-tomorrow',
-                        label: `Tomorrow (${formatDateYmd(tomorrow)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(tomorrow)),
+                        id: 'guided-av-date-plus2',
+                        label: `In 2 Days (${formatDateYmd(plusTwoDays)})`,
+                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusTwoDays)),
                     },
                     {
                         id: 'guided-av-date-plus3',
@@ -1593,6 +1819,10 @@ export default function Chatbot() {
     const guidedQuickReplies = mode === 'booking' || mode === 'availability' ? [] : buildGuidedQuickReplies();
     const guidedQuickReplyHint = pendingPayload
         ? 'Review action'
+        : availabilityFollowUp
+          ? availabilityFollowUp.status === 'available'
+              ? 'Availability result: slot is available. Choose next action.'
+              : 'Availability result: slot has conflict. Choose next action.'
         : guidedFlow.mode === 'booking'
           ? `Guided booking step: ${guidedFlow.step ?? 'none'}`
           : guidedFlow.mode === 'availability'
@@ -1793,7 +2023,7 @@ export default function Chatbot() {
                     {guidedFlow.mode !== 'none' && guidedFlow.step === 'date' && (
                         <div className="mb-3 rounded-md border border-border p-3">
                             <p className="mb-2 text-xs text-muted-foreground">Custom date (calendar)</p>
-                            <DatePicker onSelect={handleGuidedDateSelection} />
+                            <DatePicker onSelect={handleGuidedDateSelection} minAdvanceDays={2} />
                         </div>
                     )}
 
