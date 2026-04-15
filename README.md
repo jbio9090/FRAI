@@ -1,44 +1,56 @@
-This guide outlines the steps to set up your local development environment for FRAI using **Laravel Herd**, **PostgreSQL** (with **pgvector**), and **Ollama** for AI-powered features.
+No problem. If you’re sticking with the free version of Herd, you’ll just manage your PostgreSQL instance externally (like a standard local install or via Docker). 
+
+Here is the refactored guide focusing on a manual database setup.
 
 ---
 
-## 1. Database Setup (Herd Pro)
-Laravel Herd (Pro) makes it incredibly easy to manage services like PostgreSQL.
+# Local Development Setup Guide
 
-1.  Open **Herd Settings** and navigate to the **Services** tab.
-2.  Add a new **PostgreSQL** service.
-3.  Ensure the service is running on the default port `5432`.
-4.  **Install pgvector:** * Herd's PostgreSQL service typically includes `pgvector` by default. 
-    * To enable it, connect to your database (using TablePlus or Herd's CLI) and run:
+This guide outlines the steps to set up your local development environment for **FRAI** using **Laravel Herd**, a standalone **PostgreSQL** installation (with **pgvector**), and **Ollama**.
+
+---
+
+## 1. Database Setup
+Since you are using the free version of Herd, you must ensure PostgreSQL is installed and running on your machine independently.
+
+### Install & Connect
+1.  Ensure **PostgreSQL** is installed (via Homebrew, Postgres.app, or direct installer).
+2.  Open your preferred database management tool (e.g., **pgAdmin**, **TablePlus**, or **DBeaver**).
+3.  Create a new database for the project (e.g., `frai_db`).
+
+### Enable pgvector
+To support vector embeddings, you must manually enable the `pgvector` extension on your specific database:
+1.  Open a **SQL Query** window in your database tool.
+2.  Select your project database.
+3.  Run the following command:
     ```sql
     CREATE EXTENSION IF NOT EXISTS vector;
     ```
+    *Note: If this fails, ensure the pgvector binary is installed on your system.*
 
 ### Update `.env`
-Configure your Laravel application to use the PostgreSQL service:
+Update your project's `.env` file with your local PostgreSQL credentials:
 
 ```env
 DB_CONNECTION=pgsql
 DB_HOST=127.0.0.1
 DB_PORT=5432
-DB_DATABASE=your_database_name
-DB_USERNAME=root
-DB_PASSWORD=
+DB_DATABASE=frai_db
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
 ```
 
 ---
 
 ## 2. Ollama & Models
-Ollama handles your local LLMs and embedding models.
+Ollama provides the local LLM and embedding capabilities.
 
-1.  **Download & Install Ollama** from [ollama.com](https://ollama.com).
-2.  **Pull the LLM:**
-    Open your terminal and run:
+1.  **Install Ollama:** Download from [ollama.com](https://ollama.com).
+2.  **Download LLM:**
     ```bash
     ollama pull qwen3:0.6b
     ```
-3.  **Pull the Embedding Model:**
-    Run the following to pull the Nomic embedding model:
+3.  **Download Embedding Model:**
     ```bash
     ollama pull nomic-embed-text
     ```
@@ -46,7 +58,7 @@ Ollama handles your local LLMs and embedding models.
 ---
 
 ## 3. Application Configuration
-Ensure your application is configured to talk to Ollama. If you are using a package like `laravelextra/ollama` or `langchain-laravel`, add the following to your `.env`:
+Configure the application to communicate with your local Ollama instance:
 
 ```env
 OLLAMA_MODEL=qwen3:0.6b
@@ -57,27 +69,36 @@ OLLAMA_URL=http://localhost:11434
 ---
 
 ## 4. Initialization
-Once your database is migrated and Ollama is running with the required models, initialize your project's index/rules.
+Run these commands in your terminal to prepare the application:
 
-1.  **Install Composer Dependencies:**
+1.  **Install Dependencies:**
     ```bash
     composer install
     ```
-
 2.  **Run Migrations:**
     ```bash
-    php artisan migrate
+    php artisan migrate:fresh --seed
     ```
-
 3.  **Index Application Rules:**
-    Run the specific command to process your project rules into the vector database:
+    *you only need to do this once
+    Process your project data into the vector database by running:
     ```bash
     php artisan app:index-rules
+    ```
+4. **Run the Queue**
+    For the Notifications and other non blocking proccess to work
+    ```
+    php artisan queue:work
+    ```
+
+5. **Run Ollama**
+    ```
+    ollama serve
     ```
 
 ---
 
 ## Troubleshooting
-* **Postgres Connection:** If you cannot connect, double-check that the PostgreSQL service is started in the Herd dashboard.
-* **Ollama Connectivity:** Run `ollama list` in your terminal to verify that `qwen3:0.6b` and `nomic-embed-text` are successfully downloaded.
-* **Extension Errors:** If `app:index-rules` fails with a "vector type does not exist" error, re-run the `CREATE EXTENSION vector;` command in your database.
+* **Database Connection:** Ensure the PostgreSQL service is active on your system. If you use a non-standard port (not 5432), update the `DB_PORT` in your `.env`.
+* **Vector Errors:** If `app:index-rules` throws a "type 'vector' does not exist" error, double-check that you ran the `CREATE EXTENSION` query on the **correct** database.
+* **Ollama Status:** Ensure the Ollama app is running in your menu bar/system tray, or the models won't be reachable.
