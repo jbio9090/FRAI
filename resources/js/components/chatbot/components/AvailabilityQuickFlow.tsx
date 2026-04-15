@@ -14,6 +14,16 @@ const TIME_OPTIONS = [
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
 ];
 
+function toMinutes(time: string): number {
+    const [timePart, modifier] = time.split(' ');
+    const [rawHours, rawMinutes] = timePart.split(':').map(Number);
+    let hours = rawHours;
+    const minutes = rawMinutes;
+    if (modifier === 'PM' && hours !== 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+    return (hours * 60) + minutes;
+}
+
 export default function AvailabilityQuickFlow({
     facilities,
     onComplete,
@@ -44,6 +54,10 @@ export default function AvailabilityQuickFlow({
 
     const handleEndTimeSelect = (time: string) => {
         if (!selectedFacility || !selectedDate || !selectedStartTime) {
+            return;
+        }
+
+        if (toMinutes(time) <= toMinutes(selectedStartTime)) {
             return;
         }
 
@@ -88,6 +102,15 @@ export default function AvailabilityQuickFlow({
         selectedDate || 'none',
         selectedStartTime || 'none',
     ].join(':');
+
+    const maxEndTime = TIME_OPTIONS[TIME_OPTIONS.length - 1];
+    const availableStartTimes = TIME_OPTIONS.filter(
+        option => toMinutes(option) < toMinutes(maxEndTime)
+    );
+
+    const availableEndTimes = selectedStartTime
+        ? TIME_OPTIONS.filter(option => toMinutes(option) > toMinutes(selectedStartTime))
+        : TIME_OPTIONS;
 
     useEffect(() => {
         setIsTypingPrompt(true);
@@ -140,7 +163,7 @@ export default function AvailabilityQuickFlow({
                     {!isTypingPrompt && selectedFacility && selectedDate && !selectedStartTime && (
                         <>
                             <div className="mt-3 flex flex-wrap gap-2">
-                                {TIME_OPTIONS.map(option => (
+                                {availableStartTimes.map(option => (
                                     <button
                                         key={option}
                                         onClick={() => handleStartTimeSelect(option)}
@@ -161,7 +184,7 @@ export default function AvailabilityQuickFlow({
                     {!isTypingPrompt && selectedFacility && selectedDate && selectedStartTime && (
                         <>
                             <div className="mt-3 flex flex-wrap gap-2">
-                                {TIME_OPTIONS.map(option => (
+                                {availableEndTimes.map(option => (
                                     <button
                                         key={option}
                                         onClick={() => handleEndTimeSelect(option)}

@@ -4,6 +4,7 @@ export interface Equipment {
     description?: string;
     quantity: number;
     facility_id: number;
+    facility?: string | null;
 }
 
 export interface EquipmentConflict {
