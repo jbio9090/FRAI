@@ -21,7 +21,7 @@ import DatePicker from './components/DatePicker';
 
 type ChatMode = 'idle' | 'booking' | 'availability' | 'ai';
 type GuidedFlowMode = 'none' | 'booking' | 'availability';
-type GuidedFlowStep = 'participants' | 'facility' | 'date' | 'time_start' | 'time_end' | 'equipment';
+type GuidedFlowStep = 'attachments' | 'participants' | 'facility' | 'date' | 'time_start' | 'time_end' | 'equipment';
 type SelectedEquipmentItem = {
     equipment_id: number;
     equipment_name: string;
@@ -248,6 +248,7 @@ export default function Chatbot() {
     const [customParticipantCount, setCustomParticipantCount] = useState<string>('');
     const [customStartTime, setCustomStartTime] = useState<string>('');
     const [customEndTime, setCustomEndTime] = useState<string>('');
+    const guidedFileInputRef = useRef<HTMLInputElement | null>(null);
 
     const withAttachedFiles = (payload: CreateRequestPayload): CreateRequestPayload => {
         const fileIds = attachedFiles.map((file) => file.id);
@@ -313,14 +314,14 @@ export default function Chatbot() {
         setGuidedFlow({
             ...INITIAL_GUIDED_FLOW,
             mode: flowMode,
-            step: flowMode === 'booking' ? 'participants' : 'facility',
+            step: flowMode === 'booking' ? 'attachments' : 'facility',
         });
 
         addMessage({
             role: 'assistant',
             content:
                 flowMode === 'booking'
-                    ? 'Guided booking is active. Please choose the participant count using the quick replies below.'
+                    ? 'Guided booking is active. Before we continue, do you have any approval paper or related supporting document to attach?'
                     : 'Guided availability check is active. Please choose a facility using the quick replies below.',
         });
     };
@@ -343,8 +344,10 @@ export default function Chatbot() {
 
             if (prev.mode === 'booking') {
                 switch (prev.step) {
-                    case 'participants':
+                    case 'attachments':
                         return { ...INITIAL_GUIDED_FLOW };
+                    case 'participants':
+                        return { ...prev, step: 'attachments' };
                     case 'facility':
                         return { ...prev, step: 'participants', facilityId: null };
                     case 'date':
@@ -419,6 +422,42 @@ export default function Chatbot() {
 
         setCustomParticipantCount('');
         handleGuidedParticipantSelection(Math.floor(parsed));
+    };
+
+    const proceedToGuidedParticipantStep = () => {
+        setGuidedFlow((prev) => ({
+            ...prev,
+            mode: 'booking',
+            step: 'participants',
+        }));
+        addMessage({
+            role: 'assistant',
+            content: 'Thanks. Now please choose the participant count using the quick replies or custom input.',
+        });
+    };
+
+    const handleGuidedNoAttachment = () => {
+        addMessage({ role: 'user', content: 'No attachment for now.' });
+        proceedToGuidedParticipantStep();
+    };
+
+    const handleGuidedAttachFileClick = () => {
+        guidedFileInputRef.current?.click();
+    };
+
+    const handleGuidedFileSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) {
+            return;
+        }
+
+        addMessage({
+            role: 'user',
+            content: `I will attach ${files.length} supporting document(s).`,
+        });
+        await handleAttachFiles(files);
+        event.target.value = '';
+        proceedToGuidedParticipantStep();
     };
 
     const handleGuidedFacilitySelection = (facilityId: number) => {
@@ -1198,6 +1237,24 @@ export default function Chatbot() {
         }
 
         if (guidedFlow.mode === 'booking') {
+            if (guidedFlow.step === 'attachments') {
+                return [
+                    {
+                        id: 'guided-attach-file',
+                        label: 'Attach a File',
+                        onSelect: handleGuidedAttachFileClick,
+                        variant: 'default',
+                    },
+                    {
+                        id: 'guided-no-attachment',
+                        label: 'No Attachment',
+                        onSelect: handleGuidedNoAttachment,
+                        variant: 'outline',
+                    },
+                    { id: 'guided-back', label: 'Back', onSelect: handleGuidedBack, variant: 'outline' },
+                ];
+            }
+
             if (guidedFlow.step === 'participants') {
                 return [
                     { id: 'guided-p-25', label: '25 Participants', onSelect: () => handleGuidedParticipantSelection(25) },
@@ -1537,6 +1594,14 @@ export default function Chatbot() {
             {guidedQuickReplies.length > 0 && (
                 <div className="border-t border-border bg-background px-6 py-3">
                     <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{guidedQuickReplyHint}</p>
+                    <input
+                        ref={guidedFileInputRef}
+                        type="file"
+                        multiple
+                        accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                        onChange={handleGuidedFileSelection}
+                        style={{ display: 'none' }}
+                    />
 
                     {guidedFlow.mode !== 'none' && guidedFlow.step === 'participants' && (
                         <div className="mb-3 flex flex-wrap items-end gap-2">
