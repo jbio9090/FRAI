@@ -19,11 +19,13 @@ export interface ChatRequest {
 
 export interface CreateRequestPayload {
     title: string;
+    participant_count?: number;
     facility_bookings: Array<{
         facility_id: number;
         date: string;
         time_start: string;
         time_end: string;
+        expected_capacity?: number;
         equipment?: Array<{
             equipment_id: number;
             quantity_needed: number;

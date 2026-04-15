@@ -73,12 +73,69 @@ class ChatController extends Controller
         return response()->json(['message' => 'Session cleared.']);
     }
 
-    private function filterFacilitiesByCapacity($facilities, $participants)
+    private function normalizePositiveIntValue(mixed $value): ?int
     {
-        return $facilities->filter(function ($facility) use ($participants) {
-            return $facility->capacity >= $participants
-                && $facility->capacity <= ($participants * 2);
-        });
+        if (is_int($value) && $value > 0) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $candidate = trim($value);
+            if ($candidate !== '' && ctype_digit($candidate)) {
+                $parsed = (int) $candidate;
+                return $parsed > 0 ? $parsed : null;
+            }
+        }
+
+        if (is_numeric($value)) {
+            $parsed = (int) $value;
+            return $parsed > 0 ? $parsed : null;
+        }
+
+        return null;
+    }
+
+    private function validateFacilityParticipantCapacity(array $facilityBookings, ?int $globalParticipantCount = null): array
+    {
+        $errors = [];
+        $facilityIds = collect($facilityBookings)
+            ->map(fn($booking) => isset($booking['facility_id']) ? (int) $booking['facility_id'] : 0)
+            ->filter(fn($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($facilityIds)) {
+            return $errors;
+        }
+
+        $facilities = Facility::whereIn('id', $facilityIds)->get(['id', 'name', 'capacity'])->keyBy('id');
+
+        foreach ($facilityBookings as $bookingIndex => $booking) {
+            $facilityId = isset($booking['facility_id']) ? (int) $booking['facility_id'] : 0;
+            if ($facilityId <= 0) {
+                continue;
+            }
+
+            $facility = $facilities->get($facilityId);
+            if (!$facility) {
+                continue;
+            }
+
+            $bookingParticipantCount = $this->normalizePositiveIntValue($booking['expected_capacity'] ?? null)
+                ?? $this->normalizePositiveIntValue($globalParticipantCount);
+
+            if (!$bookingParticipantCount) {
+                continue;
+            }
+
+            if ($bookingParticipantCount > (int) $facility->capacity) {
+                $errors["facility_bookings.{$bookingIndex}.expected_capacity"][] =
+                    "Participant count ({$bookingParticipantCount}) exceeds the capacity of {$facility->name} ({$facility->capacity}).";
+            }
+        }
+
+        return $errors;
     }
 
     private function getLatestUserMessageContent(array $messages): ?string
@@ -280,93 +337,6 @@ class ChatController extends Controller
             ->all();
     }
 
-    private function injectDeterministicAvailabilityContext(array &$messages, ?string $latestUserMessage, $allFacilities, $allRequests): void
-    {
-        $parsed = $this->extractFacilityAndDateFromMessage($latestUserMessage, $allFacilities);
-        $facility = $parsed['facility'];
-        $date = $parsed['date'];
-
-        if (!$facility || !$date) {
-            return;
-        }
-
-        $approvedBookings = $allRequests
-            ->filter(fn($r) => $r->status->value === 'Approved')
-            ->flatMap(function ($r) use ($facility) {
-                return $r->requestFacilities
-                    ->where('facility_id', $facility->id)
-                    ->map(function ($rf) use ($r) {
-                        return [
-                            'request_id' => $r->id,
-                            'title' => $r->title,
-                            'date' => $rf->date_requested,
-                            'time_start' => $rf->time_start,
-                            'time_end' => $rf->time_end,
-                        ];
-                    });
-            })
-            ->where('date', $date)
-            ->sortBy('time_start')
-            ->values();
-
-        if ($approvedBookings->isEmpty()) {
-            array_unshift($messages, [
-                'role' => 'system',
-                'content' => "DETERMINISTIC AVAILABILITY CHECK:\nThe latest user message refers to facility '{$facility->name}' (ID {$facility->id}) on {$date}. Backend check result: there are NO approved bookings for this facility on that date.\n\nYou must treat the facility as date-available. If the user has not provided a time yet, ask for the preferred start and end time before checking time-slot conflicts.",
-            ]);
-            return;
-        }
-
-        $bookingLines = $approvedBookings->map(function ($booking) {
-            return "- {$booking['date']} | {$booking['time_start']} - {$booking['time_end']} | Request #{$booking['request_id']} | {$booking['title']}";
-        })->implode("\n");
-
-        array_unshift($messages, [
-            'role' => 'system',
-            'content' => "DETERMINISTIC AVAILABILITY CHECK:\nThe latest user message refers to facility '{$facility->name}' (ID {$facility->id}) on {$date}. Backend check result: there ARE approved bookings for this facility on that date, but only for the exact time slots listed below:\n{$bookingLines}\n\nImportant instructions:\n- Do NOT say the facility is unavailable for the whole day unless the bookings actually cover the whole day\n- If the user did not provide a specific start and end time, do NOT claim a conflict yet\n- Instead, explain that the facility already has the listed booked time slots on {$date} and ask the user for their preferred start and end time so you can check overlap precisely\n- If the user asks whether a previous conflict claim was correct, use this backend check as the source of truth",
-        ]);
-    }
-
-    private function injectApprovedBookingTable(array &$messages, $allRequests): void
-    {
-        $approvedBookings = $allRequests->filter(function ($r) {
-            return $r->status->value === 'Approved';
-        })->flatMap(function ($r) {
-            return $r->requestFacilities->map(function ($rf) use ($r) {
-                $facilityName = $r->facilities->firstWhere('id', $rf->facility_id)?->name ?? 'Unknown';
-                return [
-                    'request_id' => $r->id,
-                    'facility_id' => $rf->facility_id,
-                    'facility_name' => $facilityName,
-                    'date' => $rf->date_requested,
-                    'time_start' => $rf->time_start,
-                    'time_end' => $rf->time_end,
-                ];
-            });
-        })->values();
-
-        if ($approvedBookings->isEmpty()) {
-            return;
-        }
-
-        $bookingLines = $approvedBookings->map(function ($b) {
-            return sprintf(
-                "%s | %s | %s | %s | %s | %s",
-                $b['facility_id'], $b['facility_name'], $b['date'], $b['time_start'], $b['time_end'], $b['request_id']
-            );
-        })->implode("\n");
-
-        array_unshift($messages, [
-            'role' => 'system',
-            'content' => "APPROVED BOOKINGS TABLE FOR AVAILABILITY CHECK:\nFacility ID | Facility Name | Date | Start | End | Request ID\n" . $bookingLines,
-        ]);
-
-        array_unshift($messages, [
-            'role' => 'system',
-            'content' => "When the user asks whether a facility is available for a specific date or time, consult the approved bookings table above. To check for conflicts:\n1. Find all bookings for the same facility_id on the same date\n2. Check if the requested time overlaps with any existing booking:\n   - Overlap occurs if: requested_start < existing_end AND requested_end > existing_start\n3. If ANY overlap is found, the facility is UNAVAILABLE for that time slot\n4. If NO overlaps are found, the facility is AVAILABLE\n\nAlways provide specific details about conflicting bookings when found, and suggest alternative times or facilities.",
-        ]);
-    }
-
     private function resolveFacilityIdFromValue(mixed $facilityValue): mixed
     {
         if (is_int($facilityValue) || (is_string($facilityValue) && ctype_digit(trim($facilityValue)))) {
@@ -565,6 +535,13 @@ class ChatController extends Controller
     {
         $normalized = $input;
         $orphanEquipmentSelections = [];
+        $globalParticipantCount = $this->normalizePositiveIntValue($normalized['participant_count'] ?? null);
+
+        if ($globalParticipantCount) {
+            $normalized['participant_count'] = $globalParticipantCount;
+        } else {
+            unset($normalized['participant_count']);
+        }
 
         if (!empty($normalized['facility_bookings']) && is_array($normalized['facility_bookings'])) {
             $normalizedBookings = [];
@@ -582,6 +559,10 @@ class ChatController extends Controller
                     $booking['time_end'] = $booking['end_time'];
                 }
 
+                if (!isset($booking['expected_capacity']) && isset($booking['participant_count'])) {
+                    $booking['expected_capacity'] = $booking['participant_count'];
+                }
+
                 if (isset($booking['date'])) {
                     $booking['date'] = $this->normalizeDateValue($booking['date']);
                 }
@@ -596,6 +577,14 @@ class ChatController extends Controller
 
                 if (isset($booking['facility_id'])) {
                     $booking['facility_id'] = $this->resolveFacilityIdFromValue($booking['facility_id']);
+                }
+
+                $bookingParticipantCount = $this->normalizePositiveIntValue($booking['expected_capacity'] ?? null)
+                    ?? $globalParticipantCount;
+                if ($bookingParticipantCount) {
+                    $booking['expected_capacity'] = $bookingParticipantCount;
+                } else {
+                    unset($booking['expected_capacity']);
                 }
 
                 $facilityId = isset($booking['facility_id']) && is_numeric($booking['facility_id'])
@@ -655,34 +644,6 @@ class ChatController extends Controller
         }
 
         return $normalized;
-    }
-
-    private function isFacilityRecommendationIntent(?string $message): bool
-    {
-        if (!$message) {
-            return false;
-        }
-
-        return (bool) preg_match(
-            '/\b(room|rooms|facility|facilities|hall|venue)\b/i',
-            $message
-        ) && (bool) preg_match(
-            '/\b(need|looking for|recommend|suggest|available|have|show|list|other)\b/i',
-            $message
-        );
-    }
-
-    private function buildFacilityRecommendationResponse($facilitiesToDisplay, int $participantCount): string
-    {
-        if ($facilitiesToDisplay->isEmpty()) {
-            return "I checked the facilities for {$participantCount} participants, and there are no rooms with capacity between {$participantCount} and " . ($participantCount * 2) . ".";
-        }
-
-        $lines = $facilitiesToDisplay->map(function ($facility) {
-            return "- ID {$facility->id}: {$facility->name} (Building: {$facility->building}, Capacity: {$facility->capacity})";
-        })->implode("\n");
-
-        return "For {$participantCount} participants, the valid facility capacity range is {$participantCount}-" . ($participantCount * 2) . ".\n\nHere are all matching facilities:\n{$lines}\n\nWhich room would you like to consider?";
     }
 
     private function isAvailabilityIntent(?string $message): bool
@@ -887,6 +848,22 @@ class ChatController extends Controller
         ], $extra);
     }
 
+    private function applyBookingPolicyToRules(array $rules): array
+    {
+        return array_values(array_filter($rules, function ($rule) {
+            $normalizedRule = trim((string) $rule);
+            if ($normalizedRule === '') {
+                return false;
+            }
+
+            // Description/additional information is optional in current policy.
+            return !preg_match(
+                '/(\bdescription\b.*\b(required|must|required field)\b)|(\b(required|must|required field)\b.*\bdescription\b)/i',
+                $normalizedRule
+            );
+        }));
+    }
+
     private function extractStructuredPayload(?string $assistantMessage): ?array
     {
         if (!$assistantMessage) {
@@ -983,76 +960,21 @@ class ChatController extends Controller
                     ->limit(30)
                     ->get();
 
-                $lines = $allRequests->map(function ($r) {
-                    $facilities = $r->requestFacilities->map(function ($rf) use ($r) {
-                        $facilityName = $r->facilities->firstWhere('id', $rf->facility_id)?->name ?? 'Unknown';
-                        return sprintf('%s on %s (%s - %s)', $facilityName, $rf->date_requested, $rf->time_start, $rf->time_end);
-                    })->implode('; ');
-
-                    $priorityLabel = $r->priority_level->label();
-                    $holdInfo      = $r->on_hold ? ' [ON HOLD]' : '';
-
-                    return sprintf(
-                        'Request #%s "%s" — Status: %s%s — Priority: %s — By: %s — Facilities: %s',
-                        $r->id, $r->title, $r->status->value, $holdInfo,
-                        $priorityLabel, $r->user?->name ?? 'Unknown', $facilities ?: 'N/A'
-                    );
-                })->toArray();
-
-                if (!empty($lines)) {
-                    array_unshift($messages, [
-                        'role'    => 'system',
-                        'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines),
-                    ]);
-                    $this->injectApprovedBookingTable($messages, $allRequests);
-                    $approvedBookingContextInjected = true;
-                } else {
-                    array_unshift($messages, [
-                        'role'    => 'system',
-                        'content' => "There are currently NO pending or approved facility bookings in the system. All facilities are available unless specified otherwise.",
-                    ]);
-                }
+                // Keep request data for deterministic backend checks and logging only.
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch requests for chat: ' . $e->getMessage());
             }
 
             try {
                 $allFacilities = Facility::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'building', 'capacity']);
-
-                $facilitiesToDisplay = $allFacilities;
-                $filterApplied       = false;
-
-                if ($participantCount && is_numeric($participantCount) && $participantCount > 0) {
-                    $participantCount    = (int) $participantCount;
-                    $facilitiesToDisplay = $this->filterFacilitiesByCapacity($allFacilities, $participantCount);
-                    $filterApplied       = true;
-                }
-
-                $facilities = $facilitiesToDisplay->map(function ($f) {
+                $facilities = $allFacilities->map(function ($f) {
                     return "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})";
                 })->toArray();
-                $facilityCount = count($facilities);
 
                 if (!empty($facilities)) {
                     array_unshift($messages, [
                         'role'    => 'system',
-                        'content' => "Available Facilities" . ($filterApplied ? " (filtered for {$participantCount} participants)" : "") . ":\n- " . implode("\n- ", $facilities),
-                    ]);
-                    if ($filterApplied) {
-                        array_unshift($messages, [
-                            'role'    => 'system',
-                            'content' => "STRICT FACILITY RECOMMENDATION RULE:\nThe 'Available Facilities (filtered for {$participantCount} participants)' list already contains the COMPLETE and EXACT set of valid facilities for this participant count. There are exactly {$facilityCount} valid facilities in that filtered list.\n\nWhen the user asks for facility recommendations for {$participantCount} participants, you MUST:\n- Recommend ONLY facilities from that filtered list\n- Recommend ALL {$facilityCount} facilities from that filtered list\n- Do NOT mention any facility outside that filtered list\n- Do NOT omit any facility from that filtered list\n- Do NOT recompute percentages, ranges, or suitability yourself\n- Do NOT provide sample recommendations, examples, or a partial shortlist\n- If the user asks 'any other rooms?', answer no if all {$facilityCount} facilities were already shown\n\nRequired response behavior:\n- If {$facilityCount} is greater than 0, list all {$facilityCount} facilities using the exact IDs, names, buildings, and capacities from the filtered list\n- If {$facilityCount} is 0, say that no facilities match the {$participantCount}-participant requirement\n- After listing facilities, ask whether the user wants to check availability or proceed with booking\n\nDo not mention Main Auditorium, Assembly Hall, or any other facility unless it appears in the filtered list.",
-                        ]);
-                    }
-                    // Add a reminder to the AI to warn about already approved bookings for selected facilities
-                    array_unshift($messages, [
-                        'role'    => 'system',
-                        'content' => "CRITICAL: When the user wants to book a facility, you MUST check the APPROVED BOOKINGS TABLE first. If the requested facility, date, and time overlaps with any approved booking, you MUST tell the user it's unavailable and suggest alternatives. Do NOT proceed with creating a request that conflicts with approved bookings.",
-                    ]);
-                } elseif ($filterApplied) {
-                    array_unshift($messages, [
-                        'role'    => 'system',
-                        'content' => "No facilities available with capacity suitable for {$participantCount} participants.",
+                        'content' => "Available Facilities:\n- " . implode("\n- ", $facilities),
                     ]);
                 }
 
@@ -1066,15 +988,7 @@ class ChatController extends Controller
                         'content' => "Available Equipment:\n- " . implode("\n- ", $equipment),
                     ]);
                 }
-
-                if ($allRequests->isNotEmpty()) {
-                    $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
-                    $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
-                    $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
-                }
-
                 if (
-                    $allRequests->isNotEmpty() &&
                     $latestUserMessage &&
                     $this->isAvailabilityIntent($latestUserMessage)
                 ) {
@@ -1103,7 +1017,7 @@ class ChatController extends Controller
                                 $rulesInjected,
                                 $approvedBookingContextInjected,
                                 $deterministicAvailabilityInjected,
-                                $filterApplied
+                                $facilityFilterApplied
                             ),
                             $sessionId,
                             'availability_check',
@@ -1119,50 +1033,14 @@ class ChatController extends Controller
                     }
                 }
 
-                if (
-                    $filterApplied &&
-                    $latestUserMessage &&
-                    $this->isFacilityRecommendationIntent($latestUserMessage)
-                ) {
-                    $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
-                    $this->storeAssistantReply($incomingMessages, $content);
-                    $this->chatbotLogService->logAssistantReply(
-                        $latestUserMessage,
-                        $content,
-                        $this->buildLogContext(
-                            $latestUserMessage,
-                            $participantCount,
-                            $bookingContext,
-                            $allRequests,
-                            $allFacilities,
-                            $equipmentCount,
-                            count($rules),
-                            $rulesInjected,
-                            $approvedBookingContextInjected,
-                            $deterministicAvailabilityInjected,
-                            $filterApplied
-                        ),
-                        $sessionId,
-                        'facility_recommendation',
-                        'facility_recommendation',
-                    );
-
-                    return response()->json([
-                        'message' => [
-                            'role' => 'assistant',
-                            'content' => $content,
-                        ],
-                    ]);
-                }
-
                 array_unshift($messages, [
                     'role'    => 'system',
-                    'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. The valid capacity rule is:\n- Minimum: Facility capacity must be at least 100% of the participant count\n- Maximum: Facility capacity must be at most 200% of the participant count\nFor example, for 40 participants, only facilities with capacity 40-80 are valid. Never describe this as 40%-80% of the participant count. Never recommend facilities outside the filtered results. Always present the filtered results exactly as provided.",
+                    'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission.",
                 ]);
 
                 array_unshift($messages, [
                     'role' => 'system',
-                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT REQUIREMENT:\nBefore asking for confirmation, you MUST check if files have been uploaded:\n- If NO files have been uploaded: STOP and ask the user to upload supporting documents. Say: \"Please upload the necessary supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each) before I can proceed with the request.\"\n- If files HAVE been uploaded: Proceed with the standard JSON confirmation request below.\n\nAfter collecting all required information and files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
+                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
                 ]);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
@@ -1172,6 +1050,7 @@ class ChatController extends Controller
                 $limitRules = max(1, min(200, (int) $request->input('rules_limit', 50)));
                 $rules = RuleModel::orderBy('id', 'asc')->limit($limitRules)->get(['id', 'rule'])
                     ->map(fn($r) => trim($r->rule))->filter()->toArray();
+                $rules = $this->applyBookingPolicyToRules($rules);
 
                 $rulesListText = !empty($rules) ? implode("\n- ", $rules) : '';
                 $rulesSummary  = "Please be aware of the following facility booking guidelines. If a request is directly relevant to these guidelines and would clearly violate one, politely explain the issue and guide toward a valid solution. If a guideline is vague, unrelated to the booking process, or would unnecessarily block a valid facility reservation, use your judgment to allow the request.";
@@ -1226,7 +1105,7 @@ class ChatController extends Controller
                     $validatorMessages = [
                         [
                             'role'    => 'system',
-                            'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules. Important distinctions:\n\n- VIOLATIONS (hard constraints): Explicit prohibitions like 'do not mention X', 'never do Y', 'forbidden topic', 'cannot discuss Z'\n- NOT VIOLATIONS (soft guidelines): Style preferences like 'be brief', 'be concise', 'use simple language', 'be friendly'\n\nOnly flag something as a violation if it DIRECTLY contradicts a strict prohibition. Return ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). Example: {\"violations\": [0,2]} or {\"violations\": []}. No extra text.",
+                            'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules. Important distinctions:\n\n- VIOLATIONS (hard constraints): Explicit prohibitions like 'do not mention X', 'never do Y', 'forbidden topic', 'cannot discuss Z'\n- NOT VIOLATIONS (soft guidelines): Style preferences like 'be brief', 'be concise', 'use simple language', 'be friendly'\n\nPolicy override for this system:\n- Missing request description/additional information is NOT a violation. Description is optional.\n\nOnly flag something as a violation if it DIRECTLY contradicts a strict prohibition. Return ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). Example: {\"violations\": [0,2]} or {\"violations\": []}. No extra text.",
                         ],
                         [
                             'role'    => 'user',
@@ -1283,7 +1162,7 @@ class ChatController extends Controller
                 $rulesInjected,
                 $approvedBookingContextInjected,
                 $deterministicAvailabilityInjected,
-                $filterApplied
+                $facilityFilterApplied
             );
             $payload = $this->extractStructuredPayload($assistantMessage);
 
@@ -1375,59 +1254,17 @@ class ChatController extends Controller
                 ->whereIn('status', ['Pending', 'Approved'])
                 ->latest()->limit(30)->get();
 
-            $lines = $allRequests->map(function ($r) {
-                $facilities    = $r->requestFacilities->map(function ($rf) use ($r) {
-                    $facilityName = $r->facilities->firstWhere('id', $rf->facility_id)?->name ?? 'Unknown';
-                    return sprintf('%s on %s (%s - %s)', $facilityName, $rf->date_requested, $rf->time_start, $rf->time_end);
-                })->implode('; ');
-                $priorityLabel = $r->priority_level->label();
-                $holdInfo      = $r->on_hold ? ' [ON HOLD]' : '';
-                return sprintf('Request #%s "%s" — Status: %s%s — Priority: %s — By: %s — Facilities: %s',
-                    $r->id, $r->title, $r->status->value, $holdInfo, $priorityLabel, $r->user?->name ?? 'Unknown', $facilities ?: 'N/A'
-                );
-            })->toArray();
-
-            if (!empty($lines)) {
-                array_unshift($messages, ['role' => 'system', 'content' => "CURRENT FACILITY REQUESTS (pending & approved):\n- " . implode("\n- ", $lines)]);
-                $this->injectApprovedBookingTable($messages, $allRequests);
-                $approvedBookingContextInjected = true;
-            } else {
-                array_unshift($messages, ['role' => 'system', 'content' => "There are currently NO pending or approved facility bookings in the system. All facilities are available unless specified otherwise."]);
-            }
+            // Keep request data for deterministic backend checks and logging only.
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch requests: ' . $e->getMessage());
         }
 
         try {
             $allFacilities       = Facility::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'building', 'capacity']);
-            $facilitiesToDisplay = $allFacilities;
-            $filterApplied       = false;
-
-            if ($participantCount && is_numeric($participantCount) && $participantCount > 0) {
-                $participantCount    = (int) $participantCount;
-                $facilitiesToDisplay = $this->filterFacilitiesByCapacity($allFacilities, $participantCount);
-                $filterApplied       = true;
-            }
-            $facilityFilterApplied = $filterApplied;
-
-            $facilities = $facilitiesToDisplay->map(fn($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
-            $facilityCount = count($facilities);
+            $facilities = $allFacilities->map(fn($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
 
             if (!empty($facilities)) {
-                array_unshift($messages, ['role' => 'system', 'content' => "Available Facilities" . ($filterApplied ? " (filtered for {$participantCount} participants)" : "") . ":\n- " . implode("\n- ", $facilities)]);
-                if ($filterApplied) {
-                    array_unshift($messages, [
-                        'role'    => 'system',
-                        'content' => "STRICT FACILITY RECOMMENDATION RULE:\nThe 'Available Facilities (filtered for {$participantCount} participants)' list already contains the COMPLETE and EXACT set of valid facilities for this participant count. There are exactly {$facilityCount} valid facilities in that filtered list.\n\nWhen the user asks for facility recommendations for {$participantCount} participants, you MUST:\n- Recommend ONLY facilities from that filtered list\n- Recommend ALL {$facilityCount} facilities from that filtered list\n- Do NOT mention any facility outside that filtered list\n- Do NOT omit any facility from that filtered list\n- Do NOT recompute percentages, ranges, or suitability yourself\n- Do NOT provide sample recommendations, examples, or a partial shortlist\n- If the user asks 'any other rooms?', answer no if all {$facilityCount} facilities were already shown\n\nRequired response behavior:\n- If {$facilityCount} is greater than 0, list all {$facilityCount} facilities using the exact IDs, names, buildings, and capacities from the filtered list\n- If {$facilityCount} is 0, say that no facilities match the {$participantCount}-participant requirement\n- After listing facilities, ask whether the user wants to check availability or proceed with booking\n\nDo not mention Main Auditorium, Assembly Hall, or any other facility unless it appears in the filtered list.",
-                    ]);
-                }
-                // Add a reminder to the AI to warn about already approved bookings for selected facilities
-                array_unshift($messages, [
-                    'role'    => 'system',
-                    'content' => "CRITICAL: When the user wants to book a facility, you MUST check the APPROVED BOOKINGS TABLE first. If the requested facility, date, and time overlaps with any approved booking, you MUST tell the user it's unavailable and suggest alternatives. Do NOT proceed with creating a request that conflicts with approved bookings.",
-                ]);
-            } elseif ($filterApplied) {
-                array_unshift($messages, ['role' => 'system', 'content' => "No facilities available with capacity suitable for {$participantCount} participants."]);
+                array_unshift($messages, ['role' => 'system', 'content' => "Available Facilities:\n- " . implode("\n- ", $facilities)]);
             }
 
             $equipmentRows = $this->getEquipmentContextRows(50);
@@ -1437,15 +1274,7 @@ class ChatController extends Controller
             if (!empty($equipment)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
             }
-
-            if ($allRequests->isNotEmpty()) {
-                $this->injectDeterministicAvailabilityContext($messages, $latestUserMessage, $allFacilities, $allRequests);
-                $selectedContext = $this->extractSelectedContext($latestUserMessage, $allFacilities);
-                $deterministicAvailabilityInjected = !empty($selectedContext['selected_facility']) && !empty($selectedContext['selected_date']);
-            }
-
             if (
-                $allRequests->isNotEmpty() &&
                 $latestUserMessage &&
                 $this->isAvailabilityIntent($latestUserMessage)
             ) {
@@ -1475,7 +1304,7 @@ class ChatController extends Controller
                             $rulesInjected,
                             $approvedBookingContextInjected,
                             $deterministicAvailabilityInjected,
-                            $filterApplied
+                            $facilityFilterApplied
                         ),
                         $sessionId,
                         'availability_check',
@@ -1498,55 +1327,11 @@ class ChatController extends Controller
                 }
             }
 
-            if (
-                $filterApplied &&
-                $latestUserMessage &&
-                $this->isFacilityRecommendationIntent($latestUserMessage)
-            ) {
-                $content = $this->buildFacilityRecommendationResponse($facilitiesToDisplay, $participantCount);
-                $incomingMessages = $request->input('messages', []);
-                $this->storeAssistantReply($incomingMessages, $content);
-                $this->chatbotLogService->logAssistantReply(
-                    $latestUserMessage,
-                    $content,
-                    $this->buildLogContext(
-                        $latestUserMessage,
-                        $participantCount,
-                        $bookingContext,
-                        $allRequests,
-                        $allFacilities,
-                        $equipmentCount,
-                        0,
-                        $rulesInjected,
-                        $approvedBookingContextInjected,
-                        $deterministicAvailabilityInjected,
-                        $filterApplied
-                    ),
-                    $sessionId,
-                    'facility_recommendation',
-                    'facility_recommendation',
-                );
-
-                return response()->stream(function () use ($content) {
-                    echo "data: " . json_encode(['token' => $content]) . "\n\n";
-                    ob_flush();
-                    flush();
-                    echo "data: " . json_encode(['done' => true]) . "\n\n";
-                    ob_flush();
-                    flush();
-                }, 200, [
-                    'Content-Type'      => 'text/event-stream',
-                    'Cache-Control'     => 'no-cache',
-                    'X-Accel-Buffering' => 'no',
-                    'Connection'        => 'keep-alive',
-                ]);
-            }
-
-            array_unshift($messages, ['role' => 'system', 'content' => "FACILITY CAPACITY MATCHING:\nWhen the user mentions the number of participants or people they plan to host, ask for this information early if not provided. After learning the participant count, the system will automatically filter and show ONLY suitable facilities. The valid capacity rule is:\n- Minimum: Facility capacity must be at least 100% of the participant count\n- Maximum: Facility capacity must be at most 200% of the participant count\nFor example, for 40 participants, only facilities with capacity 40-80 are valid. Never describe this as 40%-80% of the participant count. Never recommend facilities outside the filtered results. Always present the filtered results exactly as provided."]);
+            array_unshift($messages, ['role' => 'system', 'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission."]);
             // Updated flow: ask for event type and map to priority level, no separate priority reason
             // Updated order: Description moved after Event Type, and Additional Message retained at end.
                 // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
-                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Facility ID (from the available facilities list above)\n3. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n4. Date (YYYY-MM-DD format)\n5. Start Time (HH:MM format in 24-hour)\n6. End Time (HH:MM format in 24-hour)\n7. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n8. Description (detailed explanation)\n9. Additional Message (any extra information the user wants to provide)\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
+                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch facilities/equipment: ' . $e->getMessage());
         }
@@ -1555,6 +1340,7 @@ class ChatController extends Controller
         try {
             $rules = RuleModel::orderBy('id', 'asc')->limit(50)->get(['id', 'rule'])
                 ->map(fn($r) => trim($r->rule))->filter()->toArray();
+            $rules = $this->applyBookingPolicyToRules($rules);
 
             $rulesSummary = "You MUST follow the following rules exactly. If a user request would violate any rule, you MUST refuse and reply with a short explanation stating which rule would be violated. Do NOT provide prohibited content.";
             $rulesSummary .= !empty($rules) ? "\nRules:\n- " . implode("\n- ", $rules) : "\n(There are currently no configured rules.)";
@@ -1686,7 +1472,7 @@ class ChatController extends Controller
                 if (!empty($rules)) {
                     try {
                         $validatorMessages = [
-                            ['role' => 'system', 'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules.\n\n- VIOLATIONS: Explicit prohibitions like 'do not mention X', 'never do Y'\n- NOT VIOLATIONS: Style preferences like 'be brief', 'be friendly'\n\nReturn ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). No extra text."],
+                            ['role' => 'system', 'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules.\n\n- VIOLATIONS: Explicit prohibitions like 'do not mention X', 'never do Y'\n- NOT VIOLATIONS: Style preferences like 'be brief', 'be friendly'\n\nPolicy override for this system:\n- Missing request description/additional information is NOT a violation. Description is optional.\n\nReturn ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). No extra text."],
                             ['role' => 'user',   'content' => "Rules:\n- " . implode("\n- ", $rules) . "\n\nAssistant Response:\n" . $fullContent],
                         ];
 
@@ -2014,11 +1800,13 @@ class ChatController extends Controller
                 'description'                                     => 'nullable|string',
                 'priority_level'                                  => 'nullable|integer|in:0,1,2,3',
                 'priority_reason'                                 => 'nullable|string|max:512',
+                'participant_count'                               => 'nullable|integer|min:1',
                 'facility_bookings'                               => 'required|array|min:1',
                 'facility_bookings.*.facility_id'                 => 'required|exists:facilities,id',
                 'facility_bookings.*.date'                        => 'required|date',
                 'facility_bookings.*.time_start'                  => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
                 'facility_bookings.*.time_end'                    => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
+                'facility_bookings.*.expected_capacity'           => 'nullable|integer|min:1',
                 'facility_bookings.*.equipment'                   => 'sometimes|nullable|array',
                 'facility_bookings.*.equipment.*.equipment_id'    => 'required|exists:equipments,id',
                 'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
@@ -2029,6 +1817,14 @@ class ChatController extends Controller
             $equipmentSelectionErrors = $this->validateFacilityEquipmentSelections($validated['facility_bookings']);
             if (!empty($equipmentSelectionErrors)) {
                 throw ValidationException::withMessages($equipmentSelectionErrors);
+            }
+
+            $capacityErrors = $this->validateFacilityParticipantCapacity(
+                $validated['facility_bookings'],
+                isset($validated['participant_count']) ? (int) $validated['participant_count'] : null
+            );
+            if (!empty($capacityErrors)) {
+                throw ValidationException::withMessages($capacityErrors);
             }
 
             $priorityLevel  = (int) ($validated['priority_level'] ?? 0);
@@ -2050,6 +1846,9 @@ class ChatController extends Controller
                     'date_requested' => $dateOnly,
                     'time_start'     => $booking['time_start'],
                     'time_end'       => $booking['time_end'],
+                    'expected_capacity' => isset($booking['expected_capacity'])
+                        ? (int) $booking['expected_capacity']
+                        : (isset($validated['participant_count']) ? (int) $validated['participant_count'] : null),
                 ]);
 
                 if (!empty($booking['equipment'])) {
@@ -2133,7 +1932,7 @@ class ChatController extends Controller
                         $heldCount++;
                         \Log::info("AI: Request #{$conflictingRequest->id} put on hold by high-priority request #{$facilityRequest->id}");
                     }
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     \Log::warning('AI createRequestApi: priority override failed: ' . $e->getMessage());
                 }
             }
@@ -2206,3 +2005,4 @@ class ChatController extends Controller
         }
     }
 }
+

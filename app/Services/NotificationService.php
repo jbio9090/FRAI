@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
 use App\Notifications\Reschedule;
+use App\RequestStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -66,6 +67,23 @@ class NotificationService
             ));
         } catch (\Exception $e) {
             Log::error('Push notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+        }
+    }
+
+    public function notifyOnHold(Request $targetRequest, Request $heldByRequest, string $reason): void
+    {
+        try {
+            $user = User::findOrFail($targetRequest->user_id);
+
+            // RequestResult already supports ON_HOLD status messaging.
+            $user->notify(new RequestResult(
+                $targetRequest->title,
+                RequestStatus::ON_HOLD,
+                route("requests.detail", ["request_id" => $targetRequest->id]),
+            ));
+        } catch (\Exception $e) {
+            Log::error('On-hold notification failed: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }

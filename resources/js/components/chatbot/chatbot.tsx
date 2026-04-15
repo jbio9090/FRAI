@@ -152,6 +152,9 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
         const timeEndRaw = booking.time_end ?? booking.end_time;
         const timeStart = typeof timeStartRaw === 'string' ? timeStartRaw : '';
         const timeEnd = typeof timeEndRaw === 'string' ? timeEndRaw : '';
+        const expectedCapacity = toPositiveInt(
+            booking.expected_capacity ?? (booking as { participant_count?: unknown }).participant_count,
+        );
         const normalizedEquipment = normalizeEquipmentSelections(booking.equipment);
 
         if (facilityId) {
@@ -161,6 +164,10 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
                 time_start: timeStart,
                 time_end: timeEnd,
             };
+
+            if (expectedCapacity) {
+                normalizedBooking.expected_capacity = expectedCapacity;
+            }
 
             if (normalizedEquipment.length > 0) {
                 normalizedBooking.equipment = normalizedEquipment;
@@ -188,8 +195,11 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
         return payload;
     }
 
+    const payloadParticipantCount = toPositiveInt(rawPayload.participant_count);
+
     return {
         ...payload,
+        ...(payloadParticipantCount ? { participant_count: payloadParticipantCount } : {}),
         facility_bookings: normalizedBookings,
     };
 };
@@ -236,7 +246,7 @@ export default function Chatbot() {
     const [showEquipmentSelection, setShowEquipmentSelection] = useState<boolean>(false);
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
-    const { extractAndSet, getCurrentCount } = useParticipantCount();
+    const { participantCount: trackedParticipantCount, setParticipantCount, extractAndSet, getCurrentCount } = useParticipantCount();
     const bookingFlow = useBookingFlow(facilities, equipmentOptions);
     const { isLoading, sendMessage, submitRequest } = useChatAPI();
     const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
@@ -264,6 +274,51 @@ export default function Chatbot() {
         };
     };
 
+    const resolveParticipantCountForSubmission = (): number | null => {
+        const guidedCount = toPositiveInt(guidedFlow.participantCount);
+        if (guidedCount) {
+            return guidedCount;
+        }
+
+        const trackedCount = toPositiveInt(trackedParticipantCount);
+        if (trackedCount) {
+            return trackedCount;
+        }
+
+        const inferredCount = toPositiveInt(getCurrentCount(getMessagesText()));
+        return inferredCount ?? null;
+    };
+
+    const withParticipantCountMetadata = (payload: CreateRequestPayload): CreateRequestPayload => {
+        const payloadParticipantCount = toPositiveInt((payload as unknown as { participant_count?: unknown }).participant_count);
+        const resolvedParticipantCount = payloadParticipantCount ?? resolveParticipantCountForSubmission();
+
+        if (!resolvedParticipantCount) {
+            return payload;
+        }
+
+        return {
+            ...payload,
+            participant_count: resolvedParticipantCount,
+            facility_bookings: payload.facility_bookings.map((booking) => {
+                const existingExpectedCapacity = toPositiveInt((booking as unknown as { expected_capacity?: unknown }).expected_capacity);
+
+                if (existingExpectedCapacity) {
+                    return booking;
+                }
+
+                return {
+                    ...booking,
+                    expected_capacity: resolvedParticipantCount,
+                };
+            }),
+        };
+    };
+
+    const buildSubmissionPayload = (payload: CreateRequestPayload): CreateRequestPayload => {
+        return withAttachedFiles(withParticipantCountMetadata(normalizePayloadForSubmission(payload)));
+    };
+
     const getPayloadValidationError = (payload: CreateRequestPayload): string | null => {
         const bookingsWithFacilityId = payload.facility_bookings.filter((booking) => Number.isFinite(booking.facility_id) && booking.facility_id > 0);
 
@@ -288,16 +343,25 @@ export default function Chatbot() {
         setGuidedFlow({ ...INITIAL_GUIDED_FLOW });
     };
 
-    const getGuidedBookingFacilities = (participantCount: number): Facility[] => {
-        return facilities
-            .filter((facility) => {
-                if (typeof facility.capacity !== 'number') {
-                    return true;
-                }
+    const isFacilityRecommendedForParticipants = (facility: Facility, participantCount: number): boolean => {
+        if (participantCount <= 0 || typeof facility.capacity !== 'number') {
+            return false;
+        }
 
-                return facility.capacity >= participantCount && facility.capacity <= participantCount * 2;
-            })
-            .sort((a, b) => a.id - b.id);
+        return facility.capacity >= participantCount && facility.capacity <= participantCount * 2;
+    };
+
+    const getGuidedBookingFacilities = (participantCount: number): Facility[] => {
+        return [...facilities].sort((a, b) => {
+            const aRecommended = isFacilityRecommendedForParticipants(a, participantCount);
+            const bRecommended = isFacilityRecommendedForParticipants(b, participantCount);
+
+            if (aRecommended === bRecommended) {
+                return a.id - b.id;
+            }
+
+            return aRecommended ? -1 : 1;
+        });
     };
 
     const getGuidedEndTimeOptions = (startTime: string): string[] => {
@@ -379,23 +443,11 @@ export default function Chatbot() {
     };
 
     const handleGuidedParticipantSelection = (participantCount: number) => {
+        setParticipantCount(participantCount);
         addMessage({ role: 'user', content: `Participants: ${participantCount}` });
-        const matchedFacilities = getGuidedBookingFacilities(participantCount);
-
-        if (matchedFacilities.length === 0) {
-            addMessage({
-                role: 'assistant',
-                content: `No facilities match ${participantCount} participants with the required capacity range (${participantCount}-${participantCount * 2}). Please choose another participant count.`,
-            });
-            setGuidedFlow((prev) => ({
-                ...prev,
-                mode: 'booking',
-                step: 'participants',
-                participantCount,
-                facilityId: null,
-            }));
-            return;
-        }
+        const recommendedCount = facilities.filter((facility) =>
+            isFacilityRecommendedForParticipants(facility, participantCount),
+        ).length;
 
         setGuidedFlow((prev) => ({
             ...prev,
@@ -406,7 +458,10 @@ export default function Chatbot() {
         }));
         addMessage({
             role: 'assistant',
-            content: `Found ${matchedFacilities.length} matching facility options. Please choose one facility ID below.`,
+            content:
+                recommendedCount > 0
+                    ? `I prioritized ${recommendedCount} recommended room option(s) for ${participantCount} participants. You can still choose any facility; final capacity validation is handled by the backend during submission.`
+                    : `No exact capacity-range recommendation was found for ${participantCount} participants. You can still choose any facility, and backend validation will make the final decision on submission.`,
         });
     };
 
@@ -596,7 +651,7 @@ export default function Chatbot() {
         });
     };
 
-    const handleGuidedContinueBooking = async () => {
+    const handleGuidedContinueBooking = async (equipmentSelectionForGuided?: SelectedEquipmentItem[]) => {
         const facility = facilities.find((item) => item.id === guidedFlow.facilityId);
         if (!facility || !guidedFlow.participantCount || !guidedFlow.date || !guidedFlow.timeStart || !guidedFlow.timeEnd) {
             addMessage({
@@ -606,12 +661,22 @@ export default function Chatbot() {
             return;
         }
 
+        const serializedEquipmentSelection = (equipmentSelectionForGuided ?? [])
+            .filter((item) => item.facility_id === facility.id)
+            .map((item) => ({
+                equipment_id: item.equipment_id,
+                facility_id: item.facility_id,
+                quantity_needed: item.quantity_needed,
+            }));
+
         const equipmentInstruction =
-            guidedFlow.equipmentDecision === 'selected'
-                ? 'Use the exact equipment IDs and quantities already selected in previous user messages.'
-                : guidedFlow.equipmentDecision === 'none'
-                  ? 'No equipment is needed for this request.'
-                  : 'Ask once if equipment is needed. If not needed, proceed without equipment.';
+            serializedEquipmentSelection.length > 0
+                ? `Use this exact guided equipment selection: ${JSON.stringify(serializedEquipmentSelection)}.`
+                : guidedFlow.equipmentDecision === 'selected'
+                  ? 'Use the exact equipment IDs and quantities already selected in previous user messages.'
+                  : guidedFlow.equipmentDecision === 'none'
+                    ? 'No equipment is needed for this request.'
+                    : 'Ask once if equipment is needed. If not needed, proceed without equipment.';
 
         const userMessage: Message = {
             role: 'user',
@@ -648,6 +713,14 @@ export default function Chatbot() {
         setCustomStartTime('');
         setCustomEndTime('');
     }, [guidedFlow.mode, guidedFlow.step]);
+
+    useEffect(() => {
+        if (guidedFlow.mode !== 'booking' || guidedFlow.step !== 'equipment' || !guidedFlow.facilityId) {
+            return;
+        }
+
+        setSelectedEquipment((prev) => prev.filter((item) => item.facility_id === guidedFlow.facilityId));
+    }, [guidedFlow.mode, guidedFlow.step, guidedFlow.facilityId]);
 
     // Fetch facilities and equipment for the booking flow
     useEffect(() => {
@@ -723,7 +796,7 @@ export default function Chatbot() {
 
         if (isConfirming && pendingPayload) {
             try {
-                const payload = withAttachedFiles(normalizePayloadForSubmission(pendingPayload));
+                const payload = buildSubmissionPayload(pendingPayload);
                 const validationError = getPayloadValidationError(payload);
 
                 if (validationError) {
@@ -830,7 +903,7 @@ export default function Chatbot() {
         if (!pendingPayload) return;
 
         try {
-            const payload = withAttachedFiles(normalizePayloadForSubmission(pendingPayload));
+            const payload = buildSubmissionPayload(pendingPayload);
             const validationError = getPayloadValidationError(payload);
 
             if (validationError) {
@@ -1036,8 +1109,12 @@ export default function Chatbot() {
     };
 
     const submitEquipmentSelection = async (selection: SelectedEquipmentItem[] = selectedEquipment) => {
-        const message = buildEquipmentSelectionMessage(selection);
-        const serializedSelection = selection.map((equipment) => ({
+        const guidedFacilityId = guidedFlow.mode === 'booking' && guidedFlow.step === 'equipment' ? guidedFlow.facilityId : null;
+        const normalizedSelection =
+            guidedFacilityId && guidedFacilityId > 0 ? selection.filter((equipment) => equipment.facility_id === guidedFacilityId) : selection;
+
+        const message = buildEquipmentSelectionMessage(normalizedSelection);
+        const serializedSelection = normalizedSelection.map((equipment) => ({
             equipment_id: equipment.equipment_id,
             facility_id: equipment.facility_id,
             quantity_needed: equipment.quantity_needed,
@@ -1058,8 +1135,13 @@ export default function Chatbot() {
         if (guidedFlow.mode === 'booking' && guidedFlow.step === 'equipment') {
             setGuidedFlow((prev) => ({
                 ...prev,
-                equipmentDecision: selection.length > 0 ? 'selected' : 'none',
+                equipmentDecision: normalizedSelection.length > 0 ? 'selected' : 'none',
             }));
+            setSelectedEquipment([]);
+            setShowEquipmentSelection(false);
+            addMessage({ role: 'user', content: message });
+            await handleGuidedContinueBooking(normalizedSelection);
+            return;
         }
 
         setSelectedEquipment([]);
@@ -1269,12 +1351,16 @@ export default function Chatbot() {
                 const participantCount = guidedFlow.participantCount ?? 0;
                 const matchedFacilities = participantCount > 0 ? getGuidedBookingFacilities(participantCount) : facilities;
 
-                const facilityReplies = matchedFacilities.slice(0, 12).map((facility) => ({
-                    id: `guided-booking-facility-${facility.id}`,
-                    label: `ID ${facility.id} ${facility.name}`,
-                    onSelect: () => handleGuidedFacilitySelection(facility.id),
-                    variant: 'outline' as const,
-                }));
+                const facilityReplies = matchedFacilities.slice(0, 12).map((facility) => {
+                    const isRecommended = participantCount > 0 && isFacilityRecommendedForParticipants(facility, participantCount);
+
+                    return {
+                        id: `guided-booking-facility-${facility.id}`,
+                        label: `${isRecommended ? 'Recommended - ' : ''}ID ${facility.id} ${facility.name}${typeof facility.capacity === 'number' ? ` (Capacity: ${facility.capacity})` : ''}`,
+                        onSelect: () => handleGuidedFacilitySelection(facility.id),
+                        variant: 'outline' as const,
+                    };
+                });
 
                 return [
                     ...facilityReplies,
@@ -1507,7 +1593,12 @@ export default function Chatbot() {
                                                 )}
                                             </div>
                                             <div className="flex flex-wrap gap-2">
-                                                <Button size="sm" variant="outline" onClick={() => setShowEquipmentSelection(false)}>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => setShowEquipmentSelection(false)}
+                                                    disabled={isLoading}
+                                                >
                                                     Cancel
                                                 </Button>
                                                 <Button size="sm" variant="outline" onClick={submitNoEquipmentSelection} disabled={isLoading}>
