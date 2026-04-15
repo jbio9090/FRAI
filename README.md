@@ -1,9 +1,3 @@
-No problem. If you’re sticking with the free version of Herd, you’ll just manage your PostgreSQL instance externally (like a standard local install or via Docker). 
-
-Here is the refactored guide focusing on a manual database setup.
-
----
-
 # Local Development Setup Guide
 
 This guide outlines the steps to set up your local development environment for **FRAI** using **Laravel Herd**, a standalone **PostgreSQL** installation (with **pgvector**), and **Ollama**.
@@ -47,6 +41,7 @@ Ollama provides the local LLM and embedding capabilities.
 
 1.  **Install Ollama:** Download from [ollama.com](https://ollama.com).
 2.  **Download LLM:**
+    *or whatever model you want
     ```bash
     ollama pull qwen3:0.6b
     ```
