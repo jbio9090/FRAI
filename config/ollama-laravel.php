@@ -6,6 +6,7 @@ return [
     'model' => env('OLLAMA_MODEL', 'FRAI'),
     'url' => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
     'default_prompt' => env('OLLAMA_DEFAULT_PROMPT', 'Hello, how can I assist you today?'),
+    "embed_model" => env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
 
     /*
     |--------------------------------------------------------------------------
