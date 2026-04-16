@@ -5,6 +5,9 @@ export interface Equipment {
     quantity: number;
     facility_id: number;
     facility?: string | null;
+    total_quantity?: number;
+    reserved_quantity?: number;
+    remaining_quantity?: number;
 }
 
 export interface EquipmentConflict {

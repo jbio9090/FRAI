@@ -29,6 +29,9 @@ export interface CreateRequestPayload {
         equipment?: Array<{
             equipment_id: number;
             quantity_needed: number;
+            facility_id?: number;
+            is_borrowed?: boolean;
+            source_facility_id?: number | null;
         }>;
     }>;
     description?: string;

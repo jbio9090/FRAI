@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Http\File as HttpFile;
 use Illuminate\Support\Carbon;
@@ -272,6 +273,17 @@ class ChatController extends Controller
         return $value;
     }
 
+    private function toMinuteOfDay(string $time): ?int
+    {
+        $normalized = $this->normalizeTimeValue($time);
+        if (!is_string($normalized) || !preg_match('/^\d{2}:\d{2}$/', $normalized)) {
+            return null;
+        }
+
+        [$hour, $minute] = array_map('intval', explode(':', $normalized));
+        return ($hour * 60) + $minute;
+    }
+
     private function extractTimeRangeFromMessage(?string $message): array
     {
         if (!$message) {
@@ -403,11 +415,59 @@ class ChatController extends Controller
         return $equipment?->id ?? $equipmentValue;
     }
 
-    private function validateFacilityEquipmentSelections(array $facilityBookings): array
+    private function resolveBorrowSourceFacilityId(
+        Equipment $equipment,
+        int $selectedFacilityId,
+        string $date,
+        string $timeStart,
+        string $timeEnd,
+        int $quantityNeeded
+    ): ?int {
+        $candidates = $equipment->facilities
+            ->filter(fn($facility) => (int) $facility->id !== $selectedFacilityId)
+            ->map(function ($facility) use ($equipment, $date, $timeStart, $timeEnd) {
+                $slotAvailability = $equipment->slotAvailabilityInFacility(
+                    (int) $facility->id,
+                    $date,
+                    $timeStart,
+                    $timeEnd
+                );
+
+                return [
+                    'id' => (int) $facility->id,
+                    'remaining' => (int) ($slotAvailability['remaining_quantity'] ?? 0),
+                ];
+            })
+            ->filter(fn($candidate) => $candidate['remaining'] > 0)
+            ->values()
+            ->all();
+
+        if (empty($candidates)) {
+            return null;
+        }
+
+        usort($candidates, function ($left, $right) use ($quantityNeeded) {
+            $leftFits = $left['remaining'] >= $quantityNeeded ? 1 : 0;
+            $rightFits = $right['remaining'] >= $quantityNeeded ? 1 : 0;
+            if ($leftFits !== $rightFits) {
+                return $rightFits <=> $leftFits;
+            }
+
+            if ($left['remaining'] !== $right['remaining']) {
+                return $right['remaining'] <=> $left['remaining'];
+            }
+
+            return $left['id'] <=> $right['id'];
+        });
+
+        return (int) $candidates[0]['id'];
+    }
+
+    private function validateFacilityEquipmentSelections(array &$facilityBookings): array
     {
         $errors = [];
 
-        foreach ($facilityBookings as $bookingIndex => $booking) {
+        foreach ($facilityBookings as $bookingIndex => &$booking) {
             $facilityId = (int) ($booking['facility_id'] ?? 0);
             if ($facilityId <= 0 || empty($booking['equipment']) || !is_array($booking['equipment'])) {
                 continue;
@@ -417,7 +477,7 @@ class ChatController extends Controller
             $timeStart = (string) ($this->normalizeTimeValue($booking['time_start'] ?? '') ?? '');
             $timeEnd = (string) ($this->normalizeTimeValue($booking['time_end'] ?? '') ?? '');
 
-            foreach ($booking['equipment'] as $equipmentIndex => $selection) {
+            foreach ($booking['equipment'] as $equipmentIndex => &$selection) {
                 $equipmentId = (int) ($selection['equipment_id'] ?? 0);
                 $quantityNeeded = (int) ($selection['quantity_needed'] ?? 0);
                 if ($equipmentId <= 0 || $quantityNeeded <= 0) {
@@ -429,21 +489,109 @@ class ChatController extends Controller
                     continue;
                 }
 
-                if (!$equipment->facilities->contains('id', $facilityId)) {
+                $sourceFacilityId = isset($selection['source_facility_id']) && is_numeric($selection['source_facility_id'])
+                    ? (int) $selection['source_facility_id']
+                    : (isset($selection['facility_id']) && is_numeric($selection['facility_id'])
+                        ? (int) $selection['facility_id']
+                        : 0);
+
+                $isAssignedToSelectedFacility = $equipment->facilities->contains('id', $facilityId);
+                if ((!$sourceFacilityId || $sourceFacilityId === $facilityId) && !$isAssignedToSelectedFacility) {
+                    $resolvedSourceFacilityId = $this->resolveBorrowSourceFacilityId(
+                        $equipment,
+                        $facilityId,
+                        $date,
+                        $timeStart,
+                        $timeEnd,
+                        $quantityNeeded
+                    );
+
+                    if ($resolvedSourceFacilityId) {
+                        $sourceFacilityId = $resolvedSourceFacilityId;
+                        $selection['source_facility_id'] = $resolvedSourceFacilityId;
+                        $selection['is_borrowed'] = true;
+                    }
+                }
+
+                if ($sourceFacilityId <= 0) {
+                    $sourceFacilityId = $facilityId;
+                }
+
+                $isBorrowed = $sourceFacilityId > 0 && $sourceFacilityId !== $facilityId;
+                $validationFacilityId = $isBorrowed ? $sourceFacilityId : $facilityId;
+
+                if (!$equipment->facilities->contains('id', $validationFacilityId)) {
                     $errors["facility_bookings.{$bookingIndex}.equipment.{$equipmentIndex}.equipment_id"][] =
-                        "{$equipment->name} is not assigned to the selected facility.";
+                        $isBorrowed
+                            ? "{$equipment->name} is not assigned to the source facility (ID {$validationFacilityId}) for borrowing."
+                            : "{$equipment->name} is not assigned to the selected facility.";
                     continue;
                 }
 
-                $available = $equipment->quantityAvailableInFacility($facilityId, $date, $timeStart, $timeEnd);
+                $slotAvailability = $equipment->slotAvailabilityInFacility($validationFacilityId, $date, $timeStart, $timeEnd);
+                $available = (int) ($slotAvailability['remaining_quantity'] ?? 0);
                 if ($quantityNeeded > $available) {
                     $errors["facility_bookings.{$bookingIndex}.equipment.{$equipmentIndex}.quantity_needed"][] =
-                        "{$equipment->name} only has {$available} available unit(s) in this facility for the selected time slot.";
+                        $isBorrowed
+                            ? "{$equipment->name}: requested {$quantityNeeded} borrowed unit(s), but only {$available} remaining unit(s) are available from facility ID {$validationFacilityId} for the selected time slot."
+                            : "{$equipment->name}: requested {$quantityNeeded} unit(s), but only {$available} remaining unit(s) are available in this facility for the selected time slot.";
                 }
             }
+
+            unset($selection);
         }
 
+        unset($booking);
+
         return $errors;
+    }
+
+    private function lockFacilityEquipmentRows(array $facilityBookings): void
+    {
+        $pairs = collect($facilityBookings)
+            ->flatMap(function ($booking) {
+                $facilityId = isset($booking['facility_id']) ? (int) $booking['facility_id'] : 0;
+                $equipmentRows = $booking['equipment'] ?? [];
+
+                if ($facilityId <= 0 || !is_array($equipmentRows)) {
+                    return [];
+                }
+
+                return collect($equipmentRows)
+                    ->map(function ($selection) use ($facilityId) {
+                        $equipmentId = isset($selection['equipment_id']) ? (int) $selection['equipment_id'] : 0;
+                        if ($equipmentId <= 0) {
+                            return null;
+                        }
+
+                        $sourceFacilityId = isset($selection['source_facility_id']) && is_numeric($selection['source_facility_id'])
+                            ? (int) $selection['source_facility_id']
+                            : (isset($selection['facility_id']) && is_numeric($selection['facility_id'])
+                                ? (int) $selection['facility_id']
+                                : $facilityId);
+                        $lockFacilityId = ($sourceFacilityId > 0 && $sourceFacilityId !== $facilityId)
+                            ? $sourceFacilityId
+                            : $facilityId;
+
+                        return [
+                            'facility_id' => $lockFacilityId,
+                            'equipment_id' => $equipmentId,
+                        ];
+                    })
+                    ->filter()
+                    ->values()
+                    ->all();
+            })
+            ->unique(fn($pair) => "{$pair['facility_id']}:{$pair['equipment_id']}")
+            ->values();
+
+        foreach ($pairs as $pair) {
+            DB::table('facility_equipment')
+                ->where('facility_id', $pair['facility_id'])
+                ->where('equipment_id', $pair['equipment_id'])
+                ->lockForUpdate()
+                ->first();
+        }
     }
 
     private function normalizeEquipmentSelections(array $equipmentSelections, ?int $facilityId = null): array
@@ -467,12 +615,35 @@ class ChatController extends Controller
                 $quantityNeeded = isset($equipmentValue['quantity_needed'])
                     ? (int) $equipmentValue['quantity_needed']
                     : 0;
+                $sourceFacilityId = null;
+                if (isset($equipmentValue['source_facility_id'])) {
+                    $resolvedSourceFacilityId = $this->resolveFacilityIdFromValue($equipmentValue['source_facility_id']);
+                    $sourceFacilityId = is_numeric($resolvedSourceFacilityId) ? (int) $resolvedSourceFacilityId : null;
+                } elseif (isset($equipmentValue['facility_id'])) {
+                    $resolvedSelectionFacilityId = $this->resolveFacilityIdFromValue($equipmentValue['facility_id']);
+                    $sourceFacilityId = is_numeric($resolvedSelectionFacilityId) ? (int) $resolvedSelectionFacilityId : null;
+                }
+
+                $isBorrowed = false;
+                if ($sourceFacilityId && (!$facilityId || $sourceFacilityId !== $facilityId)) {
+                    $isBorrowed = true;
+                } elseif (array_key_exists('is_borrowed', $equipmentValue)) {
+                    $parsedBorrowed = filter_var($equipmentValue['is_borrowed'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                    $isBorrowed = $parsedBorrowed === true;
+                }
 
                 if (is_numeric($resolvedEquipmentId) && $quantityNeeded > 0) {
-                    $normalized[] = [
+                    $normalizedItem = [
                         'equipment_id' => (int) $resolvedEquipmentId,
                         'quantity_needed' => $quantityNeeded,
                     ];
+
+                    if ($isBorrowed && $sourceFacilityId && (!$facilityId || $sourceFacilityId !== $facilityId)) {
+                        $normalizedItem['is_borrowed'] = true;
+                        $normalizedItem['source_facility_id'] = $sourceFacilityId;
+                    }
+
+                    $normalized[] = $normalizedItem;
                 }
 
                 continue;
@@ -504,6 +675,7 @@ class ChatController extends Controller
     private function mergeNormalizedEquipment(array $base, array $extra): array
     {
         $totals = [];
+        $meta = [];
 
         foreach (array_merge($base, $extra) as $selection) {
             if (!is_array($selection)) {
@@ -512,20 +684,45 @@ class ChatController extends Controller
 
             $equipmentId = isset($selection['equipment_id']) ? (int) $selection['equipment_id'] : 0;
             $quantityNeeded = isset($selection['quantity_needed']) ? (int) $selection['quantity_needed'] : 0;
+            $sourceFacilityId = isset($selection['source_facility_id']) ? (int) $selection['source_facility_id'] : 0;
+            $isBorrowed = isset($selection['is_borrowed'])
+                ? (bool) $selection['is_borrowed']
+                : ($sourceFacilityId > 0);
 
             if ($equipmentId <= 0 || $quantityNeeded <= 0) {
                 continue;
             }
 
-            $totals[$equipmentId] = ($totals[$equipmentId] ?? 0) + $quantityNeeded;
+            if ($isBorrowed && $sourceFacilityId <= 0) {
+                continue;
+            }
+
+            $bucketKey = $equipmentId . ':' . (($isBorrowed && $sourceFacilityId > 0) ? $sourceFacilityId : 0);
+            $totals[$bucketKey] = ($totals[$bucketKey] ?? 0) + $quantityNeeded;
+            $meta[$bucketKey] = [
+                'equipment_id' => $equipmentId,
+                'is_borrowed' => $isBorrowed && $sourceFacilityId > 0,
+                'source_facility_id' => $sourceFacilityId > 0 ? $sourceFacilityId : null,
+            ];
         }
 
         $merged = [];
-        foreach ($totals as $equipmentId => $quantityNeeded) {
-            $merged[] = [
-                'equipment_id' => (int) $equipmentId,
+        foreach ($totals as $bucketKey => $quantityNeeded) {
+            $equipmentId = (int) ($meta[$bucketKey]['equipment_id'] ?? 0);
+            $isBorrowed = (bool) ($meta[$bucketKey]['is_borrowed'] ?? false);
+            $sourceFacilityId = $meta[$bucketKey]['source_facility_id'] ?? null;
+
+            $mergedItem = [
+                'equipment_id' => $equipmentId,
                 'quantity_needed' => (int) $quantityNeeded,
             ];
+
+            if ($isBorrowed && is_numeric($sourceFacilityId)) {
+                $mergedItem['is_borrowed'] = true;
+                $mergedItem['source_facility_id'] = (int) $sourceFacilityId;
+            }
+
+            $merged[] = $mergedItem;
         }
 
         return $merged;
@@ -590,15 +787,20 @@ class ChatController extends Controller
                 $facilityId = isset($booking['facility_id']) && is_numeric($booking['facility_id'])
                     ? (int) $booking['facility_id']
                     : null;
-                $normalizedEquipment = !empty($booking['equipment']) && is_array($booking['equipment'])
+                $normalizedOwnEquipment = !empty($booking['equipment']) && is_array($booking['equipment'])
                     ? $this->normalizeEquipmentSelections($booking['equipment'], $facilityId)
                     : [];
+                $normalizedBorrowedEquipment = !empty($booking['borrowed_equipment']) && is_array($booking['borrowed_equipment'])
+                    ? $this->normalizeEquipmentSelections($booking['borrowed_equipment'], $facilityId)
+                    : [];
+                $normalizedEquipment = $this->mergeNormalizedEquipment($normalizedOwnEquipment, $normalizedBorrowedEquipment);
 
                 if (!empty($normalizedEquipment)) {
                     $booking['equipment'] = $normalizedEquipment;
                 } else {
                     unset($booking['equipment']);
                 }
+                unset($booking['borrowed_equipment']);
 
                 if ($facilityId && $facilityId > 0) {
                     $booking['facility_id'] = $facilityId;
@@ -641,6 +843,24 @@ class ChatController extends Controller
             );
 
             unset($normalized['equipment']);
+        }
+
+        if (!empty($normalized['borrowed_equipment']) && is_array($normalized['borrowed_equipment']) && !empty($normalized['facility_bookings'][0])) {
+            $firstFacilityId = isset($normalized['facility_bookings'][0]['facility_id']) && is_numeric($normalized['facility_bookings'][0]['facility_id'])
+                ? (int) $normalized['facility_bookings'][0]['facility_id']
+                : null;
+
+            $topLevelBorrowedEquipment = $this->normalizeEquipmentSelections(
+                $normalized['borrowed_equipment'],
+                $firstFacilityId
+            );
+
+            $normalized['facility_bookings'][0]['equipment'] = $this->mergeNormalizedEquipment(
+                $normalized['facility_bookings'][0]['equipment'] ?? [],
+                $topLevelBorrowedEquipment
+            );
+
+            unset($normalized['borrowed_equipment']);
         }
 
         return $normalized;
@@ -1672,18 +1892,164 @@ class ChatController extends Controller
     {
         try {
             $limit = max(1, min(200, (int) $request->input('limit', 50)));
+            $facilityId = $request->filled('facility_id') ? (int) $request->input('facility_id') : null;
+            $sourceMode = strtolower((string) $request->input('source', 'own'));
+            $dateValue = $request->input('date');
+            $timeStartValue = $request->input('time_start');
+            $timeEndValue = $request->input('time_end');
 
-            $rows = collect($this->getEquipmentContextRows($limit))
-                ->map(fn($row) => [
-                    'id' => $row['id'],
-                    'name' => $row['name'],
-                    'quantity' => $row['quantity'],
-                    'facility_id' => $row['facility_id'],
-                    'facility' => $row['facility'],
-                ])
-                ->values();
+            if (!in_array($sourceMode, ['own', 'borrow'], true)) {
+                throw ValidationException::withMessages([
+                    'source' => ['Source must be either "own" or "borrow".'],
+                ]);
+            }
+
+            if ($facilityId !== null) {
+                $request->validate([
+                    'facility_id' => 'integer|exists:facilities,id',
+                ]);
+            }
+
+            $hasAnyTimeField = $request->filled('date') || $request->filled('time_start') || $request->filled('time_end');
+            $isSlotAwareRequest = false;
+            $normalizedDate = null;
+            $normalizedTimeStart = null;
+            $normalizedTimeEnd = null;
+
+            if ($hasAnyTimeField) {
+                $normalizedDate = $this->normalizeDateValue($dateValue);
+                $normalizedTimeStart = $this->normalizeTimeValue($timeStartValue);
+                $normalizedTimeEnd = $this->normalizeTimeValue($timeEndValue);
+
+                $request->merge([
+                    'facility_id' => $facilityId,
+                    'date' => $normalizedDate,
+                    'time_start' => $normalizedTimeStart,
+                    'time_end' => $normalizedTimeEnd,
+                ]);
+
+                $request->validate([
+                    'facility_id' => 'required|integer|exists:facilities,id',
+                    'date' => 'required|date_format:Y-m-d',
+                    'time_start' => 'required|regex:/^\d{2}:\d{2}$/',
+                    'time_end' => 'required|regex:/^\d{2}:\d{2}$/',
+                ]);
+
+                $startMinutes = $this->toMinuteOfDay((string) $normalizedTimeStart);
+                $endMinutes = $this->toMinuteOfDay((string) $normalizedTimeEnd);
+                if ($startMinutes === null || $endMinutes === null || $startMinutes >= $endMinutes) {
+                    throw ValidationException::withMessages([
+                        'time_end' => ['End time must be later than start time.'],
+                    ]);
+                }
+
+                $isSlotAwareRequest = true;
+            }
+
+            if ($isSlotAwareRequest && $facilityId) {
+                if ($sourceMode === 'borrow') {
+                    $rows = Equipment::query()
+                        ->whereHas('facilities', fn($q) => $q->where('facilities.id', '!=', $facilityId))
+                        ->with([
+                            'facilities' => fn($q) => $q
+                                ->where('facilities.id', '!=', $facilityId)
+                                ->select('facilities.id', 'facilities.name'),
+                        ])
+                        ->orderBy('equipments.id', 'asc')
+                        ->get(['equipments.id', 'equipments.name'])
+                        ->flatMap(function (Equipment $equipment) use ($normalizedDate, $normalizedTimeStart, $normalizedTimeEnd) {
+                            return $equipment->facilities->map(function ($facility) use ($equipment, $normalizedDate, $normalizedTimeStart, $normalizedTimeEnd) {
+                                $slotAvailability = $equipment->slotAvailabilityInFacility(
+                                    (int) $facility->id,
+                                    (string) $normalizedDate,
+                                    (string) $normalizedTimeStart,
+                                    (string) $normalizedTimeEnd
+                                );
+
+                                return [
+                                    'id' => $equipment->id,
+                                    'name' => $equipment->name,
+                                    'facility_id' => (int) $facility->id,
+                                    'facility' => $facility->name,
+                                    'total_quantity' => (int) ($slotAvailability['total_quantity'] ?? 0),
+                                    'reserved_quantity' => (int) ($slotAvailability['reserved_quantity'] ?? 0),
+                                    'remaining_quantity' => (int) ($slotAvailability['remaining_quantity'] ?? 0),
+                                    // Legacy compatibility
+                                    'quantity' => (int) ($slotAvailability['remaining_quantity'] ?? 0),
+                                ];
+                            })->values();
+                        })
+                        ->filter(fn($row) => (int) ($row['remaining_quantity'] ?? 0) > 0)
+                        ->take($limit)
+                        ->values();
+                } else {
+                    $rows = Equipment::query()
+                        ->whereHas('facilities', fn($q) => $q->where('facilities.id', $facilityId))
+                        ->with([
+                            'facilities' => fn($q) => $q
+                                ->where('facilities.id', $facilityId)
+                                ->select('facilities.id', 'facilities.name'),
+                        ])
+                        ->orderBy('equipments.id', 'asc')
+                        ->limit($limit)
+                        ->get(['equipments.id', 'equipments.name'])
+                        ->map(function (Equipment $equipment) use ($facilityId, $normalizedDate, $normalizedTimeStart, $normalizedTimeEnd) {
+                            $facility = $equipment->facilities->first();
+                            $slotAvailability = $equipment->slotAvailabilityInFacility(
+                                $facilityId,
+                                (string) $normalizedDate,
+                                (string) $normalizedTimeStart,
+                                (string) $normalizedTimeEnd
+                            );
+
+                            return [
+                                'id' => $equipment->id,
+                                'name' => $equipment->name,
+                                'facility_id' => $facilityId,
+                                'facility' => $facility?->name,
+                                'total_quantity' => (int) ($slotAvailability['total_quantity'] ?? 0),
+                                'reserved_quantity' => (int) ($slotAvailability['reserved_quantity'] ?? 0),
+                                'remaining_quantity' => (int) ($slotAvailability['remaining_quantity'] ?? 0),
+                                // Legacy compatibility
+                                'quantity' => (int) ($slotAvailability['remaining_quantity'] ?? 0),
+                            ];
+                        })
+                        ->values();
+                }
+            } else {
+                $rows = collect($this->getEquipmentContextRows($limit))
+                    ->filter(function ($row) use ($facilityId, $sourceMode) {
+                        if ($facilityId === null) {
+                            return true;
+                        }
+
+                        $rowFacilityId = (int) ($row['facility_id'] ?? 0);
+                        if ($sourceMode === 'borrow') {
+                            return $rowFacilityId > 0 && $rowFacilityId !== $facilityId;
+                        }
+
+                        return $rowFacilityId === $facilityId;
+                    })
+                    ->map(fn($row) => [
+                        'id' => (int) $row['id'],
+                        'name' => $row['name'],
+                        'facility_id' => $row['facility_id'],
+                        'facility' => $row['facility'],
+                        'total_quantity' => (int) $row['quantity'],
+                        'reserved_quantity' => 0,
+                        'remaining_quantity' => (int) $row['quantity'],
+                        // Legacy compatibility
+                        'quantity' => (int) $row['quantity'],
+                    ])
+                    ->values();
+            }
 
             return response()->json(['data' => $rows]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
             \Log::error('Equipment list error: ' . $e->getMessage());
             return response()->json([
@@ -1810,11 +2176,15 @@ class ChatController extends Controller
                 'facility_bookings.*.equipment'                   => 'sometimes|nullable|array',
                 'facility_bookings.*.equipment.*.equipment_id'    => 'required|exists:equipments,id',
                 'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
+                'facility_bookings.*.equipment.*.source_facility_id' => 'sometimes|nullable|exists:facilities,id',
+                'facility_bookings.*.equipment.*.is_borrowed'     => 'sometimes|boolean',
                 'files'                                           => 'nullable|array',
                 'files.*'                                         => 'nullable|string',
             ]);
 
-            $equipmentSelectionErrors = $this->validateFacilityEquipmentSelections($validated['facility_bookings']);
+            $bookingsForValidation = $validated['facility_bookings'];
+            $equipmentSelectionErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
+            $validated['facility_bookings'] = $bookingsForValidation;
             if (!empty($equipmentSelectionErrors)) {
                 throw ValidationException::withMessages($equipmentSelectionErrors);
             }
@@ -1829,113 +2199,141 @@ class ChatController extends Controller
 
             $priorityLevel  = (int) ($validated['priority_level'] ?? 0);
             $priorityReason = $validated['priority_reason'] ?? null;
-
-            $facilityRequest = RequestModel::create([
-                'user_id'         => Auth::id(),
-                'title'           => $validated['title'],
-                'description'     => $validated['description'] ?? null,
-                'status'          => RequestStatus::PENDING,
-                'priority_level'  => $priorityLevel,
-                'priority_reason' => $priorityReason,
-            ]);
-
-            foreach ($validated['facility_bookings'] as $booking) {
-                $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
-                $facilityRequest->requestFacilities()->create([
-                    'facility_id'    => $booking['facility_id'],
-                    'date_requested' => $dateOnly,
-                    'time_start'     => $booking['time_start'],
-                    'time_end'       => $booking['time_end'],
-                    'expected_capacity' => isset($booking['expected_capacity'])
-                        ? (int) $booking['expected_capacity']
-                        : (isset($validated['participant_count']) ? (int) $validated['participant_count'] : null),
-                ]);
-
-                if (!empty($booking['equipment'])) {
-                    foreach ($booking['equipment'] as $equipment) {
-                        $facilityRequest->equipment()->attach($equipment['equipment_id'], [
-                            'quantity_needed' => $equipment['quantity_needed'],
-                        ]);
-                    }
-                }
-            }
-
-            // Handle file uploads - move from temp storage to permanent
             $userId = Auth::id();
-            $sessionId = session()->getId();
             $tempDir = "chat-uploads/{$userId}/{$sessionId}";
             $fileCount = 0;
+            $heldCount = 0;
+            $facilityRequest = DB::transaction(function () use (
+                $validated,
+                $priorityLevel,
+                $priorityReason,
+                $tempDir,
+                &$fileCount,
+                &$heldCount
+            ) {
+                $bookingsForValidation = $validated['facility_bookings'];
+                $preLockEquipmentErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
+                if (!empty($preLockEquipmentErrors)) {
+                    throw ValidationException::withMessages($preLockEquipmentErrors);
+                }
 
-            if (!empty($validated['files'])) {
-                foreach ($validated['files'] as $fileId) {
-                    try {
-                        $tempFiles = Storage::disk('public')->files($tempDir);
-                        $tempFilePath = null;
+                // Serialize slot-equipment validations (including borrowed source facilities).
+                $this->lockFacilityEquipmentRows($bookingsForValidation);
 
-                        foreach ($tempFiles as $file) {
-                            if (str_contains($file, $fileId)) {
-                                $tempFilePath = $file;
-                                break;
-                            }
-                        }
+                $lockedEquipmentErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
+                if (!empty($lockedEquipmentErrors)) {
+                    throw ValidationException::withMessages($lockedEquipmentErrors);
+                }
 
-                        if ($tempFilePath) {
-                            $originalName = basename($tempFilePath);
-                            $permanentPath = "request-files/{$originalName}";
-                            
-                            $content = Storage::disk('public')->get($tempFilePath);
-                            Storage::disk('public')->put($permanentPath, $content);
+                $facilityRequest = RequestModel::create([
+                    'user_id'         => Auth::id(),
+                    'title'           => $validated['title'],
+                    'description'     => $validated['description'] ?? null,
+                    'status'          => RequestStatus::PENDING,
+                    'priority_level'  => $priorityLevel,
+                    'priority_reason' => $priorityReason,
+                ]);
 
-                            $facilityRequest->files()->create([
-                                'path'          => $permanentPath,
-                                'original_name' => $originalName,
-                                'mime_type'     => Storage::disk('public')->mimeType($tempFilePath),
-                                'size'          => Storage::disk('public')->size($tempFilePath),
+                foreach ($bookingsForValidation as $booking) {
+                    $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+                    $facilityRequest->requestFacilities()->create([
+                        'facility_id'    => $booking['facility_id'],
+                        'date_requested' => $dateOnly,
+                        'time_start'     => $booking['time_start'],
+                        'time_end'       => $booking['time_end'],
+                        'expected_capacity' => isset($booking['expected_capacity'])
+                            ? (int) $booking['expected_capacity']
+                            : (isset($validated['participant_count']) ? (int) $validated['participant_count'] : null),
+                    ]);
+
+                    if (!empty($booking['equipment'])) {
+                        foreach ($booking['equipment'] as $equipment) {
+                            $sourceFacilityId = isset($equipment['source_facility_id']) && is_numeric($equipment['source_facility_id'])
+                                ? (int) $equipment['source_facility_id']
+                                : null;
+                            $isBorrowed = $sourceFacilityId !== null && $sourceFacilityId !== (int) $booking['facility_id'];
+
+                            $facilityRequest->equipment()->attach($equipment['equipment_id'], [
+                                'quantity_needed' => $equipment['quantity_needed'],
+                                'is_borrowed' => $isBorrowed,
+                                'source_facility_id' => $isBorrowed ? $sourceFacilityId : null,
                             ]);
+                        }
+                    }
+                }
 
-                            Storage::disk('public')->delete($tempFilePath);
-                            $fileCount++;
+                if (!empty($validated['files'])) {
+                    foreach ($validated['files'] as $fileId) {
+                        try {
+                            $tempFiles = Storage::disk('public')->files($tempDir);
+                            $tempFilePath = null;
+
+                            foreach ($tempFiles as $file) {
+                                if (str_contains($file, $fileId)) {
+                                    $tempFilePath = $file;
+                                    break;
+                                }
+                            }
+
+                            if ($tempFilePath) {
+                                $originalName = basename($tempFilePath);
+                                $permanentPath = "request-files/{$originalName}";
+
+                                $content = Storage::disk('public')->get($tempFilePath);
+                                Storage::disk('public')->put($permanentPath, $content);
+
+                                $facilityRequest->files()->create([
+                                    'path'          => $permanentPath,
+                                    'original_name' => $originalName,
+                                    'mime_type'     => Storage::disk('public')->mimeType($tempFilePath),
+                                    'size'          => Storage::disk('public')->size($tempFilePath),
+                                ]);
+
+                                Storage::disk('public')->delete($tempFilePath);
+                                $fileCount++;
+                            }
+                        } catch (\Exception $e) {
+                            \Log::warning("Failed to process file {$fileId}: " . $e->getMessage());
+                        }
+                    }
+
+                    try {
+                        $remainingFiles = Storage::disk('public')->files($tempDir);
+                        if (empty($remainingFiles)) {
+                            Storage::disk('public')->deleteDirectory($tempDir);
                         }
                     } catch (\Exception $e) {
-                        \Log::warning("Failed to process file {$fileId}: " . $e->getMessage());
+                        \Log::warning("Failed to clean temp directory: " . $e->getMessage());
                     }
                 }
 
-                try {
-                    $remainingFiles = Storage::disk('public')->files($tempDir);
-                    if (empty($remainingFiles)) {
-                        Storage::disk('public')->deleteDirectory($tempDir);
+                if ($priorityLevel > 0) {
+                    try {
+                        $bookingsForConflict = array_map(fn($booking) => [
+                            'facility_id' => $booking['facility_id'],
+                            'date'        => $booking['date'],
+                            'time_start'  => $booking['time_start'],
+                            'time_end'    => $booking['time_end'],
+                        ], $validated['facility_bookings']);
+
+                        $requestService      = app(\App\Services\RequestService::class);
+                        $notificationService = app(\App\Services\NotificationService::class);
+                        $conflicting         = $requestService->findConflictingLowerPriorityRequests($bookingsForConflict, $priorityLevel);
+                        $holdReason          = $priorityReason ?? 'Higher-priority event submitted for the same time slot.';
+
+                        foreach ($conflicting as $conflictingRequest) {
+                            $requestService->putOnHold($conflictingRequest, $facilityRequest, $holdReason);
+                            $notificationService->notifyOnHold($conflictingRequest, $facilityRequest, $holdReason);
+                            $heldCount++;
+                            \Log::info("AI: Request #{$conflictingRequest->id} put on hold by high-priority request #{$facilityRequest->id}");
+                        }
+                    } catch (\Throwable $e) {
+                        \Log::warning('AI createRequestApi: priority override failed: ' . $e->getMessage());
                     }
-                } catch (\Exception $e) {
-                    \Log::warning("Failed to clean temp directory: " . $e->getMessage());
                 }
-            }
 
-            $heldCount = 0;
-            if ($priorityLevel > 0) {
-                try {
-                    $bookingsForConflict = array_map(fn($booking) => [
-                        'facility_id' => $booking['facility_id'],
-                        'date'        => $booking['date'],
-                        'time_start'  => $booking['time_start'],
-                        'time_end'    => $booking['time_end'],
-                    ], $validated['facility_bookings']);
-
-                    $requestService      = app(\App\Services\RequestService::class);
-                    $notificationService = app(\App\Services\NotificationService::class);
-                    $conflicting         = $requestService->findConflictingLowerPriorityRequests($bookingsForConflict, $priorityLevel);
-                    $holdReason          = $priorityReason ?? 'Higher-priority event submitted for the same time slot.';
-
-                    foreach ($conflicting as $conflictingRequest) {
-                        $requestService->putOnHold($conflictingRequest, $facilityRequest, $holdReason);
-                        $notificationService->notifyOnHold($conflictingRequest, $facilityRequest, $holdReason);
-                        $heldCount++;
-                        \Log::info("AI: Request #{$conflictingRequest->id} put on hold by high-priority request #{$facilityRequest->id}");
-                    }
-                } catch (\Throwable $e) {
-                    \Log::warning('AI createRequestApi: priority override failed: ' . $e->getMessage());
-                }
-            }
+                return $facilityRequest;
+            });
 
             $this->clearSession();
 
@@ -2005,4 +2403,3 @@ class ChatController extends Controller
         }
     }
 }
-

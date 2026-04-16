@@ -36,6 +36,7 @@ type BookingEquipmentSelection = {
 };
 
 type GuidedEquipmentDecision = 'unknown' | 'selected' | 'none';
+type EquipmentSourceMode = 'own' | 'borrow';
 
 type GuidedFlowState = {
     mode: GuidedFlowMode;
@@ -286,8 +287,8 @@ const toMinutes = (time: string): number => {
     const candidate = time.trim();
     if (!candidate) return NaN;
 
-    if (/^\d{1,2}:\d{2}$/.test(candidate)) {
-        const [hours, minutes] = candidate.split(':').map(Number);
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(candidate)) {
+        const [hours, minutes] = candidate.split(':').slice(0, 2).map(Number);
         if (Number.isNaN(hours) || Number.isNaN(minutes)) return NaN;
         return hours * 60 + minutes;
     }
@@ -302,6 +303,34 @@ const toMinutes = (time: string): number => {
     if (modifier === 'PM' && hours !== 12) hours += 12;
     if (modifier === 'AM' && hours === 12) hours = 0;
     return hours * 60 + minutes;
+};
+
+const toHHMM = (time: string): string | null => {
+    const minutes = toMinutes(time);
+    if (Number.isNaN(minutes) || minutes < 0) {
+        return null;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+
+    if (hours > 23 || mins > 59) {
+        return null;
+    }
+
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+};
+
+const getEquipmentRemainingQuantity = (equipment: Equipment): number => {
+    if (typeof equipment.remaining_quantity === 'number' && Number.isFinite(equipment.remaining_quantity)) {
+        return Math.max(0, Math.floor(equipment.remaining_quantity));
+    }
+
+    if (typeof equipment.quantity === 'number' && Number.isFinite(equipment.quantity)) {
+        return Math.max(0, Math.floor(equipment.quantity));
+    }
+
+    return 0;
 };
 
 const formatDateYmd = (date: Date): string => {
@@ -346,7 +375,11 @@ export default function Chatbot() {
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment>>([]);
+    const [baseEquipmentOptions, setBaseEquipmentOptions] = useState<Array<Equipment>>([]);
     const [selectedEquipment, setSelectedEquipment] = useState<SelectedEquipmentItem[]>([]);
+    const [equipmentSelectionNotice, setEquipmentSelectionNotice] = useState<string | null>(null);
+    const [isSlotScopedEquipmentList, setIsSlotScopedEquipmentList] = useState(false);
+    const [equipmentSourceMode, setEquipmentSourceMode] = useState<EquipmentSourceMode>('own');
     // NEW: Track the message index of the last equipment question we responded to
     const [lastEquipmentQuestionIndex, setLastEquipmentQuestionIndex] = useState<number>(-1);
     // NEW: Track whether to show equipment selection UI
@@ -354,7 +387,7 @@ export default function Chatbot() {
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
     const { participantCount: trackedParticipantCount, setParticipantCount, extractAndSet, getCurrentCount } = useParticipantCount();
-    const bookingFlow = useBookingFlow(facilities, equipmentOptions);
+    const bookingFlow = useBookingFlow(facilities, baseEquipmentOptions);
     const { isLoading, sendMessage, submitRequest } = useChatAPI();
     const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
@@ -363,6 +396,7 @@ export default function Chatbot() {
     const messageQueueRef = useRef<Array<{ message: Message; context?: string }>>([]);
     const [guidedFlow, setGuidedFlow] = useState<GuidedFlowState>({ ...INITIAL_GUIDED_FLOW });
     const [availabilityFollowUp, setAvailabilityFollowUp] = useState<AvailabilityFollowUpState | null>(null);
+    const [guidedEquipmentSnapshot, setGuidedEquipmentSnapshot] = useState<SelectedEquipmentItem[]>([]);
     const [customParticipantCount, setCustomParticipantCount] = useState<string>('');
     const [customStartTime, setCustomStartTime] = useState<string>('');
     const [customEndTime, setCustomEndTime] = useState<string>('');
@@ -449,6 +483,7 @@ export default function Chatbot() {
 
     const resetGuidedFlow = () => {
         setGuidedFlow({ ...INITIAL_GUIDED_FLOW });
+        setGuidedEquipmentSnapshot([]);
     };
 
     const isFacilityRecommendedForParticipants = (facility: Facility, participantCount: number): boolean => {
@@ -483,6 +518,9 @@ export default function Chatbot() {
     const startGuidedFlow = (flowMode: Exclude<GuidedFlowMode, 'none'>) => {
         setMode('ai');
         setShowEquipmentSelection(false);
+        setEquipmentSourceMode('own');
+        setEquipmentSelectionNotice(null);
+        setGuidedEquipmentSnapshot([]);
         setAvailabilityFollowUp(null);
         setGuidedFlow({
             ...INITIAL_GUIDED_FLOW,
@@ -576,6 +614,9 @@ export default function Chatbot() {
             !!guidedFlow.timeEnd;
 
         if (hasLockedSchedule) {
+            setEquipmentSourceMode('own');
+            setGuidedEquipmentSnapshot([]);
+            setEquipmentSelectionNotice(null);
             setGuidedFlow((prev) => ({
                 ...prev,
                 mode: 'booking',
@@ -754,6 +795,9 @@ export default function Chatbot() {
             step: 'equipment',
             timeEnd,
         }));
+        setGuidedEquipmentSnapshot([]);
+        setEquipmentSourceMode('own');
+        setEquipmentSelectionNotice(null);
         addMessage({
             role: 'assistant',
             content: 'Schedule saved. Choose equipment, then select event type before continuing to request details.',
@@ -784,6 +828,7 @@ export default function Chatbot() {
 
     const handleGuidedNoEquipment = () => {
         setShowEquipmentSelection(false);
+        setGuidedEquipmentSnapshot([]);
         setGuidedFlow((prev) => ({
             ...prev,
             equipmentDecision: 'none',
@@ -828,12 +873,14 @@ export default function Chatbot() {
             return;
         }
 
-        const serializedEquipmentSelection = (equipmentSelectionForGuided ?? [])
-            .filter((item) => item.facility_id === facility.id)
+        const effectiveGuidedSelection = equipmentSelectionForGuided ?? guidedEquipmentSnapshot;
+        const serializedEquipmentSelection = effectiveGuidedSelection
             .map((item) => ({
                 equipment_id: item.equipment_id,
                 facility_id: item.facility_id,
                 quantity_needed: item.quantity_needed,
+                is_borrowed: item.facility_id !== facility.id,
+                source_facility_id: item.facility_id !== facility.id ? item.facility_id : null,
             }));
 
         const equipmentInstruction =
@@ -870,10 +917,138 @@ export default function Chatbot() {
         await processAndSend(userMessage, context);
     };
 
+    const normalizeEquipmentResponse = (items: unknown[]): Equipment[] => {
+        return items
+            .map((rawItem) => {
+                if (!rawItem || typeof rawItem !== 'object') {
+                    return null;
+                }
+
+                const item = rawItem as Partial<Equipment>;
+                const remainingQuantityRaw =
+                    typeof item.remaining_quantity === 'number' ? item.remaining_quantity : Number(item.remaining_quantity ?? item.quantity);
+                const totalQuantityRaw =
+                    typeof item.total_quantity === 'number' ? item.total_quantity : Number(item.total_quantity ?? item.quantity);
+                const reservedQuantityRaw =
+                    typeof item.reserved_quantity === 'number' ? item.reserved_quantity : Number(item.reserved_quantity ?? 0);
+
+                return {
+                    ...item,
+                    id: Number(item.id),
+                    facility_id: Number(item.facility_id),
+                    quantity: Number.isFinite(remainingQuantityRaw) ? Math.max(0, Math.floor(remainingQuantityRaw)) : 0,
+                    total_quantity: Number.isFinite(totalQuantityRaw) ? Math.max(0, Math.floor(totalQuantityRaw)) : 0,
+                    reserved_quantity: Number.isFinite(reservedQuantityRaw) ? Math.max(0, Math.floor(reservedQuantityRaw)) : 0,
+                    remaining_quantity: Number.isFinite(remainingQuantityRaw) ? Math.max(0, Math.floor(remainingQuantityRaw)) : 0,
+                    facility: typeof item.facility === 'string' ? item.facility : null,
+                    name: String(item.name ?? ''),
+                } as Equipment;
+            })
+            .filter((item): item is Equipment => {
+                if (!item) {
+                    return false;
+                }
+
+                return Number.isFinite(item.id) && Number.isFinite(item.facility_id) && item.facility_id > 0 && item.name.trim() !== '';
+            });
+    };
+
+    const reconcileSelectedEquipment = (options: Equipment[], notify: boolean) => {
+        setSelectedEquipment((prev) => {
+            const optionByKey = new Map<string, Equipment>(
+                options.map((option) => [`${option.id}-${option.facility_id}`, option]),
+            );
+
+            let changed = false;
+            const next = prev.flatMap((selection) => {
+                const option = optionByKey.get(`${selection.equipment_id}-${selection.facility_id}`);
+                if (!option) {
+                    changed = true;
+                    return [];
+                }
+
+                const remaining = getEquipmentRemainingQuantity(option);
+                if (remaining <= 0) {
+                    changed = true;
+                    return [];
+                }
+
+                const clampedQuantity = Math.min(Math.max(1, selection.quantity_needed), remaining);
+                if (clampedQuantity !== selection.quantity_needed) {
+                    changed = true;
+                }
+
+                return [{ ...selection, quantity_needed: clampedQuantity }];
+            });
+
+            if (changed && notify) {
+                setEquipmentSelectionNotice('Availability changed for this slot. Selected quantities were adjusted to the latest remaining stock.');
+            }
+
+            return next;
+        });
+    };
+
+    const fetchEquipmentOptions = async (
+        params?: { facilityId?: number; date?: string; timeStart?: string; timeEnd?: string; sourceMode?: EquipmentSourceMode },
+        scope: 'default' | 'slot' = 'default',
+    ) => {
+        try {
+            if (scope === 'default') {
+                setEquipmentSelectionNotice(null);
+            }
+
+            const queryParams = new URLSearchParams();
+            if (params?.facilityId) queryParams.set('facility_id', String(params.facilityId));
+            if (params?.date) queryParams.set('date', params.date);
+            if (params?.timeStart) queryParams.set('time_start', params.timeStart);
+            if (params?.timeEnd) queryParams.set('time_end', params.timeEnd);
+            queryParams.set('source', params?.sourceMode ?? 'own');
+
+            const endpoint = queryParams.toString()
+                ? `${route('chat.equipment')}?${queryParams.toString()}`
+                : route('chat.equipment');
+
+            const response = await fetch(endpoint, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            const json = await response.json();
+            if (!json.data || !Array.isArray(json.data)) {
+                return;
+            }
+
+            const normalizedEquipment = normalizeEquipmentResponse(json.data);
+            if (scope === 'slot') {
+                setEquipmentSelectionNotice(null);
+            }
+            setEquipmentOptions(normalizedEquipment);
+            reconcileSelectedEquipment(normalizedEquipment, scope === 'slot');
+
+            if (scope === 'default') {
+                setBaseEquipmentOptions(normalizedEquipment);
+                setIsSlotScopedEquipmentList(false);
+            } else {
+                setIsSlotScopedEquipmentList(true);
+            }
+        } catch {
+            if (scope === 'slot') {
+                setEquipmentSelectionNotice('Unable to refresh slot-aware availability right now. Please try opening equipment again.');
+            }
+        }
+    };
+
     // Reset equipment selection UI when mode changes
     useEffect(() => {
         setShowEquipmentSelection(false);
         setSelectedEquipment([]);
+        setGuidedEquipmentSnapshot([]);
+        setEquipmentSelectionNotice(null);
+        setEquipmentSourceMode('own');
         if (mode !== 'ai') {
             setGuidedFlow({ ...INITIAL_GUIDED_FLOW });
         }
@@ -886,14 +1061,57 @@ export default function Chatbot() {
     }, [guidedFlow.mode, guidedFlow.step]);
 
     useEffect(() => {
-        if (guidedFlow.mode !== 'booking' || guidedFlow.step !== 'equipment' || !guidedFlow.facilityId) {
+        if (mode !== 'ai') {
+            if (isSlotScopedEquipmentList && baseEquipmentOptions.length > 0) {
+                setEquipmentOptions(baseEquipmentOptions);
+                setIsSlotScopedEquipmentList(false);
+                reconcileSelectedEquipment(baseEquipmentOptions, false);
+            }
             return;
         }
 
-        setSelectedEquipment((prev) => prev.filter((item) => item.facility_id === guidedFlow.facilityId));
-    }, [guidedFlow.mode, guidedFlow.step, guidedFlow.facilityId]);
+        const slotContext = getActiveSlotContext();
+        if (!slotContext) {
+            if (isSlotScopedEquipmentList && baseEquipmentOptions.length > 0) {
+                setEquipmentOptions(baseEquipmentOptions);
+                setIsSlotScopedEquipmentList(false);
+                reconcileSelectedEquipment(baseEquipmentOptions, false);
+            }
+            return;
+        }
 
-    // Fetch facilities and equipment for the booking flow
+        const normalizedStart = toHHMM(slotContext.timeStart);
+        const normalizedEnd = toHHMM(slotContext.timeEnd);
+        if (!normalizedStart || !normalizedEnd) {
+            setEquipmentSelectionNotice('Please use a valid start/end time format to load slot-aware equipment availability.');
+            return;
+        }
+
+        void fetchEquipmentOptions(
+            {
+                facilityId: slotContext.facilityId,
+                date: slotContext.date,
+                timeStart: normalizedStart,
+                timeEnd: normalizedEnd,
+                sourceMode: equipmentSourceMode,
+            },
+            'slot',
+        );
+    }, [
+        mode,
+        guidedFlow.mode,
+        guidedFlow.step,
+        guidedFlow.facilityId,
+        guidedFlow.date,
+        guidedFlow.timeStart,
+        guidedFlow.timeEnd,
+        pendingPayload,
+        equipmentSourceMode,
+        baseEquipmentOptions,
+        isSlotScopedEquipmentList,
+    ]);
+
+    // Fetch facilities and baseline equipment for booking flows
     useEffect(() => {
         fetch(route('chat.facilities'), {
             headers: {
@@ -908,33 +1126,7 @@ export default function Chatbot() {
             })
             .catch(() => {});
 
-        fetch(route('chat.equipment'), {
-            headers: {
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            credentials: 'same-origin',
-        })
-            .then((res) => res.json())
-            .then((json) => {
-                if (json.data) {
-                    const normalizedEquipment = json.data
-                        .map((item: Equipment) => ({
-                            ...item,
-                            id: Number(item.id),
-                            facility_id: Number(item.facility_id),
-                            quantity: Number(item.quantity),
-                            facility: typeof item.facility === 'string' ? item.facility : null,
-                        }))
-                        .filter((item: Equipment) => Number.isFinite(item.id) && Number.isFinite(item.facility_id) && item.facility_id > 0);
-
-                    console.log('[Chatbot equipment fetch] Raw equipment payload:', json.data);
-                    console.log('[Chatbot equipment fetch] Normalized equipment payload:', normalizedEquipment);
-
-                    setEquipmentOptions(normalizedEquipment);
-                }
-            })
-            .catch(() => {});
+        void fetchEquipmentOptions(undefined, 'default');
     }, []);
 
     useEffect(() => {
@@ -1142,9 +1334,57 @@ export default function Chatbot() {
         return null;
     };
 
+    const getActiveSlotContext = (): { facilityId: number; date: string; timeStart: string; timeEnd: string } | null => {
+        const isGuidedSlotLocked =
+            guidedFlow.mode === 'booking' &&
+            guidedFlow.step === 'equipment' &&
+            !!guidedFlow.facilityId &&
+            !!guidedFlow.date &&
+            !!guidedFlow.timeStart &&
+            !!guidedFlow.timeEnd;
+
+        if (isGuidedSlotLocked) {
+            return {
+                facilityId: guidedFlow.facilityId as number,
+                date: guidedFlow.date as string,
+                timeStart: guidedFlow.timeStart as string,
+                timeEnd: guidedFlow.timeEnd as string,
+            };
+        }
+
+        const pendingBooking = pendingPayload?.facility_bookings?.[0];
+        const pendingFacilityId = pendingBooking?.facility_id;
+        if (
+            typeof pendingFacilityId === 'number' &&
+            pendingFacilityId > 0 &&
+            typeof pendingBooking?.date === 'string' &&
+            typeof pendingBooking?.time_start === 'string' &&
+            typeof pendingBooking?.time_end === 'string' &&
+            pendingBooking.date.length > 0 &&
+            pendingBooking.time_start.length > 0 &&
+            pendingBooking.time_end.length > 0
+        ) {
+            return {
+                facilityId: pendingFacilityId,
+                date: pendingBooking.date,
+                timeStart: pendingBooking.time_start,
+                timeEnd: pendingBooking.time_end,
+            };
+        }
+
+        return null;
+    };
+
     const getFilteredEquipment = () => {
         const facilityId = getCurrentFacilityId();
-        if (!facilityId) return equipmentOptions;
+        if (!facilityId) {
+            return equipmentOptions;
+        }
+
+        if (equipmentSourceMode === 'borrow') {
+            return equipmentOptions.filter((eq) => eq.facility_id !== facilityId);
+        }
+
         return equipmentOptions.filter((eq) => eq.facility_id === facilityId);
     };
 
@@ -1234,6 +1474,12 @@ export default function Chatbot() {
     }, [messages, pendingPayload, attachedFiles]);
 
     const handleEquipmentToggle = (equipment: Equipment) => {
+        const remaining = getEquipmentRemainingQuantity(equipment);
+        if (remaining <= 0) {
+            setEquipmentSelectionNotice(`"${equipment.name}" is unavailable for the selected slot.`);
+            return;
+        }
+
         setSelectedEquipment((prev) => {
             const exists = prev.find((item) => item.equipment_id === equipment.id && item.facility_id === equipment.facility_id);
             if (exists) {
@@ -1254,9 +1500,17 @@ export default function Chatbot() {
     };
 
     const updateEquipmentQuantity = (equipmentId: number, facilityId: number, quantity: number) => {
+        const option = equipmentOptions.find((item) => item.id === equipmentId && item.facility_id === facilityId);
+        const remaining = option ? getEquipmentRemainingQuantity(option) : 0;
+        if (remaining <= 0) {
+            setEquipmentSelectionNotice('Selected equipment is no longer available for this slot.');
+            return;
+        }
+
+        const bounded = Math.min(Math.max(1, Math.floor(quantity)), remaining);
         setSelectedEquipment((prev) =>
             prev.map((item) =>
-                item.equipment_id === equipmentId && item.facility_id === facilityId ? { ...item, quantity_needed: quantity } : item,
+                item.equipment_id === equipmentId && item.facility_id === facilityId ? { ...item, quantity_needed: bounded } : item,
             ),
         );
     };
@@ -1269,6 +1523,31 @@ export default function Chatbot() {
             .map((e) => `${e.equipment_name} (ID: ${e.equipment_id}, Facility ID: ${e.facility_id}, quantity: ${e.quantity_needed})`)
             .join(', ');
         return `I need the following equipment: ${items}`;
+    };
+
+    const sanitizeEquipmentSelection = (selection: SelectedEquipmentItem[]): SelectedEquipmentItem[] => {
+        const optionByKey = new Map<string, Equipment>(
+            getFilteredEquipment().map((option) => [`${option.id}-${option.facility_id}`, option]),
+        );
+
+        return selection.flatMap((item) => {
+            const option = optionByKey.get(`${item.equipment_id}-${item.facility_id}`);
+            if (!option) {
+                return [];
+            }
+
+            const remaining = getEquipmentRemainingQuantity(option);
+            if (remaining <= 0) {
+                return [];
+            }
+
+            return [
+                {
+                    ...item,
+                    quantity_needed: Math.min(Math.max(1, Math.floor(item.quantity_needed)), remaining),
+                },
+            ];
+        });
     };
 
     const handleAttachFiles = async (fileList: FileList) => {
@@ -1330,21 +1609,30 @@ export default function Chatbot() {
 
     const submitEquipmentSelection = async (selection: SelectedEquipmentItem[] = selectedEquipment) => {
         const guidedFacilityId = guidedFlow.mode === 'booking' && guidedFlow.step === 'equipment' ? guidedFlow.facilityId : null;
-        const normalizedSelection =
-            guidedFacilityId && guidedFacilityId > 0 ? selection.filter((equipment) => equipment.facility_id === guidedFacilityId) : selection;
+        const selectedFacilityId = guidedFacilityId ?? getCurrentFacilityId();
+        const normalizedSelection = sanitizeEquipmentSelection(selection);
+
+        if (normalizedSelection.length !== selection.length) {
+            setEquipmentSelectionNotice('Some selected equipment quantities were adjusted or removed based on latest slot availability.');
+        }
+
+        setSelectedEquipment(normalizedSelection);
 
         const message = buildEquipmentSelectionMessage(normalizedSelection);
         const serializedSelection = normalizedSelection.map((equipment) => ({
             equipment_id: equipment.equipment_id,
             facility_id: equipment.facility_id,
             quantity_needed: equipment.quantity_needed,
+            is_borrowed: selectedFacilityId ? equipment.facility_id !== selectedFacilityId : false,
+            source_facility_id:
+                selectedFacilityId && equipment.facility_id !== selectedFacilityId ? equipment.facility_id : null,
         }));
         const equipmentMsg =
             'The user selected equipment using the checkbox list. ' +
             `Use these exact selections when generating or updating the booking JSON payload: ${JSON.stringify(serializedSelection)}. ` +
-            'Do not replace the equipment IDs with names or any other format.';
+            'For rows with is_borrowed=true, keep source_facility_id exactly as provided. Do not replace IDs with names.';
         const noEquipmentMsg = 'The user selected no additional equipment. ' + 'Do not ask for equipment again unless it is required later.';
-        const context = selection.length > 0 ? equipmentMsg : noEquipmentMsg;
+        const context = normalizedSelection.length > 0 ? equipmentMsg : noEquipmentMsg;
 
         // NEW: Mark this equipment question as answered by storing the message index
         const latest = getLatestAssistantMessage();
@@ -1353,6 +1641,7 @@ export default function Chatbot() {
         }
 
         if (guidedFlow.mode === 'booking' && guidedFlow.step === 'equipment') {
+            setGuidedEquipmentSnapshot(normalizedSelection);
             setGuidedFlow((prev) => ({
                 ...prev,
                 equipmentDecision: normalizedSelection.length > 0 ? 'selected' : 'none',
@@ -1375,6 +1664,42 @@ export default function Chatbot() {
 
     const submitNoEquipmentSelection = async () => {
         await submitEquipmentSelection([]);
+    };
+
+    const handleEquipmentSourceModeChange = (nextMode: EquipmentSourceMode) => {
+        if (nextMode === equipmentSourceMode) {
+            return;
+        }
+
+        setEquipmentSourceMode(nextMode);
+        setSelectedEquipment([]);
+        setEquipmentSelectionNotice(
+            nextMode === 'borrow'
+                ? 'Borrow mode enabled. Showing slot-aware equipment from other facilities only.'
+                : 'Own-facility mode enabled. Showing slot-aware equipment assigned to the selected facility.',
+        );
+
+        const slotContext = getActiveSlotContext();
+        if (!slotContext) {
+            return;
+        }
+
+        const normalizedStart = toHHMM(slotContext.timeStart);
+        const normalizedEnd = toHHMM(slotContext.timeEnd);
+        if (!normalizedStart || !normalizedEnd) {
+            return;
+        }
+
+        void fetchEquipmentOptions(
+            {
+                facilityId: slotContext.facilityId,
+                date: slotContext.date,
+                timeStart: normalizedStart,
+                timeEnd: normalizedEnd,
+                sourceMode: nextMode,
+            },
+            'slot',
+        );
     };
 
     const handleQuickReply = (option: QuickReply) => {
@@ -1980,6 +2305,19 @@ export default function Chatbot() {
                                                 {!currentFacilityId && (
                                                     <p className="mt-1 text-xs text-muted-foreground">Showing equipment across all facilities.</p>
                                                 )}
+                                                {currentFacilityId && (
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        Source mode: {equipmentSourceMode === 'borrow' ? 'Borrow Equipment (other facilities)' : 'Own Facility Equipment'}
+                                                    </p>
+                                                )}
+                                                {isSlotScopedEquipmentList && (
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        Slot-aware availability is active for the selected date and time window.
+                                                    </p>
+                                                )}
+                                                {equipmentSelectionNotice && (
+                                                    <p className="mt-1 text-xs text-amber-600">{equipmentSelectionNotice}</p>
+                                                )}
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 <Button
@@ -1989,6 +2327,22 @@ export default function Chatbot() {
                                                     disabled={isLoading}
                                                 >
                                                     Cancel
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant={equipmentSourceMode === 'borrow' ? 'default' : 'outline'}
+                                                    onClick={() => handleEquipmentSourceModeChange('borrow')}
+                                                    disabled={isLoading || !currentFacilityId}
+                                                >
+                                                    Borrow Equipment
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant={equipmentSourceMode === 'own' ? 'default' : 'outline'}
+                                                    onClick={() => handleEquipmentSourceModeChange('own')}
+                                                    disabled={isLoading || !currentFacilityId}
+                                                >
+                                                    Own Facility
                                                 </Button>
                                                 <Button size="sm" variant="outline" onClick={submitNoEquipmentSelection} disabled={isLoading}>
                                                     No Equipment Needed
@@ -2013,6 +2367,8 @@ export default function Chatbot() {
                                                 const selected = selectedEquipment.find(
                                                     (item) => item.equipment_id === equipment.id && item.facility_id === equipment.facility_id,
                                                 );
+                                                const remainingQuantity = getEquipmentRemainingQuantity(equipment);
+                                                const isUnavailable = remainingQuantity <= 0;
                                                 return (
                                                     <div
                                                         key={`${equipment.id}-${equipment.facility_id}`}
@@ -2022,19 +2378,25 @@ export default function Chatbot() {
                                                             <Checkbox
                                                                 id={`equipment-${equipment.id}-${equipment.facility_id}`}
                                                                 checked={!!selected}
+                                                                disabled={isUnavailable}
                                                                 onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                             />
                                                             <div className="min-w-0 flex-1">
                                                                 <Label
                                                                     htmlFor={`equipment-${equipment.id}-${equipment.facility_id}`}
-                                                                    className="cursor-pointer text-sm font-medium"
+                                                                    className={`text-sm font-medium ${isUnavailable ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer'}`}
                                                                 >
                                                                     {equipment.name}
                                                                 </Label>
                                                                 <p className="text-xs text-muted-foreground">
                                                                     Facility: {equipment.facility ?? `Facility #${equipment.facility_id}`} |
-                                                                    Available: {equipment.quantity}
+                                                                    Total: {equipment.total_quantity ?? equipment.quantity} |
+                                                                    Reserved: {equipment.reserved_quantity ?? 0} |
+                                                                    Remaining: {remainingQuantity}
                                                                 </p>
+                                                                {isUnavailable && (
+                                                                    <p className="text-xs text-muted-foreground">Unavailable for this selected slot.</p>
+                                                                )}
                                                             </div>
                                                         </div>
 
@@ -2044,11 +2406,11 @@ export default function Chatbot() {
                                                                 <Input
                                                                     type="number"
                                                                     min={1}
-                                                                    max={equipment.quantity}
+                                                                    max={remainingQuantity}
                                                                     value={selected.quantity_needed}
                                                                     onChange={(e) => {
                                                                         const value = Number(e.target.value);
-                                                                        const bounded = Math.min(Math.max(1, value), equipment.quantity);
+                                                                        const bounded = Math.min(Math.max(1, value), remainingQuantity);
                                                                         updateEquipmentQuantity(equipment.id, equipment.facility_id, bounded);
                                                                     }}
                                                                     className="w-24"
