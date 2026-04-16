@@ -21,7 +21,7 @@ import DatePicker from './components/DatePicker';
 
 type ChatMode = 'idle' | 'booking' | 'availability' | 'ai';
 type GuidedFlowMode = 'none' | 'booking' | 'availability';
-type GuidedFlowStep = 'attachments' | 'participants' | 'facility' | 'date' | 'time_start' | 'time_end' | 'equipment';
+type GuidedFlowStep = 'attachments' | 'participants' | 'facility' | 'date' | 'time_start' | 'time_end' | 'equipment' | 'event_type';
 type SelectedEquipmentItem = {
     equipment_id: number;
     equipment_name: string;
@@ -543,6 +543,8 @@ export default function Chatbot() {
                         return hasLockedSchedule
                             ? { ...prev, step: 'participants', equipmentDecision: 'unknown', eventType: null }
                             : { ...prev, step: 'time_end', equipmentDecision: 'unknown', eventType: null };
+                    case 'event_type':
+                        return { ...prev, step: 'equipment', eventType: null };
                     default:
                         return prev;
                 }
@@ -785,12 +787,12 @@ export default function Chatbot() {
         setGuidedFlow((prev) => ({
             ...prev,
             equipmentDecision: 'none',
-            step: 'equipment',
+            step: 'event_type',
         }));
         addMessage({ role: 'user', content: 'No equipment needed.' });
         addMessage({
             role: 'assistant',
-            content: 'Noted. Please select your event type, then continue to request details.',
+            content: 'Noted. Please select your event type.',
         });
     };
 
@@ -802,6 +804,7 @@ export default function Chatbot() {
 
         setGuidedFlow((prev) => ({
             ...prev,
+            step: 'event_type',
             eventType: eventTypeId,
         }));
 
@@ -1353,11 +1356,15 @@ export default function Chatbot() {
             setGuidedFlow((prev) => ({
                 ...prev,
                 equipmentDecision: normalizedSelection.length > 0 ? 'selected' : 'none',
+                step: 'event_type',
             }));
             setSelectedEquipment([]);
             setShowEquipmentSelection(false);
             addMessage({ role: 'user', content: message });
-            await handleGuidedContinueBooking(normalizedSelection);
+            addMessage({
+                role: 'assistant',
+                content: 'Equipment saved. Please select your event type.',
+            });
             return;
         }
 
@@ -1576,7 +1583,8 @@ export default function Chatbot() {
         });
     };
 
-    const shouldRenderEquipmentPicker = showEquipmentSelection || shouldShowEquipmentPicker();
+    const canUseEquipmentSelector = guidedFlow.mode !== 'booking' || guidedFlow.step === 'equipment';
+    const shouldRenderEquipmentPicker = canUseEquipmentSelector && (showEquipmentSelection || shouldShowEquipmentPicker());
     const currentFacilityId = getCurrentFacilityId();
 
     const buildGuidedQuickReplies = (): GuidedQuickReplyOption[] => {
@@ -1779,6 +1787,30 @@ export default function Chatbot() {
                         disabled: getFilteredEquipment().length === 0,
                     },
                     { id: 'guided-equipment-none', label: 'No Equipment Needed', onSelect: handleGuidedNoEquipment, variant: 'outline' },
+                    {
+                        id: 'guided-equipment-next',
+                        label: 'Next: Event Type',
+                        onSelect: () => {
+                            setShowEquipmentSelection(false);
+                            setGuidedFlow((prev) => ({
+                                ...prev,
+                                equipmentDecision: prev.equipmentDecision === 'unknown' ? 'none' : prev.equipmentDecision,
+                                step: 'event_type',
+                            }));
+                            addMessage({
+                                role: 'assistant',
+                                content: 'Proceeding without additional equipment. Please select your event type.',
+                            });
+                        },
+                        variant: 'default',
+                    },
+                    { id: 'guided-back', label: 'Back', onSelect: handleGuidedBack, variant: 'outline' },
+                    { id: 'guided-cancel', label: 'Cancel Guided Flow', onSelect: handleGuidedCancel, variant: 'outline' },
+                ];
+            }
+
+            if (guidedFlow.step === 'event_type') {
+                return [
                     ...EVENT_TYPE_OPTIONS.map((eventType) => ({
                         id: `guided-event-type-${eventType.id}`,
                         label: `${eventType.label} Event`,
@@ -1802,7 +1834,7 @@ export default function Chatbot() {
             if (guidedFlow.step === 'facility') {
                 const facilityReplies = facilities.slice(0, 12).map((facility) => ({
                     id: `guided-availability-facility-${facility.id}`,
-                    label: `ID ${facility.id} ${facility.name}`,
+                    label: `ID ${facility.id} ${facility.name}${typeof facility.capacity === 'number' ? ` (Capacity: ${facility.capacity})` : ''}`,
                     onSelect: () => handleGuidedFacilitySelection(facility.id),
                     variant: 'outline' as const,
                 }));
@@ -1901,16 +1933,18 @@ export default function Chatbot() {
                 {/* AI chat mode */}
                 {mode === 'ai' && (
                     <>
-                        <div className="mb-3 flex justify-end">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setShowEquipmentSelection(true)}
-                                disabled={isLoading || getFilteredEquipment().length === 0}
-                            >
-                                Select Equipment
-                            </Button>
-                        </div>
+                        {canUseEquipmentSelector && (
+                            <div className="mb-3 flex justify-end">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setShowEquipmentSelection(true)}
+                                    disabled={isLoading || getFilteredEquipment().length === 0}
+                                >
+                                    Select Equipment
+                                </Button>
+                            </div>
+                        )}
 
                         <MessageList
                             messages={messages}
