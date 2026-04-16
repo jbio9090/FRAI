@@ -533,8 +533,8 @@ class ChatController extends Controller
                 if ($quantityNeeded > $available) {
                     $errors["facility_bookings.{$bookingIndex}.equipment.{$equipmentIndex}.quantity_needed"][] =
                         $isBorrowed
-                            ? "{$equipment->name}: requested {$quantityNeeded} borrowed unit(s), but only {$available} remaining unit(s) are available from facility ID {$validationFacilityId} for the selected time slot."
-                            : "{$equipment->name}: requested {$quantityNeeded} unit(s), but only {$available} remaining unit(s) are available in this facility for the selected time slot.";
+                            ? "{$equipment->name}: requested {$quantityNeeded} borrowed unit(s), available quantity is {$available} unit(s) from facility ID {$validationFacilityId} for the selected time slot."
+                            : "{$equipment->name}: requested {$quantityNeeded} unit(s), available quantity is {$available} unit(s) in this facility for the selected time slot.";
                 }
             }
 
@@ -872,7 +872,67 @@ class ChatController extends Controller
             return false;
         }
 
-        return (bool) preg_match('/\b(available|availability|free|open|booked|conflict|occupied|check again|re-check|recheck|double check|are you sure|is that available)\b/i', $message);
+        $normalized = trim((string) $message);
+        if ($normalized === '') {
+            return false;
+        }
+
+        $hasAvailabilityKeyword = (bool) preg_match(
+            '/\b(available|availability|free|open|booked|occupied|conflict|overlap|overlapping)\b/i',
+            $normalized
+        );
+
+        if (!$hasAvailabilityKeyword) {
+            return false;
+        }
+
+        $hasAvailabilityAction = (bool) preg_match(
+            '/\b(check|verify|confirm|re-?check|double check|is|are|can|could|show)\b/i',
+            $normalized
+        );
+
+        $hasBookingEntity = (bool) preg_match(
+            '/\b(room|facility|hall|avr|mph|slot|schedule|booking|date|time)\b/i',
+            $normalized
+        );
+
+        $isLikelyMetaDiscussion = (bool) preg_match(
+            '/\b(logic|module|function|regex|prompt|controller|backend|frontend|intent|code|implementation|system)\b/i',
+            $normalized
+        );
+
+        if ($isLikelyMetaDiscussion && !$hasBookingEntity) {
+            return false;
+        }
+
+        return $hasAvailabilityAction || $hasBookingEntity;
+    }
+
+    private function shouldRunDeterministicAvailabilityCheck(?string $latestUserMessage, array $resolved, $facilities): bool
+    {
+        if (!$latestUserMessage || !$this->isAvailabilityIntent($latestUserMessage)) {
+            return false;
+        }
+
+        if (empty($resolved['facility']) || empty($resolved['date'])) {
+            return false;
+        }
+
+        $latestParsed = $this->extractFacilityAndDateFromMessage($latestUserMessage, $facilities);
+        $latestRange = $this->extractTimeRangeFromMessage($latestUserMessage);
+
+        $messageHasDirectBookingDetails =
+            !empty($latestParsed['facility']) ||
+            !empty($latestParsed['date']) ||
+            !empty($latestRange['time_start']) ||
+            !empty($latestRange['time_end']);
+
+        $messageHasReferentialFollowUp = (bool) preg_match(
+            '/\b(it|that|same (room|facility|slot|time|date)|same schedule|same booking)\b/i',
+            $latestUserMessage
+        );
+
+        return $messageHasDirectBookingDetails || $messageHasReferentialFollowUp;
     }
 
     private function resolveFacilityAndDateFromConversation(array $messages, $facilities): array
@@ -1077,10 +1137,26 @@ class ChatController extends Controller
             }
 
             // Description/additional information is optional in current policy.
-            return !preg_match(
+            if (preg_match(
                 '/(\bdescription\b.*\b(required|must|required field)\b)|(\b(required|must|required field)\b.*\bdescription\b)/i',
                 $normalizedRule
-            );
+            )) {
+                return false;
+            }
+
+            // Equipment availability is backend-authoritative at submit-time.
+            // Drop chat-time refusal rules that block equipment quantity collection.
+            if (preg_match(
+                '/\bequipment\b.*\b(available|availability|stock|remaining|exceed|limit|quantity|qty|insufficient|not enough|cannot|can\'t|do not|don\'t)\b/i',
+                $normalizedRule
+            ) || preg_match(
+                '/\b(available|availability|stock|remaining|exceed|limit|quantity|qty|insufficient|not enough|cannot|can\'t|do not|don\'t)\b.*\bequipment\b/i',
+                $normalizedRule
+            )) {
+                return false;
+            }
+
+            return true;
         }));
     }
 
@@ -1208,13 +1284,10 @@ class ChatController extends Controller
                         'content' => "Available Equipment:\n- " . implode("\n- ", $equipment),
                     ]);
                 }
-                if (
-                    $latestUserMessage &&
-                    $this->isAvailabilityIntent($latestUserMessage)
-                ) {
+                if ($latestUserMessage) {
                     $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
 
-                    if (!empty($resolved['facility']) && !empty($resolved['date'])) {
+                    if ($this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities)) {
                         $content = $this->buildAvailabilityResponse(
                             $resolved['facility'],
                             $resolved['date'],
@@ -1260,7 +1333,7 @@ class ChatController extends Controller
 
                 array_unshift($messages, [
                     'role' => 'system',
-                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
+                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nEQUIPMENT POLICY:\n- During chat, never refuse equipment quantities based on availability math.\n- Do not say \"cannot fulfill\" due to stock/remaining quantity while collecting details.\n- If the user requests equipment, capture the requested equipment ID and quantity and continue.\n- Backend submission validation is the only source of truth for slot-aware equipment limits.\n- If submission fails, relay the backend validation message (including available quantity) and ask for an updated quantity.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
                 ]);
             } catch (\Exception $e) {
                 \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
@@ -1494,13 +1567,10 @@ class ChatController extends Controller
             if (!empty($equipment)) {
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
             }
-            if (
-                $latestUserMessage &&
-                $this->isAvailabilityIntent($latestUserMessage)
-            ) {
+            if ($latestUserMessage) {
                 $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
 
-                if (!empty($resolved['facility']) && !empty($resolved['date'])) {
+                if ($this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities)) {
                     $content = $this->buildAvailabilityResponse(
                         $resolved['facility'],
                         $resolved['date'],
@@ -1551,7 +1621,7 @@ class ChatController extends Controller
             // Updated flow: ask for event type and map to priority level, no separate priority reason
             // Updated order: Description moved after Event Type, and Additional Message retained at end.
                 // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
-                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
+                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nEQUIPMENT POLICY:\n- During chat, never refuse equipment quantities based on availability math.\n- Do not say \"cannot fulfill\" due to stock/remaining quantity while collecting details.\n- If the user requests equipment, capture the requested equipment ID and quantity and continue.\n- Backend submission validation is the only source of truth for slot-aware equipment limits.\n- If submission fails, relay the backend validation message (including available quantity) and ask for an updated quantity.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
         } catch (\Exception $e) {
             \Log::warning('Stream: Failed to fetch facilities/equipment: ' . $e->getMessage());
         }

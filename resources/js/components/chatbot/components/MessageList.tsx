@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import TypingText from './TypingText';
 
 interface MessageListProps {
     messages: Message[];
@@ -47,6 +48,28 @@ const getDisplayContent = (message: Message, equipmentSelectorActive: boolean): 
     }
 
     return 'Equipment options are available in the selector below.';
+};
+
+const isGuidedAssistantMessage = (message: Message): boolean => {
+    if (message.role !== 'assistant') {
+        return false;
+    }
+
+    const content = message.content.toLowerCase();
+    return (
+        content.includes('guided booking is active') ||
+        content.includes('guided availability check is active') ||
+        content.includes('guided flow cancelled') ||
+        content.includes('guided flow is active') ||
+        content.includes('quick replies below') ||
+        content.includes('please choose the participant count') ||
+        content.includes('choose your start time') ||
+        content.includes('choose your end time') ||
+        content.includes('schedule saved') ||
+        content.includes('please select your event type') ||
+        content.includes('equipment saved') ||
+        content.includes('availability is confirmed')
+    );
 };
 
 export default function MessageList({ 
@@ -96,7 +119,11 @@ export default function MessageList({
                                     {msg.role}
                                 </Badge>
                                 <div className="text-sm whitespace-pre-wrap break-words text-card-foreground">
-                                    {getDisplayContent(msg, equipmentSelectorActive)}
+                                    {isGuidedAssistantMessage(msg) ? (
+                                        <TypingText text={getDisplayContent(msg, equipmentSelectorActive)} charDelayMs={12} showCursor />
+                                    ) : (
+                                        getDisplayContent(msg, equipmentSelectorActive)
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
