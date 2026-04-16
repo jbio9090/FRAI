@@ -82,7 +82,7 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
     return (
-        <div className="group relative rounded-lg border border-border/50 bg-card transition-shadow hover:shadow-sm">
+        <div className="group relative rounded-lg border border-border bg-card transition-shadow hover:shadow-sm">
             {/* Header */}
             <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b">
                 <div className="min-w-0">
@@ -91,12 +91,12 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
                             {booking.facility_name}
                         </Link>
                         {booking.has_outsiders && (
-                            <span className="text-amber-600 dark:text-amber-400 font-medium">
-                                · Outsiders
+                            <span className="text-amber-600 dark:text-amber-400 bg-amber-100 rounded-full text-xs px-1 font-medium">
+                                Outsiders
                             </span>
                         )}
                         {hasConflicts && (
-                            <span className="flex items-center gap-1 text-destructive font-medium">
+                            <span className="flex items-center gap-1 text-destructive font-medium text-xs px-1">
                                 <AlertCircleIcon size={10} />
                                 Conflicts
                             </span>
@@ -173,7 +173,7 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
 
             {/* Equipment */}
             {hasAnyEquipment && (
-                <div className="mborder-t border-border/40 space-y-2.5 px-4 py-3.5 bg-background">
+                <div className="rounded-md space-y-2.5 px-4 py-3.5 bg-background">
                     {hasOwnEquipment && (
                         <EquipmentRow label="Facility">
                             {booking.equipment.map((eq, i) => (
@@ -209,17 +209,25 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
 
 function EquipmentRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div className="flex items-start gap-3">
-            <div className="flex flex-wrap gap-1">{children}</div>
+        <div className="flex flex-col gap-1">
+            {label && (
+                <span className="text-xs text-muted-foreground font-semibold">
+                    {label}
+                </span>
+            )}
+            <div className="flex items-start gap-3">
+                <div className="flex flex-wrap gap-1">{children}</div>
+            </div>
         </div>
+
     );
 }
 
 function Chip({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
     return (
         <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-sm border ${muted
-                ? "border-border/40 text-muted-foreground"
-                : "border-border/50 text-foreground/80"
+            ? "border-border/40 text-muted-foreground"
+            : "border-border/50 text-foreground/80"
             }`}>
             {children}
         </span>

@@ -1,6 +1,6 @@
 import { useForm, router } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Plus, Paperclip, Info } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Minus, Plus, Paperclip, Info } from "lucide-react";
 import { motion } from "motion/react"
 import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -214,6 +214,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [equipmentAvailability, setEquipmentAvailability] = useState<Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>>({});
     const [checkingAvailability, setCheckingAvailability] = useState(false);
     const [borrowableAvailability, setBorrowableAvailability] = useState<Record<number, Record<number, number>>>({});
+    const [isExternalOpen, setIsExternalOpen] = useState(false);
+    const [isBorrowOpen, setIsBorrowOpen] = useState(false);
 
     const handleCheckboxChange = (name: string) => {
         setData('approved_by', data.approved_by.includes(name)
@@ -681,13 +683,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         )}
 
                         <Tabs defaultValue="details" className="w-full">
-                            <TabsList className="w-full mb-6">
+                            <TabsList className="w-full mb-6 max-w-2xl mx-auto">
                                 <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
                                 <TabsTrigger value="facility" className="flex-1">Facility</TabsTrigger>
                             </TabsList>
 
                             {/* ── Details Tab ── */}
-                            <TabsContent value="details" className="space-y-6 mt-0">
+                            <TabsContent value="details" className="space-y-6 mt-0 max-w-2xl mx-auto">
                                 <div className="space-y-2">
                                     <Label htmlFor="title">Request Title</Label>
                                     <Input
@@ -1000,10 +1002,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         <div className="space-y-2">
 
                                             {/* External equipment */}
-                                            <Collapsible>
+                                            <Collapsible open={isExternalOpen} onOpenChange={setIsExternalOpen}>
                                                 <CollapsibleTrigger asChild>
                                                     <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
-                                                        <Plus size={16} />
+                                                        {isExternalOpen ? <Minus size={16} /> : <Plus size={16} />}
                                                         <span>Add external equipment</span>
                                                         {externalEquipment.length > 0 && (
                                                             <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
@@ -1014,9 +1016,27 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 </CollapsibleTrigger>
                                                 <CollapsibleContent>
                                                     <div className="mt-3 space-y-3 px-1">
-                                                        <p className="text-xs text-muted-foreground">
+                                                        <p className="text-sm text-muted-foreground">
                                                             List equipment you'll be bringing that isn't in our inventory.
                                                         </p>
+                                                        {externalEquipment.length > 0 && (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {externalEquipment.map((item, i) => (
+                                                                    <div key={i} className="flex items-center gap-1 justify-between rounded-md border py-1 px-2 text-sm bg-muted/20 w-fit">
+                                                                        <span>{item.name}</span>
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                                            onClick={() => setExternalEquipment(prev => prev.filter((_, idx) => idx !== i))}
+                                                                        >
+                                                                            <X size={14} />
+                                                                        </Button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                         <div className="flex gap-2">
                                                             <Input
                                                                 placeholder="e.g., Portable speaker"
@@ -1046,35 +1066,16 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                 Add
                                                             </Button>
                                                         </div>
-
-                                                        {externalEquipment.length > 0 && (
-                                                            <div className="space-y-1.5">
-                                                                {externalEquipment.map((item, i) => (
-                                                                    <div key={i} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-muted/20">
-                                                                        <span>{item.name}</span>
-                                                                        <Button
-                                                                            type="button"
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                                                            onClick={() => setExternalEquipment(prev => prev.filter((_, idx) => idx !== i))}
-                                                                        >
-                                                                            <X size={14} />
-                                                                        </Button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 </CollapsibleContent>
                                             </Collapsible>
 
                                             {/* ── Borrow from another facility — simplified ── */}
                                             {selectedFacility && (
-                                                <Collapsible>
+                                                <Collapsible open={isBorrowOpen} onOpenChange={setIsBorrowOpen}>
                                                     <CollapsibleTrigger asChild>
                                                         <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
-                                                            <Plus size={16} />
+                                                            {isBorrowOpen ? <Minus size={16} /> : <Plus size={16} />}
                                                             <span>Borrow from another facility</span>
                                                             {selectedBorrowedEquipment.length > 0 && (
                                                                 <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
