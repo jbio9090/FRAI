@@ -565,7 +565,7 @@ export default function EquipmentsPage({
                             return (
                                 <TableRow key={eq.id}>
                                     <TableCell className="text-muted-foreground text-sm px-4">
-                                        {i + 1}
+                                        {i}
                                     </TableCell>
                                     <TableCell className="text-sm font-medium">{eq.name}</TableCell>
                                     <TableCell>

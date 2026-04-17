@@ -7,7 +7,9 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { motion, useMotionValue, useMotionTemplate } from "framer-motion"
 
+const MotionButton = motion(Button);
 
 export function LoginForm({
   className,
@@ -18,8 +20,18 @@ export function LoginForm({
     password: '',
   });
 
+  // 1. Setup motion values for mouse position
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
 
-  function submit(e) {
+  // 2. Handle mouse movement to update coordinates
+  function handleMouseMove({ currentTarget, clientX, clientY }: React.MouseEvent) {
+    const { left, top } = currentTarget.getBoundingClientRect();
+    mouseX.set(clientX - left);
+    mouseY.set(clientY - top);
+  }
+
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     post(route('login'));
   }
@@ -36,7 +48,6 @@ export function LoginForm({
           </p>
         </div>
 
-        {/* Show field error */}
         {errors.email && (
           <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-md text-sm">
             {errors.email}
@@ -52,6 +63,7 @@ export function LoginForm({
             onChange={e => setData('email', e.target.value)}
             required />
         </Field>
+        
         <Field>
           <div className="flex items-center">
             <FieldLabel htmlFor="password">Password</FieldLabel>
@@ -62,8 +74,33 @@ export function LoginForm({
             onChange={e => setData('password', e.target.value)}
             required />
         </Field>
+        
         <Field>
-          <Button type="submit">Login</Button>
+          <div className="group relative">
+            <MotionButton 
+              type="submit"
+              onMouseMove={handleMouseMove}
+              className="relative w-full bg-blue-600 hover:bg-blue-600 text-white border-none overflow-hidden"
+              whileTap={{ scale: 0.98 }}
+            >
+              {/* 3. The Animated Gradient Layer */}
+              <motion.div
+                className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
+                style={{
+                  background: useMotionTemplate`
+                    radial-gradient(
+                      300px circle at ${mouseX}px ${mouseY}px,
+                      rgba(255, 255, 255, 0.15),
+                      transparent 80%
+                    )
+                  `,
+                }}
+              />
+              <span className='relative z-10 font-bold'>
+                Login
+              </span>
+            </MotionButton>
+          </div>
         </Field>
       </FieldGroup>
     </form>

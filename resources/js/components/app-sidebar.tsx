@@ -180,8 +180,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           ))}
         </SidebarMenu>
       </SidebarContent>
+      <SidebarSeparator className="mx-0"/>
       <SidebarFooter>
-        <SidebarSeparator />
         <SidebarMenu className="pb-4">
           <SidebarMenuItem className="px-4">
             <SidebarMenuButton asChild>
