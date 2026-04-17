@@ -665,11 +665,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             </AlertDialog>
 
             <div className="w-full">
-                <div className="max-w-5xl w-full mx-auto">
+                <div className="max-w-4xl w-full mx-auto">
                     <form onSubmit={submit} className="space-y-8 flex flex-col gap-6">
 
                         {Object.keys(errors).length > 0 && (
-                            <Alert variant="destructive" className="border-destructive bg-destructive/4 mb-0 mt-0">
+                            <Alert variant="destructive" className="max-w-2xl mx-auto border-destructive bg-destructive/4 mb-0 mt-0">
                                 <AlertCircleIcon />
                                 <AlertTitle>Error with submission. Please properly fill in all the details.</AlertTitle>
                                 <AlertDescription>
@@ -866,7 +866,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
                                         {/* Facility picker */}
                                         <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex justify-start gap-1">
                                                 <Label>Facility</Label>
                                                 <div className="block lg:hidden">
                                                     <Dialog>
@@ -1259,11 +1259,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                             </TabsContent>
                         </Tabs>
 
-                        <div className="flex justify-end gap-4 mb-16">
-                            <Button type="button" variant="outline" onClick={() => window.history.back()}>
+                        <div className="flex justify-end gap-4 mx-auto w-full max-w-2xl mb-16">
+                            <Button type="button" variant="outline" size="lg" className='text-md font-semibold' onClick={() => window.history.back()}>
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={processing}>
+                            <Button type="submit" size="lg" className='text-md font-semibold' disabled={processing}>
                                 {processing
                                     ? (isEditing ? 'Saving...' : 'Submitting...')
                                     : (isEditing ? 'Save Changes' : 'Submit Request')}

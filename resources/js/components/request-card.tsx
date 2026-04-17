@@ -31,7 +31,6 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
 
 export default function RequestCard({
     request: initialRequest,
-    page_title,
     handleSelection,
     isSelecting,
     isSelected
@@ -380,18 +379,22 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                 return (
                     <div className="mt-4 rounded-xl border border-dashed p-5 flex flex-col gap-3">
                         {isLoadingRecommendation ? (
-                            <>
-                                <div className="flex items-center gap-2">
+                            <div className="flex flex-col gap-2">
+                                {/* Header: Icon + "Recommendation" */}
+                                <div className="flex items-center gap-1.5">
                                     <div className="w-4 h-4 rounded bg-muted animate-pulse" />
-                                    <div className="w-28 h-3.5 rounded bg-muted animate-pulse" />
+                                    <div className="w-24 h-3.5 rounded bg-muted animate-pulse" />
                                 </div>
-                                <div className="w-32 h-8 rounded bg-muted animate-pulse" />
-                                <div className="flex flex-col gap-1.5">
+
+                                {/* Main Verdict: Centered and Bold-sized */}
+                                <div className="h-8 w-48 rounded bg-muted animate-pulse mx-auto" />
+
+                                {/* Reason: Multi-line Centered */}
+                                <div className="flex flex-col items-center gap-1.5 px-2">
                                     <div className="h-3 w-full rounded bg-muted animate-pulse" />
                                     <div className="h-3 w-5/6 rounded bg-muted animate-pulse" />
-                                    <div className="h-3 w-3/4 rounded bg-muted animate-pulse" />
                                 </div>
-                            </>
+                            </div>
                         ) : (
                             <motion.div
                                 initial={{ opacity: 0, y: 6 }}

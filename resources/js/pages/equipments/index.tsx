@@ -443,44 +443,6 @@ export default function EquipmentsPage({
                 <h1 className="text-xl font-bold">Equipments</h1>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Total Items
-                        </CardTitle>
-                        <Package className="w-4 h-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold">{equipments.length}</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Total Units
-                        </CardTitle>
-                        <Hash className="w-4 h-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold">{totalUnits}</p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Facilities
-                        </CardTitle>
-                        <Building2 className="w-4 h-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-2xl font-bold">{facilities.length}</p>
-                    </CardContent>
-                </Card>
-            </div>
-
             <div className="flex items-center gap-3 mb-4">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -494,7 +456,7 @@ export default function EquipmentsPage({
 
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="outline">
+                        <Button variant="outline" className="ml-auto">
                             <ArrowDownUp className="h-4 w-4" />
                             <span>Sort By</span>
                         </Button>
@@ -565,7 +527,7 @@ export default function EquipmentsPage({
                             return (
                                 <TableRow key={eq.id}>
                                     <TableCell className="text-muted-foreground text-sm px-4">
-                                        {i}
+                                        {i + 1}
                                     </TableCell>
                                     <TableCell className="text-sm font-medium">{eq.name}</TableCell>
                                     <TableCell>
@@ -580,7 +542,7 @@ export default function EquipmentsPage({
                                                 <div className={`inline-flex items-center gap-0.5 rounded-md border px-2.5 py-1 text-sm
                 ${over ? "border-destructive/30" : "border-border bg-muted/40"}`}
                                                 >
-                                                    <span className={`font-medium ${over ? "text-destructive" : empty ? "text-muted-foreground" : "text-green-700"
+                                                    <span className={`font-medium ${over ? "text-destructive" : empty ? "text-muted-foreground" : "text-primary/60"
                                                         }`}>
                                                         {assigned}
                                                     </span>
@@ -598,16 +560,16 @@ export default function EquipmentsPage({
                                                 </span>
                                             ) : (
                                                 eq.facilities.map((f) => {
-                                                    const { text, background } = wordToColor(f.name, isDark);
+                                                    const { text, background } = wordToColor(f.name);
                                                     return (
                                                         <Badge
                                                             key={f.id}
                                                             variant="secondary"
-                                                            className="text-xs flex items-center"
+                                                            className="text-xs flex items-center font-bold"
                                                             style={{ background, color: text }}
                                                         >
                                                             {(f.pivot?.quantity && f.pivot.quantity > 1)
-                                                                ? (<span className="font-extrabold">{`${f.pivot.quantity} -`}</span>)
+                                                                ? (<span className="">{`${f.pivot.quantity} in `}</span>)
                                                                 : ""}
                                                             <span>{f.name}</span>
                                                         </Badge>

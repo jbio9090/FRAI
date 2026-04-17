@@ -40,7 +40,12 @@ export default function Rules({ rules }: DashboardProps) {
 
     return (
         <DefaultLayout>
+            
             <h1 className='text-lg font-bold'>Rules</h1>
+            {hasPermission("modify rules") && (
+              <p className='text-sm mb-4'>The rules here will be the basis for the AI recommendations for requests. Please put the important rules at the top.</p>  
+            )}
+            
             {hasPermission("modify rules") && (
                 <header className='flex w-full max-w-4xl'>
                     <Button variant={"outline"} size={"sm"} onClick={() => setInputState(!showInput)}>
