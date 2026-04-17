@@ -1023,6 +1023,19 @@ export default function Chatbot() {
             }
 
             const normalizedEquipment = normalizeEquipmentResponse(json.data);
+            const requestedSourceMode = params?.sourceMode ?? 'own';
+
+            if (
+                scope === 'slot' &&
+                requestedSourceMode === 'own' &&
+                !!params?.facilityId &&
+                normalizedEquipment.length === 0
+            ) {
+                setEquipmentSourceMode('borrow');
+                setEquipmentSelectionNotice('No equipment is assigned to this facility. Switched to Borrow Equipment.');
+                return;
+            }
+
             if (scope === 'slot') {
                 setEquipmentSelectionNotice(null);
             }
@@ -1388,6 +1401,46 @@ export default function Chatbot() {
         return equipmentOptions.filter((eq) => eq.facility_id === facilityId);
     };
 
+    const openEquipmentSelection = () => {
+        setShowEquipmentSelection(true);
+
+        const facilityId = getCurrentFacilityId();
+        if (!facilityId || equipmentSourceMode !== 'own') {
+            return;
+        }
+
+        const ownFacilityOptions = equipmentOptions.filter((eq) => eq.facility_id === facilityId);
+        if (ownFacilityOptions.length > 0) {
+            return;
+        }
+
+        setEquipmentSourceMode('borrow');
+        setSelectedEquipment([]);
+        setEquipmentSelectionNotice('No equipment is assigned to this facility. Switched to Borrow Equipment.');
+
+        const slotContext = getActiveSlotContext();
+        if (!slotContext) {
+            return;
+        }
+
+        const normalizedStart = toHHMM(slotContext.timeStart);
+        const normalizedEnd = toHHMM(slotContext.timeEnd);
+        if (!normalizedStart || !normalizedEnd) {
+            return;
+        }
+
+        void fetchEquipmentOptions(
+            {
+                facilityId: slotContext.facilityId,
+                date: slotContext.date,
+                timeStart: normalizedStart,
+                timeEnd: normalizedEnd,
+                sourceMode: 'borrow',
+            },
+            'slot',
+        );
+    };
+
     const getLatestAssistantMessage = (): { message: Message; index: number } | null => {
         for (let i = messages.length - 1; i >= 0; i -= 1) {
             if (messages[i].role === 'assistant') {
@@ -1442,7 +1495,7 @@ export default function Chatbot() {
         const assistantAskedAboutEquipment = isEquipmentAvailabilityIntent(latestAssistantText);
         const userAskedAboutEquipmentAvailability = isEquipmentAvailabilityIntent(latestUserText);
 
-        return getFilteredEquipment().length > 0 && (assistantAskedAboutEquipment || userAskedAboutEquipmentAvailability);
+        return equipmentOptions.length > 0 && (assistantAskedAboutEquipment || userAskedAboutEquipmentAvailability);
     };
 
     useEffect(() => {
@@ -2108,8 +2161,7 @@ export default function Chatbot() {
                     {
                         id: 'guided-equipment-select',
                         label: 'Select Equipment',
-                        onSelect: () => setShowEquipmentSelection(true),
-                        disabled: getFilteredEquipment().length === 0,
+                        onSelect: openEquipmentSelection,
                     },
                     { id: 'guided-equipment-none', label: 'No Equipment Needed', onSelect: handleGuidedNoEquipment, variant: 'outline' },
                     {
@@ -2263,8 +2315,8 @@ export default function Chatbot() {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => setShowEquipmentSelection(true)}
-                                    disabled={isLoading || getFilteredEquipment().length === 0}
+                                    onClick={openEquipmentSelection}
+                                    disabled={isLoading}
                                 >
                                     Select Equipment
                                 </Button>
@@ -2290,7 +2342,7 @@ export default function Chatbot() {
                                                 Click the button to select equipment from the available list.
                                             </p>
                                         </div>
-                                        <Button size="sm" onClick={() => setShowEquipmentSelection(true)} disabled={isLoading}>
+                                        <Button size="sm" onClick={openEquipmentSelection} disabled={isLoading}>
                                             Select Equipment
                                         </Button>
                                     </div>
