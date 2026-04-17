@@ -44,6 +44,7 @@ export async function sendChatMessageStream(
     payload: ChatRequest,
     onToken: (token: string) => void,
     onBookingPayload: (json: string) => void,
+    onDeterministic: (payload: Record<string, unknown>) => void,
     onViolation: (message: string) => void,
     onDone: () => void,
     onError: (message: string) => void,
@@ -119,6 +120,10 @@ export async function sendChatMessageStream(
                         : JSON.stringify(event.booking_payload);
                     bookingPayloadEmitted = true;
                     onBookingPayload(payloadStr);
+                }
+
+                if (event.deterministic && typeof event.deterministic === 'object') {
+                    onDeterministic(event.deterministic as Record<string, unknown>);
                 }
 
                 if (event.violation) {

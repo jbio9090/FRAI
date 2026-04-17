@@ -3,7 +3,6 @@ import { Message, CreateRequestPayload, AttachedFileInfo } from './types';
 import { useMessages } from './hooks/useMessages';
 import { useParticipantCount } from './hooks/useParticipantCount';
 import { useChatAPI } from './hooks/useChatAPI';
-import { QuickReply } from './components/QuickReplies';
 import { Facility, useBookingFlow } from './hooks/useBookingFlow';
 import { Equipment } from '@/types/equipment';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -66,6 +65,8 @@ type AvailabilityFollowUpState = {
     endTime: string;
     source: 'guided' | 'wizard';
 };
+
+type GuidedIntentRoute = 'booking' | 'availability' | 'equipment' | null;
 
 const GUIDED_TIME_OPTIONS = ['8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
 
@@ -1184,10 +1185,10 @@ export default function Chatbot() {
                 const result = await submitRequest(payload);
                 setPendingPayload(null);
                 setAttachedFiles([]);
-                addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
+                addMessage({ role: 'assistant', content: `Success: Request #${result.request_id} created successfully!` });
             } catch (err) {
                 const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
-                addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
+                addMessage({ role: 'assistant', content: `Failed to create request: ${errorMsg}` });
             }
             return null; // don't send to AI again
         }
@@ -1205,6 +1206,7 @@ export default function Chatbot() {
             const activeBookingContext = bookingFlow.step !== 'title' && bookingFlow.step !== 'done' ? bookingFlow.buildContextSummary() : undefined;
 
             let streamingContent = '';
+            let deterministicAvailabilityStatus: 'available' | 'unavailable' | null = null;
 
             const assistantContent = await sendMessage(
                 allMessages,
@@ -1231,6 +1233,17 @@ export default function Chatbot() {
                         }
                     } catch (_) {}
                 },
+                (deterministic) => {
+                    const check = typeof deterministic.check === 'string' ? deterministic.check : '';
+                    const status = typeof deterministic.status === 'string' ? deterministic.status : '';
+                    if (check !== 'availability') {
+                        return;
+                    }
+
+                    if (status === 'available' || status === 'unavailable') {
+                        deterministicAvailabilityStatus = status;
+                    }
+                },
             );
 
             if (
@@ -1238,7 +1251,7 @@ export default function Chatbot() {
                 (contextNote.startsWith('Quick reply collected availability details') ||
                     contextNote.startsWith('Guided quick reply collected availability details'))
             ) {
-                const status = getAvailabilityStatus(assistantContent);
+                const status = deterministicAvailabilityStatus ?? getAvailabilityStatus(assistantContent);
                 const parsedSelection = parseAvailabilityUserMessage(userMessage.content);
                 if (status && parsedSelection) {
                     const facility = facilities.find((item) => item.name.toLowerCase() === parsedSelection.facilityName.toLowerCase());
@@ -1322,10 +1335,10 @@ export default function Chatbot() {
             const result = await submitRequest(payload);
             setPendingPayload(null);
             setAttachedFiles([]);
-            addMessage({ role: 'assistant', content: `✓ Request #${result.request_id} created successfully!` });
+            addMessage({ role: 'assistant', content: `Success: Request #${result.request_id} created successfully!` });
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
-            addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
+            addMessage({ role: 'assistant', content: `Failed to create request: ${errorMsg}` });
         }
     };
 
@@ -1476,10 +1489,30 @@ export default function Chatbot() {
             /\bneed any of (?:these )?equipment\b/,
             /\bneed any of these\b.*\bequipment\b/,
             /\bplease let me know if you need\b.*\bequipment\b/,
-            /\bi(?:'|’)ll add (?:them|it) to the facility request\b/,
+            /\bi(?:'|â€™)ll add (?:them|it) to the facility request\b/,
             /\bany additional equipment\b/,
             /\bavailable for use\b/,
         ].some((pattern) => pattern.test(text));
+    };
+
+    const detectGuidedIntentRoute = (text: string): GuidedIntentRoute => {
+        const normalized = text.toLowerCase();
+        const equipmentIntent = isEquipmentAvailabilityIntent(normalized) || /\b(borrow equipment|equipment request)\b/i.test(normalized);
+        if (equipmentIntent) {
+            return 'equipment';
+        }
+
+        const availabilityIntent = /\b(check|verify|confirm|is|are)\b.*\b(available|availability|free|vacant)\b/i.test(normalized);
+        if (availabilityIntent) {
+            return 'availability';
+        }
+
+        const bookingIntent = /\b(book|booking|reserve|reservation|create request|submit request|facility request)\b/i.test(normalized);
+        if (bookingIntent) {
+            return 'booking';
+        }
+
+        return null;
     };
 
     const shouldShowEquipmentPicker = (): boolean => {
@@ -1754,54 +1787,35 @@ export default function Chatbot() {
             'slot',
         );
     };
-
-    const handleQuickReply = (option: QuickReply) => {
-        setAvailabilityFollowUp(null);
-
-        if (option.id === 'guided_booking') {
-            startGuidedFlow('booking');
-            return;
-        }
-
-        if (option.id === 'guided_availability') {
-            startGuidedFlow('availability');
-            return;
-        }
-
-        if (option.id === 'book_facility') {
-            // Enter structured booking flow — no AI needed
-            setMode('booking');
-            return;
-        }
-
-        if (option.action === 'availability') {
-            setMode('availability');
-            return;
-        }
-
-        if (option.action === 'navigate' && option.href) {
-            window.location.href = option.href;
-            return;
-        }
-
-        const userMessage: Message = { role: 'user', content: option.message };
-
-        if (isLoading) {
-            addMessage(userMessage);
-            messageQueueRef.current.push({ message: userMessage, context: option.context });
-            return;
-        }
-
-        // All other quick replies go to AI mode
-        setMode('ai');
-        processAndSend(userMessage, option.context);
-    };
-
     const handleSendMessage = async () => {
         const message = input.trim();
         if (!message) return;
         setInput('');
         setAvailabilityFollowUp(null);
+
+        if (guidedFlow.mode === 'none') {
+            const routedIntent = detectGuidedIntentRoute(message);
+            if (routedIntent === 'availability') {
+                addMessage({ role: 'user', content: message });
+                startGuidedFlow('availability');
+                addMessage({
+                    role: 'assistant',
+                    content: 'I routed your request to Guided Availability so backend checks stay deterministic.',
+                });
+                return;
+            }
+
+            if (routedIntent === 'booking' || routedIntent === 'equipment') {
+                addMessage({ role: 'user', content: message });
+                startGuidedFlow('booking');
+                addMessage({
+                    role: 'assistant',
+                    content: 'I routed your request to Guided Booking so we can collect details in one controlled flow.',
+                });
+                return;
+            }
+        }
+
         if (mode === 'idle' || mode === 'booking' || mode === 'availability') setMode('ai');
 
         if (guidedFlow.mode !== 'none') {
@@ -1941,7 +1955,7 @@ export default function Chatbot() {
             });
             addMessage({
                 role: 'assistant',
-                content: `Okay, let’s change the time slot for ${facility.name} on ${date}. Please choose a new start time.`,
+                content: `Okay, letâ€™s change the time slot for ${facility.name} on ${date}. Please choose a new start time.`,
             });
             return;
         }
@@ -2040,18 +2054,6 @@ export default function Chatbot() {
                     id: 'guided-start-availability',
                     label: 'Guided Availability',
                     onSelect: () => startGuidedFlow('availability'),
-                    variant: 'outline',
-                },
-                {
-                    id: 'guided-open-booking-wizard',
-                    label: 'Open Booking Wizard',
-                    onSelect: () => setMode('booking'),
-                    variant: 'outline',
-                },
-                {
-                    id: 'guided-open-availability-wizard',
-                    label: 'Open Availability Wizard',
-                    onSelect: () => setMode('availability'),
                     variant: 'outline',
                 },
             ];
@@ -2272,6 +2274,9 @@ export default function Chatbot() {
     };
 
     const guidedQuickReplies = mode === 'booking' || mode === 'availability' ? [] : buildGuidedQuickReplies();
+    const equipmentIntentInSession = messages.some(
+        (message) => message.role === 'assistant' && isEquipmentAvailabilityIntent(message.content.toLowerCase()),
+    );
     const guidedQuickReplyHint = pendingPayload
         ? 'Review action'
         : availabilityFollowUp
@@ -2287,10 +2292,10 @@ export default function Chatbot() {
     return (
         <div className="flex h-full w-full flex-col bg-background">
             <div className={`flex-1 space-y-4 p-6 ${mode === 'idle' ? 'overflow-visible' : 'overflow-y-auto'}`}>
-                {/* Idle — show welcome + quick reply buttons */}
-                {mode === 'idle' && <WelcomeMessage onQuickReply={handleQuickReply} />}
+                {/* Idle — show welcome */}
+                {mode === 'idle' && <WelcomeMessage />}
 
-                {/* Booking flow — fully structured, no AI */}
+                {/* Booking flow â€” fully structured, no AI */}
                 {mode === 'booking' && (
                     <BookingFlow
                         bookingFlow={bookingFlow}
@@ -2310,7 +2315,7 @@ export default function Chatbot() {
                 {/* AI chat mode */}
                 {mode === 'ai' && (
                     <>
-                        {canUseEquipmentSelector && (
+                        {canUseEquipmentSelector && (showEquipmentSelection || equipmentIntentInSession) && (
                             <div className="mb-3 flex justify-end">
                                 <Button
                                     size="sm"
@@ -2565,7 +2570,7 @@ export default function Chatbot() {
                 </div>
             )}
 
-            {/* Input area — hidden during booking flow */}
+            {/* Input area â€” hidden during booking flow */}
             <ChatInput
                 value={input}
                 onChange={setInput}
@@ -2583,3 +2588,6 @@ export default function Chatbot() {
         </div>
     );
 }
+
+
+

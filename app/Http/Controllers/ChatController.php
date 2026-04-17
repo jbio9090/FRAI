@@ -1073,6 +1073,58 @@ class ChatController extends Controller
         return "{$facility->name} has approved bookings on {$date} during these time slots:\n{$bookingLines}\n\nI cannot say the room is unavailable for the whole day based on this alone. If you tell me your preferred start and end time, I can check whether your time slot overlaps with any existing booking.";
     }
 
+    private function buildAvailabilityCheckResult(
+        $facility,
+        string $date,
+        $allRequests,
+        ?string $requestedStart = null,
+        ?string $requestedEnd = null
+    ): array {
+        $content = $this->buildAvailabilityResponse($facility, $date, $allRequests, $requestedStart, $requestedEnd);
+
+        $status = 'info';
+        $reason = 'informational';
+        $actions = ['change_time_slot', 'other_facility', 'cancel'];
+
+        if (Str::contains($content, ' is NOT available on ')) {
+            $status = 'unavailable';
+            $reason = 'overlap_conflict';
+            $actions = ['change_time_slot', 'other_facility', 'cancel'];
+        } elseif (Str::contains($content, ' is available on ')) {
+            $status = 'available';
+            $reason = 'no_conflict';
+            $actions = ['proceed_booking', 'change_time_slot', 'other_facility', 'cancel'];
+        } elseif (Str::contains($content, "couldn't understand the requested time format")) {
+            $status = 'needs_time_format';
+            $reason = 'invalid_time_format';
+            $actions = ['change_time_slot', 'cancel'];
+        } elseif (Str::contains($content, 'end time is not after the start time')) {
+            $status = 'invalid_time_range';
+            $reason = 'invalid_time_range';
+            $actions = ['change_time_slot', 'cancel'];
+        } elseif (Str::contains($content, 'If you tell me your preferred start and end time')) {
+            $status = 'needs_time_slot';
+            $reason = 'time_required';
+            $actions = ['change_time_slot', 'cancel'];
+        }
+
+        return [
+            'content' => $content,
+            'deterministic' => [
+                'source' => 'deterministic_check',
+                'check' => 'availability',
+                'status' => $status,
+                'reason' => $reason,
+                'actions' => $actions,
+                'facility_id' => (int) ($facility->id ?? 0),
+                'facility_name' => (string) ($facility->name ?? ''),
+                'date' => $date,
+                'time_start' => is_string($requestedStart) ? $this->normalizeTimeValue($requestedStart) : null,
+                'time_end' => is_string($requestedEnd) ? $this->normalizeTimeValue($requestedEnd) : null,
+            ],
+        ];
+    }
+
     private function storeAssistantReply(array $incomingMessages, string $content): void
     {
         $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
@@ -1112,9 +1164,18 @@ class ChatController extends Controller
         bool $facilityFilterApplied,
         array $extra = [],
     ): array {
+        $bookingContextText = trim((string) $bookingContext);
+        $routingSource = null;
+        if ($bookingContextText !== '') {
+            $routingSource = Str::contains(Str::lower($bookingContextText), ['guided', 'quick reply context'])
+                ? 'guided_step'
+                : 'chat_input';
+        }
+
         return array_merge([
             'participant_count' => is_numeric($participantCount) ? (int) $participantCount : null,
             'booking_context' => $bookingContext ? Str::limit(trim((string) $bookingContext), 500) : null,
+            'routing_source' => $routingSource,
             'rules_injected' => $rulesInjected,
             'rules_loaded' => $rulesCount,
             'approved_booking_context_injected' => $approvedBookingContextInjected,
@@ -1288,13 +1349,14 @@ class ChatController extends Controller
                     $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
 
                     if ($this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities)) {
-                        $content = $this->buildAvailabilityResponse(
+                        $availabilityResult = $this->buildAvailabilityCheckResult(
                             $resolved['facility'],
                             $resolved['date'],
                             $allRequests,
                             $resolved['time_start'] ?? null,
                             $resolved['time_end'] ?? null
                         );
+                        $content = $availabilityResult['content'];
                         $this->storeAssistantReply($incomingMessages, $content);
                         $this->chatbotLogService->logAssistantReply(
                             $latestUserMessage,
@@ -1310,10 +1372,11 @@ class ChatController extends Controller
                                 $rulesInjected,
                                 $approvedBookingContextInjected,
                                 $deterministicAvailabilityInjected,
-                                $facilityFilterApplied
+                                $facilityFilterApplied,
+                                ['response_source' => 'deterministic_check']
                             ),
                             $sessionId,
-                            'availability_check',
+                            'deterministic_check',
                             'availability_check',
                         );
 
@@ -1322,6 +1385,7 @@ class ChatController extends Controller
                                 'role' => 'assistant',
                                 'content' => $content,
                             ],
+                            'deterministic' => $availabilityResult['deterministic'],
                         ]);
                     }
                 }
@@ -1329,6 +1393,11 @@ class ChatController extends Controller
                 array_unshift($messages, [
                     'role'    => 'system',
                     'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission.",
+                ]);
+
+                array_unshift($messages, [
+                    'role'    => 'system',
+                    'content' => "AI ROLE BOUNDARY (STRICT):\nYou are an assistant and rationale layer only.\n- Never compute or decide final operational truth for availability, conflicts, participant-capacity limits, or equipment slot limits.\n- Never refuse or approve requests based on your own calculations.\n- Deterministic backend checks and submission validation are the source of truth.\n- When backend deterministic output is available, explain it clearly and suggest next valid actions.",
                 ]);
 
                 array_unshift($messages, [
@@ -1471,8 +1540,10 @@ class ChatController extends Controller
                 $this->chatbotLogService->logAssistantReply(
                     $latestUserMessage,
                     $assistantMessage,
-                    $logContext,
-                    $sessionId
+                    array_merge($logContext, ['response_source' => 'ai_rationale']),
+                    $sessionId,
+                    'ai_rationale',
+                    'ai_rationale'
                 );
             }
 
@@ -1571,13 +1642,14 @@ class ChatController extends Controller
                 $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
 
                 if ($this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities)) {
-                    $content = $this->buildAvailabilityResponse(
+                    $availabilityResult = $this->buildAvailabilityCheckResult(
                         $resolved['facility'],
                         $resolved['date'],
                         $allRequests,
                         $resolved['time_start'] ?? null,
                         $resolved['time_end'] ?? null
                     );
+                    $content = $availabilityResult['content'];
                     $incomingMessages = $request->input('messages', []);
                     $this->storeAssistantReply($incomingMessages, $content);
                     $this->chatbotLogService->logAssistantReply(
@@ -1594,15 +1666,19 @@ class ChatController extends Controller
                             $rulesInjected,
                             $approvedBookingContextInjected,
                             $deterministicAvailabilityInjected,
-                            $facilityFilterApplied
+                            $facilityFilterApplied,
+                            ['response_source' => 'deterministic_check']
                         ),
                         $sessionId,
-                        'availability_check',
+                        'deterministic_check',
                         'availability_check',
                     );
 
-                    return response()->stream(function () use ($content) {
+                    return response()->stream(function () use ($content, $availabilityResult) {
                         echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                        ob_flush();
+                        flush();
+                        echo "data: " . json_encode(['deterministic' => $availabilityResult['deterministic']]) . "\n\n";
                         ob_flush();
                         flush();
                         echo "data: " . json_encode(['done' => true]) . "\n\n";
@@ -1618,6 +1694,7 @@ class ChatController extends Controller
             }
 
             array_unshift($messages, ['role' => 'system', 'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission."]);
+            array_unshift($messages, ['role' => 'system', 'content' => "AI ROLE BOUNDARY (STRICT):\nYou are an assistant and rationale layer only.\n- Never compute or decide final operational truth for availability, conflicts, participant-capacity limits, or equipment slot limits.\n- Never refuse or approve requests based on your own calculations.\n- Deterministic backend checks and submission validation are the source of truth.\n- When backend deterministic output is available, explain it clearly and suggest next valid actions."]);
             // Updated flow: ask for event type and map to priority level, no separate priority reason
             // Updated order: Description moved after Event Type, and Additional Message retained at end.
                 // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
@@ -1821,8 +1898,10 @@ class ChatController extends Controller
                     $this->chatbotLogService->logAssistantReply(
                         $latestUserMessage,
                         $fullContent,
-                        $logContext,
-                        $sessionId
+                        array_merge($logContext, ['response_source' => 'ai_rationale']),
+                        $sessionId,
+                        'ai_rationale',
+                        'ai_rationale'
                     );
                 }
 

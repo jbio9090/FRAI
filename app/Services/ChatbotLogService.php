@@ -57,8 +57,8 @@ class ChatbotLogService
     ): ChatbotInteractionLog {
         return $this->create([
             'session_id' => $sessionId,
-            'interaction_type' => 'request_creation',
-            'intent' => 'request_creation',
+            'interaction_type' => 'submission_validation',
+            'intent' => 'submission_validation',
             'user_message' => Arr::get($context, 'user_message'),
             'assistant_message' => Arr::get($context, 'assistant_message'),
             'context_data' => $this->compactContext($context),
@@ -77,8 +77,8 @@ class ChatbotLogService
     ): ChatbotInteractionLog {
         return $this->create([
             'session_id' => $sessionId,
-            'interaction_type' => 'request_creation',
-            'intent' => 'request_creation',
+            'interaction_type' => 'submission_validation',
+            'intent' => 'submission_validation',
             'user_message' => Arr::get($context, 'user_message'),
             'assistant_message' => Arr::get($context, 'assistant_message'),
             'context_data' => $this->compactContext($context),
@@ -186,6 +186,9 @@ class ChatbotLogService
             'equipment_count_loaded' => Arr::get($context, 'equipment_count_loaded'),
             'request_count_loaded' => Arr::get($context, 'request_count_loaded'),
             'approved_request_count' => Arr::get($context, 'approved_request_count'),
+            'response_source' => Arr::get($context, 'response_source'),
+            'routing_source' => Arr::get($context, 'routing_source'),
+            'fallback_counter' => Arr::get($context, 'fallback_counter'),
             'held_count' => Arr::get($context, 'held_count'),
             'files_attached' => Arr::get($context, 'files_attached'),
             'request_id' => Arr::get($context, 'request_id'),

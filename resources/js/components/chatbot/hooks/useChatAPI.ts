@@ -13,6 +13,7 @@ export function useChatAPI() {
         bookingContext?: string,
         onToken?: (token: string) => void,
         onBookingPayload?: (json: string) => void,
+        onDeterministic?: (payload: Record<string, unknown>) => void,
     ) => {
         setIsLoading(true);
         setError(null);
@@ -40,6 +41,9 @@ export function useChatAPI() {
                     } catch (e) {
                         console.error('Error handling booking payload:', e);
                     }
+                },
+                (deterministic) => {
+                    onDeterministic?.(deterministic);
                 },
 
                 (violation) => {
