@@ -60,48 +60,58 @@ class RequestSeeder extends Seeder
 
         // ---- REQUEST FACILITIES ----
         $rf1 = RequestFacility::create([
-            'request_id'     => $request1->id,
-            'facility_id'    => $facilities['COED AVR'],
-            'date_requested' => Carbon::now()->addDays(10)->toDateString(),
-            'time_start'     => '09:00:00',
-            'time_end'       => '12:00:00',
+            'request_id'        => $request1->id,
+            'facility_id'       => $facilities['COED AVR'],
+            'date_requested'    => Carbon::now()->addDays(10)->toDateString(),
+            'time_start'        => '09:00:00',
+            'time_end'          => '12:00:00',
+            'expected_capacity' => 80,
+            'has_outsiders'     => false,
         ]);
 
         $rf2 = RequestFacility::create([
-            'request_id'     => $request2->id,
-            'facility_id'    => $facilities['CEIT Lecture Hall'],
-            'date_requested' => Carbon::now()->addDays(15)->toDateString(),
-            'time_start'     => '10:00:00',
-            'time_end'       => '16:00:00',
+            'request_id'        => $request2->id,
+            'facility_id'       => $facilities['CEIT Lecture Hall'],
+            'date_requested'    => Carbon::now()->addDays(15)->toDateString(),
+            'time_start'        => '10:00:00',
+            'time_end'          => '16:00:00',
+            'expected_capacity' => 120,
+            'has_outsiders'     => true,
         ]);
         ExternalEquipment::create(['request_facility_id' => $rf2->id, 'name' => '1 portable projector']);
         ExternalEquipment::create(['request_facility_id' => $rf2->id, 'name' => '2 extension cords']);
 
         RequestFacility::create([
-            'request_id'     => $request2->id,
-            'facility_id'    => $facilities['CEIT Lecture Hall'],
-            'date_requested' => Carbon::now()->addDays(16)->toDateString(),
-            'time_start'     => '10:00:00',
-            'time_end'       => '16:00:00',
+            'request_id'        => $request2->id,
+            'facility_id'       => $facilities['CEIT Lecture Hall'],
+            'date_requested'    => Carbon::now()->addDays(16)->toDateString(),
+            'time_start'        => '10:00:00',
+            'time_end'          => '16:00:00',
+            'expected_capacity' => 120,
+            'has_outsiders'     => false,
         ]);
 
         $rf4 = RequestFacility::create([
-            'request_id'     => $request3->id,
-            'facility_id'    => $facilities['Main Auditorium'],
-            'date_requested' => Carbon::now()->addDays(20)->toDateString(),
-            'time_start'     => '08:00:00',
-            'time_end'       => '17:00:00',
+            'request_id'        => $request3->id,
+            'facility_id'       => $facilities['Main Auditorium'],
+            'date_requested'    => Carbon::now()->addDays(20)->toDateString(),
+            'time_start'        => '08:00:00',
+            'time_end'          => '17:00:00',
+            'expected_capacity' => 500,
+            'has_outsiders'     => true,
         ]);
         ExternalEquipment::create(['request_facility_id' => $rf4->id, 'name' => '3 portable speakers']);
         ExternalEquipment::create(['request_facility_id' => $rf4->id, 'name' => '1 mixing board']);
         ExternalEquipment::create(['request_facility_id' => $rf4->id, 'name' => '2 microphone stands']);
 
         $rf5 = RequestFacility::create([
-            'request_id'     => $request4->id,
-            'facility_id'    => $facilities['MPH 6D (CEIT Small room)'],
-            'date_requested' => Carbon::now()->addDays(7)->toDateString(),
-            'time_start'     => '18:00:00',
-            'time_end'       => '22:00:00',
+            'request_id'        => $request4->id,
+            'facility_id'       => $facilities['MPH 6D (CEIT Small room)'],
+            'date_requested'    => Carbon::now()->addDays(7)->toDateString(),
+            'time_start'        => '18:00:00',
+            'time_end'          => '22:00:00',
+            'expected_capacity' => 50,
+            'has_outsiders'     => false,
         ]);
         ExternalEquipment::create(['request_facility_id' => $rf5->id, 'name' => '1 bluetooth speaker']);
 

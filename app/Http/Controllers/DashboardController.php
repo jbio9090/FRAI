@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\AuditEvent;
+use App\Models\AuditLog;
 use App\Models\Facility;
 use App\RequestStatus;
 use App\Services\FacilityService;
@@ -22,13 +24,27 @@ class DashboardController extends Controller
         $start = now()->startOfMonth()->format('Y-m-d');
         $end   = now()->endOfMonth()->format('Y-m-d');
 
+        $chartData = AuditLog::query()
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
+            ->whereBetween('created_at', [$start, $end])
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->map(fn($row) => [
+                'date'  => $row->date,
+                'total' => $row->total,
+            ])
+            ->values();
+
         return Inertia::render("dashboard", [
             'labeledBreadcrumb' => "Dashboard",
-            'pending' => $pending,
-            'approved' => $approved,
-            'denied' => $denied,
+            'pending'       => $pending,
+            'approved'      => $approved,
+            'denied'        => $denied,
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
-            'buildings' => Facility::distinct()->pluck('building')->filter()->values(),
+            'buildings'     => Facility::distinct()->pluck('building')->filter()->values(),
+            'auditLogs'     => AuditLog::latest()->take(50)->get(),
+            'chartData'     => $chartData,
         ]);
     }
 
@@ -44,5 +60,30 @@ class DashboardController extends Controller
         return response()->json(
             $this->facilityService->getAllSchedule($start, $end)
         );
+    }
+
+    public function chartData(Request $request)
+    {
+        $range = $request->input('range', 'week');
+
+        [$start, $end] = match ($range) {
+            'month'   => [now()->startOfMonth()->format('Y-m-d'), now()->endOfMonth()->format('Y-m-d')],
+            '3months' => [now()->subMonths(3)->startOfDay()->format('Y-m-d'), now()->format('Y-m-d')],
+            default   => [now()->subDays(6)->startOfDay()->format('Y-m-d'), now()->format('Y-m-d')], // week
+        };
+
+        $data = AuditLog::query()
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
+            ->whereBetween('created_at', [$start, $end])
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->map(fn($row) => [
+                'date'  => $row->date,
+                'total' => (int) $row->total,
+            ])
+            ->values();
+
+        return response()->json($data);
     }
 }

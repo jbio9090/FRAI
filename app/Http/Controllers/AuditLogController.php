@@ -10,8 +10,5 @@ use Carbon\Carbon;
 
 class AuditLogController extends Controller
 {
-    public static function dashboardData(): array
-    {
 
-    }
 }
