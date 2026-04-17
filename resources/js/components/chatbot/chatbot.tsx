@@ -21,7 +21,7 @@ import DatePicker from './components/DatePicker';
 
 type ChatMode = 'idle' | 'booking' | 'availability' | 'ai';
 type GuidedFlowMode = 'none' | 'booking' | 'availability';
-type GuidedFlowStep = 'participants' | 'facility' | 'date' | 'time_start' | 'time_end' | 'equipment';
+type GuidedFlowStep = 'attachments' | 'participants' | 'facility' | 'date' | 'time_start' | 'time_end' | 'equipment' | 'event_type';
 type SelectedEquipmentItem = {
     equipment_id: number;
     equipment_name: string;
@@ -36,6 +36,7 @@ type BookingEquipmentSelection = {
 };
 
 type GuidedEquipmentDecision = 'unknown' | 'selected' | 'none';
+type EquipmentSourceMode = 'own' | 'borrow';
 
 type GuidedFlowState = {
     mode: GuidedFlowMode;
@@ -46,6 +47,7 @@ type GuidedFlowState = {
     timeStart: string | null;
     timeEnd: string | null;
     equipmentDecision: GuidedEquipmentDecision;
+    eventType: 0 | 1 | 2 | 3 | null;
 };
 
 type GuidedQuickReplyOption = {
@@ -54,6 +56,15 @@ type GuidedQuickReplyOption = {
     onSelect: () => void | Promise<void>;
     variant?: 'default' | 'outline';
     disabled?: boolean;
+};
+
+type AvailabilityFollowUpState = {
+    status: 'available' | 'unavailable';
+    facility: Facility;
+    date: string;
+    startTime: string;
+    endTime: string;
+    source: 'guided' | 'wizard';
 };
 
 const GUIDED_TIME_OPTIONS = ['8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
@@ -67,7 +78,15 @@ const INITIAL_GUIDED_FLOW: GuidedFlowState = {
     timeStart: null,
     timeEnd: null,
     equipmentDecision: 'unknown',
+    eventType: null,
 };
+
+const EVENT_TYPE_OPTIONS = [
+    { id: 0 as const, label: 'Academic', priority: 0 as const },
+    { id: 1 as const, label: 'Organizational', priority: 1 as const },
+    { id: 2 as const, label: 'University', priority: 1 as const },
+    { id: 3 as const, label: 'Government', priority: 2 as const },
+];
 
 const toPositiveInt = (value: unknown): number | null => {
     if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
@@ -152,6 +171,9 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
         const timeEndRaw = booking.time_end ?? booking.end_time;
         const timeStart = typeof timeStartRaw === 'string' ? timeStartRaw : '';
         const timeEnd = typeof timeEndRaw === 'string' ? timeEndRaw : '';
+        const expectedCapacity = toPositiveInt(
+            booking.expected_capacity ?? (booking as { participant_count?: unknown }).participant_count,
+        );
         const normalizedEquipment = normalizeEquipmentSelections(booking.equipment);
 
         if (facilityId) {
@@ -161,6 +183,10 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
                 time_start: timeStart,
                 time_end: timeEnd,
             };
+
+            if (expectedCapacity) {
+                normalizedBooking.expected_capacity = expectedCapacity;
+            }
 
             if (normalizedEquipment.length > 0) {
                 normalizedBooking.equipment = normalizedEquipment;
@@ -188,18 +214,81 @@ const normalizePayloadForSubmission = (payload: CreateRequestPayload): CreateReq
         return payload;
     }
 
+    const payloadParticipantCount = toPositiveInt(rawPayload.participant_count);
+
     return {
         ...payload,
+        ...(payloadParticipantCount ? { participant_count: payloadParticipantCount } : {}),
         facility_bookings: normalizedBookings,
     };
+};
+
+const extractPayloadFromText = (content: string): CreateRequestPayload | null => {
+    const trimmed = content.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    const directCandidate = trimmed
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
+    const tryParse = (candidate: string): CreateRequestPayload | null => {
+        try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { facility_bookings?: unknown }).facility_bookings)) {
+                return parsed as CreateRequestPayload;
+            }
+        } catch (_) {}
+        return null;
+    };
+
+    const directParsed = tryParse(directCandidate);
+    if (directParsed) {
+        return directParsed;
+    }
+
+    let depth = 0;
+    let start = -1;
+
+    for (let index = 0; index < content.length; index += 1) {
+        const char = content[index];
+
+        if (char === '{') {
+            if (depth === 0) {
+                start = index;
+            }
+            depth += 1;
+            continue;
+        }
+
+        if (char !== '}' || depth === 0) {
+            continue;
+        }
+
+        depth -= 1;
+        if (depth !== 0 || start < 0) {
+            continue;
+        }
+
+        const candidate = content.slice(start, index + 1);
+        const parsed = tryParse(candidate);
+        if (parsed) {
+            return parsed;
+        }
+    }
+
+    return null;
 };
 
 const toMinutes = (time: string): number => {
     const candidate = time.trim();
     if (!candidate) return NaN;
 
-    if (/^\d{1,2}:\d{2}$/.test(candidate)) {
-        const [hours, minutes] = candidate.split(':').map(Number);
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(candidate)) {
+        const [hours, minutes] = candidate.split(':').slice(0, 2).map(Number);
         if (Number.isNaN(hours) || Number.isNaN(minutes)) return NaN;
         return hours * 60 + minutes;
     }
@@ -216,11 +305,68 @@ const toMinutes = (time: string): number => {
     return hours * 60 + minutes;
 };
 
+const toHHMM = (time: string): string | null => {
+    const minutes = toMinutes(time);
+    if (Number.isNaN(minutes) || minutes < 0) {
+        return null;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+
+    if (hours > 23 || mins > 59) {
+        return null;
+    }
+
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+};
+
+const getEquipmentRemainingQuantity = (equipment: Equipment): number => {
+    if (typeof equipment.remaining_quantity === 'number' && Number.isFinite(equipment.remaining_quantity)) {
+        return Math.max(0, Math.floor(equipment.remaining_quantity));
+    }
+
+    if (typeof equipment.quantity === 'number' && Number.isFinite(equipment.quantity)) {
+        return Math.max(0, Math.floor(equipment.quantity));
+    }
+
+    return 0;
+};
+
 const formatDateYmd = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const getAvailabilityStatus = (content: string): 'available' | 'unavailable' | null => {
+    if (/\bis not available on\b/i.test(content) || /\bNOT available on\b/.test(content)) {
+        return 'unavailable';
+    }
+
+    if (/\bis available on\b/i.test(content) || /\bis available\b/i.test(content)) {
+        return 'available';
+    }
+
+    return null;
+};
+
+const parseAvailabilityUserMessage = (
+    content: string,
+): { facilityName: string; date: string; startTime: string; endTime: string } | null => {
+    const match = content.match(/check availability for (.+) on (\d{4}-\d{2}-\d{2}) from (.+) to (.+)\.?$/i);
+    if (!match) {
+        return null;
+    }
+
+    const [, facilityName, date, startTime, endTime] = match;
+    return {
+        facilityName: facilityName.trim(),
+        date: date.trim(),
+        startTime: startTime.trim(),
+        endTime: endTime.trim(),
+    };
 };
 
 export default function Chatbot() {
@@ -229,15 +375,19 @@ export default function Chatbot() {
     const [mode, setMode] = useState<ChatMode>('idle');
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [equipmentOptions, setEquipmentOptions] = useState<Array<Equipment>>([]);
+    const [baseEquipmentOptions, setBaseEquipmentOptions] = useState<Array<Equipment>>([]);
     const [selectedEquipment, setSelectedEquipment] = useState<SelectedEquipmentItem[]>([]);
+    const [equipmentSelectionNotice, setEquipmentSelectionNotice] = useState<string | null>(null);
+    const [isSlotScopedEquipmentList, setIsSlotScopedEquipmentList] = useState(false);
+    const [equipmentSourceMode, setEquipmentSourceMode] = useState<EquipmentSourceMode>('own');
     // NEW: Track the message index of the last equipment question we responded to
     const [lastEquipmentQuestionIndex, setLastEquipmentQuestionIndex] = useState<number>(-1);
     // NEW: Track whether to show equipment selection UI
     const [showEquipmentSelection, setShowEquipmentSelection] = useState<boolean>(false);
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
-    const { extractAndSet, getCurrentCount } = useParticipantCount();
-    const bookingFlow = useBookingFlow(facilities, equipmentOptions);
+    const { participantCount: trackedParticipantCount, setParticipantCount, extractAndSet, getCurrentCount } = useParticipantCount();
+    const bookingFlow = useBookingFlow(facilities, baseEquipmentOptions);
     const { isLoading, sendMessage, submitRequest } = useChatAPI();
     const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
@@ -245,9 +395,12 @@ export default function Chatbot() {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const messageQueueRef = useRef<Array<{ message: Message; context?: string }>>([]);
     const [guidedFlow, setGuidedFlow] = useState<GuidedFlowState>({ ...INITIAL_GUIDED_FLOW });
+    const [availabilityFollowUp, setAvailabilityFollowUp] = useState<AvailabilityFollowUpState | null>(null);
+    const [guidedEquipmentSnapshot, setGuidedEquipmentSnapshot] = useState<SelectedEquipmentItem[]>([]);
     const [customParticipantCount, setCustomParticipantCount] = useState<string>('');
     const [customStartTime, setCustomStartTime] = useState<string>('');
     const [customEndTime, setCustomEndTime] = useState<string>('');
+    const guidedFileInputRef = useRef<HTMLInputElement | null>(null);
 
     const withAttachedFiles = (payload: CreateRequestPayload): CreateRequestPayload => {
         const fileIds = attachedFiles.map((file) => file.id);
@@ -261,6 +414,51 @@ export default function Chatbot() {
             ...payload,
             files: fileIds,
         };
+    };
+
+    const resolveParticipantCountForSubmission = (): number | null => {
+        const guidedCount = toPositiveInt(guidedFlow.participantCount);
+        if (guidedCount) {
+            return guidedCount;
+        }
+
+        const trackedCount = toPositiveInt(trackedParticipantCount);
+        if (trackedCount) {
+            return trackedCount;
+        }
+
+        const inferredCount = toPositiveInt(getCurrentCount(getMessagesText()));
+        return inferredCount ?? null;
+    };
+
+    const withParticipantCountMetadata = (payload: CreateRequestPayload): CreateRequestPayload => {
+        const payloadParticipantCount = toPositiveInt((payload as unknown as { participant_count?: unknown }).participant_count);
+        const resolvedParticipantCount = payloadParticipantCount ?? resolveParticipantCountForSubmission();
+
+        if (!resolvedParticipantCount) {
+            return payload;
+        }
+
+        return {
+            ...payload,
+            participant_count: resolvedParticipantCount,
+            facility_bookings: payload.facility_bookings.map((booking) => {
+                const existingExpectedCapacity = toPositiveInt((booking as unknown as { expected_capacity?: unknown }).expected_capacity);
+
+                if (existingExpectedCapacity) {
+                    return booking;
+                }
+
+                return {
+                    ...booking,
+                    expected_capacity: resolvedParticipantCount,
+                };
+            }),
+        };
+    };
+
+    const buildSubmissionPayload = (payload: CreateRequestPayload): CreateRequestPayload => {
+        return withAttachedFiles(withParticipantCountMetadata(normalizePayloadForSubmission(payload)));
     };
 
     const getPayloadValidationError = (payload: CreateRequestPayload): string | null => {
@@ -285,18 +483,28 @@ export default function Chatbot() {
 
     const resetGuidedFlow = () => {
         setGuidedFlow({ ...INITIAL_GUIDED_FLOW });
+        setGuidedEquipmentSnapshot([]);
+    };
+
+    const isFacilityRecommendedForParticipants = (facility: Facility, participantCount: number): boolean => {
+        if (participantCount <= 0 || typeof facility.capacity !== 'number') {
+            return false;
+        }
+
+        return facility.capacity >= participantCount && facility.capacity <= participantCount * 2;
     };
 
     const getGuidedBookingFacilities = (participantCount: number): Facility[] => {
-        return facilities
-            .filter((facility) => {
-                if (typeof facility.capacity !== 'number') {
-                    return true;
-                }
+        return [...facilities].sort((a, b) => {
+            const aRecommended = isFacilityRecommendedForParticipants(a, participantCount);
+            const bRecommended = isFacilityRecommendedForParticipants(b, participantCount);
 
-                return facility.capacity >= participantCount && facility.capacity <= participantCount * 2;
-            })
-            .sort((a, b) => a.id - b.id);
+            if (aRecommended === bRecommended) {
+                return a.id - b.id;
+            }
+
+            return aRecommended ? -1 : 1;
+        });
     };
 
     const getGuidedEndTimeOptions = (startTime: string): string[] => {
@@ -310,17 +518,21 @@ export default function Chatbot() {
     const startGuidedFlow = (flowMode: Exclude<GuidedFlowMode, 'none'>) => {
         setMode('ai');
         setShowEquipmentSelection(false);
+        setEquipmentSourceMode('own');
+        setEquipmentSelectionNotice(null);
+        setGuidedEquipmentSnapshot([]);
+        setAvailabilityFollowUp(null);
         setGuidedFlow({
             ...INITIAL_GUIDED_FLOW,
             mode: flowMode,
-            step: flowMode === 'booking' ? 'participants' : 'facility',
+            step: flowMode === 'booking' ? 'attachments' : 'facility',
         });
 
         addMessage({
             role: 'assistant',
             content:
                 flowMode === 'booking'
-                    ? 'Guided booking is active. Please choose the participant count using the quick replies below.'
+                    ? 'Guided booking is active. Before we continue, do you have any approval paper or related supporting document to attach?'
                     : 'Guided availability check is active. Please choose a facility using the quick replies below.',
         });
     };
@@ -328,6 +540,7 @@ export default function Chatbot() {
     const handleGuidedCancel = () => {
         resetGuidedFlow();
         setShowEquipmentSelection(false);
+        setAvailabilityFollowUp(null);
         addMessage({
             role: 'assistant',
             content: 'Guided flow cancelled. You can start a new guided flow or continue with normal chat.',
@@ -341,10 +554,21 @@ export default function Chatbot() {
                 return prev;
             }
 
+            const hasLockedSchedule =
+                !!prev.facilityId &&
+                typeof prev.date === 'string' &&
+                prev.date.length > 0 &&
+                typeof prev.timeStart === 'string' &&
+                prev.timeStart.length > 0 &&
+                typeof prev.timeEnd === 'string' &&
+                prev.timeEnd.length > 0;
+
             if (prev.mode === 'booking') {
                 switch (prev.step) {
-                    case 'participants':
+                    case 'attachments':
                         return { ...INITIAL_GUIDED_FLOW };
+                    case 'participants':
+                        return { ...prev, step: 'attachments' };
                     case 'facility':
                         return { ...prev, step: 'participants', facilityId: null };
                     case 'date':
@@ -354,7 +578,11 @@ export default function Chatbot() {
                     case 'time_end':
                         return { ...prev, step: 'time_start', timeEnd: null };
                     case 'equipment':
-                        return { ...prev, step: 'time_end', equipmentDecision: 'unknown' };
+                        return hasLockedSchedule
+                            ? { ...prev, step: 'participants', equipmentDecision: 'unknown', eventType: null }
+                            : { ...prev, step: 'time_end', equipmentDecision: 'unknown', eventType: null };
+                    case 'event_type':
+                        return { ...prev, step: 'equipment', eventType: null };
                     default:
                         return prev;
                 }
@@ -376,23 +604,35 @@ export default function Chatbot() {
     };
 
     const handleGuidedParticipantSelection = (participantCount: number) => {
+        setParticipantCount(participantCount);
         addMessage({ role: 'user', content: `Participants: ${participantCount}` });
-        const matchedFacilities = getGuidedBookingFacilities(participantCount);
 
-        if (matchedFacilities.length === 0) {
-            addMessage({
-                role: 'assistant',
-                content: `No facilities match ${participantCount} participants with the required capacity range (${participantCount}-${participantCount * 2}). Please choose another participant count.`,
-            });
+        const hasLockedSchedule =
+            !!guidedFlow.facilityId &&
+            !!guidedFlow.date &&
+            !!guidedFlow.timeStart &&
+            !!guidedFlow.timeEnd;
+
+        if (hasLockedSchedule) {
+            setEquipmentSourceMode('own');
+            setGuidedEquipmentSnapshot([]);
+            setEquipmentSelectionNotice(null);
             setGuidedFlow((prev) => ({
                 ...prev,
                 mode: 'booking',
-                step: 'participants',
+                step: 'equipment',
                 participantCount,
-                facilityId: null,
             }));
+            addMessage({
+                role: 'assistant',
+                content: 'Participant count saved. Your facility, date, and time are locked from the availability check. Choose equipment and event type to continue.',
+            });
             return;
         }
+
+        const recommendedCount = facilities.filter((facility) =>
+            isFacilityRecommendedForParticipants(facility, participantCount),
+        ).length;
 
         setGuidedFlow((prev) => ({
             ...prev,
@@ -403,7 +643,10 @@ export default function Chatbot() {
         }));
         addMessage({
             role: 'assistant',
-            content: `Found ${matchedFacilities.length} matching facility options. Please choose one facility ID below.`,
+            content:
+                recommendedCount > 0
+                    ? `I prioritized ${recommendedCount} recommended room option(s) for ${participantCount} participants. You can still choose any facility; final capacity validation is handled by the backend during submission.`
+                    : `No exact capacity-range recommendation was found for ${participantCount} participants. You can still choose any facility, and backend validation will make the final decision on submission.`,
         });
     };
 
@@ -419,6 +662,42 @@ export default function Chatbot() {
 
         setCustomParticipantCount('');
         handleGuidedParticipantSelection(Math.floor(parsed));
+    };
+
+    const proceedToGuidedParticipantStep = () => {
+        setGuidedFlow((prev) => ({
+            ...prev,
+            mode: 'booking',
+            step: 'participants',
+        }));
+        addMessage({
+            role: 'assistant',
+            content: 'Thanks. Now please choose the participant count using the quick replies or custom input.',
+        });
+    };
+
+    const handleGuidedNoAttachment = () => {
+        addMessage({ role: 'user', content: 'No attachment for now.' });
+        proceedToGuidedParticipantStep();
+    };
+
+    const handleGuidedAttachFileClick = () => {
+        guidedFileInputRef.current?.click();
+    };
+
+    const handleGuidedFileSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) {
+            return;
+        }
+
+        addMessage({
+            role: 'user',
+            content: `I will attach ${files.length} supporting document(s).`,
+        });
+        await handleAttachFiles(files);
+        event.target.value = '';
+        proceedToGuidedParticipantStep();
     };
 
     const handleGuidedFacilitySelection = (facilityId: number) => {
@@ -499,6 +778,7 @@ export default function Chatbot() {
             const context = `Guided quick reply collected availability details. Facility: ${currentFacility.name} (ID ${currentFacility.id}). Date: ${guidedFlow.date}. Start time: ${guidedFlow.timeStart}. End time: ${timeEnd}.`;
 
             resetGuidedFlow();
+            setAvailabilityFollowUp(null);
 
             if (isLoading) {
                 addMessage(userMessage);
@@ -515,9 +795,12 @@ export default function Chatbot() {
             step: 'equipment',
             timeEnd,
         }));
+        setGuidedEquipmentSnapshot([]);
+        setEquipmentSourceMode('own');
+        setEquipmentSelectionNotice(null);
         addMessage({
             role: 'assistant',
-            content: 'Schedule saved. Choose your equipment option below, then continue to request details.',
+            content: 'Schedule saved. Choose equipment, then select event type before continuing to request details.',
         });
     };
 
@@ -545,19 +828,42 @@ export default function Chatbot() {
 
     const handleGuidedNoEquipment = () => {
         setShowEquipmentSelection(false);
+        setGuidedEquipmentSnapshot([]);
         setGuidedFlow((prev) => ({
             ...prev,
             equipmentDecision: 'none',
-            step: 'equipment',
+            step: 'event_type',
         }));
         addMessage({ role: 'user', content: 'No equipment needed.' });
         addMessage({
             role: 'assistant',
-            content: 'Noted. You can now continue to request details.',
+            content: 'Noted. Please select your event type.',
         });
     };
 
-    const handleGuidedContinueBooking = async () => {
+    const handleGuidedEventTypeSelection = (eventTypeId: 0 | 1 | 2 | 3) => {
+        const option = EVENT_TYPE_OPTIONS.find((eventType) => eventType.id === eventTypeId);
+        if (!option) {
+            return;
+        }
+
+        setGuidedFlow((prev) => ({
+            ...prev,
+            step: 'event_type',
+            eventType: eventTypeId,
+        }));
+
+        addMessage({
+            role: 'user',
+            content: `Event type: ${option.label} (ID: ${eventTypeId}, priority_level: ${option.priority})`,
+        });
+        addMessage({
+            role: 'assistant',
+            content: `${option.label} selected. You can continue to request details now.`,
+        });
+    };
+
+    const handleGuidedContinueBooking = async (equipmentSelectionForGuided?: SelectedEquipmentItem[]) => {
         const facility = facilities.find((item) => item.id === guidedFlow.facilityId);
         if (!facility || !guidedFlow.participantCount || !guidedFlow.date || !guidedFlow.timeStart || !guidedFlow.timeEnd) {
             addMessage({
@@ -567,18 +873,34 @@ export default function Chatbot() {
             return;
         }
 
+        const effectiveGuidedSelection = equipmentSelectionForGuided ?? guidedEquipmentSnapshot;
+        const serializedEquipmentSelection = effectiveGuidedSelection
+            .map((item) => ({
+                equipment_id: item.equipment_id,
+                facility_id: item.facility_id,
+                quantity_needed: item.quantity_needed,
+                is_borrowed: item.facility_id !== facility.id,
+                source_facility_id: item.facility_id !== facility.id ? item.facility_id : null,
+            }));
+
         const equipmentInstruction =
-            guidedFlow.equipmentDecision === 'selected'
-                ? 'Use the exact equipment IDs and quantities already selected in previous user messages.'
-                : guidedFlow.equipmentDecision === 'none'
-                  ? 'No equipment is needed for this request.'
-                  : 'Ask once if equipment is needed. If not needed, proceed without equipment.';
+            serializedEquipmentSelection.length > 0
+                ? `Use this exact guided equipment selection: ${JSON.stringify(serializedEquipmentSelection)}.`
+                : guidedFlow.equipmentDecision === 'selected'
+                  ? 'Use the exact equipment IDs and quantities already selected in previous user messages.'
+                  : guidedFlow.equipmentDecision === 'none'
+                    ? 'No equipment is needed for this request.'
+                    : 'Ask once if equipment is needed. If not needed, proceed without equipment.';
+        const selectedEventType = EVENT_TYPE_OPTIONS.find((eventType) => eventType.id === guidedFlow.eventType);
+        const eventTypeInstruction = selectedEventType
+            ? `Use locked event_type=${selectedEventType.id} (${selectedEventType.label}) and priority_level=${selectedEventType.priority}. Do not ask event type again.`
+            : 'If event type is still missing, ask once and map it deterministically before final payload.';
 
         const userMessage: Message = {
             role: 'user',
             content:
                 `Continue request creation with these locked details: participant_count=${guidedFlow.participantCount}, facility_id=${facility.id} (${facility.name}), date=${guidedFlow.date}, time_start=${guidedFlow.timeStart}, time_end=${guidedFlow.timeEnd}. ` +
-                `${equipmentInstruction} Do not change these locked details. Collect only missing fields (title, event type, description, optional files), then prepare the confirmation JSON payload.`,
+                `${equipmentInstruction} ${eventTypeInstruction} Do not change these locked details. Collect only missing fields (title, description, optional files, and event type only if not provided), then prepare the confirmation JSON payload.`,
         };
         const context =
             'Guided flow locked booking details. The assistant must keep the selected participant count, facility ID, date, and time window unchanged while collecting only missing fields.';
@@ -595,10 +917,151 @@ export default function Chatbot() {
         await processAndSend(userMessage, context);
     };
 
+    const normalizeEquipmentResponse = (items: unknown[]): Equipment[] => {
+        return items
+            .map((rawItem) => {
+                if (!rawItem || typeof rawItem !== 'object') {
+                    return null;
+                }
+
+                const item = rawItem as Partial<Equipment>;
+                const remainingQuantityRaw =
+                    typeof item.remaining_quantity === 'number' ? item.remaining_quantity : Number(item.remaining_quantity ?? item.quantity);
+                const totalQuantityRaw =
+                    typeof item.total_quantity === 'number' ? item.total_quantity : Number(item.total_quantity ?? item.quantity);
+                const reservedQuantityRaw =
+                    typeof item.reserved_quantity === 'number' ? item.reserved_quantity : Number(item.reserved_quantity ?? 0);
+
+                return {
+                    ...item,
+                    id: Number(item.id),
+                    facility_id: Number(item.facility_id),
+                    quantity: Number.isFinite(remainingQuantityRaw) ? Math.max(0, Math.floor(remainingQuantityRaw)) : 0,
+                    total_quantity: Number.isFinite(totalQuantityRaw) ? Math.max(0, Math.floor(totalQuantityRaw)) : 0,
+                    reserved_quantity: Number.isFinite(reservedQuantityRaw) ? Math.max(0, Math.floor(reservedQuantityRaw)) : 0,
+                    remaining_quantity: Number.isFinite(remainingQuantityRaw) ? Math.max(0, Math.floor(remainingQuantityRaw)) : 0,
+                    facility: typeof item.facility === 'string' ? item.facility : null,
+                    name: String(item.name ?? ''),
+                } as Equipment;
+            })
+            .filter((item): item is Equipment => {
+                if (!item) {
+                    return false;
+                }
+
+                return Number.isFinite(item.id) && Number.isFinite(item.facility_id) && item.facility_id > 0 && item.name.trim() !== '';
+            });
+    };
+
+    const reconcileSelectedEquipment = (options: Equipment[], notify: boolean) => {
+        setSelectedEquipment((prev) => {
+            const optionByKey = new Map<string, Equipment>(
+                options.map((option) => [`${option.id}-${option.facility_id}`, option]),
+            );
+
+            let changed = false;
+            const next = prev.flatMap((selection) => {
+                const option = optionByKey.get(`${selection.equipment_id}-${selection.facility_id}`);
+                if (!option) {
+                    changed = true;
+                    return [];
+                }
+
+                const remaining = getEquipmentRemainingQuantity(option);
+                if (remaining <= 0) {
+                    changed = true;
+                    return [];
+                }
+
+                const clampedQuantity = Math.min(Math.max(1, selection.quantity_needed), remaining);
+                if (clampedQuantity !== selection.quantity_needed) {
+                    changed = true;
+                }
+
+                return [{ ...selection, quantity_needed: clampedQuantity }];
+            });
+
+            if (changed && notify) {
+                setEquipmentSelectionNotice('Availability changed for this slot. Selected quantities were adjusted to the latest remaining stock.');
+            }
+
+            return next;
+        });
+    };
+
+    const fetchEquipmentOptions = async (
+        params?: { facilityId?: number; date?: string; timeStart?: string; timeEnd?: string; sourceMode?: EquipmentSourceMode },
+        scope: 'default' | 'slot' = 'default',
+    ) => {
+        try {
+            if (scope === 'default') {
+                setEquipmentSelectionNotice(null);
+            }
+
+            const queryParams = new URLSearchParams();
+            if (params?.facilityId) queryParams.set('facility_id', String(params.facilityId));
+            if (params?.date) queryParams.set('date', params.date);
+            if (params?.timeStart) queryParams.set('time_start', params.timeStart);
+            if (params?.timeEnd) queryParams.set('time_end', params.timeEnd);
+            queryParams.set('source', params?.sourceMode ?? 'own');
+
+            const endpoint = queryParams.toString()
+                ? `${route('chat.equipment')}?${queryParams.toString()}`
+                : route('chat.equipment');
+
+            const response = await fetch(endpoint, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            const json = await response.json();
+            if (!json.data || !Array.isArray(json.data)) {
+                return;
+            }
+
+            const normalizedEquipment = normalizeEquipmentResponse(json.data);
+            const requestedSourceMode = params?.sourceMode ?? 'own';
+
+            if (
+                scope === 'slot' &&
+                requestedSourceMode === 'own' &&
+                !!params?.facilityId &&
+                normalizedEquipment.length === 0
+            ) {
+                setEquipmentSourceMode('borrow');
+                setEquipmentSelectionNotice('No equipment is assigned to this facility. Switched to Borrow Equipment.');
+                return;
+            }
+
+            if (scope === 'slot') {
+                setEquipmentSelectionNotice(null);
+            }
+            setEquipmentOptions(normalizedEquipment);
+            reconcileSelectedEquipment(normalizedEquipment, scope === 'slot');
+
+            if (scope === 'default') {
+                setBaseEquipmentOptions(normalizedEquipment);
+                setIsSlotScopedEquipmentList(false);
+            } else {
+                setIsSlotScopedEquipmentList(true);
+            }
+        } catch {
+            if (scope === 'slot') {
+                setEquipmentSelectionNotice('Unable to refresh slot-aware availability right now. Please try opening equipment again.');
+            }
+        }
+    };
+
     // Reset equipment selection UI when mode changes
     useEffect(() => {
         setShowEquipmentSelection(false);
         setSelectedEquipment([]);
+        setGuidedEquipmentSnapshot([]);
+        setEquipmentSelectionNotice(null);
+        setEquipmentSourceMode('own');
         if (mode !== 'ai') {
             setGuidedFlow({ ...INITIAL_GUIDED_FLOW });
         }
@@ -610,7 +1073,58 @@ export default function Chatbot() {
         setCustomEndTime('');
     }, [guidedFlow.mode, guidedFlow.step]);
 
-    // Fetch facilities and equipment for the booking flow
+    useEffect(() => {
+        if (mode !== 'ai') {
+            if (isSlotScopedEquipmentList && baseEquipmentOptions.length > 0) {
+                setEquipmentOptions(baseEquipmentOptions);
+                setIsSlotScopedEquipmentList(false);
+                reconcileSelectedEquipment(baseEquipmentOptions, false);
+            }
+            return;
+        }
+
+        const slotContext = getActiveSlotContext();
+        if (!slotContext) {
+            if (isSlotScopedEquipmentList && baseEquipmentOptions.length > 0) {
+                setEquipmentOptions(baseEquipmentOptions);
+                setIsSlotScopedEquipmentList(false);
+                reconcileSelectedEquipment(baseEquipmentOptions, false);
+            }
+            return;
+        }
+
+        const normalizedStart = toHHMM(slotContext.timeStart);
+        const normalizedEnd = toHHMM(slotContext.timeEnd);
+        if (!normalizedStart || !normalizedEnd) {
+            setEquipmentSelectionNotice('Please use a valid start/end time format to load slot-aware equipment availability.');
+            return;
+        }
+
+        void fetchEquipmentOptions(
+            {
+                facilityId: slotContext.facilityId,
+                date: slotContext.date,
+                timeStart: normalizedStart,
+                timeEnd: normalizedEnd,
+                sourceMode: equipmentSourceMode,
+            },
+            'slot',
+        );
+    }, [
+        mode,
+        guidedFlow.mode,
+        guidedFlow.step,
+        guidedFlow.facilityId,
+        guidedFlow.date,
+        guidedFlow.timeStart,
+        guidedFlow.timeEnd,
+        pendingPayload,
+        equipmentSourceMode,
+        baseEquipmentOptions,
+        isSlotScopedEquipmentList,
+    ]);
+
+    // Fetch facilities and baseline equipment for booking flows
     useEffect(() => {
         fetch(route('chat.facilities'), {
             headers: {
@@ -625,33 +1139,7 @@ export default function Chatbot() {
             })
             .catch(() => {});
 
-        fetch(route('chat.equipment'), {
-            headers: {
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            credentials: 'same-origin',
-        })
-            .then((res) => res.json())
-            .then((json) => {
-                if (json.data) {
-                    const normalizedEquipment = json.data
-                        .map((item: Equipment) => ({
-                            ...item,
-                            id: Number(item.id),
-                            facility_id: Number(item.facility_id),
-                            quantity: Number(item.quantity),
-                            facility: typeof item.facility === 'string' ? item.facility : null,
-                        }))
-                        .filter((item: Equipment) => Number.isFinite(item.id) && Number.isFinite(item.facility_id) && item.facility_id > 0);
-
-                    console.log('[Chatbot equipment fetch] Raw equipment payload:', json.data);
-                    console.log('[Chatbot equipment fetch] Normalized equipment payload:', normalizedEquipment);
-
-                    setEquipmentOptions(normalizedEquipment);
-                }
-            })
-            .catch(() => {});
+        void fetchEquipmentOptions(undefined, 'default');
     }, []);
 
     useEffect(() => {
@@ -673,7 +1161,7 @@ export default function Chatbot() {
             .catch(() => {});
     }, []);
 
-    const processAndSend = async (userMessage: Message, contextNote?: string, skipUserAdd = false) => {
+    const processAndSend = async (userMessage: Message, contextNote?: string, skipUserAdd = false): Promise<string | null> => {
         if (!skipUserAdd) {
             addMessage(userMessage);
         }
@@ -684,13 +1172,13 @@ export default function Chatbot() {
 
         if (isConfirming && pendingPayload) {
             try {
-                const payload = withAttachedFiles(normalizePayloadForSubmission(pendingPayload));
+                const payload = buildSubmissionPayload(pendingPayload);
                 const validationError = getPayloadValidationError(payload);
 
                 if (validationError) {
                     setPendingPayload(null);
                     addMessage({ role: 'assistant', content: validationError });
-                    return;
+                    return null;
                 }
 
                 const result = await submitRequest(payload);
@@ -701,7 +1189,7 @@ export default function Chatbot() {
                 const errorMsg = err instanceof Error ? err.message : 'Failed to create request';
                 addMessage({ role: 'assistant', content: `✗ Failed to create request: ${errorMsg}` });
             }
-            return; // don't send to AI again
+            return null; // don't send to AI again
         }
 
         try {
@@ -718,7 +1206,7 @@ export default function Chatbot() {
 
             let streamingContent = '';
 
-            await sendMessage(
+            const assistantContent = await sendMessage(
                 allMessages,
                 currentCount,
                 activeBookingContext,
@@ -738,12 +1226,41 @@ export default function Chatbot() {
                 (json) => {
                     try {
                         const payload = JSON.parse(json);
-                        if (payload.title && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
+                        if (payload && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
                             setPendingPayload(withAttachedFiles(normalizePayloadForSubmission(payload)));
                         }
                     } catch (_) {}
                 },
             );
+
+            if (
+                contextNote &&
+                (contextNote.startsWith('Quick reply collected availability details') ||
+                    contextNote.startsWith('Guided quick reply collected availability details'))
+            ) {
+                const status = getAvailabilityStatus(assistantContent);
+                const parsedSelection = parseAvailabilityUserMessage(userMessage.content);
+                if (status && parsedSelection) {
+                    const facility = facilities.find((item) => item.name.toLowerCase() === parsedSelection.facilityName.toLowerCase());
+                    if (facility) {
+                        setAvailabilityFollowUp({
+                            status,
+                            facility,
+                            date: parsedSelection.date,
+                            startTime: parsedSelection.startTime,
+                            endTime: parsedSelection.endTime,
+                            source: contextNote.startsWith('Guided quick reply collected availability details') ? 'guided' : 'wizard',
+                        });
+                        addMessage({
+                            role: 'assistant',
+                            content:
+                                status === 'available'
+                                    ? 'Would you like to proceed with booking, check another facility, change time slot, or cancel?'
+                                    : 'Would you like to check another facility, change time slot, or cancel?',
+                        });
+                    }
+                }
+            }
 
             if (messageQueueRef.current.length > 0) {
                 const next = messageQueueRef.current.shift();
@@ -751,6 +1268,7 @@ export default function Chatbot() {
                     await processAndSend(next.message, next.context, true);
                 }
             }
+            return assistantContent;
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : 'Unknown error occurred';
             setMessages((prev) => {
@@ -761,6 +1279,7 @@ export default function Chatbot() {
                 };
                 return updated;
             });
+            return null;
         }
     };
 
@@ -791,7 +1310,7 @@ export default function Chatbot() {
         if (!pendingPayload) return;
 
         try {
-            const payload = withAttachedFiles(normalizePayloadForSubmission(pendingPayload));
+            const payload = buildSubmissionPayload(pendingPayload);
             const validationError = getPayloadValidationError(payload);
 
             if (validationError) {
@@ -828,10 +1347,98 @@ export default function Chatbot() {
         return null;
     };
 
+    const getActiveSlotContext = (): { facilityId: number; date: string; timeStart: string; timeEnd: string } | null => {
+        const isGuidedSlotLocked =
+            guidedFlow.mode === 'booking' &&
+            guidedFlow.step === 'equipment' &&
+            !!guidedFlow.facilityId &&
+            !!guidedFlow.date &&
+            !!guidedFlow.timeStart &&
+            !!guidedFlow.timeEnd;
+
+        if (isGuidedSlotLocked) {
+            return {
+                facilityId: guidedFlow.facilityId as number,
+                date: guidedFlow.date as string,
+                timeStart: guidedFlow.timeStart as string,
+                timeEnd: guidedFlow.timeEnd as string,
+            };
+        }
+
+        const pendingBooking = pendingPayload?.facility_bookings?.[0];
+        const pendingFacilityId = pendingBooking?.facility_id;
+        if (
+            typeof pendingFacilityId === 'number' &&
+            pendingFacilityId > 0 &&
+            typeof pendingBooking?.date === 'string' &&
+            typeof pendingBooking?.time_start === 'string' &&
+            typeof pendingBooking?.time_end === 'string' &&
+            pendingBooking.date.length > 0 &&
+            pendingBooking.time_start.length > 0 &&
+            pendingBooking.time_end.length > 0
+        ) {
+            return {
+                facilityId: pendingFacilityId,
+                date: pendingBooking.date,
+                timeStart: pendingBooking.time_start,
+                timeEnd: pendingBooking.time_end,
+            };
+        }
+
+        return null;
+    };
+
     const getFilteredEquipment = () => {
         const facilityId = getCurrentFacilityId();
-        if (!facilityId) return equipmentOptions;
+        if (!facilityId) {
+            return equipmentOptions;
+        }
+
+        if (equipmentSourceMode === 'borrow') {
+            return equipmentOptions.filter((eq) => eq.facility_id !== facilityId);
+        }
+
         return equipmentOptions.filter((eq) => eq.facility_id === facilityId);
+    };
+
+    const openEquipmentSelection = () => {
+        setShowEquipmentSelection(true);
+
+        const facilityId = getCurrentFacilityId();
+        if (!facilityId || equipmentSourceMode !== 'own') {
+            return;
+        }
+
+        const ownFacilityOptions = equipmentOptions.filter((eq) => eq.facility_id === facilityId);
+        if (ownFacilityOptions.length > 0) {
+            return;
+        }
+
+        setEquipmentSourceMode('borrow');
+        setSelectedEquipment([]);
+        setEquipmentSelectionNotice('No equipment is assigned to this facility. Switched to Borrow Equipment.');
+
+        const slotContext = getActiveSlotContext();
+        if (!slotContext) {
+            return;
+        }
+
+        const normalizedStart = toHHMM(slotContext.timeStart);
+        const normalizedEnd = toHHMM(slotContext.timeEnd);
+        if (!normalizedStart || !normalizedEnd) {
+            return;
+        }
+
+        void fetchEquipmentOptions(
+            {
+                facilityId: slotContext.facilityId,
+                date: slotContext.date,
+                timeStart: normalizedStart,
+                timeEnd: normalizedEnd,
+                sourceMode: 'borrow',
+            },
+            'slot',
+        );
     };
 
     const getLatestAssistantMessage = (): { message: Message; index: number } | null => {
@@ -888,7 +1495,7 @@ export default function Chatbot() {
         const assistantAskedAboutEquipment = isEquipmentAvailabilityIntent(latestAssistantText);
         const userAskedAboutEquipmentAvailability = isEquipmentAvailabilityIntent(latestUserText);
 
-        return getFilteredEquipment().length > 0 && (assistantAskedAboutEquipment || userAskedAboutEquipmentAvailability);
+        return equipmentOptions.length > 0 && (assistantAskedAboutEquipment || userAskedAboutEquipmentAvailability);
     };
 
     useEffect(() => {
@@ -901,7 +1508,31 @@ export default function Chatbot() {
         }
     }, [mode, showEquipmentSelection, messages, equipmentOptions, bookingFlow.data.facility_id, guidedFlow.facilityId, pendingPayload]);
 
+    useEffect(() => {
+        if (pendingPayload || messages.length === 0) {
+            return;
+        }
+
+        const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+        if (!latestAssistant || !latestAssistant.content) {
+            return;
+        }
+
+        const extracted = extractPayloadFromText(latestAssistant.content);
+        if (!extracted) {
+            return;
+        }
+
+        setPendingPayload(withAttachedFiles(normalizePayloadForSubmission(extracted)));
+    }, [messages, pendingPayload, attachedFiles]);
+
     const handleEquipmentToggle = (equipment: Equipment) => {
+        const remaining = getEquipmentRemainingQuantity(equipment);
+        if (remaining <= 0) {
+            setEquipmentSelectionNotice(`"${equipment.name}" is unavailable for the selected slot.`);
+            return;
+        }
+
         setSelectedEquipment((prev) => {
             const exists = prev.find((item) => item.equipment_id === equipment.id && item.facility_id === equipment.facility_id);
             if (exists) {
@@ -922,9 +1553,17 @@ export default function Chatbot() {
     };
 
     const updateEquipmentQuantity = (equipmentId: number, facilityId: number, quantity: number) => {
+        const option = equipmentOptions.find((item) => item.id === equipmentId && item.facility_id === facilityId);
+        const remaining = option ? getEquipmentRemainingQuantity(option) : 0;
+        if (remaining <= 0) {
+            setEquipmentSelectionNotice('Selected equipment is no longer available for this slot.');
+            return;
+        }
+
+        const bounded = Math.min(Math.max(1, Math.floor(quantity)), remaining);
         setSelectedEquipment((prev) =>
             prev.map((item) =>
-                item.equipment_id === equipmentId && item.facility_id === facilityId ? { ...item, quantity_needed: quantity } : item,
+                item.equipment_id === equipmentId && item.facility_id === facilityId ? { ...item, quantity_needed: bounded } : item,
             ),
         );
     };
@@ -937,6 +1576,31 @@ export default function Chatbot() {
             .map((e) => `${e.equipment_name} (ID: ${e.equipment_id}, Facility ID: ${e.facility_id}, quantity: ${e.quantity_needed})`)
             .join(', ');
         return `I need the following equipment: ${items}`;
+    };
+
+    const sanitizeEquipmentSelection = (selection: SelectedEquipmentItem[]): SelectedEquipmentItem[] => {
+        const optionByKey = new Map<string, Equipment>(
+            getFilteredEquipment().map((option) => [`${option.id}-${option.facility_id}`, option]),
+        );
+
+        return selection.flatMap((item) => {
+            const option = optionByKey.get(`${item.equipment_id}-${item.facility_id}`);
+            if (!option) {
+                return [];
+            }
+
+            const remaining = getEquipmentRemainingQuantity(option);
+            if (remaining <= 0) {
+                return [];
+            }
+
+            return [
+                {
+                    ...item,
+                    quantity_needed: Math.min(Math.max(1, Math.floor(item.quantity_needed)), remaining),
+                },
+            ];
+        });
     };
 
     const handleAttachFiles = async (fileList: FileList) => {
@@ -997,18 +1661,31 @@ export default function Chatbot() {
     };
 
     const submitEquipmentSelection = async (selection: SelectedEquipmentItem[] = selectedEquipment) => {
-        const message = buildEquipmentSelectionMessage(selection);
-        const serializedSelection = selection.map((equipment) => ({
+        const guidedFacilityId = guidedFlow.mode === 'booking' && guidedFlow.step === 'equipment' ? guidedFlow.facilityId : null;
+        const selectedFacilityId = guidedFacilityId ?? getCurrentFacilityId();
+        const normalizedSelection = sanitizeEquipmentSelection(selection);
+
+        if (normalizedSelection.length !== selection.length) {
+            setEquipmentSelectionNotice('Some selected equipment quantities were adjusted or removed based on latest slot availability.');
+        }
+
+        setSelectedEquipment(normalizedSelection);
+
+        const message = buildEquipmentSelectionMessage(normalizedSelection);
+        const serializedSelection = normalizedSelection.map((equipment) => ({
             equipment_id: equipment.equipment_id,
             facility_id: equipment.facility_id,
             quantity_needed: equipment.quantity_needed,
+            is_borrowed: selectedFacilityId ? equipment.facility_id !== selectedFacilityId : false,
+            source_facility_id:
+                selectedFacilityId && equipment.facility_id !== selectedFacilityId ? equipment.facility_id : null,
         }));
         const equipmentMsg =
             'The user selected equipment using the checkbox list. ' +
             `Use these exact selections when generating or updating the booking JSON payload: ${JSON.stringify(serializedSelection)}. ` +
-            'Do not replace the equipment IDs with names or any other format.';
+            'For rows with is_borrowed=true, keep source_facility_id exactly as provided. Do not replace IDs with names.';
         const noEquipmentMsg = 'The user selected no additional equipment. ' + 'Do not ask for equipment again unless it is required later.';
-        const context = selection.length > 0 ? equipmentMsg : noEquipmentMsg;
+        const context = normalizedSelection.length > 0 ? equipmentMsg : noEquipmentMsg;
 
         // NEW: Mark this equipment question as answered by storing the message index
         const latest = getLatestAssistantMessage();
@@ -1017,10 +1694,20 @@ export default function Chatbot() {
         }
 
         if (guidedFlow.mode === 'booking' && guidedFlow.step === 'equipment') {
+            setGuidedEquipmentSnapshot(normalizedSelection);
             setGuidedFlow((prev) => ({
                 ...prev,
-                equipmentDecision: selection.length > 0 ? 'selected' : 'none',
+                equipmentDecision: normalizedSelection.length > 0 ? 'selected' : 'none',
+                step: 'event_type',
             }));
+            setSelectedEquipment([]);
+            setShowEquipmentSelection(false);
+            addMessage({ role: 'user', content: message });
+            addMessage({
+                role: 'assistant',
+                content: 'Equipment saved. Please select your event type.',
+            });
+            return;
         }
 
         setSelectedEquipment([]);
@@ -1032,7 +1719,45 @@ export default function Chatbot() {
         await submitEquipmentSelection([]);
     };
 
+    const handleEquipmentSourceModeChange = (nextMode: EquipmentSourceMode) => {
+        if (nextMode === equipmentSourceMode) {
+            return;
+        }
+
+        setEquipmentSourceMode(nextMode);
+        setSelectedEquipment([]);
+        setEquipmentSelectionNotice(
+            nextMode === 'borrow'
+                ? 'Borrow mode enabled. Showing slot-aware equipment from other facilities only.'
+                : 'Own-facility mode enabled. Showing slot-aware equipment assigned to the selected facility.',
+        );
+
+        const slotContext = getActiveSlotContext();
+        if (!slotContext) {
+            return;
+        }
+
+        const normalizedStart = toHHMM(slotContext.timeStart);
+        const normalizedEnd = toHHMM(slotContext.timeEnd);
+        if (!normalizedStart || !normalizedEnd) {
+            return;
+        }
+
+        void fetchEquipmentOptions(
+            {
+                facilityId: slotContext.facilityId,
+                date: slotContext.date,
+                timeStart: normalizedStart,
+                timeEnd: normalizedEnd,
+                sourceMode: nextMode,
+            },
+            'slot',
+        );
+    };
+
     const handleQuickReply = (option: QuickReply) => {
+        setAvailabilityFollowUp(null);
+
         if (option.id === 'guided_booking') {
             startGuidedFlow('booking');
             return;
@@ -1076,6 +1801,7 @@ export default function Chatbot() {
         const message = input.trim();
         if (!message) return;
         setInput('');
+        setAvailabilityFollowUp(null);
         if (mode === 'idle' || mode === 'booking' || mode === 'availability') setMode('ai');
 
         if (guidedFlow.mode !== 'none') {
@@ -1129,6 +1855,7 @@ export default function Chatbot() {
         const context = `Quick reply collected availability details. Facility: ${selection.facility.name} (ID ${selection.facility.id}). Date: ${selection.date}. Start time: ${selection.startTime}. End time: ${selection.endTime}.`;
 
         setMode('ai');
+        setAvailabilityFollowUp(null);
 
         if (isLoading) {
             addMessage(userMessage);
@@ -1139,13 +1866,109 @@ export default function Chatbot() {
         await processAndSend(userMessage, context);
     };
 
-    const shouldRenderEquipmentPicker = showEquipmentSelection || shouldShowEquipmentPicker();
+    const handleAvailabilityProceedWithBooking = async () => {
+        if (!availabilityFollowUp) {
+            return;
+        }
+
+        const { source, facility, date, startTime, endTime } = availabilityFollowUp;
+        setAvailabilityFollowUp(null);
+        setShowEquipmentSelection(false);
+
+        if (source === 'guided') {
+            setMode('ai');
+            setGuidedFlow({
+                ...INITIAL_GUIDED_FLOW,
+                mode: 'booking',
+                step: 'attachments',
+                facilityId: facility.id,
+                date,
+                timeStart: startTime,
+                timeEnd: endTime,
+            });
+            addMessage({
+                role: 'assistant',
+                content:
+                    `Great, availability is confirmed for ${facility.name} on ${date} from ${startTime} to ${endTime}. ` +
+                    'Before we continue, do you have any approval paper or related supporting document to attach?',
+            });
+            return;
+        }
+
+        setMode('booking');
+        bookingFlow.update({
+            facility_id: facility.id,
+            facility_name: facility.name,
+            date,
+            time_start: startTime,
+            time_end: endTime,
+        });
+        bookingFlow.goToStep('title');
+    };
+
+    const handleAvailabilityOtherFacility = () => {
+        if (!availabilityFollowUp) {
+            return;
+        }
+
+        const source = availabilityFollowUp.source;
+        setAvailabilityFollowUp(null);
+
+        if (source === 'guided') {
+            startGuidedFlow('availability');
+            return;
+        }
+
+        setMode('availability');
+    };
+
+    const handleAvailabilityChangeTimeSlot = () => {
+        if (!availabilityFollowUp) {
+            return;
+        }
+
+        const { source, facility, date } = availabilityFollowUp;
+        setAvailabilityFollowUp(null);
+
+        if (source === 'guided') {
+            setMode('ai');
+            setGuidedFlow({
+                ...INITIAL_GUIDED_FLOW,
+                mode: 'availability',
+                step: 'time_start',
+                facilityId: facility.id,
+                date,
+            });
+            addMessage({
+                role: 'assistant',
+                content: `Okay, let’s change the time slot for ${facility.name} on ${date}. Please choose a new start time.`,
+            });
+            return;
+        }
+
+        setMode('availability');
+        addMessage({
+            role: 'assistant',
+            content: 'Please choose a new time slot for another availability check.',
+        });
+    };
+
+    const handleAvailabilityCancel = () => {
+        setAvailabilityFollowUp(null);
+        addMessage({
+            role: 'assistant',
+            content: 'Availability follow-up cancelled. You can continue chatting anytime.',
+        });
+    };
+
+    const canUseEquipmentSelector = guidedFlow.mode !== 'booking' || guidedFlow.step === 'equipment';
+    const shouldRenderEquipmentPicker = canUseEquipmentSelector && (showEquipmentSelection || shouldShowEquipmentPicker());
     const currentFacilityId = getCurrentFacilityId();
 
     const buildGuidedQuickReplies = (): GuidedQuickReplyOption[] => {
         const today = new Date();
-        const tomorrow = new Date();
-        tomorrow.setDate(today.getDate() + 1);
+        const plusTwoDays = new Date();
+        plusTwoDays.setDate(today.getDate() + 2);
         const plusThreeDays = new Date();
         plusThreeDays.setDate(today.getDate() + 3);
         const plusSevenDays = new Date();
@@ -1166,6 +1989,43 @@ export default function Chatbot() {
                     variant: 'outline',
                 },
             ];
+        }
+
+        if (availabilityFollowUp) {
+            const sharedReplies: GuidedQuickReplyOption[] = [
+                {
+                    id: 'availability-other-facility',
+                    label: 'Avail Other Facility',
+                    onSelect: handleAvailabilityOtherFacility,
+                    variant: 'outline',
+                },
+                {
+                    id: 'availability-change-timeslot',
+                    label: 'Change Time Slot',
+                    onSelect: handleAvailabilityChangeTimeSlot,
+                    variant: 'outline',
+                },
+                {
+                    id: 'availability-cancel',
+                    label: 'Cancel',
+                    onSelect: handleAvailabilityCancel,
+                    variant: 'outline',
+                },
+            ];
+
+            if (availabilityFollowUp.status === 'available') {
+                return [
+                    {
+                        id: 'availability-proceed-booking',
+                        label: 'Proceed with Booking',
+                        onSelect: () => void handleAvailabilityProceedWithBooking(),
+                        variant: 'default',
+                    },
+                    ...sharedReplies,
+                ];
+            }
+
+            return sharedReplies;
         }
 
         if (guidedFlow.mode === 'none') {
@@ -1198,6 +2058,24 @@ export default function Chatbot() {
         }
 
         if (guidedFlow.mode === 'booking') {
+            if (guidedFlow.step === 'attachments') {
+                return [
+                    {
+                        id: 'guided-attach-file',
+                        label: 'Attach a File',
+                        onSelect: handleGuidedAttachFileClick,
+                        variant: 'default',
+                    },
+                    {
+                        id: 'guided-no-attachment',
+                        label: 'No Attachment',
+                        onSelect: handleGuidedNoAttachment,
+                        variant: 'outline',
+                    },
+                    { id: 'guided-back', label: 'Back', onSelect: handleGuidedBack, variant: 'outline' },
+                ];
+            }
+
             if (guidedFlow.step === 'participants') {
                 return [
                     { id: 'guided-p-25', label: '25 Participants', onSelect: () => handleGuidedParticipantSelection(25) },
@@ -1212,12 +2090,16 @@ export default function Chatbot() {
                 const participantCount = guidedFlow.participantCount ?? 0;
                 const matchedFacilities = participantCount > 0 ? getGuidedBookingFacilities(participantCount) : facilities;
 
-                const facilityReplies = matchedFacilities.slice(0, 12).map((facility) => ({
-                    id: `guided-booking-facility-${facility.id}`,
-                    label: `ID ${facility.id} ${facility.name}`,
-                    onSelect: () => handleGuidedFacilitySelection(facility.id),
-                    variant: 'outline' as const,
-                }));
+                const facilityReplies = matchedFacilities.slice(0, 12).map((facility) => {
+                    const isRecommended = participantCount > 0 && isFacilityRecommendedForParticipants(facility, participantCount);
+
+                    return {
+                        id: `guided-booking-facility-${facility.id}`,
+                        label: `${isRecommended ? 'Recommended - ' : ''}ID ${facility.id} ${facility.name}${typeof facility.capacity === 'number' ? ` (Capacity: ${facility.capacity})` : ''}`,
+                        onSelect: () => handleGuidedFacilitySelection(facility.id),
+                        variant: 'outline' as const,
+                    };
+                });
 
                 return [
                     ...facilityReplies,
@@ -1229,14 +2111,9 @@ export default function Chatbot() {
             if (guidedFlow.step === 'date') {
                 return [
                     {
-                        id: 'guided-date-today',
-                        label: `Today (${formatDateYmd(today)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(today)),
-                    },
-                    {
-                        id: 'guided-date-tomorrow',
-                        label: `Tomorrow (${formatDateYmd(tomorrow)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(tomorrow)),
+                        id: 'guided-date-plus2',
+                        label: `In 2 Days (${formatDateYmd(plusTwoDays)})`,
+                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusTwoDays)),
                     },
                     {
                         id: 'guided-date-plus3',
@@ -1284,15 +2161,45 @@ export default function Chatbot() {
                     {
                         id: 'guided-equipment-select',
                         label: 'Select Equipment',
-                        onSelect: () => setShowEquipmentSelection(true),
-                        disabled: getFilteredEquipment().length === 0,
+                        onSelect: openEquipmentSelection,
                     },
                     { id: 'guided-equipment-none', label: 'No Equipment Needed', onSelect: handleGuidedNoEquipment, variant: 'outline' },
+                    {
+                        id: 'guided-equipment-next',
+                        label: 'Next: Event Type',
+                        onSelect: () => {
+                            setShowEquipmentSelection(false);
+                            setGuidedFlow((prev) => ({
+                                ...prev,
+                                equipmentDecision: prev.equipmentDecision === 'unknown' ? 'none' : prev.equipmentDecision,
+                                step: 'event_type',
+                            }));
+                            addMessage({
+                                role: 'assistant',
+                                content: 'Proceeding without additional equipment. Please select your event type.',
+                            });
+                        },
+                        variant: 'default',
+                    },
+                    { id: 'guided-back', label: 'Back', onSelect: handleGuidedBack, variant: 'outline' },
+                    { id: 'guided-cancel', label: 'Cancel Guided Flow', onSelect: handleGuidedCancel, variant: 'outline' },
+                ];
+            }
+
+            if (guidedFlow.step === 'event_type') {
+                return [
+                    ...EVENT_TYPE_OPTIONS.map((eventType) => ({
+                        id: `guided-event-type-${eventType.id}`,
+                        label: `${eventType.label} Event`,
+                        onSelect: () => handleGuidedEventTypeSelection(eventType.id),
+                        variant: guidedFlow.eventType === eventType.id ? ('default' as const) : ('outline' as const),
+                    })),
                     {
                         id: 'guided-equipment-continue',
                         label: 'Continue to Request Details',
                         onSelect: handleGuidedContinueBooking,
                         variant: 'default',
+                        disabled: guidedFlow.eventType === null,
                     },
                     { id: 'guided-back', label: 'Back', onSelect: handleGuidedBack, variant: 'outline' },
                     { id: 'guided-cancel', label: 'Cancel Guided Flow', onSelect: handleGuidedCancel, variant: 'outline' },
@@ -1304,7 +2211,7 @@ export default function Chatbot() {
             if (guidedFlow.step === 'facility') {
                 const facilityReplies = facilities.slice(0, 12).map((facility) => ({
                     id: `guided-availability-facility-${facility.id}`,
-                    label: `ID ${facility.id} ${facility.name}`,
+                    label: `ID ${facility.id} ${facility.name}${typeof facility.capacity === 'number' ? ` (Capacity: ${facility.capacity})` : ''}`,
                     onSelect: () => handleGuidedFacilitySelection(facility.id),
                     variant: 'outline' as const,
                 }));
@@ -1315,14 +2222,9 @@ export default function Chatbot() {
             if (guidedFlow.step === 'date') {
                 return [
                     {
-                        id: 'guided-av-date-today',
-                        label: `Today (${formatDateYmd(today)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(today)),
-                    },
-                    {
-                        id: 'guided-av-date-tomorrow',
-                        label: `Tomorrow (${formatDateYmd(tomorrow)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(tomorrow)),
+                        id: 'guided-av-date-plus2',
+                        label: `In 2 Days (${formatDateYmd(plusTwoDays)})`,
+                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusTwoDays)),
                     },
                     {
                         id: 'guided-av-date-plus3',
@@ -1372,6 +2274,10 @@ export default function Chatbot() {
     const guidedQuickReplies = mode === 'booking' || mode === 'availability' ? [] : buildGuidedQuickReplies();
     const guidedQuickReplyHint = pendingPayload
         ? 'Review action'
+        : availabilityFollowUp
+          ? availabilityFollowUp.status === 'available'
+              ? 'Availability result: slot is available. Choose next action.'
+              : 'Availability result: slot has conflict. Choose next action.'
         : guidedFlow.mode === 'booking'
           ? `Guided booking step: ${guidedFlow.step ?? 'none'}`
           : guidedFlow.mode === 'availability'
@@ -1380,7 +2286,7 @@ export default function Chatbot() {
 
     return (
         <div className="flex h-full w-full flex-col bg-background">
-            <div className="flex-1 space-y-4 overflow-y-auto p-6">
+            <div className={`flex-1 space-y-4 p-6 ${mode === 'idle' ? 'overflow-visible' : 'overflow-y-auto'}`}>
                 {/* Idle — show welcome + quick reply buttons */}
                 {mode === 'idle' && <WelcomeMessage onQuickReply={handleQuickReply} />}
 
@@ -1404,16 +2310,18 @@ export default function Chatbot() {
                 {/* AI chat mode */}
                 {mode === 'ai' && (
                     <>
-                        <div className="mb-3 flex justify-end">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setShowEquipmentSelection(true)}
-                                disabled={isLoading || getFilteredEquipment().length === 0}
-                            >
-                                Select Equipment
-                            </Button>
-                        </div>
+                        {canUseEquipmentSelector && (
+                            <div className="mb-3 flex justify-end">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={openEquipmentSelection}
+                                    disabled={isLoading}
+                                >
+                                    Select Equipment
+                                </Button>
+                            </div>
+                        )}
 
                         <MessageList
                             messages={messages}
@@ -1421,6 +2329,7 @@ export default function Chatbot() {
                             showConfirmationButtons={!!pendingPayload}
                             onConfirm={handleConfirmRequest}
                             onCancel={handleCancelRequest}
+                            equipmentSelectorActive={shouldRenderEquipmentPicker}
                         />
 
                         {shouldRenderEquipmentPicker && (
@@ -1433,7 +2342,7 @@ export default function Chatbot() {
                                                 Click the button to select equipment from the available list.
                                             </p>
                                         </div>
-                                        <Button size="sm" onClick={() => setShowEquipmentSelection(true)} disabled={isLoading}>
+                                        <Button size="sm" onClick={openEquipmentSelection} disabled={isLoading}>
                                             Select Equipment
                                         </Button>
                                     </div>
@@ -1448,10 +2357,44 @@ export default function Chatbot() {
                                                 {!currentFacilityId && (
                                                     <p className="mt-1 text-xs text-muted-foreground">Showing equipment across all facilities.</p>
                                                 )}
+                                                {currentFacilityId && (
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        Source mode: {equipmentSourceMode === 'borrow' ? 'Borrow Equipment (other facilities)' : 'Own Facility Equipment'}
+                                                    </p>
+                                                )}
+                                                {isSlotScopedEquipmentList && (
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        Slot-aware availability is active for the selected date and time window.
+                                                    </p>
+                                                )}
+                                                {equipmentSelectionNotice && (
+                                                    <p className="mt-1 text-xs text-amber-600">{equipmentSelectionNotice}</p>
+                                                )}
                                             </div>
                                             <div className="flex flex-wrap gap-2">
-                                                <Button size="sm" variant="outline" onClick={() => setShowEquipmentSelection(false)}>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => setShowEquipmentSelection(false)}
+                                                    disabled={isLoading}
+                                                >
                                                     Cancel
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant={equipmentSourceMode === 'borrow' ? 'default' : 'outline'}
+                                                    onClick={() => handleEquipmentSourceModeChange('borrow')}
+                                                    disabled={isLoading || !currentFacilityId}
+                                                >
+                                                    Borrow Equipment
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant={equipmentSourceMode === 'own' ? 'default' : 'outline'}
+                                                    onClick={() => handleEquipmentSourceModeChange('own')}
+                                                    disabled={isLoading || !currentFacilityId}
+                                                >
+                                                    Own Facility
                                                 </Button>
                                                 <Button size="sm" variant="outline" onClick={submitNoEquipmentSelection} disabled={isLoading}>
                                                     No Equipment Needed
@@ -1476,6 +2419,8 @@ export default function Chatbot() {
                                                 const selected = selectedEquipment.find(
                                                     (item) => item.equipment_id === equipment.id && item.facility_id === equipment.facility_id,
                                                 );
+                                                const remainingQuantity = getEquipmentRemainingQuantity(equipment);
+                                                const isUnavailable = remainingQuantity <= 0;
                                                 return (
                                                     <div
                                                         key={`${equipment.id}-${equipment.facility_id}`}
@@ -1485,19 +2430,25 @@ export default function Chatbot() {
                                                             <Checkbox
                                                                 id={`equipment-${equipment.id}-${equipment.facility_id}`}
                                                                 checked={!!selected}
+                                                                disabled={isUnavailable}
                                                                 onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                             />
                                                             <div className="min-w-0 flex-1">
                                                                 <Label
                                                                     htmlFor={`equipment-${equipment.id}-${equipment.facility_id}`}
-                                                                    className="cursor-pointer text-sm font-medium"
+                                                                    className={`text-sm font-medium ${isUnavailable ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer'}`}
                                                                 >
                                                                     {equipment.name}
                                                                 </Label>
                                                                 <p className="text-xs text-muted-foreground">
                                                                     Facility: {equipment.facility ?? `Facility #${equipment.facility_id}`} |
-                                                                    Available: {equipment.quantity}
+                                                                    Total: {equipment.total_quantity ?? equipment.quantity} |
+                                                                    Reserved: {equipment.reserved_quantity ?? 0} |
+                                                                    Remaining: {remainingQuantity}
                                                                 </p>
+                                                                {isUnavailable && (
+                                                                    <p className="text-xs text-muted-foreground">Unavailable for this selected slot.</p>
+                                                                )}
                                                             </div>
                                                         </div>
 
@@ -1507,11 +2458,11 @@ export default function Chatbot() {
                                                                 <Input
                                                                     type="number"
                                                                     min={1}
-                                                                    max={equipment.quantity}
+                                                                    max={remainingQuantity}
                                                                     value={selected.quantity_needed}
                                                                     onChange={(e) => {
                                                                         const value = Number(e.target.value);
-                                                                        const bounded = Math.min(Math.max(1, value), equipment.quantity);
+                                                                        const bounded = Math.min(Math.max(1, value), remainingQuantity);
                                                                         updateEquipmentQuantity(equipment.id, equipment.facility_id, bounded);
                                                                     }}
                                                                     className="w-24"
@@ -1537,6 +2488,14 @@ export default function Chatbot() {
             {guidedQuickReplies.length > 0 && (
                 <div className="border-t border-border bg-background px-6 py-3">
                     <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{guidedQuickReplyHint}</p>
+                    <input
+                        ref={guidedFileInputRef}
+                        type="file"
+                        multiple
+                        accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                        onChange={handleGuidedFileSelection}
+                        style={{ display: 'none' }}
+                    />
 
                     {guidedFlow.mode !== 'none' && guidedFlow.step === 'participants' && (
                         <div className="mb-3 flex flex-wrap items-end gap-2">
@@ -1559,7 +2518,7 @@ export default function Chatbot() {
                     {guidedFlow.mode !== 'none' && guidedFlow.step === 'date' && (
                         <div className="mb-3 rounded-md border border-border p-3">
                             <p className="mb-2 text-xs text-muted-foreground">Custom date (calendar)</p>
-                            <DatePicker onSelect={handleGuidedDateSelection} />
+                            <DatePicker onSelect={handleGuidedDateSelection} minAdvanceDays={2} />
                         </div>
                     )}
 

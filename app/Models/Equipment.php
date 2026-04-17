@@ -92,44 +92,95 @@ class Equipment extends Model
         string $timeEnd,
         ?int $excludeRequestId = null
     ): int {
-        $total = $this->quantityInFacility($facilityId);
+        return $this->slotAvailabilityInFacility(
+            $facilityId,
+            $date,
+            $timeStart,
+            $timeEnd,
+            $excludeRequestId
+        )['remaining_quantity'];
+    }
 
+    /**
+     * Deterministic slot-aware summary for one facility.
+     *
+     * `reserved_quantity` includes:
+     * 1) In-house usage in the same facility
+     * 2) Borrowed rows sourced from the same facility
+     */
+    public function slotAvailabilityInFacility(
+        int $facilityId,
+        string $date,
+        string $timeStart,
+        string $timeEnd,
+        ?int $excludeRequestId = null
+    ): array {
+        $total = $this->quantityInFacility($facilityId);
+        $reserved = $this->quantityReservedInFacility(
+            $facilityId,
+            $date,
+            $timeStart,
+            $timeEnd,
+            $excludeRequestId
+        );
+        $remaining = max(0, $total - $reserved);
+
+        return [
+            'total_quantity' => $total,
+            'reserved_quantity' => $reserved,
+            'remaining_quantity' => $remaining,
+        ];
+    }
+
+    public function quantityReservedInFacility(
+        int $facilityId,
+        string $date,
+        string $timeStart,
+        string $timeEnd,
+        ?int $excludeRequestId = null
+    ): int {
         $approvedStatuses = [
             RequestStatus::APPROVED->value,
             RequestStatus::CONDITIONALLY_APPROVED->value,
         ];
- 
-        $usedInHouse = DB::table('request_equipment')
-            ->join('requests', 'requests.id', '=', 'request_equipment.request_id')
-            ->join('request_facilities', 'request_facilities.request_id', '=', 'requests.id')
-            ->where('request_equipment.equipment_id', $this->id)
-            ->where('request_equipment.is_borrowed', false)
-            ->where('request_facilities.facility_id', $facilityId)
-            ->whereIn('requests.status', $approvedStatuses)
-            ->where('requests.on_hold', false)
-            ->where('request_facilities.date_requested', $date)
-            ->where('request_facilities.time_start', '<', $timeEnd)
-            ->where('request_facilities.time_end', '>', $timeStart)
-            ->when($excludeRequestId, fn($q) => $q->where('requests.id', '!=', $excludeRequestId))
-            ->sum('request_equipment.quantity_needed');
 
- 
-        $borrowedAway = DB::table('request_equipment')
-            ->join('requests', 'requests.id', '=', 'request_equipment.request_id')
-            ->join('request_facilities', 'request_facilities.request_id', '=', 'requests.id')
-            ->where('request_equipment.equipment_id', $this->id)
-            ->where('request_equipment.is_borrowed', true)
-            ->where('request_equipment.source_facility_id', $facilityId)
-            ->whereIn('requests.status', $approvedStatuses)
-            ->where('requests.on_hold', false)
-            ->where('request_facilities.date_requested', $date)
-            ->where('request_facilities.time_start', '<', $timeEnd)
-            ->where('request_facilities.time_end', '>', $timeStart)
-            ->when($excludeRequestId, fn($q) => $q->where('requests.id', '!=', $excludeRequestId))
-            ->distinct()
-            ->sum('request_equipment.quantity_needed');
+        $usedInHouse = DB::table('request_equipment as re')
+            ->join('requests as r', 'r.id', '=', 're.request_id')
+            ->where('re.equipment_id', $this->id)
+            ->where('re.is_borrowed', false)
+            ->whereIn('r.status', $approvedStatuses)
+            ->where('r.on_hold', false)
+            ->when($excludeRequestId, fn($q) => $q->where('r.id', '!=', $excludeRequestId))
+            ->whereExists(function ($q) use ($facilityId, $date, $timeStart, $timeEnd) {
+                $q->select(DB::raw(1))
+                    ->from('request_facilities as rf')
+                    ->whereColumn('rf.request_id', 'r.id')
+                    ->where('rf.facility_id', $facilityId)
+                    ->where('rf.date_requested', $date)
+                    ->where('rf.time_start', '<', $timeEnd)
+                    ->where('rf.time_end', '>', $timeStart);
+            })
+            ->sum('re.quantity_needed');
 
-        return max(0, $total - $usedInHouse - $borrowedAway);
+        $borrowedAway = DB::table('request_equipment as re')
+            ->join('requests as r', 'r.id', '=', 're.request_id')
+            ->where('re.equipment_id', $this->id)
+            ->where('re.is_borrowed', true)
+            ->where('re.source_facility_id', $facilityId)
+            ->whereIn('r.status', $approvedStatuses)
+            ->where('r.on_hold', false)
+            ->when($excludeRequestId, fn($q) => $q->where('r.id', '!=', $excludeRequestId))
+            ->whereExists(function ($q) use ($date, $timeStart, $timeEnd) {
+                $q->select(DB::raw(1))
+                    ->from('request_facilities as rf')
+                    ->whereColumn('rf.request_id', 'r.id')
+                    ->where('rf.date_requested', $date)
+                    ->where('rf.time_start', '<', $timeEnd)
+                    ->where('rf.time_end', '>', $timeStart);
+            })
+            ->sum('re.quantity_needed');
+
+        return max(0, $usedInHouse + $borrowedAway);
     }
 
     public function quantityAvailableToBorrowFrom(

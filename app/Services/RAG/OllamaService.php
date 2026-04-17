@@ -12,7 +12,7 @@ class OllamaService
 
     public function __construct()
     {
-        $this->baseUrl = config('ollama.url', 'http://localhost:11434');
+        $this->baseUrl = config('ollama-laravel.url', 'http://localhost:11434');
         $this->model = config("ollama-laravel.model", "FRAI");
         $this->embed_model = config("ollama-laravel.embed_model", 'nomic-embed-text');
     }

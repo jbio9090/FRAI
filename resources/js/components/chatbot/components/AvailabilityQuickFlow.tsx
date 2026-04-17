@@ -156,7 +156,7 @@ export default function AvailabilityQuickFlow({
 
                     {!isTypingPrompt && selectedFacility && !selectedDate && (
                         <>
-                            <DatePicker onSelect={handleDateSelect} />
+                            <DatePicker onSelect={handleDateSelect} minAdvanceDays={2} />
                         </>
                     )}
 

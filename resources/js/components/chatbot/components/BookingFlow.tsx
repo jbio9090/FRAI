@@ -227,7 +227,7 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
                         )}
 
                         {!isTypingPrompt && config.showDatePicker && (
-                            <DatePicker onSelect={(iso) => handleQuickReply(iso)} />
+                            <DatePicker onSelect={(iso) => handleQuickReply(iso)} minAdvanceDays={2} />
                         )}
 
                         {!isTypingPrompt && config.isTextInput && (
