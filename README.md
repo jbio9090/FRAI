@@ -43,7 +43,7 @@ Ollama provides the local LLM and embedding capabilities.
 2.  **Download LLM:**
     *or whatever model you want
     ```bash
-    ollama pull qwen3:0.6b
+    ollama pull qwen2.5:3b
     ```
 3.  **Download Embedding Model:**
     ```bash
@@ -56,7 +56,7 @@ Ollama provides the local LLM and embedding capabilities.
 Configure the application to communicate with your local Ollama instance:
 
 ```env
-OLLAMA_MODEL=qwen3:0.6b
+OLLAMA_MODEL=qwen2.5:3b
 OLLAMA_EMBED_MODEL=nomic-embed-text
 OLLAMA_URL=http://localhost:11434
 ```
@@ -74,21 +74,20 @@ Run these commands in your terminal to prepare the application:
     ```bash
     php artisan migrate:fresh --seed
     ```
-3.  **Index Application Rules:**
-    *you only need to do this once
-    Process your project data into the vector database by running:
-    ```bash
-    php artisan app:index-rules
-    ```
-4. **Run the Queue**
+3. **Run the Queue**
     For the Notifications and other non blocking proccess to work
     ```
     php artisan queue:work
     ```
-
-5. **Run Ollama**
+4. **Run Ollama**
     ```
     ollama serve
+    ```
+5.  **Index Application Rules:**
+    *you only need to do this once or when you change models
+    Process your project data into the vector database by running:
+    ```bash
+    php artisan app:index-rules
     ```
 
 ---

@@ -17,7 +17,7 @@ class AIRecommendationService
     {
         try {
             $requestContext = $this->buildRequestContext($request);
-            $embedding      = $this->ollama->embed($requestContext); // ← likely failing here
+            $embedding      = $this->ollama->embed($requestContext);
 
             $vectorLiteral = '[' . implode(',', $embedding) . ']';
 
@@ -25,7 +25,7 @@ class AIRecommendationService
             SELECT content, 1 - (embedding <=> ?) AS similarity
             FROM rule_embeddings
             ORDER BY embedding <=> ?
-            LIMIT 8
+            LIMIT 5
         ", [$vectorLiteral, $vectorLiteral]);
 
             if (empty($relevantRules)) {
@@ -35,24 +35,22 @@ class AIRecommendationService
             $rulesText     = collect($relevantRules)->map(fn($r) => '- ' . $r->content)->join("\n");
             $validStatuses = implode(', ', array_column(RequestStatus::cases(), 'value'));
 
+            $now = now()->toDateTimeString();
+
             $prompt = <<<PROMPT
-        You are a facility request evaluation assistant.
-        Based ONLY on the rules below, recommend a status for the following request.
+TODAY'S DATE AND TIME: {$now}
 
-        RULES:
-        {$rulesText}
+RULES:
+{$rulesText}
 
-        REQUEST DETAILS:
-        {$requestContext}
+REQUEST DETAILS:
+{$requestContext}
 
-        VALID STATUSES (choose exactly one): {$validStatuses}
+VALID STATUSES (choose exactly one): {$validStatuses}
 
-        Respond ONLY in this exact JSON format with no extra text:
-        {
-          "status": "<one of the valid statuses>",
-          "reason": "<one sentence citing the rule that led to this decision>"
-        }
-        PROMPT;
+Respond using exactly this structure:
+{"status": "<valid status>", "reason": "<one sentence>"}
+PROMPT;
 
             $raw = $this->ollama->generate($prompt);
 
@@ -106,10 +104,17 @@ class AIRecommendationService
             'equipment',
         ]);
 
-        $facilities = $request->requestFacilities->map(
-            fn($rf) =>
-            "{$rf->facility->name} on {$rf->date_requested} from {$rf->time_start} to {$rf->time_end}"
-        )->join('; ');
+        $facilities = $request->requestFacilities->map(function ($rf) {
+            $daysUntil = now()->startOfDay()->diffInDays(
+                \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
+                false 
+            );
+            $urgency = $daysUntil < 0
+                ? "PAST DATE"
+                : "({$daysUntil} days from today)";
+
+            return "{$rf->facility->name} on {$rf->date_requested} {$urgency} from {$rf->time_start} to {$rf->time_end}";
+        })->join('; ');
 
         $equipment = $request->equipment->map(
             fn($eq) =>
@@ -162,14 +167,20 @@ class AIRecommendationService
 
     private function parseResponse(string $raw): array
     {
-        // Strip possible markdown code fences
-        $clean = preg_replace('/```json|```/', '', $raw);
+        \Log::debug('Ollama raw response: ' . $raw);
+
+        // Strip markdown fences
+        $clean = preg_replace('/```json|```/i', '', $raw);
         $clean = trim($clean);
+
+        // Try to extract a JSON object anywhere in the response
+        if (preg_match('/\{.*?"status".*?"reason".*?\}/s', $clean, $matches)) {
+            $clean = $matches[0];
+        }
 
         $decoded = json_decode($clean, true);
 
         if (!$decoded || !isset($decoded['status'])) {
-            // Fallback: try to find a valid status in the raw text
             foreach (RequestStatus::cases() as $case) {
                 if (stripos($raw, $case->value) !== false) {
                     return [
