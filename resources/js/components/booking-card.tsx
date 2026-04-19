@@ -48,6 +48,7 @@ interface BookingCardProps {
     index: number;
     onEdit?: (index: number) => void;
     onRemove?: (index: number) => void;
+    className?: string;
 }
 
 function formatTime(time: string): string {
@@ -70,7 +71,7 @@ function groupBorrowed(
     );
 }
 
-export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardProps) {
+export function BookingCard({ booking, index, onEdit, onRemove, className }: BookingCardProps) {
     const hasOwnEquipment = booking.equipment.length > 0;
     const hasBorrowedEquipment = (booking.borrowed_equipment ?? []).length > 0;
     const hasExternalEquipment = (booking.external_equipment ?? []).length > 0;
@@ -82,7 +83,7 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
     return (
-        <div className="group relative rounded-lg border border-border bg-card transition-shadow hover:shadow-sm">
+        <div className={`group relative rounded-lg border border-border bg-card transition-shadow hover:shadow-sm ${className ?? ""}`}>
             {/* Header */}
             <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b">
                 <div className="min-w-0">

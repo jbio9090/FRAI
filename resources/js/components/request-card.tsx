@@ -20,6 +20,7 @@ import Comment from './comment';
 import StatusTag from './status-tag';
 import AnimatedText from './animated-text';
 import { BookingCard } from './booking-card';
+import { ScrollArea } from './ui/scroll-area';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -126,7 +127,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection(request.id)}
             className={cn(
-                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-xl",
+                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-xs",
                 isSelecting && "cursor-pointer hover:border-primary/50",
                 isSelected && "border-primary ring-1 ring-primary"
             )}
@@ -299,7 +300,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
             label: "Facilities",
             badge: request.facilities.length,
             content: (
-                <div className='flex flex-col gap-3 mt-4'>
+                <ScrollArea className='mt-4 max-h-96'>
                     {request.request_facilities.map((rf) => {
                         const facility = request.facilities.find(f => f.id === rf.facility_id);
 
@@ -341,10 +342,11 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                                 key={rf.date_requested + rf.time_start}
                                 booking={booking}
                                 index={0}
+                                className='mt-4'
                             />
                         );
                     })}
-                </div>
+                </ScrollArea>
             ),
         },
         {
@@ -353,11 +355,11 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
             label: "Comments",
             badge: request.comments?.length || undefined,
             content: request.comments?.length > 0 ? (
-                <div className='flex flex-col gap-3 mt-4'>
+                <ScrollArea className='mt-4 max-h-96'>
                     {request.comments.map((comment) => (
                         <Comment comment={comment} key={comment.id} />
                     ))}
-                </div>
+                </ScrollArea>
             ) : (
                 <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comments yet</p>
             ),
