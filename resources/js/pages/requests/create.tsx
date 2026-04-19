@@ -821,7 +821,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-auto p-0">
-                                                    <Calendar mode="single" selected={currentDate} onSelect={handleDateChange} initialFocus />
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={currentDate}
+                                                        onSelect={handleDateChange}
+                                                        initialFocus
+                                                        disabled={(date) => date <= new Date(new Date().setHours(0, 0, 0, 0))}
+                                                    />
                                                 </PopoverContent>
                                             </Popover>
                                         </div>
@@ -838,7 +844,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     </div>
 
                                     {/* Attendees + Outsiders */}
-                                    <div className="flex items-end gap-4">
+                                    <div className="flex items-end gap-4 w-fit">
                                         <div className="space-y-2 flex-1">
                                             <Label htmlFor="expected_capacity">Expected Attendees</Label>
                                             <Input
@@ -848,7 +854,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 value={expectedCapacity}
                                                 onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
                                                 placeholder="How many attendees?"
-                                                className="text-sm"
+                                                className="text-sm max-w-84"
                                             />
                                         </div>
                                         <div className="flex items-center gap-2 pb-2 shrink-0">
@@ -1260,7 +1266,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         </TabsContent>
                     </Tabs>
 
-<div className="sticky bottom-0 z-50 -mx-6 md:-mx-8 px-6 md:px-8 flex justify-end gap-4 py-4 bg-background/80 backdrop-blur-sm border-t border-border">
+                    <div className="sticky bottom-0 z-50 -mx-6 md:-mx-8 px-6 md:px-8 flex justify-end gap-4 py-4 bg-background/80 backdrop-blur-sm border-t border-border">
                         <Button type="button" variant="outline" size="lg" className='text-md font-semibold' onClick={() => window.history.back()}>
                             Cancel
                         </Button>
