@@ -808,7 +808,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     {/* Date + Time row */}
                                     <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-4 w-full">
                                         <div className="space-y-2 col-span-full md:col-span-1">
-                                            <Label>Date</Label>
+                                            <Label>Date <span className="text-destructive">*</span></Label>
                                             <Popover>
                                                 <PopoverTrigger asChild>
                                                     <Button
@@ -833,12 +833,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label htmlFor="time_start">Start Time</Label>
+                                            <Label htmlFor="time_start">Start Time <span className="text-destructive">*</span></Label>
                                             <Input id="time_start" type="time" value={currentTimeStart} onChange={handleTimeStartChange} min="7:00" max="20:00" className="text-sm" />
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label htmlFor="time_end">End Time</Label>
+                                            <Label htmlFor="time_end">End Time <span className="text-destructive">*</span></Label>
                                             <Input id="time_end" type="time" value={currentTimeEnd} onChange={handleTimeEndChange} min="7:00" max="20:00" className="text-sm" />
                                         </div>
                                     </div>
@@ -874,7 +874,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     {/* Facility picker */}
                                     <div className="space-y-2">
                                         <div className="flex justify-start gap-1">
-                                            <Label>Facility</Label>
+                                            <Label>Facility <span className="text-destructive">*</span></Label>
                                             <div className="block lg:hidden">
                                                 <Dialog>
                                                     <DialogTrigger asChild>
@@ -1230,21 +1230,30 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         )}
                                     </div>
 
-                                    {/* Add booking button */}
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={addFacilityBooking}
-                                        disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
-                                        className="w-full"
-                                    >
-                                        Add Facility Booking
-                                    </Button>
+                                    <div className="flex flex-col gap-1 mt-12">
+                                        {data.facility_bookings.length === 0 && (
+                                            <p className="text-xs text-destructive">At least one facility booking is required.</p>
+                                        )}
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={addFacilityBooking}
+                                            disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
+                                            className="w-full"
+                                        >
+                                            Add Facility Booking
+                                        </Button>
+                                    </div>
 
-                                    {/* Booked entries */}
-                                    {data.facility_bookings.map((booking, index) => (
-                                        <BookingCard key={index} booking={booking} index={index} onEdit={editBooking} onRemove={removeBooking} />
-                                    ))}
+                                    {(data.facility_bookings.length > 0) && (
+                                        <div className="flex flex-col gap-2 mt-4">
+                                            {/* Booked entries */}
+                                            {data.facility_bookings.map((booking, index) => (
+                                                <BookingCard key={index} booking={booking} index={index} onEdit={editBooking} onRemove={removeBooking} />
+                                            ))}
+                                        </div>
+                                    )}
+
                                 </div>
 
                                 {/* ── Right: sticky sidebar (desktop only) ── */}
