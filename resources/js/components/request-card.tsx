@@ -307,6 +307,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                         const pendingConflicts = (request.pending_conflicts ?? [])
                             .filter(c => c.facility_id === rf.facility_id)
                             .map(c => ({
+                                request_id: c.request_id,
                                 request_title: c.request.title,
                                 status: "Pending",
                                 time_start: c.time_start,
@@ -316,6 +317,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                         const approvedConflicts = (request.approved_conflicts ?? [])
                             .filter(c => c.facility_id === rf.facility_id)
                             .map(c => ({
+                                request_id: c.request_id,
                                 request_title: c.request.title,
                                 status: "Approved",
                                 time_start: c.time_start,
@@ -323,6 +325,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                             }));
 
                         const booking = {
+                            request_id: rf.request_id,
                             facility_id: rf.facility_id,
                             facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
                             date: rf.date_requested,

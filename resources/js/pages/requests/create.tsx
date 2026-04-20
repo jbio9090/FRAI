@@ -1257,7 +1257,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 </div>
 
                                 {/* ── Right: sticky sidebar (desktop only) ── */}
-                                <Card className="hidden lg:block bg-background shadow">
+                                <Card className="hidden lg:block bg-background shadow-sm border">
                                     <CardContent className="sticky top-6">
                                         <FacilityInfo
                                             selectedFacility={selectedFacility}
