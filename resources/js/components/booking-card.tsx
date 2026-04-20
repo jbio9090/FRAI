@@ -88,7 +88,7 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
             <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <Link className="font-medium text-sm text-foreground truncate hover:underline">
+                        <Link className="font-bold text-lg text-foreground truncate hover:underline">
                             {booking.facility_name}
                         </Link>
                         {booking.has_outsiders && (

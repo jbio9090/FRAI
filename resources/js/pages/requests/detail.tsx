@@ -120,7 +120,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
             <div className="flex flex-col w-full gap-4 *:text-sm">
                 <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
-                        <h1 className='font-bold text-xl'>{request.title}</h1>
+                        <h1 className='font-bold text-2xl'>{request.title}</h1>
                         {canEdit && (
                             <Link href={route("requests.edit", request.id)}>
                                 <Button variant={"ghost"} size={"icon-sm"}>

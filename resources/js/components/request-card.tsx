@@ -135,7 +135,7 @@ export default function RequestCard({
             <div className={cn("flex justify-between items-start w-full flex-col gap-6", isSelecting && "pointer-events-none")}>
                 <div className="flex justify-around w-full">
                     <div className='flex flex-col gap-1'>
-                        <h3 className="font-bold">{request.title}</h3>
+                        <h3 className="font-bold text-xl">{request.title}</h3>
 
                         <div className="flex gap-2 flex-wrap">
                             <StatusTag requestStatus={request.status} />
