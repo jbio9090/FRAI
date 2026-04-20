@@ -69,6 +69,7 @@ Route::middleware("auth")->group(function () {
     Route::get("/facilities/getCalendarSchedule/{facility_id}", [FacilityController::class, "getCalendarSchedule"])->name("facility.schedule.calendar");
 
     Route::get("/settings", [SettingsController::class, "index"])->name("settings");
+    Route::post('/settings/change-password', [SettingsController::class, 'changePassword'])->name('settings.change-password');
 
     Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');
     Route::post('/equipment/check-conflicts', [EquipmentController::class, 'checkConflicts'])

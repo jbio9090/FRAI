@@ -10,11 +10,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
-    Avatar,
-    AvatarFallback,
-    AvatarImage,
-} from "@/components/ui/avatar";
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogClose,
+} from "@/components/ui/dialog";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -39,11 +44,32 @@ export default function Settings() {
     const { auth } = usePage<PageProps>().props;
     const [theme, setTheme] = useState(localStorage.theme);
     const [preview, setPreview] = useState<string | null>(null);
+    const [pwDialogOpen, setPwDialogOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data, setData, post, processing, errors, reset } = useForm<{ profile: File | null }>({
         profile: null,
     });
+
+    const { data: pwData, setData: setPwData, post: postPw, processing: pwProcessing, errors: pwErrors, reset: resetPw } = useForm({
+        current_password: '',
+        password: '',
+        password_confirmation: '',
+    });
+
+    const handlePasswordChange = () => {
+        postPw(route('settings.change-password'), {
+            onSuccess: () => {
+                resetPw();
+                setPwDialogOpen(false);
+            },
+        });
+    };
+
+    const handleDialogOpenChange = (open: boolean) => {
+        if (!open) resetPw();
+        setPwDialogOpen(open);
+    };
 
     const { delete: destroy, processing: removing } = useForm();
 
@@ -93,9 +119,6 @@ export default function Settings() {
 
     const hasCustomPicture = auth.user.profile !== 'default.png';
 
-    const avatarSrc = preview
-        ?? (hasCustomPicture ? `/storage/profiles/${auth.user.profile}` : undefined);
-
     return (
         <DefaultLayout>
             <div className="flex flex-col mx-auto max-w-2xl gap-6 w-full">
@@ -128,37 +151,17 @@ export default function Settings() {
                         )}
                         {preview ? (
                             <>
-                                <Button
-                                    variant={"outline"}
-                                    size={"sm"}
-                                    onClick={handleSubmit}
-                                    disabled={processing}
-                                    type="button"
-                                >
-                                    <span>
-                                        {processing ? 'Saving…' : 'Save'}
-                                    </span>
+                                <Button variant={"outline"} size={"sm"} onClick={handleSubmit} disabled={processing} type="button">
+                                    {processing ? 'Saving…' : 'Save'}
                                 </Button>
-                                <Button
-                                    variant={"outline"}
-                                    onClick={handleCancel}
-                                    size={"sm"}
-                                    disabled={processing}
-                                    type="button"
-                                >
+                                <Button variant={"outline"} onClick={handleCancel} size={"sm"} disabled={processing} type="button">
                                     Cancel
                                 </Button>
                             </>
                         ) : (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        type="button"
-                                        size={"sm"}
-                                    >
-                                        Edit
-                                    </Button>
+                                    <Button variant={"outline"} type="button" size={"sm"}>Edit</Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                     <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className='cursor-pointer'>
@@ -169,11 +172,7 @@ export default function Settings() {
                                         Upload photo
                                     </DropdownMenuItem>
                                     {hasCustomPicture && (
-                                        <DropdownMenuItem
-                                            onClick={handleRemove}
-                                            disabled={removing}
-                                            className="text-destructive focus:text-destructive cursor-pointer"
-                                        >
+                                        <DropdownMenuItem onClick={handleRemove} disabled={removing} className="text-destructive focus:text-destructive cursor-pointer">
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                             </svg>
@@ -185,6 +184,83 @@ export default function Settings() {
                         )}
                     </div>
                 </div>
+
+                {/* Change Password Row */}
+                <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold">Password</span>
+                    <Button variant="outline" size="sm" type="button" onClick={() => setPwDialogOpen(true)}>
+                        Change Password
+                    </Button>
+                </div>
+
+                {/* Change Password Dialog */}
+                <Dialog open={pwDialogOpen} onOpenChange={handleDialogOpenChange}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Change Password</DialogTitle>
+                        </DialogHeader>
+
+                        <div className="flex flex-col gap-3 py-2">
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Current Password</Label>
+                                <Input
+                                    type="password"
+                                    value={pwData.current_password}
+                                    onChange={e => setPwData('current_password', e.target.value)}
+                                    placeholder="Enter current password"
+                                    disabled={pwProcessing}
+                                />
+                                {pwErrors.current_password && (
+                                    <span className="text-xs text-destructive">{pwErrors.current_password}</span>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">New Password</Label>
+                                <Input
+                                    type="password"
+                                    value={pwData.password}
+                                    onChange={e => setPwData('password', e.target.value)}
+                                    placeholder="Enter new password"
+                                    disabled={pwProcessing}
+                                />
+                                {pwErrors.password && (
+                                    <span className="text-xs text-destructive">{pwErrors.password}</span>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Confirm New Password</Label>
+                                <Input
+                                    type="password"
+                                    value={pwData.password_confirmation}
+                                    onChange={e => setPwData('password_confirmation', e.target.value)}
+                                    placeholder="Confirm new password"
+                                    disabled={pwProcessing}
+                                />
+                                {pwErrors.password_confirmation && (
+                                    <span className="text-xs text-destructive">{pwErrors.password_confirmation}</span>
+                                )}
+                            </div>
+                        </div>
+
+                        <DialogFooter className="gap-2">
+                            <DialogClose asChild>
+                                <Button variant="outline" size="sm" type="button" disabled={pwProcessing}>
+                                    Cancel
+                                </Button>
+                            </DialogClose>
+                            <Button
+                                size="sm"
+                                type="button"
+                                onClick={handlePasswordChange}
+                                disabled={pwProcessing || !pwData.current_password || !pwData.password || !pwData.password_confirmation}
+                            >
+                                {pwProcessing ? 'Saving…' : 'Save Password'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 <PushNotifications />
 
