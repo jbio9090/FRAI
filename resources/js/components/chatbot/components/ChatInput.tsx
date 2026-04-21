@@ -46,7 +46,7 @@ export default function ChatInput({
     };
 
     return (
-        <div className="border-t border-border bg-background p-6">
+        <div className="border-t border-border bg-background p-3 sm:p-4 lg:p-6">
             {attachedFiles.length > 0 && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <div className="text-sm font-semibold text-blue-900 mb-2">
@@ -96,7 +96,7 @@ export default function ChatInput({
                 </div>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
                 <textarea
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
@@ -104,13 +104,13 @@ export default function ChatInput({
                     disabled={disabled}
                     placeholder={placeholder}
                     rows={1}
-                    className="flex-1 bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-lg px-4 py-3 focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50 resize-none"
+                    className="w-full flex-1 resize-none rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 focus:outline-none disabled:opacity-50 min-h-[44px] max-h-40"
                 />
                 
                 <button
                     onClick={onSend}
                     disabled={disabled || !value.trim()}
-                    className="bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-bold py-3 px-6 rounded-lg transition-all duration-200 uppercase text-sm tracking-wide"
+                    className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold tracking-wide text-primary-foreground uppercase transition-all duration-200 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-6"
                 >
                     Send
                 </button>
@@ -130,7 +130,7 @@ export default function ChatInput({
                             onClick={() => fileInputRef.current?.click()}
                             disabled={disabled || uploading}
                             title="Attach files"
-                            className="bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-800 font-bold py-3 px-4 rounded-lg transition-all duration-200 text-lg"
+                            className="w-full rounded-lg bg-gray-200 px-4 py-3 text-lg font-bold text-gray-800 transition-all duration-200 hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                         >
                             📎{attachedFiles.length > 0 && <span className="ml-1 text-xs">({attachedFiles.length})</span>}
                         </button>

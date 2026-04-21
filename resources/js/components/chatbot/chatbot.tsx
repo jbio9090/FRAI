@@ -2355,8 +2355,8 @@ export default function Chatbot() {
             : 'Quick actions';
 
     return (
-        <div className="flex h-full w-full flex-col bg-background">
-            <div className={`flex-1 space-y-4 p-6 ${mode === 'idle' ? 'overflow-visible' : 'overflow-y-auto'}`}>
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+            <div className={`flex-1 space-y-3 p-3 sm:space-y-4 sm:p-4 lg:p-6 ${mode === 'idle' ? 'overflow-visible' : 'overflow-y-auto'}`}>
                 {/* Idle — show welcome */}
                 {mode === 'idle' && <WelcomeMessage />}
 
@@ -2403,9 +2403,9 @@ export default function Chatbot() {
                         />
 
                         {shouldRenderEquipmentPicker && (
-                            <div className="mb-4 rounded-lg border border-border bg-background p-4">
+                            <div className="mb-4 rounded-lg border border-border bg-background p-3 sm:p-4">
                                 {!showEquipmentSelection ? (
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div>
                                             <p className="text-sm font-semibold">Equipment Selection</p>
                                             <p className="text-xs text-muted-foreground">
@@ -2535,7 +2535,7 @@ export default function Chatbot() {
                                                                         const bounded = Math.min(Math.max(1, value), remainingQuantity);
                                                                         updateEquipmentQuantity(equipment.id, equipment.facility_id, bounded);
                                                                     }}
-                                                                    className="w-24"
+                                                                    className="w-full sm:w-24"
                                                                 />
                                                             </div>
                                                         )}
@@ -2556,7 +2556,7 @@ export default function Chatbot() {
             </div>
 
             {guidedQuickReplies.length > 0 && (
-                <div className="border-t border-border bg-background px-6 py-3">
+                <div className="border-t border-border bg-background px-3 py-3 sm:px-4 lg:px-6">
                     <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{guidedQuickReplyHint}</p>
                     <input
                         ref={guidedFileInputRef}
@@ -2576,7 +2576,7 @@ export default function Chatbot() {
                                     min={1}
                                     value={customParticipantCount}
                                     onChange={(e) => setCustomParticipantCount(e.target.value)}
-                                    className="w-44"
+                                    className="w-full sm:w-44"
                                 />
                             </div>
                             <Button size="sm" variant="outline" onClick={handleCustomParticipantSubmit} disabled={isLoading}>
@@ -2596,7 +2596,7 @@ export default function Chatbot() {
                         <div className="mb-3 flex flex-wrap items-end gap-2">
                             <div>
                                 <Label className="mb-1 block text-xs text-muted-foreground">Custom start time</Label>
-                                <Input type="time" value={customStartTime} onChange={(e) => setCustomStartTime(e.target.value)} className="w-44" />
+                                <Input type="time" value={customStartTime} onChange={(e) => setCustomStartTime(e.target.value)} className="w-full sm:w-44" />
                             </div>
                             <Button size="sm" variant="outline" onClick={handleCustomStartTimeSubmit} disabled={isLoading}>
                                 Set Custom Start
@@ -2608,7 +2608,7 @@ export default function Chatbot() {
                         <div className="mb-3 flex flex-wrap items-end gap-2">
                             <div>
                                 <Label className="mb-1 block text-xs text-muted-foreground">Custom end time</Label>
-                                <Input type="time" value={customEndTime} onChange={(e) => setCustomEndTime(e.target.value)} className="w-44" />
+                                <Input type="time" value={customEndTime} onChange={(e) => setCustomEndTime(e.target.value)} className="w-full sm:w-44" />
                             </div>
                             <Button size="sm" variant="outline" onClick={() => void handleCustomEndTimeSubmit()} disabled={isLoading}>
                                 Set Custom End
@@ -2626,7 +2626,7 @@ export default function Chatbot() {
                                     void option.onSelect();
                                 }}
                                 disabled={isLoading || option.disabled}
-                                className="max-w-full text-left whitespace-normal"
+                                className="w-full justify-start max-w-full text-left whitespace-normal sm:w-auto"
                             >
                                 {option.label}
                             </Button>

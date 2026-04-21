@@ -85,15 +85,15 @@ export default function MessageList({
             {messages.map((msg, index) => (
                 <div
                     key={index}
-                    className={`flex gap-4 animate-in fade-in ${msg.role === 'user' ? 'justify-end' : 'justify-start'
+                    className={`flex gap-2 animate-in fade-in sm:gap-3 lg:gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'
                         }`}
                 >
                     <div
-                        className={`flex gap-3 max-w-[70%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                        className={`flex max-w-[92%] gap-2 sm:max-w-[82%] sm:gap-3 lg:max-w-[72%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
                             }`}
                     >
                         {/* Avatar */}
-                        <Avatar className="h-10 w-10 rounded-lg flex-shrink-0">
+                        <Avatar className="h-8 w-8 rounded-lg flex-shrink-0 sm:h-10 sm:w-10">
                             <AvatarFallback
                                 className={`rounded-lg text-sm font-bold ${msg.role === 'user'
                                         ? 'bg-muted text-muted-foreground'
@@ -111,7 +111,7 @@ export default function MessageList({
                                     : 'bg-muted-background border-border'
                                 }`}
                         >
-                            <CardContent className="px-5 py-3">
+                            <CardContent className="px-3 py-2.5 sm:px-4 sm:py-3 lg:px-5">
                                 <Badge
                                     variant="outline"
                                     className="text-xs font-mono text-muted-foreground mb-2 tracking-wide uppercase border-none p-0 h-auto"
@@ -133,17 +133,17 @@ export default function MessageList({
             
             {/* Confirmation Buttons */}
             {showConfirmationButtons && onConfirm && onCancel && (
-                <div className="flex gap-3 justify-center mt-4 animate-in fade-in slide-in-from-bottom-2">
+                <div className="mt-4 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 sm:flex-row sm:justify-center sm:gap-3">
                     <Button 
                         onClick={onConfirm}
-                        className="bg-green-600 hover:bg-green-700 text-white"
+                        className="w-full bg-green-600 text-white hover:bg-green-700 sm:w-auto"
                     >
                         ✅ Confirm & Submit
                     </Button>
                     <Button 
                         onClick={onCancel}
                         variant="outline"
-                        className="text-red-600 border-red-300 hover:bg-red-50"
+                        className="w-full border-red-300 text-red-600 hover:bg-red-50 sm:w-auto"
                     >
                         ❌ Cancel
                     </Button>

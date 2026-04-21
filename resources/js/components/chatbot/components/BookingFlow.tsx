@@ -101,16 +101,16 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
 
     if (step === 'done' && submitResult) {
         return (
-            <div className="flex gap-4 justify-start animate-in fade-in">
+            <div className="flex justify-start gap-2 animate-in fade-in sm:gap-3 lg:gap-4">
                 <BotAvatar />
-                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-muted border-border text-foreground">
+                <div className="max-w-[92%] rounded-lg border border-border bg-muted px-3 py-2.5 text-foreground sm:max-w-[82%] sm:px-4 sm:py-3 lg:max-w-[72%] lg:px-5">
                     <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                         assistant
                     </div>
                     <p className={`text-sm font-medium ${submitResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {submitResult.message}
                     </p>
-                    <div className="mt-3 flex gap-4">
+                    <div className="mt-3 flex flex-wrap gap-3">
                         {submitResult.success && (
                             <button
                                 onClick={() => onComplete(submitResult.message)}
@@ -159,18 +159,18 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
             {history.map((msg, i) => (
                 <div
                     key={i}
-                    className={`flex gap-4 animate-in fade-in ${
+                    className={`flex gap-2 animate-in fade-in sm:gap-3 lg:gap-4 ${
                         msg.from === 'user' ? 'justify-end' : 'justify-start'
                     }`}
                 >
                     {msg.from === 'bot' && <BotAvatar />}
-                    <div className={`flex gap-3 max-w-[70%] ${msg.from === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div className={`flex max-w-[92%] gap-2 sm:max-w-[82%] sm:gap-3 lg:max-w-[72%] ${msg.from === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                         {msg.from === 'user' && (
-                            <div className="h-10 w-10 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0 bg-muted text-muted-foreground">
+                            <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center text-xs font-bold flex-shrink-0 sm:h-10 sm:w-10 sm:text-sm">
                                 U
                             </div>
                         )}
-                        <div className={`px-5 py-3 rounded-lg border ${
+                        <div className={`rounded-lg border px-3 py-2.5 sm:px-4 sm:py-3 lg:px-5 ${
                             msg.from === 'user'
                                 ? 'bg-primary/5 border-border text-foreground'
                                 : 'bg-muted border-border text-foreground'
@@ -186,9 +186,9 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
 
             {/* Current step prompt */}
             {config.botMessage && (
-                <div className="flex gap-4 justify-start animate-in fade-in">
+                <div className="flex justify-start gap-2 animate-in fade-in sm:gap-3 lg:gap-4">
                     <BotAvatar />
-                    <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-muted border-border text-foreground">
+                    <div className="max-w-[92%] rounded-lg border border-border bg-muted px-3 py-2.5 text-foreground sm:max-w-[82%] sm:px-4 sm:py-3 lg:max-w-[72%] lg:px-5">
                         <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                             assistant
                         </div>
@@ -231,7 +231,7 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
                         )}
 
                         {!isTypingPrompt && config.isTextInput && (
-                            <div className="mt-3 flex gap-2">
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                                 <input
                                     type={step === 'equipment_quantity' ? 'number' : 'text'}
                                     value={textInput}
@@ -248,7 +248,7 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
                                 <button
                                     onClick={handleTextSubmit}
                                     disabled={!textInput.trim()}
-                                    className="px-4 py-2 text-xs bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed font-semibold uppercase tracking-wide transition-colors"
+                                    className="w-full rounded-lg bg-primary px-4 py-2 text-xs font-semibold tracking-wide text-primary-foreground uppercase transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
                                 >
                                     Next
                                 </button>
@@ -270,7 +270,7 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
             )}
 
             {isSubmitting && (
-                <div className="flex gap-4 justify-start">
+                <div className="flex justify-start gap-2 sm:gap-3 lg:gap-4">
                     <BotAvatar />
                     <div className="flex items-center space-x-2">
                         <div className="h-2 w-2 rounded-full bg-muted-foreground animate-pulse"></div>
@@ -285,7 +285,7 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
 
 function BotAvatar() {
     return (
-        <div className="bg-muted h-10 w-10 rounded-lg flex items-center justify-center font-bold text-muted-foreground flex-shrink-0 text-sm">
+        <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center text-xs font-bold flex-shrink-0 sm:h-10 sm:w-10 sm:text-sm">
             AI
         </div>
     );
