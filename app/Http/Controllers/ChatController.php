@@ -1156,6 +1156,91 @@ class ChatController extends Controller
         ];
     }
 
+    private function paraphraseFaqAnswer(string $faqAnswer): array
+    {
+        $sourceAnswer = trim($faqAnswer);
+        if ($sourceAnswer === '') {
+            return ['content' => '', 'paraphrased' => false];
+        }
+
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "You are an FAQ paraphrasing assistant.\n"
+                    . "Use only the provided FAQ answer as source-of-truth.\n"
+                    . "Do not add or invent facts, policies, steps, requirements, approvals, IDs, dates, or limits.\n"
+                    . "Do not infer unstated implications.\n"
+                    . "Rewrite in plain language while preserving the original meaning.\n"
+                    . "If the source is short, keep it short and do not expand it with new details.",
+            ],
+            [
+                'role' => 'user',
+                'content' => "Source FAQ answer:\n{$sourceAnswer}\n\nParaphrase this answer in clear plain language.",
+            ],
+        ];
+
+        try {
+            $client = new Client(['timeout' => 120]);
+            $response = $client->post($this->ollamaUrl . '/api/chat', [
+                'json' => [
+                    'model' => $this->model,
+                    'messages' => $messages,
+                    'stream' => false,
+                ],
+            ]);
+
+            $data = json_decode($response->getBody(), true);
+            $paraphrased = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+            if ($paraphrased !== '') {
+                return ['content' => $paraphrased, 'paraphrased' => true];
+            }
+        } catch (\Throwable $exception) {
+            \Log::warning('FAQ paraphrase failed: ' . $exception->getMessage());
+        }
+
+        return ['content' => $sourceAnswer, 'paraphrased' => false];
+    }
+
+    private function buildFaqNoMatchResponse(bool $faqMode): array
+    {
+        return [
+            'content' => 'No FAQ match found. Please rephrase your question so I can match it to our configured FAQs.',
+            'deterministic' => [
+                'source' => 'faq_no_match',
+                'check' => 'faq',
+                'status' => 'no_match',
+                'reason' => 'semantic_similarity_below_threshold',
+                'faq_mode' => $faqMode,
+            ],
+            'context' => [
+                'faq_mode' => $faqMode,
+                'faq_paraphrased' => false,
+                'faq_no_match' => true,
+                'response_source' => 'faq_no_match',
+            ],
+        ];
+    }
+
+    private function streamTextTokens(string $content, int $chunkSize = 3, int $delayMicroseconds = 8000): void
+    {
+        $text = (string) $content;
+        if ($text === '') {
+            return;
+        }
+
+        $length = strlen($text);
+        for ($offset = 0; $offset < $length; $offset += $chunkSize) {
+            $token = substr($text, $offset, $chunkSize);
+            echo "data: " . json_encode(['token' => $token]) . "\n\n";
+            ob_flush();
+            flush();
+
+            if ($delayMicroseconds > 0) {
+                usleep($delayMicroseconds);
+            }
+        }
+    }
+
     private function storeAssistantReply(array $incomingMessages, string $content): void
     {
         $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
@@ -1381,7 +1466,12 @@ class ChatController extends Controller
                     if ($faqMode) {
                         $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, true);
                         if ($faqResult) {
-                            $content = (string) $faqResult['content'];
+                            $paraphraseResult = $this->paraphraseFaqAnswer((string) $faqResult['content']);
+                            $content = (string) $paraphraseResult['content'];
+                            $deterministic = array_merge($faqResult['deterministic'], [
+                                'source' => 'faq_semantic_match_paraphrased',
+                                'status' => 'matched_paraphrased',
+                            ]);
                             $this->storeAssistantReply($incomingMessages, $content);
                             $this->chatbotLogService->logAssistantReply(
                                 $latestUserMessage,
@@ -1398,7 +1488,11 @@ class ChatController extends Controller
                                     $approvedBookingContextInjected,
                                     $deterministicAvailabilityInjected,
                                     $facilityFilterApplied,
-                                    array_merge(['faq_mode' => true], $faqResult['context'])
+                                    array_merge(['faq_mode' => true], $faqResult['context'], [
+                                        'faq_paraphrased' => (bool) $paraphraseResult['paraphrased'],
+                                        'faq_no_match' => false,
+                                        'response_source' => 'faq_semantic_match_paraphrased',
+                                    ])
                                 ),
                                 $sessionId,
                                 'faq_answer',
@@ -1410,9 +1504,42 @@ class ChatController extends Controller
                                     'role' => 'assistant',
                                     'content' => $content,
                                 ],
-                                'deterministic' => $faqResult['deterministic'],
+                                'deterministic' => $deterministic,
                             ]);
                         }
+
+                        $faqNoMatch = $this->buildFaqNoMatchResponse(true);
+                        $content = (string) $faqNoMatch['content'];
+                        $this->storeAssistantReply($incomingMessages, $content);
+                        $this->chatbotLogService->logAssistantReply(
+                            $latestUserMessage,
+                            $content,
+                            $this->buildLogContext(
+                                $latestUserMessage,
+                                $participantCount,
+                                $bookingContext,
+                                $allRequests,
+                                $allFacilities,
+                                $equipmentCount,
+                                count($rules),
+                                $rulesInjected,
+                                $approvedBookingContextInjected,
+                                $deterministicAvailabilityInjected,
+                                $facilityFilterApplied,
+                                $faqNoMatch['context']
+                            ),
+                            $sessionId,
+                            'faq_answer',
+                            'faq',
+                        );
+
+                        return response()->json([
+                            'message' => [
+                                'role' => 'assistant',
+                                'content' => $content,
+                            ],
+                            'deterministic' => $faqNoMatch['deterministic'],
+                        ]);
                     }
 
                     $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
@@ -1496,46 +1623,6 @@ class ChatController extends Controller
                         }
                     }
 
-                    if ($faqMode && $shouldRunAvailability) {
-                        $availabilityResult = $this->buildAvailabilityCheckResult(
-                            $resolved['facility'],
-                            $resolved['date'],
-                            $allRequests,
-                            $resolved['time_start'] ?? null,
-                            $resolved['time_end'] ?? null
-                        );
-                        $content = $availabilityResult['content'];
-                        $this->storeAssistantReply($incomingMessages, $content);
-                        $this->chatbotLogService->logAssistantReply(
-                            $latestUserMessage,
-                            $content,
-                            $this->buildLogContext(
-                                $latestUserMessage,
-                                $participantCount,
-                                $bookingContext,
-                                $allRequests,
-                                $allFacilities,
-                                $equipmentCount,
-                                count($rules),
-                                $rulesInjected,
-                                $approvedBookingContextInjected,
-                                $deterministicAvailabilityInjected,
-                                $facilityFilterApplied,
-                                ['response_source' => 'deterministic_check', 'faq_mode' => true]
-                            ),
-                            $sessionId,
-                            'deterministic_check',
-                            'availability_check',
-                        );
-
-                        return response()->json([
-                            'message' => [
-                                'role' => 'assistant',
-                                'content' => $content,
-                            ],
-                            'deterministic' => $availabilityResult['deterministic'],
-                        ]);
-                    }
                 }
 
                 array_unshift($messages, [
@@ -1792,7 +1879,12 @@ class ChatController extends Controller
                 if ($faqMode) {
                     $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, true);
                     if ($faqResult) {
-                        $content = (string) $faqResult['content'];
+                        $paraphraseResult = $this->paraphraseFaqAnswer((string) $faqResult['content']);
+                        $content = (string) $paraphraseResult['content'];
+                        $deterministic = array_merge($faqResult['deterministic'], [
+                            'source' => 'faq_semantic_match_paraphrased',
+                            'status' => 'matched_paraphrased',
+                        ]);
                         $incomingMessages = $request->input('messages', []);
                         $this->storeAssistantReply($incomingMessages, $content);
                         $this->chatbotLogService->logAssistantReply(
@@ -1810,18 +1902,20 @@ class ChatController extends Controller
                                 $approvedBookingContextInjected,
                                 $deterministicAvailabilityInjected,
                                 $facilityFilterApplied,
-                                array_merge(['faq_mode' => true], $faqResult['context'])
+                                array_merge(['faq_mode' => true], $faqResult['context'], [
+                                    'faq_paraphrased' => (bool) $paraphraseResult['paraphrased'],
+                                    'faq_no_match' => false,
+                                    'response_source' => 'faq_semantic_match_paraphrased',
+                                ])
                             ),
                             $sessionId,
                             'faq_answer',
                             'faq',
                         );
 
-                        return response()->stream(function () use ($content, $faqResult) {
-                            echo "data: " . json_encode(['token' => $content]) . "\n\n";
-                            ob_flush();
-                            flush();
-                            echo "data: " . json_encode(['deterministic' => $faqResult['deterministic']]) . "\n\n";
+                        return response()->stream(function () use ($content, $deterministic) {
+                            $this->streamTextTokens($content);
+                            echo "data: " . json_encode(['deterministic' => $deterministic]) . "\n\n";
                             ob_flush();
                             flush();
                             echo "data: " . json_encode(['done' => true]) . "\n\n";
@@ -1834,6 +1928,47 @@ class ChatController extends Controller
                             'Connection'        => 'keep-alive',
                         ]);
                     }
+
+                    $faqNoMatch = $this->buildFaqNoMatchResponse(true);
+                    $content = (string) $faqNoMatch['content'];
+                    $incomingMessages = $request->input('messages', []);
+                    $this->storeAssistantReply($incomingMessages, $content);
+                    $this->chatbotLogService->logAssistantReply(
+                        $latestUserMessage,
+                        $content,
+                        $this->buildLogContext(
+                            $latestUserMessage,
+                            $participantCount,
+                            $bookingContext,
+                            $allRequests,
+                            $allFacilities,
+                            $equipmentCount,
+                            0,
+                            $rulesInjected,
+                            $approvedBookingContextInjected,
+                            $deterministicAvailabilityInjected,
+                            $facilityFilterApplied,
+                            $faqNoMatch['context']
+                        ),
+                        $sessionId,
+                        'faq_answer',
+                        'faq',
+                    );
+
+                    return response()->stream(function () use ($content, $faqNoMatch) {
+                        $this->streamTextTokens($content);
+                        echo "data: " . json_encode(['deterministic' => $faqNoMatch['deterministic']]) . "\n\n";
+                        ob_flush();
+                        flush();
+                        echo "data: " . json_encode(['done' => true]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    }, 200, [
+                        'Content-Type'      => 'text/event-stream',
+                        'Cache-Control'     => 'no-cache',
+                        'X-Accel-Buffering' => 'no',
+                        'Connection'        => 'keep-alive',
+                    ]);
                 }
 
                 $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
@@ -1919,9 +2054,7 @@ class ChatController extends Controller
                         );
 
                         return response()->stream(function () use ($content, $faqResult) {
-                            echo "data: " . json_encode(['token' => $content]) . "\n\n";
-                            ob_flush();
-                            flush();
+                            $this->streamTextTokens($content);
                             echo "data: " . json_encode(['deterministic' => $faqResult['deterministic']]) . "\n\n";
                             ob_flush();
                             flush();
@@ -1937,56 +2070,6 @@ class ChatController extends Controller
                     }
                 }
 
-                if ($faqMode && $shouldRunAvailability) {
-                    $availabilityResult = $this->buildAvailabilityCheckResult(
-                        $resolved['facility'],
-                        $resolved['date'],
-                        $allRequests,
-                        $resolved['time_start'] ?? null,
-                        $resolved['time_end'] ?? null
-                    );
-                    $content = $availabilityResult['content'];
-                    $incomingMessages = $request->input('messages', []);
-                    $this->storeAssistantReply($incomingMessages, $content);
-                    $this->chatbotLogService->logAssistantReply(
-                        $latestUserMessage,
-                        $content,
-                        $this->buildLogContext(
-                            $latestUserMessage,
-                            $participantCount,
-                            $bookingContext,
-                            $allRequests,
-                            $allFacilities,
-                            $equipmentCount,
-                            0,
-                            $rulesInjected,
-                            $approvedBookingContextInjected,
-                            $deterministicAvailabilityInjected,
-                            $facilityFilterApplied,
-                            ['response_source' => 'deterministic_check', 'faq_mode' => true]
-                        ),
-                        $sessionId,
-                        'deterministic_check',
-                        'availability_check',
-                    );
-
-                    return response()->stream(function () use ($content, $availabilityResult) {
-                        echo "data: " . json_encode(['token' => $content]) . "\n\n";
-                        ob_flush();
-                        flush();
-                        echo "data: " . json_encode(['deterministic' => $availabilityResult['deterministic']]) . "\n\n";
-                        ob_flush();
-                        flush();
-                        echo "data: " . json_encode(['done' => true]) . "\n\n";
-                        ob_flush();
-                        flush();
-                    }, 200, [
-                        'Content-Type'      => 'text/event-stream',
-                        'Cache-Control'     => 'no-cache',
-                        'X-Accel-Buffering' => 'no',
-                        'Connection'        => 'keep-alive',
-                    ]);
-                }
             }
 
             array_unshift($messages, ['role' => 'system', 'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission."]);

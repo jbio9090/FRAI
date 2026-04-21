@@ -205,6 +205,8 @@ class ChatbotLogService
             'faq_match_rule_id' => Arr::get($context, 'faq_match_rule_id'),
             'faq_match_question' => Arr::get($context, 'faq_match_question'),
             'faq_match_similarity' => Arr::get($context, 'faq_match_similarity'),
+            'faq_paraphrased' => Arr::get($context, 'faq_paraphrased'),
+            'faq_no_match' => Arr::get($context, 'faq_no_match'),
         ];
 
         if (Arr::has($context, 'validation_passed')) {
