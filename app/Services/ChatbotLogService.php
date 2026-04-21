@@ -115,6 +115,10 @@ class ChatbotLogService
 
     public function inferInteractionType(?string $userMessage, array $context = []): string
     {
+        if (!empty($context['faq_match_rule_id']) || !empty($context['faq_mode'])) {
+            return 'faq_answer';
+        }
+
         if (!empty($context['generated_payload']) || !empty($context['request_creation'])) {
             return 'request_creation';
         }
@@ -139,6 +143,10 @@ class ChatbotLogService
 
         if (Str::contains($message, ['rule', 'guideline', 'policy', 'allowed', 'prohibited'])) {
             return 'rules_inquiry';
+        }
+
+        if (Str::contains($message, ['faq', 'frequently asked', 'common question'])) {
+            return 'faq_answer';
         }
 
         if (Str::contains($message, ['book', 'booking', 'reserve', 'reservation', 'create request', 'submit request'])) {
@@ -193,6 +201,10 @@ class ChatbotLogService
             'files_attached' => Arr::get($context, 'files_attached'),
             'request_id' => Arr::get($context, 'request_id'),
             'error_message' => Arr::get($context, 'error_message'),
+            'faq_mode' => Arr::get($context, 'faq_mode'),
+            'faq_match_rule_id' => Arr::get($context, 'faq_match_rule_id'),
+            'faq_match_question' => Arr::get($context, 'faq_match_question'),
+            'faq_match_similarity' => Arr::get($context, 'faq_match_similarity'),
         ];
 
         if (Arr::has($context, 'validation_passed')) {

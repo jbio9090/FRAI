@@ -15,23 +15,33 @@ class RulesController extends Controller
     public function index()
     {
         return Inertia::render("rules/index", [
-            "rules" => Rule::orderBy('priority')->get(),
+            "policies" => Rule::policy()->orderBy('priority')->orderBy('id')->get(),
+            "faqs" => Rule::faq()->orderBy('priority')->orderBy('id')->get(),
         ]);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate(['rule' => 'string|required']);
+        $validated = $request->validate([
+            'rule' => 'string|required',
+            'forPolicy' => 'required|integer|in:0,1',
+            'faq_answer' => 'nullable|string|required_if:forPolicy,1',
+        ]);
 
-        $maxPriority = Rule::max('priority') ?? -1;
+        $forPolicy = (int) $validated['forPolicy'];
+        $maxPriority = Rule::where('forPolicy', $forPolicy)->max('priority') ?? -1;
         $rule = Rule::create([
             'rule'     => $validated['rule'],
             'priority' => $maxPriority + 1,
+            'forPolicy' => $forPolicy,
+            'faq_answer' => $forPolicy === 1 ? trim((string) $validated['faq_answer']) : null,
         ]);
 
         IndexRuleEmbedding::dispatch($rule);
 
-        return redirect()->to('rules');
+        $this->normalizePriorities($forPolicy);
+
+        return redirect()->route('rules');
     }
 
     public function update(Request $request)
@@ -39,12 +49,32 @@ class RulesController extends Controller
         $validated = $request->validate([
             'id'   => 'integer|required',
             'rule' => 'string|required',
+            'forPolicy' => 'required|integer|in:0,1',
+            'faq_answer' => 'nullable|string|required_if:forPolicy,1',
         ]);
 
         $rule = Rule::findOrFail($validated['id']);
-        $rule->update(['rule' => $validated['rule']]);
+        $previousForPolicy = (int) $rule->forPolicy;
+        $nextForPolicy = (int) $validated['forPolicy'];
+
+        $payload = [
+            'rule' => $validated['rule'],
+            'forPolicy' => $nextForPolicy,
+            'faq_answer' => $nextForPolicy === 1 ? trim((string) $validated['faq_answer']) : null,
+        ];
+
+        if ($previousForPolicy !== $nextForPolicy) {
+            $payload['priority'] = (Rule::where('forPolicy', $nextForPolicy)->max('priority') ?? -1) + 1;
+        }
+
+        $rule->update($payload);
 
         IndexRuleEmbedding::dispatch($rule);
+
+        $this->normalizePriorities($previousForPolicy);
+        if ($previousForPolicy !== $nextForPolicy) {
+            $this->normalizePriorities($nextForPolicy);
+        }
 
         return redirect()->route('rules');
     }
@@ -59,8 +89,8 @@ class RulesController extends Controller
         $rule = Rule::findOrFail($validated['id']);
 
         $neighbor = $validated['direction'] === 'up'
-            ? Rule::where('priority', '<', $rule->priority)->orderByDesc('priority')->first()
-            : Rule::where('priority', '>', $rule->priority)->orderBy('priority')->first();
+            ? Rule::where('forPolicy', $rule->forPolicy)->where('priority', '<', $rule->priority)->orderByDesc('priority')->first()
+            : Rule::where('forPolicy', $rule->forPolicy)->where('priority', '>', $rule->priority)->orderBy('priority')->first();
 
         if (!$neighbor) {
             return redirect()->route('rules');
@@ -69,6 +99,7 @@ class RulesController extends Controller
         [$rule->priority, $neighbor->priority] = [$neighbor->priority, $rule->priority];
         $rule->save();
         $neighbor->save();
+        $this->normalizePriorities((int) $rule->forPolicy);
 
         return redirect()->route('rules');
     }
@@ -76,9 +107,25 @@ class RulesController extends Controller
     public function remove(Request $request)
     {
         $validated = $request->validate(['id' => 'integer|required']);
+        $rule = Rule::findOrFail($validated['id']);
         $this->rule_index->deleteIndex($validated['id']);
         Rule::destroy($validated['id']);
+        $this->normalizePriorities((int) $rule->forPolicy);
 
-        return redirect()->to('rules');
+        return redirect()->route('rules');
+    }
+
+    private function normalizePriorities(int $forPolicy): void
+    {
+        Rule::where('forPolicy', $forPolicy)
+            ->orderBy('priority')
+            ->orderBy('id')
+            ->get()
+            ->values()
+            ->each(function (Rule $rule, int $index) {
+                if ((int) $rule->priority !== $index) {
+                    $rule->update(['priority' => $index]);
+                }
+            });
     }
 }

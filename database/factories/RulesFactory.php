@@ -18,6 +18,8 @@ class RulesFactory extends Factory
     {
         return [
             "rule" => fake()->sentence(),
+            "forPolicy" => 0,
+            "faq_answer" => null,
         ];
     }
 }

@@ -11,11 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('rule_embeddings', function (Blueprint $table) {
+        $driver = Schema::getConnection()->getDriverName();
+
+        Schema::create('rule_embeddings', function (Blueprint $table) use ($driver) {
             $table->id();
             $table->foreignId('rule_id')->constrained('rules');
             $table->text('content');    
-            $table->vector('embedding', 768); 
+            if ($driver === 'pgsql') {
+                $table->vector('embedding', 768);
+            } else {
+                // Test/runtime fallback for drivers without pgvector support.
+                $table->json('embedding')->nullable();
+            }
             $table->timestamps();
         });
     }

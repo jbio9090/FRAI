@@ -21,14 +21,15 @@ class AIRecommendationService
 
             $vectorLiteral = '[' . implode(',', $embedding) . ']';
 
-            $relevantRules = DB::select("
-            SELECT content, 1 - (embedding <=> ?) AS similarity
-            FROM rule_embeddings
-            ORDER BY embedding <=> ?
-            LIMIT 5
-        ", [$vectorLiteral, $vectorLiteral]);
+            $relevantRules = DB::table('rule_embeddings')
+                ->join('rules', 'rules.id', '=', 'rule_embeddings.rule_id')
+                ->where('rules.forPolicy', 0)
+                ->selectRaw('rule_embeddings.content, 1 - (rule_embeddings.embedding <=> ?) AS similarity', [$vectorLiteral])
+                ->orderByRaw('rule_embeddings.embedding <=> ?', [$vectorLiteral])
+                ->limit(5)
+                ->get();
 
-            if (empty($relevantRules)) {
+            if ($relevantRules->isEmpty()) {
                 return $this->fallback($request);
             }
 

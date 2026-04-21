@@ -15,6 +15,7 @@ export interface ChatRequest {
     messages: Message[];
     participant_count?: number;
     booking_context?: string;
+    faq_mode?: boolean;
 }
 
 export interface CreateRequestPayload {

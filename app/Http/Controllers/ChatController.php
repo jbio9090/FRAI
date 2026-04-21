@@ -19,6 +19,7 @@ use App\Models\Equipment;
 use App\RequestStatus;
 use App\PriorityLevel;
 use App\Services\ChatbotLogService;
+use App\Services\RAG\FaqMatchingService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -31,7 +32,8 @@ class ChatController extends Controller
     private const SESSION_TTL_MINUTES = 15;
 
     public function __construct(
-        protected ChatbotLogService $chatbotLogService
+        protected ChatbotLogService $chatbotLogService,
+        protected FaqMatchingService $faqMatchingService
     )
     {
         $this->ollamaUrl = config('ollama-laravel.url');
@@ -1125,6 +1127,35 @@ class ChatController extends Controller
         ];
     }
 
+    private function tryFaqSemanticMatch(?string $latestUserMessage, bool $faqMode): ?array
+    {
+        $match = $this->faqMatchingService->match($latestUserMessage);
+        if (!$match) {
+            return null;
+        }
+
+        return [
+            'content' => $match['answer'],
+            'deterministic' => [
+                'source' => 'faq_semantic_match',
+                'check' => 'faq',
+                'status' => 'matched',
+                'reason' => 'semantic_similarity',
+                'faq_mode' => $faqMode,
+                'rule_id' => (int) $match['rule_id'],
+                'question' => (string) $match['question'],
+                'similarity' => (float) $match['similarity'],
+            ],
+            'context' => [
+                'faq_mode' => $faqMode,
+                'faq_match_rule_id' => (int) $match['rule_id'],
+                'faq_match_question' => Str::limit((string) $match['question'], 250),
+                'faq_match_similarity' => round((float) $match['similarity'], 4),
+                'response_source' => 'faq_semantic_match',
+            ],
+        ];
+    }
+
     private function storeAssistantReply(array $incomingMessages, string $content): void
     {
         $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
@@ -1280,6 +1311,7 @@ class ChatController extends Controller
             $incomingMessages = $request->input('messages', []);
             $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
             $sessionId = $request->session()->getId();
+            $faqMode = $request->boolean('faq_mode');
 
             $sessionMessages = array_filter($sessionMessages, function($msg) {
                 $content = $msg['content'] ?? '';
@@ -1346,9 +1378,47 @@ class ChatController extends Controller
                     ]);
                 }
                 if ($latestUserMessage) {
-                    $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
+                    if ($faqMode) {
+                        $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, true);
+                        if ($faqResult) {
+                            $content = (string) $faqResult['content'];
+                            $this->storeAssistantReply($incomingMessages, $content);
+                            $this->chatbotLogService->logAssistantReply(
+                                $latestUserMessage,
+                                $content,
+                                $this->buildLogContext(
+                                    $latestUserMessage,
+                                    $participantCount,
+                                    $bookingContext,
+                                    $allRequests,
+                                    $allFacilities,
+                                    $equipmentCount,
+                                    count($rules),
+                                    $rulesInjected,
+                                    $approvedBookingContextInjected,
+                                    $deterministicAvailabilityInjected,
+                                    $facilityFilterApplied,
+                                    array_merge(['faq_mode' => true], $faqResult['context'])
+                                ),
+                                $sessionId,
+                                'faq_answer',
+                                'faq',
+                            );
 
-                    if ($this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities)) {
+                            return response()->json([
+                                'message' => [
+                                    'role' => 'assistant',
+                                    'content' => $content,
+                                ],
+                                'deterministic' => $faqResult['deterministic'],
+                            ]);
+                        }
+                    }
+
+                    $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
+                    $shouldRunAvailability = $this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities);
+
+                    if (!$faqMode && $shouldRunAvailability) {
                         $availabilityResult = $this->buildAvailabilityCheckResult(
                             $resolved['facility'],
                             $resolved['date'],
@@ -1373,7 +1443,85 @@ class ChatController extends Controller
                                 $approvedBookingContextInjected,
                                 $deterministicAvailabilityInjected,
                                 $facilityFilterApplied,
-                                ['response_source' => 'deterministic_check']
+                                ['response_source' => 'deterministic_check', 'faq_mode' => false]
+                            ),
+                            $sessionId,
+                            'deterministic_check',
+                            'availability_check',
+                        );
+
+                        return response()->json([
+                            'message' => [
+                                'role' => 'assistant',
+                                'content' => $content,
+                            ],
+                            'deterministic' => $availabilityResult['deterministic'],
+                        ]);
+                    }
+
+                    if (!$faqMode) {
+                        $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, false);
+                        if ($faqResult) {
+                            $content = (string) $faqResult['content'];
+                            $this->storeAssistantReply($incomingMessages, $content);
+                            $this->chatbotLogService->logAssistantReply(
+                                $latestUserMessage,
+                                $content,
+                                $this->buildLogContext(
+                                    $latestUserMessage,
+                                    $participantCount,
+                                    $bookingContext,
+                                    $allRequests,
+                                    $allFacilities,
+                                    $equipmentCount,
+                                    count($rules),
+                                    $rulesInjected,
+                                    $approvedBookingContextInjected,
+                                    $deterministicAvailabilityInjected,
+                                    $facilityFilterApplied,
+                                    array_merge(['faq_mode' => false], $faqResult['context'])
+                                ),
+                                $sessionId,
+                                'faq_answer',
+                                'faq',
+                            );
+
+                            return response()->json([
+                                'message' => [
+                                    'role' => 'assistant',
+                                    'content' => $content,
+                                ],
+                                'deterministic' => $faqResult['deterministic'],
+                            ]);
+                        }
+                    }
+
+                    if ($faqMode && $shouldRunAvailability) {
+                        $availabilityResult = $this->buildAvailabilityCheckResult(
+                            $resolved['facility'],
+                            $resolved['date'],
+                            $allRequests,
+                            $resolved['time_start'] ?? null,
+                            $resolved['time_end'] ?? null
+                        );
+                        $content = $availabilityResult['content'];
+                        $this->storeAssistantReply($incomingMessages, $content);
+                        $this->chatbotLogService->logAssistantReply(
+                            $latestUserMessage,
+                            $content,
+                            $this->buildLogContext(
+                                $latestUserMessage,
+                                $participantCount,
+                                $bookingContext,
+                                $allRequests,
+                                $allFacilities,
+                                $equipmentCount,
+                                count($rules),
+                                $rulesInjected,
+                                $approvedBookingContextInjected,
+                                $deterministicAvailabilityInjected,
+                                $facilityFilterApplied,
+                                ['response_source' => 'deterministic_check', 'faq_mode' => true]
                             ),
                             $sessionId,
                             'deterministic_check',
@@ -1410,7 +1558,7 @@ class ChatController extends Controller
 
             try {
                 $limitRules = max(1, min(200, (int) $request->input('rules_limit', 50)));
-                $rules = RuleModel::orderBy('id', 'asc')->limit($limitRules)->get(['id', 'rule'])
+                $rules = RuleModel::policy()->orderBy('priority')->orderBy('id')->limit($limitRules)->get(['id', 'rule'])
                     ->map(fn($r) => trim($r->rule))->filter()->toArray();
                 $rules = $this->applyBookingPolicyToRules($rules);
 
@@ -1524,7 +1672,8 @@ class ChatController extends Controller
                 $rulesInjected,
                 $approvedBookingContextInjected,
                 $deterministicAvailabilityInjected,
-                $facilityFilterApplied
+                $facilityFilterApplied,
+                ['faq_mode' => $faqMode]
             );
             $payload = $this->extractStructuredPayload($assistantMessage);
 
@@ -1586,6 +1735,7 @@ class ChatController extends Controller
             $allFacilities    = collect();
             $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
             $sessionId = $request->session()->getId();
+            $faqMode = $request->boolean('faq_mode');
             $rulesInjected = false;
             $approvedBookingContextInjected = false;
             $deterministicAvailabilityInjected = false;
@@ -1639,9 +1789,57 @@ class ChatController extends Controller
                 array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
             }
             if ($latestUserMessage) {
-                $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
+                if ($faqMode) {
+                    $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, true);
+                    if ($faqResult) {
+                        $content = (string) $faqResult['content'];
+                        $incomingMessages = $request->input('messages', []);
+                        $this->storeAssistantReply($incomingMessages, $content);
+                        $this->chatbotLogService->logAssistantReply(
+                            $latestUserMessage,
+                            $content,
+                            $this->buildLogContext(
+                                $latestUserMessage,
+                                $participantCount,
+                                $bookingContext,
+                                $allRequests,
+                                $allFacilities,
+                                $equipmentCount,
+                                0,
+                                $rulesInjected,
+                                $approvedBookingContextInjected,
+                                $deterministicAvailabilityInjected,
+                                $facilityFilterApplied,
+                                array_merge(['faq_mode' => true], $faqResult['context'])
+                            ),
+                            $sessionId,
+                            'faq_answer',
+                            'faq',
+                        );
 
-                if ($this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities)) {
+                        return response()->stream(function () use ($content, $faqResult) {
+                            echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                            ob_flush();
+                            flush();
+                            echo "data: " . json_encode(['deterministic' => $faqResult['deterministic']]) . "\n\n";
+                            ob_flush();
+                            flush();
+                            echo "data: " . json_encode(['done' => true]) . "\n\n";
+                            ob_flush();
+                            flush();
+                        }, 200, [
+                            'Content-Type'      => 'text/event-stream',
+                            'Cache-Control'     => 'no-cache',
+                            'X-Accel-Buffering' => 'no',
+                            'Connection'        => 'keep-alive',
+                        ]);
+                    }
+                }
+
+                $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
+                $shouldRunAvailability = $this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities);
+
+                if (!$faqMode && $shouldRunAvailability) {
                     $availabilityResult = $this->buildAvailabilityCheckResult(
                         $resolved['facility'],
                         $resolved['date'],
@@ -1667,7 +1865,105 @@ class ChatController extends Controller
                             $approvedBookingContextInjected,
                             $deterministicAvailabilityInjected,
                             $facilityFilterApplied,
-                            ['response_source' => 'deterministic_check']
+                            ['response_source' => 'deterministic_check', 'faq_mode' => false]
+                        ),
+                        $sessionId,
+                        'deterministic_check',
+                        'availability_check',
+                    );
+
+                    return response()->stream(function () use ($content, $availabilityResult) {
+                        echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                        ob_flush();
+                        flush();
+                        echo "data: " . json_encode(['deterministic' => $availabilityResult['deterministic']]) . "\n\n";
+                        ob_flush();
+                        flush();
+                        echo "data: " . json_encode(['done' => true]) . "\n\n";
+                        ob_flush();
+                        flush();
+                    }, 200, [
+                        'Content-Type'      => 'text/event-stream',
+                        'Cache-Control'     => 'no-cache',
+                        'X-Accel-Buffering' => 'no',
+                        'Connection'        => 'keep-alive',
+                    ]);
+                }
+
+                if (!$faqMode) {
+                    $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, false);
+                    if ($faqResult) {
+                        $content = (string) $faqResult['content'];
+                        $incomingMessages = $request->input('messages', []);
+                        $this->storeAssistantReply($incomingMessages, $content);
+                        $this->chatbotLogService->logAssistantReply(
+                            $latestUserMessage,
+                            $content,
+                            $this->buildLogContext(
+                                $latestUserMessage,
+                                $participantCount,
+                                $bookingContext,
+                                $allRequests,
+                                $allFacilities,
+                                $equipmentCount,
+                                0,
+                                $rulesInjected,
+                                $approvedBookingContextInjected,
+                                $deterministicAvailabilityInjected,
+                                $facilityFilterApplied,
+                                array_merge(['faq_mode' => false], $faqResult['context'])
+                            ),
+                            $sessionId,
+                            'faq_answer',
+                            'faq',
+                        );
+
+                        return response()->stream(function () use ($content, $faqResult) {
+                            echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                            ob_flush();
+                            flush();
+                            echo "data: " . json_encode(['deterministic' => $faqResult['deterministic']]) . "\n\n";
+                            ob_flush();
+                            flush();
+                            echo "data: " . json_encode(['done' => true]) . "\n\n";
+                            ob_flush();
+                            flush();
+                        }, 200, [
+                            'Content-Type'      => 'text/event-stream',
+                            'Cache-Control'     => 'no-cache',
+                            'X-Accel-Buffering' => 'no',
+                            'Connection'        => 'keep-alive',
+                        ]);
+                    }
+                }
+
+                if ($faqMode && $shouldRunAvailability) {
+                    $availabilityResult = $this->buildAvailabilityCheckResult(
+                        $resolved['facility'],
+                        $resolved['date'],
+                        $allRequests,
+                        $resolved['time_start'] ?? null,
+                        $resolved['time_end'] ?? null
+                    );
+                    $content = $availabilityResult['content'];
+                    $incomingMessages = $request->input('messages', []);
+                    $this->storeAssistantReply($incomingMessages, $content);
+                    $this->chatbotLogService->logAssistantReply(
+                        $latestUserMessage,
+                        $content,
+                        $this->buildLogContext(
+                            $latestUserMessage,
+                            $participantCount,
+                            $bookingContext,
+                            $allRequests,
+                            $allFacilities,
+                            $equipmentCount,
+                            0,
+                            $rulesInjected,
+                            $approvedBookingContextInjected,
+                            $deterministicAvailabilityInjected,
+                            $facilityFilterApplied,
+                            ['response_source' => 'deterministic_check', 'faq_mode' => true]
                         ),
                         $sessionId,
                         'deterministic_check',
@@ -1705,7 +2001,7 @@ class ChatController extends Controller
 
         $rules = [];
         try {
-            $rules = RuleModel::orderBy('id', 'asc')->limit(50)->get(['id', 'rule'])
+            $rules = RuleModel::policy()->orderBy('priority')->orderBy('id')->limit(50)->get(['id', 'rule'])
                 ->map(fn($r) => trim($r->rule))->filter()->toArray();
             $rules = $this->applyBookingPolicyToRules($rules);
 
@@ -1735,7 +2031,8 @@ class ChatController extends Controller
             $rulesInjected,
             $approvedBookingContextInjected,
             $deterministicAvailabilityInjected,
-            $facilityFilterApplied
+            $facilityFilterApplied,
+            ['faq_mode' => $faqMode]
         );
 
         return response()->stream(function () use ($messages, $incomingMessages, $rules, $latestUserMessage, $sessionId, $logContext) {
@@ -1997,7 +2294,7 @@ class ChatController extends Controller
         try {
             $limit = max(1, min(200, (int) $request->input('limit', 50)));
 
-            $rows = RuleModel::orderBy('id', 'asc')
+            $rows = RuleModel::policy()->orderBy('priority')->orderBy('id')
                 ->limit($limit)
                 ->get(['id', 'rule'])
                 ->map(fn($r) => ['id' => $r->id, 'rule' => trim($r->rule)]);

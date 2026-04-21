@@ -9,9 +9,14 @@ class RuleEmbedding extends Model
 {
     protected $fillable = ['rule_id', 'content', 'embedding'];
 
-    protected $casts = [
-        'embedding' => Vector::class,
-    ];
+    protected function casts(): array
+    {
+        $driver = config('database.default');
+
+        return [
+            'embedding' => $driver === 'pgsql' ? Vector::class : 'array',
+        ];
+    }
 
     public function rule()
     {

@@ -19,7 +19,7 @@ import AvailabilityQuickFlow from './components/AvailabilityQuickFlow';
 import DatePicker from './components/DatePicker';
 
 type ChatMode = 'idle' | 'booking' | 'availability' | 'ai';
-type GuidedFlowMode = 'none' | 'booking' | 'availability';
+type GuidedFlowMode = 'none' | 'booking' | 'availability' | 'faq';
 type GuidedFlowStep = 'attachments' | 'participants' | 'facility' | 'date' | 'time_start' | 'time_end' | 'equipment' | 'event_type';
 type SelectedEquipmentItem = {
     equipment_id: number;
@@ -526,7 +526,7 @@ export default function Chatbot() {
         setGuidedFlow({
             ...INITIAL_GUIDED_FLOW,
             mode: flowMode,
-            step: flowMode === 'booking' ? 'attachments' : 'facility',
+            step: flowMode === 'booking' ? 'attachments' : flowMode === 'availability' ? 'facility' : null,
         });
 
         addMessage({
@@ -534,7 +534,9 @@ export default function Chatbot() {
             content:
                 flowMode === 'booking'
                     ? 'Guided booking is active. Before we continue, do you have any approval paper or related supporting document to attach?'
-                    : 'Guided availability check is active. Please choose a facility using the quick replies below.',
+                    : flowMode === 'availability'
+                      ? 'Guided availability check is active. Please choose a facility using the quick replies below.'
+                      : 'FAQ mode is active. Ask your question in chat, and I will answer from the FAQ knowledge first.',
         });
     };
 
@@ -587,6 +589,10 @@ export default function Chatbot() {
                     default:
                         return prev;
                 }
+            }
+
+            if (prev.mode === 'faq') {
+                return { ...INITIAL_GUIDED_FLOW };
             }
 
             switch (prev.step) {
@@ -1162,7 +1168,12 @@ export default function Chatbot() {
             .catch(() => {});
     }, []);
 
-    const processAndSend = async (userMessage: Message, contextNote?: string, skipUserAdd = false): Promise<string | null> => {
+    const processAndSend = async (
+        userMessage: Message,
+        contextNote?: string,
+        skipUserAdd = false,
+        faqModeOverride?: boolean,
+    ): Promise<string | null> => {
         if (!skipUserAdd) {
             addMessage(userMessage);
         }
@@ -1204,6 +1215,7 @@ export default function Chatbot() {
 
             const currentCount = extractedCount ?? getCurrentCount(`${getMessagesText()} ${userMessage.content}`) ?? undefined;
             const activeBookingContext = bookingFlow.step !== 'title' && bookingFlow.step !== 'done' ? bookingFlow.buildContextSummary() : undefined;
+            const faqMode = faqModeOverride ?? guidedFlow.mode === 'faq';
 
             let streamingContent = '';
             let deterministicAvailabilityStatus: 'available' | 'unavailable' | null = null;
@@ -1212,6 +1224,7 @@ export default function Chatbot() {
                 allMessages,
                 currentCount,
                 activeBookingContext,
+                faqMode,
                 (token) => {
                     streamingContent += token;
                     setMessages((prev) => {
@@ -1818,7 +1831,7 @@ export default function Chatbot() {
 
         if (mode === 'idle' || mode === 'booking' || mode === 'availability') setMode('ai');
 
-        if (guidedFlow.mode !== 'none') {
+        if (guidedFlow.mode !== 'none' && guidedFlow.mode !== 'faq') {
             const userMessage: Message = { role: 'user', content: message };
             addMessage(userMessage);
 
@@ -1840,13 +1853,28 @@ export default function Chatbot() {
         }
 
         const userMessage: Message = { role: 'user', content: message };
-        if (isLoading) {
+        const faqModeActive = guidedFlow.mode === 'faq';
+
+        if (faqModeActive && /\b(cancel|exit|stop)\b.*\b(faq|mode)\b/i.test(message)) {
             addMessage(userMessage);
-            messageQueueRef.current.push({ message: userMessage });
+            resetGuidedFlow();
+            addMessage({
+                role: 'assistant',
+                content: 'FAQ mode exited. You can continue with normal chat or start another guided flow.',
+            });
             return;
         }
 
-        await processAndSend(userMessage);
+        if (isLoading) {
+            addMessage(userMessage);
+            messageQueueRef.current.push({
+                message: userMessage,
+                context: faqModeActive ? 'FAQ mode is active.' : undefined,
+            });
+            return;
+        }
+
+        await processAndSend(userMessage, undefined, false, faqModeActive);
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -2053,6 +2081,41 @@ export default function Chatbot() {
                 {
                     id: 'guided-start-availability',
                     label: 'Guided Availability',
+                    onSelect: () => startGuidedFlow('availability'),
+                    variant: 'outline',
+                },
+                {
+                    id: 'guided-start-faq',
+                    label: 'FAQ Mode',
+                    onSelect: () => startGuidedFlow('faq'),
+                    variant: 'outline',
+                },
+            ];
+        }
+
+        if (guidedFlow.mode === 'faq') {
+            return [
+                {
+                    id: 'faq-exit',
+                    label: 'Exit FAQ Mode',
+                    onSelect: () => {
+                        resetGuidedFlow();
+                        addMessage({
+                            role: 'assistant',
+                            content: 'FAQ mode exited. You can continue with normal chat or start another guided flow.',
+                        });
+                    },
+                    variant: 'outline',
+                },
+                {
+                    id: 'faq-guided-booking',
+                    label: 'Switch to Guided Booking',
+                    onSelect: () => startGuidedFlow('booking'),
+                    variant: 'default',
+                },
+                {
+                    id: 'faq-guided-availability',
+                    label: 'Switch to Availability',
                     onSelect: () => startGuidedFlow('availability'),
                     variant: 'outline',
                 },
@@ -2287,6 +2350,8 @@ export default function Chatbot() {
           ? `Guided booking step: ${guidedFlow.step ?? 'none'}`
           : guidedFlow.mode === 'availability'
             ? `Guided availability step: ${guidedFlow.step ?? 'none'}`
+            : guidedFlow.mode === 'faq'
+              ? 'FAQ mode active: ask your question in chat.'
             : 'Quick actions';
 
     return (

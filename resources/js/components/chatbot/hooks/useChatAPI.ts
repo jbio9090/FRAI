@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
-import { Message, ChatRequest, CreateRequestPayload } from '../types';
 import { sendChatMessageStream } from '../services/chatService';
 import { createRequest } from '../services/requestService';
+import type { Message, ChatRequest, CreateRequestPayload } from '../types';
 
 export function useChatAPI() {
     const [isLoading, setIsLoading] = useState(false);
@@ -11,6 +11,7 @@ export function useChatAPI() {
         messages: Message[],
         participantCount?: number,
         bookingContext?: string,
+        faqMode?: boolean,
         onToken?: (token: string) => void,
         onBookingPayload?: (json: string) => void,
         onDeterministic?: (payload: Record<string, unknown>) => void,
@@ -22,6 +23,7 @@ export function useChatAPI() {
             const payload: ChatRequest = { messages };
             if (participantCount) payload.participant_count = participantCount;
             if (bookingContext)   payload.booking_context   = bookingContext;
+            if (faqMode) payload.faq_mode = true;
 
             let fullContent = '';
 
