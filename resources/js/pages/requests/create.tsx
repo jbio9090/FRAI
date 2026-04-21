@@ -306,6 +306,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         }
     }, [currentTimeStart, currentTimeEnd, currentDate, selectedFacility]);
 
+    // Add this useEffect to sync attachedFiles -> form data
+    useEffect(() => {
+        setData('files', attachedFiles.map(f => f.file));
+    }, [attachedFiles]);
+
     function editBooking(index: number) {
         const booking = data.facility_bookings[index];
 
@@ -573,7 +578,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         transform((d) => ({
             ...d,
             facility_bookings: JSON.stringify(d.facility_bookings),
-            files: attachedFiles.map(f => f.file),
             existing_file_ids: existingFiles.map(f => f.id),
             _method: isEditing ? 'PUT' : '',
         }));

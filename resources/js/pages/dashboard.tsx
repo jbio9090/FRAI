@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { ListFilter } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AuditLog } from '@/components/activity-feed';
+import { ActivityFeed, AuditLog } from '@/components/activity-feed';
 import {
     AreaChart,
     Area,
@@ -69,7 +69,7 @@ export default function Dashboard({
     pending,
     initialEvents,
     buildings,
-    auditLogs,
+    auditLogs: auditLogsProp,
     chartData,
 }: {
     pending: { data: FacilityRequest[] };
@@ -86,6 +86,9 @@ export default function Dashboard({
     const [loading, setLoading] = useState(false);
     const auth = usePage().props.auth;
     const { hasRole } = usePermission();
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp);
+    const [logsLoading, setLogsLoading] = useState(false);
+
     const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
     const [canScrollNext, setCanScrollNext] = useState(false);
     const [canScrollPrev, setCanScrollPrev] = useState(false);
@@ -97,6 +100,22 @@ export default function Dashboard({
     const [approvedConflictApi, setApprovedConflictApi] = useState<CarouselApi | null>(null);
     const [approvedConflictCanScrollNext, setApprovedConflictCanScrollNext] = useState(false);
     const [approvedConflictCanScrollPrev, setApprovedConflictCanScrollPrev] = useState(false);
+
+    useEffect(() => {
+        setLoading(true);
+        setLogsLoading(true);
+
+        Promise.all([
+            fetch(`/dashboard/chart-data?range=${range}`).then(r => r.json()),
+            fetch(`/dashboard/audit-logs?range=${range}`).then(r => r.json()),
+        ]).then(([chartJson, logsJson]) => {
+            setData(chartJson);
+            setAuditLogs(logsJson);
+        }).finally(() => {
+            setLoading(false);
+            setLogsLoading(false);
+        });
+    }, [range]);
 
     useEffect(() => {
         if (!carouselApi) return;
@@ -136,11 +155,14 @@ export default function Dashboard({
 
     const isAdmin: boolean = hasRole("admin");
 
-    const rangeLabel = {
+    const rangeOptions = {
+        day: "Today",
         week: 'Last 7 days',
         month: 'This month',
         '3months': 'Last 3 months',
-    }[range];
+    } as const;
+
+    const rangeLabel = rangeOptions[range];
 
     useEffect(() => {
         setLoading(true);
@@ -411,9 +433,9 @@ export default function Dashboard({
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="week">Last 7 days</SelectItem>
-                                        <SelectItem value="month">This month</SelectItem>
-                                        <SelectItem value="3months">Last 3 months</SelectItem>
+                                        {(Object.entries(rangeOptions) as [typeof range, string][]).map(([value, label]) => (
+                                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -512,6 +534,15 @@ export default function Dashboard({
                                     </ChartContainer>
                                 )}
                             </div>
+
+                            {logsLoading ? (
+                                <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+                                    <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                    Loading activity...
+                                </div>
+                            ) : (
+                                <ActivityFeed auditLogs={auditLogs} />
+                            )}
 
                         </div>
                     </TabsContent>
