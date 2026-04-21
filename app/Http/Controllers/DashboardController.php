@@ -17,10 +17,6 @@ class DashboardController extends Controller
 
     public function index()
     {
-        $pending  = $this->requestService->get([RequestStatus::PENDING]);
-        $approved = $this->requestService->get([RequestStatus::APPROVED]);
-        $denied   = $this->requestService->get([RequestStatus::DENIED]);
-
         $start = now()->startOfMonth()->format('Y-m-d');
         $end   = now()->endOfMonth()->format('Y-m-d');
 
@@ -38,13 +34,11 @@ class DashboardController extends Controller
 
         return Inertia::render("dashboard", [
             'labeledBreadcrumb' => "Dashboard",
-            'pending'       => $pending,
-            'approved'      => $approved,
-            'denied'        => $denied,
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
             'buildings'     => Facility::distinct()->pluck('building')->filter()->values(),
             'auditLogs'     => AuditLog::latest()->take(50)->get(),
             'chartData'     => $chartData,
+            'pending' => $this->requestService->get([RequestStatus::PENDING]),
         ]);
     }
 

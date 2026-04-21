@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import DefaultLayout from '@/layout.tsx/default.';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import moment from 'moment';
 import FacilityCalendar from '@/components/FacilityCalendar';
@@ -29,6 +29,8 @@ import {
     ChartTooltipContent,
 } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import AvatarWithInitials from '@/components/avatar-with-initials';
+import RequestCard from '@/components/request-card';
 
 interface Event {
     start: Date;
@@ -53,14 +55,12 @@ const chartConfig = {
 
 export default function Dashboard({
     pending,
-    approved,
-    denied,
     initialEvents,
     buildings,
     auditLogs,
     chartData,
 }: {
-    pending: FacilityRequest[];
+    pending: { data: FacilityRequest[] };
     approved: FacilityRequest[];
     denied: FacilityRequest[];
     initialEvents: Event[];
@@ -72,6 +72,7 @@ export default function Dashboard({
     const [range, setRange] = useState<'week' | 'month' | '3months'>('week');
     const [data, setData] = useState<ChartRow[]>(chartData);
     const [loading, setLoading] = useState(false);
+    const auth = usePage().props.auth;
 
     const rangeLabel = {
         week: 'Last 7 days',
@@ -99,47 +100,30 @@ export default function Dashboard({
         selectedBuildings.includes(e.building)
     );
 
-    console.log(auditLogs);
-
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-6 md:p-8">
-                <div className="flex text-sm gap-2 items-center">
-                    <CalendarIcon size={16} />
-                    <p>{moment().format("MMM Do, YYYY")}</p>
-                </div>
-
-                <Tabs defaultValue="overview" className="mt-6">
+                <Tabs defaultValue="overview">
                     <TabsList variant="line">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Schedule</TabsTrigger>
                         <TabsTrigger value="reports">Reports</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="overview">
-                        <div className="flex flex-wrap gap-2 mt-4 md:grid grid-cols-[1fr_1fr_1fr]">
-                            <div className="flex flex-col p-4 w-full border-1 border-border rounded">
-                                <p className='text-sm'>Pending Requests</p>
-                                <p className='text-4xl font-bold'>{pending.data.length}</p>
-                                <Link href={route("requests.index", ['pending'])}>
-                                    <Button variant={"link"} className='px-0 mt-2'>See all</Button>
-                                </Link>
+                    <TabsContent value="overview" className="mt-4 flex flex-col gap-4">
+                        <div className="flex w-full">
+                            <div className="flex gap-4">
+                                <AvatarWithInitials className='border' username={auth.user.name} avatarSrc={auth.user.profile} />
+                                <h1 className='text-4xl font-black tracking-tighter'>Hi {auth.user.name}!</h1>
                             </div>
+                        </div>
 
-                            <div className="flex flex-col p-4 w-full border-1 border-border rounded">
-                                <p className='text-sm'>Approved Requests you made</p>
-                                <p className='text-4xl font-bold'>{approved.data.length}</p>
-                                <Link href={route("requests.index", ['approved'])}>
-                                    <Button variant={"link"} className='px-0 mt-2'>See all</Button>
-                                </Link>
-                            </div>
-
-                            <div className="flex flex-col p-4 w-full border-1 border-border rounded">
-                                <p className='text-sm'>Denied Requests you made</p>
-                                <p className='text-4xl font-bold'>{denied.data.length}</p>
-                                <Link href={route("requests.index", ['denied'])}>
-                                    <Button variant={"link"} className='px-0 mt-2'>See all</Button>
-                                </Link>
+                        <div className="flex w-full flex-col">
+                            <h2 className='text-lg font-bold tracking-tighter'>Pending Requests</h2>
+                            <div className="flex max-w-full flex-wrap gap-2 lg:grid grid-cols-2">
+                                {pending.data.map(request => (
+                                    <RequestCard request={request} />
+                                ))}
                             </div>
                         </div>
                     </TabsContent>

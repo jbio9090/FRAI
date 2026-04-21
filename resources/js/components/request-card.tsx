@@ -33,14 +33,14 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
 export default function RequestCard({
     request: initialRequest,
     handleSelection,
-    isSelecting,
-    isSelected
+    isSelecting = false,
+    isSelected = false,
 }: {
     request: Request;
-    page_title: string;
-    handleSelection: (id: number) => void;
-    isSelecting: boolean;
-    isSelected: boolean;
+    page_title?: string;
+    handleSelection?: (id: number) => void;
+    isSelecting?: boolean;
+    isSelected?: boolean;
 }) {
     const { hasPermission } = usePermission();
     const [isCommentInputOpen, setCommentInputState] = useState(false);
@@ -125,7 +125,7 @@ export default function RequestCard({
                 duration: 0.4,
                 scale: { type: "tween", visualDuration: 0.05 },
             }}
-            onClick={() => isSelecting && handleSelection(request.id)}
+            onClick={() => isSelecting && handleSelection?.(request.id)}
             className={cn(
                 "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-xs",
                 isSelecting && "cursor-pointer hover:border-primary/50",

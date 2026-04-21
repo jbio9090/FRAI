@@ -359,6 +359,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             const approvedConflicts = request.approved_conflicts
                                 ?.filter(c => c.facility_id === rf.facility_id)
                                 .map(c => ({
+                                    request_id: c.request_id,
                                     request_title: c.request.title,
                                     status: c.request.status,
                                     time_start: c.time_start,
@@ -368,6 +369,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             const pendingConflicts = request.pending_conflicts
                                 ?.filter(c => c.facility_id === rf.facility_id)
                                 .map(c => ({
+                                    request_id: c.request_id,
                                     request_title: c.request.title,
                                     status: c.request.status,
                                     time_start: c.time_start,
