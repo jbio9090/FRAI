@@ -10,7 +10,7 @@ export default function Comment({ comment }: {
     }
 }) {
     return (
-        <div key={comment.id} className='flex gap-3 pl-4'>
+        <div key={comment.id} className='flex gap-3 pl-4 mb-3'>
             <AvatarWithInitials
                 username={comment.user.name}
                 avatarSrc={comment.user.profile}

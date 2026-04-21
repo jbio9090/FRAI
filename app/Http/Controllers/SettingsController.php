@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Hash;
 
 class SettingsController extends Controller
 {
@@ -44,5 +45,29 @@ class SettingsController extends Controller
         }
 
         return back()->with('success', 'Profile picture removed.');
+    }
+
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password'      => ['required'],
+            'password'              => ['required', 'min:8', 'confirmed', 'different:current_password'],
+            'password_confirmation' => ['required'],
+        ]);
+
+        $user = Auth::user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return back()->withErrors(['current_password' => 'The current password is incorrect.']);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        // Log out all other sessions
+        Auth::logoutOtherDevices($request->password);
+
+        return back()->with('success', 'Password changed successfully.');
     }
 }

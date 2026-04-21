@@ -30,7 +30,7 @@ class DatabaseSeeder extends Seeder
         for ($i = 0; $i < count($rules); $i++) {
             Rule::create([
                 'rule' => $rules[$i],
-                'priority' => $i + 1
+                'priority' => $i
             ]);
         }
     }

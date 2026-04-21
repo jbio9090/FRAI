@@ -121,10 +121,8 @@ function CommentEntry({ log }: { log: AuditLog }) {
                     avatarSrc={log.user?.profile}
                     username={name}
                     size="sm"
+                    icon={MessageSquare}
                 />
-                <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-background border border-border flex items-center justify-center">
-                    <MessageSquare className="w-2.5 h-2.5 text-muted-foreground" />
-                </span>
             </div>
 
             {/* Content */}

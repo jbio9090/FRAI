@@ -24,36 +24,44 @@ class RequestSeeder extends Seeder
 
         // ---- REQUESTS ----
         $request1 = Request::create([
-            'user_id'     => $user->id,
-            'title'       => 'Student Organization General Assembly',
-            'description' => 'General assembly meeting for all members',
-            'status'      => RequestStatus::PENDING->value,
+            'user_id'                   => $user->id,
+            'title'                     => 'Student Organization General Assembly',
+            'description'               => 'General assembly meeting for all members',
+            'status'                    => RequestStatus::PENDING->value,
+            'recommended_action'        => RequestStatus::APPROVED->value,
+            'recommended_action_reason' => 'No scheduling or equipment conflicts detected. The requested facility is available for the specified time slot.',
         ]);
         DB::table('requests')->where('id', $request1->id)->update(['updated_at' => Carbon::now()->subDays(2)]);
 
         $request2 = Request::create([
-            'user_id'     => $user->id,
-            'title'       => 'Department Seminar',
-            'description' => 'Guest speaker seminar for CEIT students',
-            'status'      => RequestStatus::APPROVED->value,
+            'user_id'                   => $user->id,
+            'title'                     => 'Department Seminar',
+            'description'               => 'Guest speaker seminar for CEIT students',
+            'status'                    => RequestStatus::APPROVED->value,
+            'recommended_action'        => RequestStatus::APPROVED->value,
+            'recommended_action_reason' => 'No conflicts found. External equipment noted but does not affect facility availability.',
         ]);
         Comment::create(['request_id' => $request2->id, 'user_id' => $admin->id, 'body' => 'Approved request']);
         DB::table('requests')->where('id', $request2->id)->update(['updated_at' => Carbon::now()->subDays(5)]);
 
         $request3 = Request::create([
-            'user_id'     => $admin->id,
-            'title'       => 'University-wide Orientation',
-            'description' => 'Orientation event for incoming students',
-            'status'      => RequestStatus::APPROVED->value,
+            'user_id'                   => $admin->id,
+            'title'                     => 'University-wide Orientation',
+            'description'               => 'Orientation event for incoming students',
+            'status'                    => RequestStatus::APPROVED->value,
+            'recommended_action'        => RequestStatus::APPROVED->value,
+            'recommended_action_reason' => 'High-priority university event with no conflicting bookings for the Main Auditorium on the requested date.',
         ]);
         Comment::create(['request_id' => $request3->id, 'user_id' => $admin->id, 'body' => 'Approved Request']);
         DB::table('requests')->where('id', $request3->id)->update(['updated_at' => Carbon::now()->subDays(8)]);
 
         $request4 = Request::create([
-            'user_id'     => $user->id,
-            'title'       => 'End-of-Semester Party',
-            'description' => 'Celebration event for graduating students',
-            'status'      => RequestStatus::DENIED->value,
+            'user_id'                   => $user->id,
+            'title'                     => 'End-of-Semester Party',
+            'description'               => 'Celebration event for graduating students',
+            'status'                    => RequestStatus::DENIED->value,
+            'recommended_action'        => RequestStatus::DENIED->value,
+            'recommended_action_reason' => 'Request denied due to facility unavailability on the requested date caused by an incoming storm advisory.',
         ]);
         Comment::create(['request_id' => $request4->id, 'user_id' => $admin->id, 'body' => 'Day is unavailable due to upcoming storm']);
         DB::table('requests')->where('id', $request4->id)->update(['updated_at' => Carbon::now()->subDays(1)]);

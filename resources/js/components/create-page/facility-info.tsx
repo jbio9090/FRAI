@@ -50,14 +50,14 @@ export function FacilityInfo({
                 <motion.div className="space-y-4">
                     {/* Facility meta */}
                     <div>
-                        <h3 className="font-semibold text-xl mt-2">{facility.name}</h3>
-                        <div className="flex text-muted-foreground gap-1 mt-2">
-                            <Building size={16} className={cn(isForSidebar && "hidden")} />
+                        <h3 className="font-bold text-xl mt-2">{facility.name}</h3>
+                        <div className="flex gap-1 mt-2">
+                            <Building size={16} />
                             <span className="text-sm">{facility.building}</span>
                         </div>
                         <div className="flex items-center gap-1 mt-2">
                             <User size={16} />
-                            <span className="text-sm">Capacity — {facility.capacity ?? 'N/A'}</span>
+                            <span className="text-sm">{facility.capacity ? facility.capacity + " Capacity":'N/A'}</span>
                         </div>
                     </div>
 

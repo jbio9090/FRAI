@@ -119,9 +119,9 @@ export default function FacilityDetail({ facility, initialEvents, facilities }: 
                     <Building size={16} />
                     <span className="text-sm">{facility.building}</span>
                 </div>
-                <div className="flex items-center gap-1 mt-1">
+                <div className="flex text-muted-foreground items-center gap-1 mt-1">
                     <User size={16} />
-                    <span className="text-sm">Capacity — {facility?.capacity ?? "N/A"}</span>
+                    <span className="text-sm">{facility?.capacity ? facility?.capacity + " capacity" : "N/A"}</span>
                 </div>
 
                 {isEditing && (

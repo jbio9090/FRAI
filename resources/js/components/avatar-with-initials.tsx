@@ -1,6 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { cn } from "@/lib/utils"
 import getInitials from "@/lib/getInitials";
+import { type LucideIcon } from "lucide-react";
 
 function getBackgroundColor(name: string) {
     const colors = [
@@ -19,29 +20,27 @@ function getBackgroundColor(name: string) {
 }
 
 const sizeClasses = {
-    // 32px container -> 15px text (~47%)
     sm: {
         container: "w-8 h-8",
         text: "text-[15px]"
     },
-    // 48px container -> 22px text (~46%)
     md: {
         container: "w-12 h-12",
         text: "text-[22px]"
     },
-    // 96px container -> 44px text (~46%)
     lg: {
         container: "w-24 h-24",
         text: "text-[44px]"
     },
 } as const;
 
-export default function AvatarWithInitials({ username, avatarSrc, previewSrc, className, size = "md" }: {
+export default function AvatarWithInitials({ username, avatarSrc, previewSrc, className, size = "md", icon: Icon }: {
     username: string;
     avatarSrc?: string;
     previewSrc?: string | null;
     className?: string;
     size?: keyof typeof sizeClasses;
+    icon?: LucideIcon;
 }) {
     const src = previewSrc
         ?? (avatarSrc && avatarSrc !== 'default.png' ? `/storage/profiles/${avatarSrc}` : undefined);
@@ -50,17 +49,24 @@ export default function AvatarWithInitials({ username, avatarSrc, previewSrc, cl
     const activeSize = sizeClasses[size];
 
     return (
-        <Avatar className={cn("shrink-0", activeSize.container, className)}>
-            <AvatarImage src={src} alt={username} className="object-cover" />
-            <AvatarFallback
-                className={cn(
-                    "flex items-center justify-center font-semibold text-white select-none leading-none",
-                    bgColor,
-                    activeSize.text
-                )}
-            >
-                {getInitials(username)}
-            </AvatarFallback>
-        </Avatar>
+        <div className="relative inline-flex shrink-0">
+            <Avatar className={cn(activeSize.container, className)}>
+                <AvatarImage src={src} alt={username} className="object-cover" />
+                <AvatarFallback
+                    className={cn(
+                        "flex items-center justify-center font-semibold text-white select-none leading-none",
+                        bgColor,
+                        activeSize.text
+                    )}
+                >
+                    {getInitials(username)}
+                </AvatarFallback>
+            </Avatar>
+            {Icon && (
+                <span className="absolute bottom-0 right-0 translate-x-1/4 translate-y-1/4 w-4 h-4 rounded-full flex items-center justify-center z-10">
+                    <Icon className="w-4 h-4 text-teal-400" fill="currentColor" />
+                </span>
+            )}
+        </div>
     )
 }

@@ -739,7 +739,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 80, opacity: 0 }}
                         transition={{ type: "spring", stiffness: 200, damping: 30 }}
-                        className="fixed bottom-0 left-0 right-0 z-50 flex items-center md:justify-center gap-2 border-t bg-secondary backdrop-blur-sm px-4 py-3 shadow-lg flex-wrap"
+                        className="fixed bottom-0 left-0 right-0 z-50 flex items-center md:justify-center gap-2 border-t bg-secondary backdrop-blur-sm px-4 py-3 flex-wrap"
                     >
                         <Button
                             size="sm"

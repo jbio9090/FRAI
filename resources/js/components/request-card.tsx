@@ -20,6 +20,7 @@ import Comment from './comment';
 import StatusTag from './status-tag';
 import AnimatedText from './animated-text';
 import { BookingCard } from './booking-card';
+import { ScrollArea } from './ui/scroll-area';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -31,7 +32,6 @@ export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
 
 export default function RequestCard({
     request: initialRequest,
-    page_title,
     handleSelection,
     isSelecting,
     isSelected
@@ -127,7 +127,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection(request.id)}
             className={cn(
-                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-xl",
+                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-xs",
                 isSelecting && "cursor-pointer hover:border-primary/50",
                 isSelected && "border-primary ring-1 ring-primary"
             )}
@@ -135,7 +135,7 @@ export default function RequestCard({
             <div className={cn("flex justify-between items-start w-full flex-col gap-6", isSelecting && "pointer-events-none")}>
                 <div className="flex justify-around w-full">
                     <div className='flex flex-col gap-1'>
-                        <h3 className="font-bold">{request.title}</h3>
+                        <h3 className="font-bold text-xl">{request.title}</h3>
 
                         <div className="flex gap-2 flex-wrap">
                             <StatusTag requestStatus={request.status} />
@@ -300,13 +300,14 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
             label: "Facilities",
             badge: request.facilities.length,
             content: (
-                <div className='flex flex-col gap-3 mt-4'>
+                <ScrollArea className='mt-4 max-h-96'>
                     {request.request_facilities.map((rf) => {
                         const facility = request.facilities.find(f => f.id === rf.facility_id);
 
                         const pendingConflicts = (request.pending_conflicts ?? [])
                             .filter(c => c.facility_id === rf.facility_id)
                             .map(c => ({
+                                request_id: c.request_id,
                                 request_title: c.request.title,
                                 status: "Pending",
                                 time_start: c.time_start,
@@ -316,6 +317,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                         const approvedConflicts = (request.approved_conflicts ?? [])
                             .filter(c => c.facility_id === rf.facility_id)
                             .map(c => ({
+                                request_id: c.request_id,
                                 request_title: c.request.title,
                                 status: "Approved",
                                 time_start: c.time_start,
@@ -323,6 +325,7 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                             }));
 
                         const booking = {
+                            request_id: rf.request_id,
                             facility_id: rf.facility_id,
                             facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
                             date: rf.date_requested,
@@ -342,10 +345,11 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                                 key={rf.date_requested + rf.time_start}
                                 booking={booking}
                                 index={0}
+                                className='mt-4'
                             />
                         );
                     })}
-                </div>
+                </ScrollArea>
             ),
         },
         {
@@ -354,11 +358,11 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
             label: "Comments",
             badge: request.comments?.length || undefined,
             content: request.comments?.length > 0 ? (
-                <div className='flex flex-col gap-3 mt-4'>
+                <ScrollArea className='mt-4 max-h-96'>
                     {request.comments.map((comment) => (
                         <Comment comment={comment} key={comment.id} />
                     ))}
-                </div>
+                </ScrollArea>
             ) : (
                 <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comments yet</p>
             ),
@@ -380,18 +384,22 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                 return (
                     <div className="mt-4 rounded-xl border border-dashed p-5 flex flex-col gap-3">
                         {isLoadingRecommendation ? (
-                            <>
-                                <div className="flex items-center gap-2">
+                            <div className="flex flex-col gap-2">
+                                {/* Header: Icon + "Recommendation" */}
+                                <div className="flex items-center gap-1.5">
                                     <div className="w-4 h-4 rounded bg-muted animate-pulse" />
-                                    <div className="w-28 h-3.5 rounded bg-muted animate-pulse" />
+                                    <div className="w-24 h-3.5 rounded bg-muted animate-pulse" />
                                 </div>
-                                <div className="w-32 h-8 rounded bg-muted animate-pulse" />
-                                <div className="flex flex-col gap-1.5">
+
+                                {/* Main Verdict: Centered and Bold-sized */}
+                                <div className="h-8 w-48 rounded bg-muted animate-pulse mx-auto" />
+
+                                {/* Reason: Multi-line Centered */}
+                                <div className="flex flex-col items-center gap-1.5 px-2">
                                     <div className="h-3 w-full rounded bg-muted animate-pulse" />
                                     <div className="h-3 w-5/6 rounded bg-muted animate-pulse" />
-                                    <div className="h-3 w-3/4 rounded bg-muted animate-pulse" />
                                 </div>
-                            </>
+                            </div>
                         ) : (
                             <motion.div
                                 initial={{ opacity: 0, y: 6 }}

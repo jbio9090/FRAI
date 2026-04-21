@@ -22,6 +22,7 @@ interface EquipmentRequest {
 }
 
 interface BookingSchedule {
+    request_id: number;
     request_title: string;
     status: string;
     time_start: string;
@@ -29,6 +30,7 @@ interface BookingSchedule {
 }
 
 interface FacilityBooking {
+    request_id: number;
     facility_id: number;
     facility_name: string;
     date: string;
@@ -48,6 +50,7 @@ interface BookingCardProps {
     index: number;
     onEdit?: (index: number) => void;
     onRemove?: (index: number) => void;
+    className?: string;
 }
 
 function formatTime(time: string): string {
@@ -70,7 +73,7 @@ function groupBorrowed(
     );
 }
 
-export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardProps) {
+export function BookingCard({ booking, index, onEdit, onRemove, className }: BookingCardProps) {
     const hasOwnEquipment = booking.equipment.length > 0;
     const hasBorrowedEquipment = (booking.borrowed_equipment ?? []).length > 0;
     const hasExternalEquipment = (booking.external_equipment ?? []).length > 0;
@@ -82,12 +85,12 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
     return (
-        <div className="group relative rounded-lg border border-border bg-card transition-shadow hover:shadow-sm">
+        <div className={`group relative rounded-lg border border-border transition-shadow hover:shadow-sm ${className ?? ""}`}>
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b">
+            <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b bg-card">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <Link className="font-medium text-sm text-foreground truncate hover:underline">
+                        <Link className="font-bold text-lg text-foreground truncate hover:underline">
                             {booking.facility_name}
                         </Link>
                         {booking.has_outsiders && (
@@ -96,7 +99,7 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
                             </span>
                         )}
                         {hasConflicts && (
-                            <span className="flex items-center gap-1 text-destructive font-medium text-xs px-1">
+                            <span className="flex items-center gap-1 bg-destructive/10 text-destructive font-medium rounded-full text-xs px-1">
                                 <AlertCircleIcon size={10} />
                                 Conflicts
                             </span>
@@ -150,10 +153,18 @@ export function BookingCard({ booking, index, onEdit, onRemove }: BookingCardPro
 
             {/* Conflicts */}
             {hasConflicts && (
-                <div className="space-y-1.5 px-4 py-3.5">
+                <div className="space-y-1.5 px-4 py-2">
                     {booking.conflicts.map((conflict, i) => (
-                        <p key={i} className="text-[12px] text-destructive">
-                            Schedule conflict with "{conflict.request_title}" ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
+                        <p key={i} className="text-sm text-destructive">
+                            Schedule conflict with{" "}
+                            <Link
+                                className="hover:underline font-bold"
+                                href={route("requests.detail", [conflict.request_id])}>
+                                <span>
+                                    "{conflict.request_title}"
+                                </span>
+                            </Link>
+                            {" "}({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
                         </p>
                     ))}
                     {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>

@@ -26,6 +26,8 @@ import { PRIORITY_LABELS } from '@/types/request';
 import { toast } from "sonner";
 import { BookingCard } from '@/components/booking-card';
 import { FacilityInfo } from '@/components/create-page/facility-info';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 
 interface BorrowedEquipmentRequest {
@@ -664,566 +666,574 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                 </AlertDialogContent>
             </AlertDialog>
 
-            <div className="w-full">
-                <div className="max-w-5xl w-full mx-auto">
-                    <form onSubmit={submit} className="space-y-8 flex flex-col gap-6">
+            <div className="w-full relative">
+                <form onSubmit={submit} className="space-y-8 flex flex-col gap-6">
 
-                        {Object.keys(errors).length > 0 && (
-                            <Alert variant="destructive" className="border-destructive bg-destructive/4 mb-0 mt-0">
-                                <AlertCircleIcon />
-                                <AlertTitle>Error with submission. Please properly fill in all the details.</AlertTitle>
-                                <AlertDescription>
-                                    <ul className="list-disc pl-5 space-y-1 mt-1">
-                                        {Object.entries(errors).map(([key, msg]) => (
-                                            <li key={key}>{msg as string}</li>
+                    {Object.keys(errors).length > 0 && (
+                        <Alert variant="destructive" className="max-w-2xl border-destructive bg-destructive/4 mb-0 mt-0">
+                            <AlertCircleIcon />
+                            <AlertTitle>Error with submission. Please properly fill in all the details.</AlertTitle>
+                            <AlertDescription>
+                                <ul className="list-disc pl-5 space-y-1 mt-1">
+                                    {Object.entries(errors).map(([key, msg]) => (
+                                        <li key={key}>{msg as string}</li>
+                                    ))}
+                                </ul>
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    <Tabs defaultValue="details" className="w-full">
+                        <TabsList className="w-full mb-6 max-w-2xl">
+                            <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+                            <TabsTrigger value="facility" className="flex-1">Facility</TabsTrigger>
+                        </TabsList>
+
+                        {/* ── Details Tab ── */}
+                        <TabsContent value="details" className="space-y-6 mt-0 max-w-2xl">
+                            <div className="space-y-2">
+                                <Label htmlFor="title">Request Title</Label>
+                                <Input
+                                    id="title"
+                                    type="text"
+                                    value={data.title}
+                                    onChange={(e) => setData('title', e.target.value)}
+                                    placeholder="e.g., Gamecon"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="description">Description</Label>
+                                <Textarea
+                                    id="description"
+                                    value={data.description}
+                                    onChange={(e) => setData('description', e.target.value)}
+                                    placeholder="Provide details about your request"
+                                    rows={4}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="priority">Event Type</Label>
+                                <Select
+                                    value={data.priority_level.toString()}
+                                    onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}
+                                >
+                                    <SelectTrigger className='w-full'>
+                                        <SelectValue placeholder="Select priority" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+                                            <SelectItem key={value} value={value}>{label}</SelectItem>
                                         ))}
-                                    </ul>
-                                </AlertDescription>
-                            </Alert>
-                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                        <Tabs defaultValue="details" className="w-full">
-                            <TabsList className="w-full mb-6 max-w-2xl mx-auto">
-                                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-                                <TabsTrigger value="facility" className="flex-1">Facility</TabsTrigger>
-                            </TabsList>
+                            <div className="space-y-4">
+                                <Label className="font-semibold">Approved By</Label>
 
-                            {/* ── Details Tab ── */}
-                            <TabsContent value="details" className="space-y-6 mt-0 max-w-2xl mx-auto">
-                                <div className="space-y-2">
-                                    <Label htmlFor="title">Request Title</Label>
-                                    <Input
-                                        id="title"
-                                        type="text"
-                                        value={data.title}
-                                        onChange={(e) => setData('title', e.target.value)}
-                                        placeholder="e.g., Gamecon"
-                                    />
-                                </div>
+                                <div className="flex flex-wrap gap-4 mt-2">
+                                    {approversList.map((approver) => {
+                                        const isChecked = data.approved_by.includes(approver.name)
 
-                                <div className="space-y-2">
-                                    <Label htmlFor="description">Description</Label>
-                                    <Textarea
-                                        id="description"
-                                        value={data.description}
-                                        onChange={(e) => setData('description', e.target.value)}
-                                        placeholder="Provide details about your request"
-                                        rows={4}
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="priority">Event Type</Label>
-                                    <Select
-                                        value={data.priority_level.toString()}
-                                        onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}
-                                    >
-                                        <SelectTrigger className='w-full'>
-                                            <SelectValue placeholder="Select priority" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                                                <SelectItem key={value} value={value}>{label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <Label className="font-semibold">Approved By</Label>
-
-                                    <div className="flex flex-wrap gap-4 mt-2">
-                                        {approversList.map((approver) => {
-                                            const isChecked = data.approved_by.includes(approver.name)
-
-                                            return (
-                                                <div key={approver.id} className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id={`approver-${approver.id}`}
-                                                        checked={isChecked}
-                                                        onCheckedChange={() =>
-                                                            handleCheckboxChange(approver.name)
-                                                        }
-                                                    />
-                                                    <Label htmlFor={`approver-${approver.id}`}>
-                                                        {approver.name}
-                                                    </Label>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-
-
-                                {/* File Attachments */}
-                                <div className="space-y-3">
-                                    <Label>Attachments</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Attach supporting documents, images, or files (max 10MB each).
-                                    </p>
-
-                                    <label
-                                        htmlFor="file-upload"
-                                        className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 hover:bg-muted/20 transition-colors"
-                                    >
-                                        <Paperclip size={20} className="text-muted-foreground mb-2" />
-                                        <span className="text-sm text-muted-foreground">
-                                            Click to attach files
-                                        </span>
-                                        <span className="text-xs text-muted-foreground mt-1">
-                                            JPG, PNG, PDF, DOC, XLSX, PPTX up to 10MB
-                                        </span>
-                                        <input
-                                            id="file-upload"
-                                            type="file"
-                                            multiple
-                                            accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.pptx"
-                                            onChange={handleFileSelect}
-                                            className="hidden"
-                                        />
-                                    </label>
-
-                                    <AttachedFileList
-                                        files={attachedFiles}
-                                        serverFiles={existingFiles}
-                                        onRemove={removeFile}
-                                        onRemoveServer={removeExistingFile}
-                                    />
-
-                                    {errors.files && (
-                                        <p className="text-sm text-destructive">{errors.files}</p>
-                                    )}
-                                </div>
-                            </TabsContent>
-
-                            {/* Facility Tab */}
-                            <TabsContent value="facility" className="space-y-6 mt-0">
-                                {/* Two-column grid on desktop — form | sticky sidebar */}
-                                <div className="lg:grid lg:grid-cols-[1fr_280px] lg:gap-8 lg:items-start">
-
-                                    {/* ── Left: form content ── */}
-                                    <div className="space-y-6">
-
-                                        {/* Date + Time row */}
-                                        <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-4 w-full">
-                                            <div className="space-y-2 col-span-full md:col-span-1">
-                                                <Label>Date</Label>
-                                                <Popover>
-                                                    <PopoverTrigger asChild>
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            className={cn("w-full justify-start text-left font-normal", !currentDate && "text-muted-foreground")}
-                                                        >
-                                                            <CalendarIcon className="mr-1 h-4 w-4" />
-                                                            {currentDate ? format(currentDate, "PPP") : "Pick a date"}
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-auto p-0">
-                                                        <Calendar mode="single" selected={currentDate} onSelect={handleDateChange} initialFocus />
-                                                    </PopoverContent>
-                                                </Popover>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label htmlFor="time_start">Start Time</Label>
-                                                <Input id="time_start" type="time" value={currentTimeStart} onChange={handleTimeStartChange} min="7:00" max="20:00" className="text-sm" />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label htmlFor="time_end">End Time</Label>
-                                                <Input id="time_end" type="time" value={currentTimeEnd} onChange={handleTimeEndChange} min="7:00" max="20:00" className="text-sm" />
-                                            </div>
-                                        </div>
-
-                                        {/* Attendees + Outsiders */}
-                                        <div className="flex items-end gap-4">
-                                            <div className="space-y-2 flex-1">
-                                                <Label htmlFor="expected_capacity">Expected Attendees</Label>
-                                                <Input
-                                                    id="expected_capacity"
-                                                    type="number"
-                                                    min="1"
-                                                    value={expectedCapacity}
-                                                    onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
-                                                    placeholder="How many attendees?"
-                                                    className="text-sm"
+                                        return (
+                                            <div key={approver.id} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`approver-${approver.id}`}
+                                                    checked={isChecked}
+                                                    onCheckedChange={() =>
+                                                        handleCheckboxChange(approver.name)
+                                                    }
                                                 />
+                                                <Label htmlFor={`approver-${approver.id}`}>
+                                                    {approver.name}
+                                                </Label>
                                             </div>
-                                            <div className="flex items-center gap-2 pb-2 shrink-0">
-                                                <Checkbox id="has_outsiders" checked={hasOutsiders} onCheckedChange={(checked) => setHasOutsiders(!!checked)} />
-                                                <Label htmlFor="has_outsiders" className="text-sm cursor-pointer whitespace-nowrap">Has Outsiders</Label>
-                                            </div>
-                                        </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
 
-                                        {hasTimeConflict && (
-                                            <Alert variant="destructive" className="border-destructive bg-destructive/4">
-                                                <AlertCircleIcon />
-                                                <AlertTitle>Time Conflict Detected</AlertTitle>
-                                                <AlertDescription>Your selected time overlaps with an existing event.</AlertDescription>
-                                            </Alert>
-                                        )}
 
-                                        {/* Facility picker */}
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <Label>Facility</Label>
-                                                <div className="block lg:hidden">
-                                                    <Dialog>
-                                                        <DialogTrigger asChild>
-                                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
-                                                                <Info size={14} />
-                                                            </Button>
-                                                        </DialogTrigger>
-                                                        <DialogContent className="max-h-[80vh] overflow-y-auto">
-                                                            <DialogHeader>
-                                                                <DialogTitle>Facility Info</DialogTitle>
-                                                            </DialogHeader>
-                                                            <FacilityInfo
-                                                                selectedFacility={selectedFacility}
-                                                                facilities={facilities}
-                                                                currentDate={currentDate}
-                                                                loadingSchedule={loadingSchedule}
-                                                                facilitySchedule={facilitySchedule}
-                                                                formatTime={formatTime}
-                                                                isForSidebar={false}
-                                                            />
-                                                        </DialogContent>
-                                                    </Dialog>
-                                                </div>
-                                            </div>
-                                            <Select value={selectedFacility?.toString() || ''} onValueChange={handleFacilityChange}>
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Choose a Facility" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {facilities.map((facility) => (
-                                                        <SelectItem key={facility.id} value={facility.id.toString()}>
-                                                            <b>{facility.name}</b>
-                                                            <div className="flex items-center gap-1 text-muted-foreground">
-                                                                <User className="h-3 w-3" />
-                                                                <span className="text-xs">{facility.capacity}</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                            {/* File Attachments */}
+                            <div className="space-y-3">
+                                <Label>Attachments</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Attach supporting documents, images, or files (max 10MB each).
+                                </p>
 
-                                        {/* Equipment selection */}
-                                        {selectedFacility && availableEquipment.length > 0 && (
-                                            <div className="space-y-2">
-                                                <div className="flex items-center">
-                                                    <Label className="mr-auto">Equipment</Label>
-                                                    {selectedEquipment.length < availableEquipment.length && (
-                                                        <Button variant="ghost" size="sm" onClick={selectAllEquipment} className="text-muted-foreground hover:text-foreground">
-                                                            <span className="text-sm">Select All</span>
-                                                            <SquareMousePointer />
-                                                        </Button>
-                                                    )}
-                                                    {selectedEquipment.length > 0 && (
-                                                        <Button variant="ghost" size="sm" onClick={clearEquipmentSelection} className="text-muted-foreground hover:text-foreground">
-                                                            <span className="text-sm">Clear All</span>
-                                                            <X />
-                                                        </Button>
-                                                    )}
-                                                </div>
+                                <label
+                                    htmlFor="file-upload"
+                                    className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 hover:bg-muted/20 transition-colors"
+                                >
+                                    <Paperclip size={20} className="text-muted-foreground mb-2" />
+                                    <span className="text-sm text-muted-foreground">
+                                        Click to attach files
+                                    </span>
+                                    <span className="text-xs text-muted-foreground mt-1">
+                                        JPG, PNG, PDF, DOC, XLSX, PPTX up to 10MB
+                                    </span>
+                                    <input
+                                        id="file-upload"
+                                        type="file"
+                                        multiple
+                                        accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.pptx"
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                    />
+                                </label>
 
-                                                <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
-                                                    {availableEquipment.map((equipment) => {
-                                                        const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
-                                                        const conflicts = equipmentConflicts[equipment.id] ?? [];
-                                                        const availability = equipmentAvailability[equipment.id];
-                                                        const displayQty = availability ? availability.available_quantity : equipment.pivot.quantity;
-                                                        const isLimited = availability ? availability.is_limited : false;
-                                                        const exceedsAvailable = selected && availability && selected.quantity_needed > availability.available_quantity;
+                                <AttachedFileList
+                                    files={attachedFiles}
+                                    serverFiles={existingFiles}
+                                    onRemove={removeFile}
+                                    onRemoveServer={removeExistingFile}
+                                />
 
-                                                        return (
-                                                            <div key={equipment.id} className="space-y-1">
-                                                                <div className="flex items-center justify-between gap-4">
-                                                                    <div className="flex items-center space-x-3 flex-1">
-                                                                        <Checkbox
-                                                                            id={`equipment-${equipment.id}`}
-                                                                            checked={!!selected}
-                                                                            onCheckedChange={() => handleEquipmentToggle(equipment)}
-                                                                        />
-                                                                        <div className="flex-1">
-                                                                            <Label htmlFor={`equipment-${equipment.id}`} className="text-sm font-medium cursor-pointer">
-                                                                                {equipment.name}
-                                                                            </Label>
-                                                                            <Label className={cn("text-xs block", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
-                                                                                Available: {displayQty}{isLimited && ` (${availability?.total_quantity} total)`}
-                                                                            </Label>
-                                                                        </div>
-                                                                    </div>
-                                                                    {selected && (
-                                                                        <div className="flex items-center gap-2">
-                                                                            <Label className="text-sm">Qty:</Label>
-                                                                            <Input
-                                                                                type="number"
-                                                                                min="1"
-                                                                                max={displayQty}
-                                                                                value={selected.quantity_needed}
-                                                                                onChange={(e) => updateEquipmentQuantity(equipment.id, Math.min(Number(e.target.value), displayQty))}
-                                                                                className={cn("w-20 text-sm p-2", exceedsAvailable && "border-orange-400 bg-orange-50 dark:bg-orange-950/20")}
-                                                                            />
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+                                {errors.files && (
+                                    <p className="text-sm text-destructive">{errors.files}</p>
+                                )}
+                            </div>
+                        </TabsContent>
 
-                                                                {exceedsAvailable && (
-                                                                    <div className="ml-7 flex items-start gap-1.5 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-2 py-1">
-                                                                        <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
-                                                                        <span>Only <strong>{availability?.available_quantity}</strong> available for the selected time</span>
-                                                                    </div>
-                                                                )}
+                        {/* Facility Tab */}
+                        <TabsContent value="facility" className="space-y-6 mt-0">
+                            {/* Two-column grid on desktop — form | sticky sidebar */}
+                            <div className="lg:grid lg:grid-cols-[5fr_3fr] lg:gap-12 lg:items-start">
 
-                                                                {selected && conflicts.length > 0 && (
-                                                                    <div className="ml-7 space-y-1">
-                                                                        {conflicts.map((c, i) => (
-                                                                            <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
-                                                                                <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
-                                                                                <span>
-                                                                                    Also requested by <strong>{c.requester}</strong> ("{c.request_title}") —{' '}
-                                                                                    <span className={c.status === 'Approved' ? 'text-red-600 font-semibold' : ''}>{c.status}</span>
-                                                                                </span>
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
+                                {/* ── Left: form content ── */}
+                                <div className="space-y-6">
 
-                                        {/* Optional extras — external equipment + borrow */}
-                                        <div className="space-y-2">
-
-                                            {/* External equipment */}
-                                            <Collapsible open={isExternalOpen} onOpenChange={setIsExternalOpen}>
-                                                <CollapsibleTrigger asChild>
-                                                    <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
-                                                        {isExternalOpen ? <Minus size={16} /> : <Plus size={16} />}
-                                                        <span>Add external equipment</span>
-                                                        {externalEquipment.length > 0 && (
-                                                            <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
-                                                                {externalEquipment.length}
-                                                            </span>
-                                                        )}
+                                    {/* Date + Time row */}
+                                    <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-4 w-full">
+                                        <div className="space-y-2 col-span-full md:col-span-1">
+                                            <Label>Date <span className="text-destructive">*</span></Label>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className={cn("w-full justify-start text-left font-normal", !currentDate && "text-muted-foreground")}
+                                                    >
+                                                        <CalendarIcon className="mr-1 h-4 w-4" />
+                                                        {currentDate ? format(currentDate, "PPP") : "Pick a date"}
                                                     </Button>
-                                                </CollapsibleTrigger>
-                                                <CollapsibleContent>
-                                                    <div className="mt-3 space-y-3 px-1">
-                                                        <p className="text-sm text-muted-foreground">
-                                                            List equipment you'll be bringing that isn't in our inventory.
-                                                        </p>
-                                                        {externalEquipment.length > 0 && (
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {externalEquipment.map((item, i) => (
-                                                                    <div key={i} className="flex items-center gap-1 justify-between rounded-md border py-1 px-2 text-sm bg-muted/20 w-fit">
-                                                                        <span>{item.name}</span>
-                                                                        <Button
-                                                                            type="button"
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                                                            onClick={() => setExternalEquipment(prev => prev.filter((_, idx) => idx !== i))}
-                                                                        >
-                                                                            <X size={14} />
-                                                                        </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0">
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={currentDate}
+                                                        onSelect={handleDateChange}
+                                                        initialFocus
+                                                        disabled={(date) => date <= new Date(new Date().setHours(0, 0, 0, 0))}
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="time_start">Start Time <span className="text-destructive">*</span></Label>
+                                            <Input id="time_start" type="time" value={currentTimeStart} onChange={handleTimeStartChange} min="7:00" max="20:00" className="text-sm" />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="time_end">End Time <span className="text-destructive">*</span></Label>
+                                            <Input id="time_end" type="time" value={currentTimeEnd} onChange={handleTimeEndChange} min="7:00" max="20:00" className="text-sm" />
+                                        </div>
+                                    </div>
+
+                                    {/* Attendees + Outsiders */}
+                                    <div className="flex items-end gap-4 w-fit">
+                                        <div className="space-y-2 flex-1">
+                                            <Label htmlFor="expected_capacity">Expected Attendees</Label>
+                                            <Input
+                                                id="expected_capacity"
+                                                type="number"
+                                                min="1"
+                                                value={expectedCapacity}
+                                                onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
+                                                placeholder="How many attendees?"
+                                                className="text-sm max-w-84"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2 pb-2 shrink-0">
+                                            <Checkbox id="has_outsiders" checked={hasOutsiders} onCheckedChange={(checked) => setHasOutsiders(!!checked)} />
+                                            <Label htmlFor="has_outsiders" className="text-sm cursor-pointer whitespace-nowrap">Has Outsiders</Label>
+                                        </div>
+                                    </div>
+
+                                    {hasTimeConflict && (
+                                        <Alert variant="destructive" className="border-destructive bg-destructive/4">
+                                            <AlertCircleIcon />
+                                            <AlertTitle>Time Conflict Detected</AlertTitle>
+                                            <AlertDescription>Your selected time overlaps with an existing event.</AlertDescription>
+                                        </Alert>
+                                    )}
+
+                                    {/* Facility picker */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-start gap-1">
+                                            <Label>Facility <span className="text-destructive">*</span></Label>
+                                            <div className="block lg:hidden">
+                                                <Dialog>
+                                                    <DialogTrigger asChild>
+                                                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                                            <Info size={14} />
+                                                        </Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent className="max-h-[80vh] overflow-y-auto">
+                                                        <DialogHeader>
+                                                            <DialogTitle>Facility Info</DialogTitle>
+                                                        </DialogHeader>
+                                                        <FacilityInfo
+                                                            selectedFacility={selectedFacility}
+                                                            facilities={facilities}
+                                                            currentDate={currentDate}
+                                                            loadingSchedule={loadingSchedule}
+                                                            facilitySchedule={facilitySchedule}
+                                                            formatTime={formatTime}
+                                                            isForSidebar={false}
+                                                        />
+                                                    </DialogContent>
+                                                </Dialog>
+                                            </div>
+                                        </div>
+                                        <Select value={selectedFacility?.toString() || ''} onValueChange={handleFacilityChange}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Choose a Facility" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {facilities.map((facility) => (
+                                                    <SelectItem key={facility.id} value={facility.id.toString()}>
+                                                        <b>{facility.name}</b>
+                                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                                            <User className="h-3 w-3" />
+                                                            <span className="text-xs">{facility.capacity}</span>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Equipment selection */}
+                                    {selectedFacility && availableEquipment.length > 0 && (
+                                        <div className="space-y-2">
+                                            <div className="flex items-center">
+                                                <Label className="mr-auto">Equipment</Label>
+                                                {selectedEquipment.length < availableEquipment.length && (
+                                                    <Button variant="ghost" size="sm" onClick={selectAllEquipment} className="text-muted-foreground hover:text-foreground">
+                                                        <span className="text-sm">Select All</span>
+                                                        <SquareMousePointer />
+                                                    </Button>
+                                                )}
+                                                {selectedEquipment.length > 0 && (
+                                                    <Button variant="ghost" size="sm" onClick={clearEquipmentSelection} className="text-muted-foreground hover:text-foreground">
+                                                        <span className="text-sm">Clear All</span>
+                                                        <X />
+                                                    </Button>
+                                                )}
+                                            </div>
+
+                                            <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
+                                                {availableEquipment.map((equipment) => {
+                                                    const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
+                                                    const conflicts = equipmentConflicts[equipment.id] ?? [];
+                                                    const availability = equipmentAvailability[equipment.id];
+                                                    const displayQty = availability ? availability.available_quantity : equipment.pivot.quantity;
+                                                    const isLimited = availability ? availability.is_limited : false;
+                                                    const exceedsAvailable = selected && availability && selected.quantity_needed > availability.available_quantity;
+
+                                                    return (
+                                                        <div key={equipment.id} className="space-y-1">
+                                                            <div className="flex items-center justify-between gap-4">
+                                                                <div className="flex items-center space-x-3 flex-1">
+                                                                    <Checkbox
+                                                                        id={`equipment-${equipment.id}`}
+                                                                        checked={!!selected}
+                                                                        onCheckedChange={() => handleEquipmentToggle(equipment)}
+                                                                    />
+                                                                    <div className="flex-1">
+                                                                        <Label htmlFor={`equipment-${equipment.id}`} className="text-sm font-medium cursor-pointer">
+                                                                            {equipment.name}
+                                                                        </Label>
+                                                                        <Label className={cn("text-xs block", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
+                                                                            Available: {displayQty}{isLimited && ` (${availability?.total_quantity} total)`}
+                                                                        </Label>
                                                                     </div>
-                                                                ))}
+                                                                </div>
+                                                                {selected && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Label className="text-sm">Qty:</Label>
+                                                                        <Input
+                                                                            type="number"
+                                                                            min="1"
+                                                                            max={displayQty}
+                                                                            value={selected.quantity_needed}
+                                                                            onChange={(e) => updateEquipmentQuantity(equipment.id, Math.min(Number(e.target.value), displayQty))}
+                                                                            className={cn("w-20 text-sm p-2", exceedsAvailable && "border-orange-400 bg-orange-50 dark:bg-orange-950/20")}
+                                                                        />
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                        )}
-                                                        <div className="flex gap-2">
-                                                            <Input
-                                                                placeholder="e.g., Portable speaker"
-                                                                value={externalEquipmentInput}
-                                                                onChange={(e) => setExternalEquipmentInput(e.target.value)}
-                                                                onKeyDown={(e) => {
-                                                                    if (e.key === 'Enter') {
-                                                                        e.preventDefault();
-                                                                        const trimmed = externalEquipmentInput.trim();
-                                                                        if (!trimmed) return;
-                                                                        setExternalEquipment(prev => [...prev, { name: trimmed }]);
-                                                                        setExternalEquipmentInput('');
-                                                                    }
-                                                                }}
-                                                                className="text-sm"
-                                                            />
-                                                            <Button
-                                                                type="button"
-                                                                variant="secondary"
-                                                                onClick={() => {
+
+                                                            {exceedsAvailable && (
+                                                                <div className="ml-7 flex items-start gap-1.5 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-2 py-1">
+                                                                    <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
+                                                                    <span>Only <strong>{availability?.available_quantity}</strong> available for the selected time</span>
+                                                                </div>
+                                                            )}
+
+                                                            {selected && conflicts.length > 0 && (
+                                                                <div className="ml-7 space-y-1">
+                                                                    {conflicts.map((c, i) => (
+                                                                        <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
+                                                                            <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
+                                                                            <span>
+                                                                                Also requested by <strong>{c.requester}</strong> ("{c.request_title}") —{' '}
+                                                                                <span className={c.status === 'Approved' ? 'text-red-600 font-semibold' : ''}>{c.status}</span>
+                                                                            </span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Optional extras — external equipment + borrow */}
+                                    <div className="space-y-2">
+
+                                        {/* External equipment */}
+                                        <Collapsible open={isExternalOpen} onOpenChange={setIsExternalOpen}>
+                                            <CollapsibleTrigger asChild>
+                                                <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
+                                                    {isExternalOpen ? <Minus size={16} /> : <Plus size={16} />}
+                                                    <span>Add external equipment</span>
+                                                    {externalEquipment.length > 0 && (
+                                                        <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                                                            {externalEquipment.length}
+                                                        </span>
+                                                    )}
+                                                </Button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                                <div className="mt-3 space-y-3 px-1">
+                                                    <p className="text-sm text-muted-foreground">
+                                                        List equipment you'll be bringing that isn't in our inventory.
+                                                    </p>
+                                                    {externalEquipment.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {externalEquipment.map((item, i) => (
+                                                                <div key={i} className="flex items-center gap-1 justify-between rounded-md border py-1 px-2 text-sm bg-muted/20 w-fit">
+                                                                    <span>{item.name}</span>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                                        onClick={() => setExternalEquipment(prev => prev.filter((_, idx) => idx !== i))}
+                                                                    >
+                                                                        <X size={14} />
+                                                                    </Button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex gap-2">
+                                                        <Input
+                                                            placeholder="e.g., Portable speaker"
+                                                            value={externalEquipmentInput}
+                                                            onChange={(e) => setExternalEquipmentInput(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
                                                                     const trimmed = externalEquipmentInput.trim();
                                                                     if (!trimmed) return;
                                                                     setExternalEquipment(prev => [...prev, { name: trimmed }]);
                                                                     setExternalEquipmentInput('');
-                                                                }}
-                                                            >
-                                                                Add
-                                                            </Button>
-                                                        </div>
+                                                                }
+                                                            }}
+                                                            className="text-sm"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="secondary"
+                                                            onClick={() => {
+                                                                const trimmed = externalEquipmentInput.trim();
+                                                                if (!trimmed) return;
+                                                                setExternalEquipment(prev => [...prev, { name: trimmed }]);
+                                                                setExternalEquipmentInput('');
+                                                            }}
+                                                        >
+                                                            Add
+                                                        </Button>
                                                     </div>
+                                                </div>
+                                            </CollapsibleContent>
+                                        </Collapsible>
+
+                                        {/* ── Borrow from another facility — simplified ── */}
+                                        {selectedFacility && (
+                                            <Collapsible open={isBorrowOpen} onOpenChange={setIsBorrowOpen}>
+                                                <CollapsibleTrigger asChild>
+                                                    <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
+                                                        {isBorrowOpen ? <Minus size={16} /> : <Plus size={16} />}
+                                                        <span>Borrow from another facility</span>
+                                                        {selectedBorrowedEquipment.length > 0 && (
+                                                            <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                                                                {selectedBorrowedEquipment.length}
+                                                            </span>
+                                                        )}
+                                                    </Button>
+                                                </CollapsibleTrigger>
+                                                <CollapsibleContent className="mt-2">
+                                                    <div className="border rounded-md divide-y">
+                                                        {allBorrowableEquipment.length === 0 ? (
+                                                            <p className="text-sm text-muted-foreground text-center py-4">No equipment available to borrow.</p>
+                                                        ) : allBorrowableEquipment.map((equipment) => {
+                                                            const isExpanded = borrowingEquipmentId === equipment.id;
+                                                            const borrowed = selectedBorrowedEquipment.filter(e => e.equipment_id === equipment.id);
+                                                            const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
+
+                                                            return (
+                                                                <div key={equipment.id}>
+                                                                    {/* Equipment header row */}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setBorrowingEquipmentId(isExpanded ? null : equipment.id)}
+                                                                        className={cn(
+                                                                            "w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors text-left",
+                                                                            isExpanded ? "bg-muted/40" : "hover:bg-muted/20"
+                                                                        )}
+                                                                    >
+                                                                        <span className="font-medium">{equipment.name}</span>
+                                                                        <div className="flex items-center gap-2">
+                                                                            {totalBorrowed > 0 && (
+                                                                                <span className="text-xs text-primary font-medium">{totalBorrowed} selected</span>
+                                                                            )}
+                                                                            <MotionChevron openCollapsible={isExpanded} />
+                                                                        </div>
+                                                                    </button>
+
+                                                                    {/* Sources — shown when expanded */}
+                                                                    {isExpanded && (
+                                                                        <div className="bg-muted/10 border-t divide-y px-3">
+                                                                            {equipment.sources.map(source => {
+                                                                                const item = borrowed.find(e => e.source_facility_id === source.facilityId);
+                                                                                const available = borrowableAvailability[source.facilityId]?.[equipment.id] ?? source.quantity;
+                                                                                const isLimited = available < source.quantity;
+
+                                                                                return (
+                                                                                    <div key={source.facilityId} className="flex items-center gap-3 py-2.5">
+                                                                                        <Checkbox
+                                                                                            id={`borrow-${equipment.id}-${source.facilityId}`}
+                                                                                            checked={!!item}
+                                                                                            onCheckedChange={() => {
+                                                                                                if (item) {
+                                                                                                    setSelectedBorrowedEquipment(prev =>
+                                                                                                        prev.filter(e => !(e.equipment_id === equipment.id && e.source_facility_id === source.facilityId))
+                                                                                                    );
+                                                                                                } else {
+                                                                                                    setSelectedBorrowedEquipment(prev => [...prev, {
+                                                                                                        equipment_id: equipment.id,
+                                                                                                        equipment_name: equipment.name,
+                                                                                                        source_facility_id: source.facilityId,
+                                                                                                        source_facility_name: source.facilityName,
+                                                                                                        quantity_needed: 1,
+                                                                                                        max_quantity: available,
+                                                                                                    }]);
+                                                                                                }
+                                                                                            }}
+                                                                                        />
+                                                                                        <div className="flex-1 min-w-0">
+                                                                                            <Label htmlFor={`borrow-${equipment.id}-${source.facilityId}`} className="text-sm font-medium cursor-pointer block truncate">
+                                                                                                {source.facilityName}
+                                                                                            </Label>
+                                                                                            <span className={cn("text-xs", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
+                                                                                                {available} available{isLimited && ` of ${source.quantity}`}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        {item && (
+                                                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                                                <Label className="text-xs text-muted-foreground">Qty</Label>
+                                                                                                <Input
+                                                                                                    type="number"
+                                                                                                    min="1"
+                                                                                                    max={available}
+                                                                                                    value={item.quantity_needed}
+                                                                                                    onChange={(e) => {
+                                                                                                        const qty = Math.min(Number(e.target.value), available);
+                                                                                                        setSelectedBorrowedEquipment(prev => prev.map(i =>
+                                                                                                            i.equipment_id === equipment.id && i.source_facility_id === source.facilityId
+                                                                                                                ? { ...i, quantity_needed: qty }
+                                                                                                                : i
+                                                                                                        ));
+                                                                                                    }}
+                                                                                                    className="w-16 h-7 text-sm px-2"
+                                                                                                />
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+
+                                                    {/* Summary when nothing is expanded */}
+                                                    {!borrowingEquipmentId && selectedBorrowedEquipment.length > 0 && (
+                                                        <div className="mt-3 border rounded-md px-3 py-2.5 bg-muted/10 space-y-2">
+                                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selected to borrow</p>
+                                                            {Object.entries(
+                                                                selectedBorrowedEquipment.reduce((groups, eq) => ({
+                                                                    ...groups,
+                                                                    [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq],
+                                                                }), {} as Record<string, BorrowedEquipmentRequest[]>)
+                                                            ).map(([name, items]) => (
+                                                                <div key={name}>
+                                                                    <p className="text-xs font-medium">
+                                                                        {name}
+                                                                        <span className="text-muted-foreground font-normal ml-1">
+                                                                            · {items.reduce((s, e) => s + e.quantity_needed, 0)} total
+                                                                        </span>
+                                                                    </p>
+                                                                    {items.map(eq => (
+                                                                        <div key={`${eq.equipment_id}-${eq.source_facility_id}`} className="flex items-center justify-between pl-3 py-0.5 text-xs text-muted-foreground">
+                                                                            <span>from {eq.source_facility_name} · {eq.quantity_needed}</span>
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-5 w-5 text-destructive hover:text-destructive/70"
+                                                                                onClick={() => setSelectedBorrowedEquipment(prev =>
+                                                                                    prev.filter(e => !(e.equipment_id === eq.equipment_id && e.source_facility_id === eq.source_facility_id))
+                                                                                )}
+                                                                            >
+                                                                                <X size={10} />
+                                                                            </Button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </CollapsibleContent>
                                             </Collapsible>
+                                        )}
+                                    </div>
 
-                                            {/* ── Borrow from another facility — simplified ── */}
-                                            {selectedFacility && (
-                                                <Collapsible open={isBorrowOpen} onOpenChange={setIsBorrowOpen}>
-                                                    <CollapsibleTrigger asChild>
-                                                        <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
-                                                            {isBorrowOpen ? <Minus size={16} /> : <Plus size={16} />}
-                                                            <span>Borrow from another facility</span>
-                                                            {selectedBorrowedEquipment.length > 0 && (
-                                                                <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
-                                                                    {selectedBorrowedEquipment.length}
-                                                                </span>
-                                                            )}
-                                                        </Button>
-                                                    </CollapsibleTrigger>
-                                                    <CollapsibleContent className="mt-2">
-                                                        <div className="border rounded-md divide-y">
-                                                            {allBorrowableEquipment.length === 0 ? (
-                                                                <p className="text-sm text-muted-foreground text-center py-4">No equipment available to borrow.</p>
-                                                            ) : allBorrowableEquipment.map((equipment) => {
-                                                                const isExpanded = borrowingEquipmentId === equipment.id;
-                                                                const borrowed = selectedBorrowedEquipment.filter(e => e.equipment_id === equipment.id);
-                                                                const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
-
-                                                                return (
-                                                                    <div key={equipment.id}>
-                                                                        {/* Equipment header row */}
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => setBorrowingEquipmentId(isExpanded ? null : equipment.id)}
-                                                                            className={cn(
-                                                                                "w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors text-left",
-                                                                                isExpanded ? "bg-muted/40" : "hover:bg-muted/20"
-                                                                            )}
-                                                                        >
-                                                                            <span className="font-medium">{equipment.name}</span>
-                                                                            <div className="flex items-center gap-2">
-                                                                                {totalBorrowed > 0 && (
-                                                                                    <span className="text-xs text-primary font-medium">{totalBorrowed} selected</span>
-                                                                                )}
-                                                                                <MotionChevron openCollapsible={isExpanded} />
-                                                                            </div>
-                                                                        </button>
-
-                                                                        {/* Sources — shown when expanded */}
-                                                                        {isExpanded && (
-                                                                            <div className="bg-muted/10 border-t divide-y px-3">
-                                                                                {equipment.sources.map(source => {
-                                                                                    const item = borrowed.find(e => e.source_facility_id === source.facilityId);
-                                                                                    const available = borrowableAvailability[source.facilityId]?.[equipment.id] ?? source.quantity;
-                                                                                    const isLimited = available < source.quantity;
-
-                                                                                    return (
-                                                                                        <div key={source.facilityId} className="flex items-center gap-3 py-2.5">
-                                                                                            <Checkbox
-                                                                                                id={`borrow-${equipment.id}-${source.facilityId}`}
-                                                                                                checked={!!item}
-                                                                                                onCheckedChange={() => {
-                                                                                                    if (item) {
-                                                                                                        setSelectedBorrowedEquipment(prev =>
-                                                                                                            prev.filter(e => !(e.equipment_id === equipment.id && e.source_facility_id === source.facilityId))
-                                                                                                        );
-                                                                                                    } else {
-                                                                                                        setSelectedBorrowedEquipment(prev => [...prev, {
-                                                                                                            equipment_id: equipment.id,
-                                                                                                            equipment_name: equipment.name,
-                                                                                                            source_facility_id: source.facilityId,
-                                                                                                            source_facility_name: source.facilityName,
-                                                                                                            quantity_needed: 1,
-                                                                                                            max_quantity: available,
-                                                                                                        }]);
-                                                                                                    }
-                                                                                                }}
-                                                                                            />
-                                                                                            <div className="flex-1 min-w-0">
-                                                                                                <Label htmlFor={`borrow-${equipment.id}-${source.facilityId}`} className="text-sm font-medium cursor-pointer block truncate">
-                                                                                                    {source.facilityName}
-                                                                                                </Label>
-                                                                                                <span className={cn("text-xs", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
-                                                                                                    {available} available{isLimited && ` of ${source.quantity}`}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            {item && (
-                                                                                                <div className="flex items-center gap-1.5 shrink-0">
-                                                                                                    <Label className="text-xs text-muted-foreground">Qty</Label>
-                                                                                                    <Input
-                                                                                                        type="number"
-                                                                                                        min="1"
-                                                                                                        max={available}
-                                                                                                        value={item.quantity_needed}
-                                                                                                        onChange={(e) => {
-                                                                                                            const qty = Math.min(Number(e.target.value), available);
-                                                                                                            setSelectedBorrowedEquipment(prev => prev.map(i =>
-                                                                                                                i.equipment_id === equipment.id && i.source_facility_id === source.facilityId
-                                                                                                                    ? { ...i, quantity_needed: qty }
-                                                                                                                    : i
-                                                                                                            ));
-                                                                                                        }}
-                                                                                                        className="w-16 h-7 text-sm px-2"
-                                                                                                    />
-                                                                                                </div>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    );
-                                                                                })}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-
-                                                        {/* Summary when nothing is expanded */}
-                                                        {!borrowingEquipmentId && selectedBorrowedEquipment.length > 0 && (
-                                                            <div className="mt-3 border rounded-md px-3 py-2.5 bg-muted/10 space-y-2">
-                                                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selected to borrow</p>
-                                                                {Object.entries(
-                                                                    selectedBorrowedEquipment.reduce((groups, eq) => ({
-                                                                        ...groups,
-                                                                        [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq],
-                                                                    }), {} as Record<string, BorrowedEquipmentRequest[]>)
-                                                                ).map(([name, items]) => (
-                                                                    <div key={name}>
-                                                                        <p className="text-xs font-medium">
-                                                                            {name}
-                                                                            <span className="text-muted-foreground font-normal ml-1">
-                                                                                · {items.reduce((s, e) => s + e.quantity_needed, 0)} total
-                                                                            </span>
-                                                                        </p>
-                                                                        {items.map(eq => (
-                                                                            <div key={`${eq.equipment_id}-${eq.source_facility_id}`} className="flex items-center justify-between pl-3 py-0.5 text-xs text-muted-foreground">
-                                                                                <span>from {eq.source_facility_name} · {eq.quantity_needed}</span>
-                                                                                <Button
-                                                                                    type="button"
-                                                                                    variant="ghost"
-                                                                                    size="icon"
-                                                                                    className="h-5 w-5 text-destructive hover:text-destructive/70"
-                                                                                    onClick={() => setSelectedBorrowedEquipment(prev =>
-                                                                                        prev.filter(e => !(e.equipment_id === eq.equipment_id && e.source_facility_id === eq.source_facility_id))
-                                                                                    )}
-                                                                                >
-                                                                                    <X size={10} />
-                                                                                </Button>
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </CollapsibleContent>
-                                                </Collapsible>
-                                            )}
-                                        </div>
-
-                                        {/* Add booking button */}
+                                    <div className="flex flex-col gap-1 mt-12">
+                                        {data.facility_bookings.length === 0 && (
+                                            <p className="text-xs text-destructive">At least one facility booking is required.</p>
+                                        )}
                                         <Button
                                             type="button"
                                             variant="secondary"
@@ -1233,44 +1243,50 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         >
                                             Add Facility Booking
                                         </Button>
-
-                                        {/* Booked entries */}
-                                        {data.facility_bookings.map((booking, index) => (
-                                            <BookingCard key={index} booking={booking} index={index} onEdit={editBooking} onRemove={removeBooking} />
-                                        ))}
                                     </div>
 
-                                    {/* ── Right: sticky sidebar (desktop only) ── */}
-                                    <div className="hidden lg:block">
-                                        <div className="sticky top-6">
-                                            <FacilityInfo
-                                                selectedFacility={selectedFacility}
-                                                facilities={facilities}
-                                                currentDate={currentDate}
-                                                loadingSchedule={loadingSchedule}
-                                                facilitySchedule={facilitySchedule}
-                                                formatTime={formatTime}
-                                                isForSidebar={true}
-                                            />
+                                    {(data.facility_bookings.length > 0) && (
+                                        <div className="flex flex-col gap-2 mt-4">
+                                            {/* Booked entries */}
+                                            {data.facility_bookings.map((booking, index) => (
+                                                <BookingCard key={index} booking={booking} index={index} onEdit={editBooking} onRemove={removeBooking} />
+                                            ))}
                                         </div>
-                                    </div>
+                                    )}
 
                                 </div>
-                            </TabsContent>
-                        </Tabs>
 
-                        <div className="flex justify-end gap-4 mb-16">
-                            <Button type="button" variant="outline" onClick={() => window.history.back()}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={processing}>
-                                {processing
-                                    ? (isEditing ? 'Saving...' : 'Submitting...')
-                                    : (isEditing ? 'Save Changes' : 'Submit Request')}
-                            </Button>
-                        </div>
-                    </form>
-                </div>
+                                {/* ── Right: sticky sidebar (desktop only) ── */}
+                                <Card className="hidden lg:block bg-background shadow-sm border">
+                                    <CardContent className="sticky top-6">
+                                        <FacilityInfo
+                                            selectedFacility={selectedFacility}
+                                            facilities={facilities}
+                                            currentDate={currentDate}
+                                            loadingSchedule={loadingSchedule}
+                                            facilitySchedule={facilitySchedule}
+                                            formatTime={formatTime}
+                                            isForSidebar={true}
+                                        />
+                                    </CardContent>
+                                </Card>
+
+                            </div>
+                        </TabsContent>
+                    </Tabs>
+
+                    <div className="sticky bottom-0 z-50 -mx-6 md:-mx-8 px-6 md:px-8 flex justify-end gap-4 py-4 bg-background/80 backdrop-blur-sm border-t border-border">
+                        <Button type="button" variant="outline" size="lg" className='text-md font-semibold' onClick={() => window.history.back()}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" size="lg" className='text-md font-semibold' disabled={processing}>
+                            {processing
+                                ? (isEditing ? 'Saving...' : 'Submitting...')
+                                : (isEditing ? 'Save Changes' : 'Submit Request')}
+                        </Button>
+                    </div>
+                </form>
+
             </div>
         </DefaultLayout >
     );
