@@ -5,7 +5,7 @@ import { ArrowUpRight } from 'lucide-react';
 import moment from 'moment';
 import FacilityCalendar from '@/components/FacilityCalendar';
 import { Request as FacilityRequest } from '@/types/request';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ListFilter } from 'lucide-react';
@@ -19,6 +19,8 @@ import {
     CartesianGrid,
     ResponsiveContainer,
     Tooltip,
+    Pie,
+    PieChart,
 } from 'recharts';
 import {
     ChartConfig,
@@ -64,6 +66,27 @@ const chartConfig = {
         color: 'var(--primary)',
     },
 } satisfies ChartConfig;
+
+const eventLabels: Record<string, string> = {
+    'auth.login': 'Login',
+    'auth.login_failed': 'Failed Login',
+    'auth.logout': 'Logout',
+    'request.created': 'Request Created',
+    'request.updated': 'Request Updated',
+    'request.approved': 'Request Approved',
+    'request.denied': 'Request Denied',
+    'request.conditionally_approved': 'Cond. Approved',
+    'request.held': 'Request Held',
+    'request.comment_added': 'Comment Added',
+    'request.marked_for_reschedule': 'Marked Reschedule',
+    'request.file_uploaded': 'File Uploaded',
+    'request.file_removed': 'File Removed',
+};
+
+const CHART_COLORS = [
+    'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
+    'var(--chart-4)', 'var(--chart-5)',
+];
 
 export default function Dashboard({
     pending,
@@ -191,6 +214,33 @@ export default function Dashboard({
         r => r.approved_conflicts && r.approved_conflicts.length > 0
     );
 
+    const pieData = useMemo(() => {
+        const counts: Record<string, number> = {};
+        auditLogs.forEach(log => {
+            const key = typeof log.event === 'object' ? (log.event as any).value ?? String(log.event) : String(log.event);
+            counts[key] = (counts[key] ?? 0) + 1;
+        });
+        return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([event, count], i) => ({
+                event,
+                label: eventLabels[event] ?? event,
+                count,
+                fill: CHART_COLORS[i % CHART_COLORS.length],
+            }));
+    }, [auditLogs]);
+
+    const pieChartConfig = useMemo(() => {
+        const config: ChartConfig = { count: { label: 'Events' } };
+        pieData.forEach((row, i) => {
+            config[row.event] = {
+                label: row.label,
+                color: CHART_COLORS[i % CHART_COLORS.length],
+            };
+        });
+        return config;
+    }, [pieData]);
+
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-6 md:p-8">
@@ -198,7 +248,7 @@ export default function Dashboard({
                     <TabsList variant="line">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Schedule</TabsTrigger>
-                        <TabsTrigger value="reports">Reports</TabsTrigger>
+                        <TabsTrigger value="activity">Activity</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-4 flex flex-col gap-4">
@@ -418,7 +468,7 @@ export default function Dashboard({
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="reports">
+                    <TabsContent value="activity">
                         <div className="flex flex-col gap-8 mt-6">
 
                             {/* Header row */}
@@ -440,98 +490,132 @@ export default function Dashboard({
                                 </Select>
                             </div>
 
-                            {/* Stat cards */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {[
-                                    { label: 'Total Events', value: data.reduce((s, r) => s + r.total, 0) },
-                                    { label: 'Peak Day', value: data.length ? Math.max(...data.map(r => r.total)) : 0 },
-                                    { label: 'Avg / Day', value: data.length ? (data.reduce((s, r) => s + r.total, 0) / data.length).toFixed(1) : '—' },
-                                    { label: 'Active Days', value: data.filter(r => r.total > 0).length },
-                                ].map(stat => (
-                                    <div
-                                        key={stat.label}
-                                        className="flex flex-col gap-1 rounded-xl border border-border bg-muted/30 p-4"
-                                    >
-                                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{stat.label}</p>
-                                        <p className="text-2xl font-bold tabular-nums">{stat.value}</p>
-                                    </div>
-                                ))}
-                            </div>
+                            <div className="flex flex-col gap-2 xl:grid grid-cols-[5fr_3fr]">
 
-                            {/* Chart */}
-                            <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                                <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-                                    <p className="text-sm font-semibold">Events per day</p>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="inline-block w-2 h-2 rounded-full bg-primary" />
-                                        <span className="text-xs text-muted-foreground">Total events</span>
-                                    </div>
-                                </div>
-
-                                {loading ? (
-                                    <div className="h-[300px] flex items-center justify-center">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                                            <p className="text-xs text-muted-foreground">Fetching data...</p>
+                                {/* Chart */}
+                                <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                                    <div className="px-5 pt-5 pb-2 flex items-center justify-between">
+                                        <p className="text-sm font-semibold">Events per day</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="inline-block w-2 h-2 rounded-full bg-primary" />
+                                            <span className="text-xs text-muted-foreground">Total events</span>
                                         </div>
                                     </div>
-                                ) : data.length === 0 ? (
-                                    <div className="h-[300px] flex items-center justify-center">
-                                        <p className="text-sm text-muted-foreground">No activity in this period.</p>
-                                    </div>
-                                ) : (
-                                    <ChartContainer config={chartConfig} className="h-[300px] w-full px-2 pb-4">
-                                        <AreaChart
-                                            data={data}
-                                            margin={{ top: 10, right: 16, left: -10, bottom: 0 }}
-                                        >
-                                            <defs>
-                                                <linearGradient id="fill-total" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
-                                                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid
-                                                vertical={false}
-                                                stroke="var(--border)"
-                                                strokeDasharray="4 4"
-                                                strokeOpacity={0.6}
-                                            />
-                                            <XAxis
-                                                dataKey="date"
-                                                tickLine={false}
-                                                axisLine={false}
-                                                tickMargin={10}
-                                                tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                                                tickFormatter={val => moment(val).format("MMM D")}
-                                            />
-                                            <YAxis
-                                                tickLine={false}
-                                                axisLine={false}
-                                                tickMargin={8}
-                                                allowDecimals={false}
-                                                tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                                                width={32}
-                                            />
-                                            <ChartTooltip
-                                                cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
-                                                content={
-                                                    <ChartTooltipContent
-                                                        labelFormatter={val => moment(val).format("dddd, MMM D YYYY")}
+
+                                    {loading ? (
+                                        <div className="h-[300px] flex items-center justify-center">
+                                            <div className="flex flex-col items-center gap-3">
+                                                <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                                <p className="text-xs text-muted-foreground">Fetching data...</p>
+                                            </div>
+                                        </div>
+                                    ) : data.length === 0 ? (
+                                        <div className="h-[300px] flex items-center justify-center">
+                                            <p className="text-sm text-muted-foreground">No activity in this period.</p>
+                                        </div>
+                                    ) : (
+                                        <ChartContainer config={chartConfig} className="h-[300px] w-full px-2 pb-4">
+                                            <AreaChart
+                                                data={data}
+                                                margin={{ top: 10, right: 16, left: -10, bottom: 0 }}
+                                            >
+                                                <defs>
+                                                    <linearGradient id="fill-total" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
+                                                        <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid
+                                                    vertical={false}
+                                                    stroke="var(--border)"
+                                                    strokeDasharray="4 4"
+                                                    strokeOpacity={0.6}
+                                                />
+                                                <XAxis
+                                                    dataKey="date"
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    tickMargin={10}
+                                                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                                                    tickFormatter={val => moment(val).format("MMM D")}
+                                                />
+                                                <YAxis
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    tickMargin={8}
+                                                    allowDecimals={false}
+                                                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                                                    width={32}
+                                                />
+                                                <ChartTooltip
+                                                    cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
+                                                    content={
+                                                        <ChartTooltipContent
+                                                            labelFormatter={val => moment(val).format("dddd, MMM D YYYY")}
+                                                        />
+                                                    }
+                                                />
+                                                <Area
+                                                    type="monotoneX"
+                                                    dataKey="total"
+                                                    stroke="var(--primary)"
+                                                    fill="url(#fill-total)"
+                                                    strokeWidth={2}
+                                                    dot={false}
+                                                    activeDot={{ r: 4, fill: 'var(--primary)', stroke: 'var(--background)', strokeWidth: 2 }}
+                                                />
+                                            </AreaChart>
+                                        </ChartContainer>
+                                    )}
+                                </div>
+
+                                {/* Activity Breakdown Pie Chart */}
+                                {!logsLoading && pieData.length > 0 && (
+                                    <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                                        <div className="px-5 pt-5 pb-2">
+                                            <p className="text-sm font-semibold">Activity Breakdown</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">Distribution of activity types in this period</p>
+                                        </div>
+
+                                        <div className="flex flex-col md:flex-row items-center gap-4 px-4 pb-5">
+                                            <ChartContainer
+                                                config={pieChartConfig}
+                                                className="mx-auto aspect-square max-h-[260px] min-w-[220px] [&_.recharts-pie-label-text]:fill-foreground"
+                                            >
+                                                <PieChart>
+                                                    <ChartTooltip
+                                                        content={
+                                                            <ChartTooltipContent
+                                                                nameKey="event"
+                                                                hideLabel
+                                                            />
+                                                        }
                                                     />
-                                                }
-                                            />
-                                            <Area
-                                                type="monotoneX"
-                                                dataKey="total"
-                                                stroke="var(--primary)"
-                                                fill="url(#fill-total)"
-                                                strokeWidth={2}
-                                                dot={false}
-                                                activeDot={{ r: 4, fill: 'var(--primary)', stroke: 'var(--background)', strokeWidth: 2 }}
-                                            />
-                                        </AreaChart>
-                                    </ChartContainer>
+                                                    <Pie
+                                                        data={pieData}
+                                                        dataKey="count"
+                                                        nameKey="event"
+                                                    />
+                                                </PieChart>
+                                            </ChartContainer>
+
+                                            {/* Legend */}
+                                            <div className="flex flex-col gap-2 w-full">
+                                                {pieData.map((row, i) => (
+                                                    <div key={row.event} className="flex items-center justify-between gap-2 text-xs">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <span
+                                                                className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                                                                style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                                                            />
+                                                            <span className="truncate text-muted-foreground">{row.label}</span>
+                                                        </div>
+                                                        <span className="font-semibold tabular-nums shrink-0">{row.count}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
 
