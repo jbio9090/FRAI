@@ -92,7 +92,7 @@ export default function SmallRequestCard({
             transition={{ duration: 0.3 }}
             onClick={() => isSelecting && handleSelection?.(request.id)}
             className={cn(
-                "border rounded-lg px-6 py-5 mx-auto w-full transition-all duration-200 shadow-xs",
+                "border rounded-lg px-6 py-5 mx-auto w-full transition-all duration-200",
                 isSelecting && "cursor-pointer hover:border-primary/50",
                 isSelected && "border-primary ring-1 ring-primary",
                 className,

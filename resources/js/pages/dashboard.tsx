@@ -34,6 +34,15 @@ import RequestCard from '@/components/request-card';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { usePermission } from '@/hooks/use-permission';
 import SmallRequestCard from '@/components/small-request-card';
+import {
+    Carousel,
+    CarouselContent,
+    CarouselItem,
+    CarouselNext,
+    CarouselPrevious,
+    CarouselApi,
+} from "@/components/ui/carousel";
+import { cn } from '@/lib/utils';
 
 interface Event {
     start: Date;
@@ -77,6 +86,53 @@ export default function Dashboard({
     const [loading, setLoading] = useState(false);
     const auth = usePage().props.auth;
     const { hasRole } = usePermission();
+    const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
+    const [canScrollNext, setCanScrollNext] = useState(false);
+    const [canScrollPrev, setCanScrollPrev] = useState(false);
+
+    const [pendingConflictApi, setPendingConflictApi] = useState<CarouselApi | null>(null);
+    const [pendingConflictCanScrollNext, setPendingConflictCanScrollNext] = useState(false);
+    const [pendingConflictCanScrollPrev, setPendingConflictCanScrollPrev] = useState(false);
+
+    const [approvedConflictApi, setApprovedConflictApi] = useState<CarouselApi | null>(null);
+    const [approvedConflictCanScrollNext, setApprovedConflictCanScrollNext] = useState(false);
+    const [approvedConflictCanScrollPrev, setApprovedConflictCanScrollPrev] = useState(false);
+
+    useEffect(() => {
+        if (!carouselApi) return;
+        const update = () => {
+            setCanScrollNext(carouselApi.canScrollNext());
+            setCanScrollPrev(carouselApi.canScrollPrev());
+        };
+        update();
+        carouselApi.on("select", update);
+        carouselApi.on("reInit", update);
+        return () => { carouselApi.off("select", update); };
+    }, [carouselApi]);
+
+    useEffect(() => {
+        if (!pendingConflictApi) return;
+        const update = () => {
+            setPendingConflictCanScrollNext(pendingConflictApi.canScrollNext());
+            setPendingConflictCanScrollPrev(pendingConflictApi.canScrollPrev());
+        };
+        update();
+        pendingConflictApi.on("select", update);
+        pendingConflictApi.on("reInit", update);
+        return () => { pendingConflictApi.off("select", update); };
+    }, [pendingConflictApi]);
+
+    useEffect(() => {
+        if (!approvedConflictApi) return;
+        const update = () => {
+            setApprovedConflictCanScrollNext(approvedConflictApi.canScrollNext());
+            setApprovedConflictCanScrollPrev(approvedConflictApi.canScrollPrev());
+        };
+        update();
+        approvedConflictApi.on("select", update);
+        approvedConflictApi.on("reInit", update);
+        return () => { approvedConflictApi.off("select", update); };
+    }, [approvedConflictApi]);
 
     const isAdmin: boolean = hasRole("admin");
 
@@ -132,22 +188,51 @@ export default function Dashboard({
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            <div className="flex justify-between w-full">
-                                <h2 className='text-lg font-bold tracking-tighter'>{isAdmin ? "Pending Requests" : "Your Pending Requests"}</h2>
-                                <Link className="hover:underline font-semibold text-sm flex items-center" href={route("requests.index", { status: "pending" })}>
-                                    <span>See All</span>
-                                    <ArrowUpRight size={16} />
-                                </Link>
-                            </div>
-
-                            <ScrollArea className="w-full">
-                                <div className="flex gap-4 pb-4">
-                                    {pending.data.map(request => (
-                                        <SmallRequestCard key={request.id} request={request} className='min-w-[400px] max-w-[400px]' />
-                                    ))}
+                            <Carousel
+                                opts={{ align: "start", dragFree: true, containScroll: "trimSnaps" }}
+                                className="w-full"
+                                setApi={setCarouselApi}
+                            >
+                                <div className="flex justify-between items-center mb-2">
+                                    <h2 className='text-lg font-bold tracking-tight'>
+                                        {isAdmin ? "Pending Requests" : "Your Pending Requests"}
+                                    </h2>
+                                    <div className="flex items-center gap-1">
+                                        <CarouselPrevious className="static translate-y-0" />
+                                        <CarouselNext className="static translate-y-0" />
+                                    </div>
                                 </div>
-                                <ScrollBar orientation='horizontal' />
-                            </ScrollArea>
+
+                                <div className="relative">
+                                    {/* Left fade */}
+                                    <div className={cn(
+                                        "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
+                                        canScrollPrev ? "opacity-100" : "opacity-0"
+                                    )} />
+                                    {/* Right fade */}
+                                    <div className={cn(
+                                        "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
+                                        canScrollNext ? "opacity-100" : "opacity-0"
+                                    )} />
+
+                                    <CarouselContent className="-ml-4">
+                                        {pending.data.map(request => (
+                                            <CarouselItem key={request.id} className="pl-4 basis-auto">
+                                                <SmallRequestCard request={request} className='min-w-[400px] max-w-[400px]' />
+                                            </CarouselItem>
+                                        ))}
+
+                                        <CarouselItem className="pl-4 basis-auto">
+                                            <Link href={route("requests.index", { status: "pending" })}>
+                                                <div className="min-w-[160px] max-w-[160px] h-full min-h-[160px] border rounded-lg flex flex-col items-center justify-center gap-2 text-sm font-semibold hover:bg-muted transition-colors cursor-pointer">
+                                                    <ArrowUpRight size={20} />
+                                                    <span>See All</span>
+                                                </div>
+                                            </Link>
+                                        </CarouselItem>
+                                    </CarouselContent>
+                                </div>
+                            </Carousel>
                         </div>
 
                         {(pendingConflictRequests.length > 0 || approvedConflictRequests.length > 0) && (
@@ -156,53 +241,97 @@ export default function Dashboard({
 
                                 {pendingConflictRequests.length > 0 && (
                                     <div className="flex flex-col gap-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                                                Pending Conflicts
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">
-                                                {pendingConflictRequests.length} request{pendingConflictRequests.length !== 1 ? 's' : ''}
-                                            </span>
-                                        </div>
-                                        <ScrollArea className="w-full">
-                                            <div className="flex gap-4 pb-4">
-                                                {pendingConflictRequests.map(request => (
-                                                    <SmallRequestCard
-                                                        key={request.id}
-                                                        request={request}
-                                                        className="min-w-[700px] max-w-[700px] border-yellow-300 dark:border-yellow-700"
-                                                    />
-                                                ))}
+                                        <Carousel
+                                            opts={{ align: "start", dragFree: true, containScroll: "trimSnaps" }}
+                                            className="w-full"
+                                            setApi={setPendingConflictApi}
+                                        >
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                                                        Pending Conflicts
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {pendingConflictRequests.length} request{pendingConflictRequests.length !== 1 ? 's' : ''}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <CarouselPrevious className="static translate-y-0" />
+                                                    <CarouselNext className="static translate-y-0" />
+                                                </div>
                                             </div>
-                                            <ScrollBar orientation="horizontal" />
-                                        </ScrollArea>
+
+                                            <div className="relative">
+                                                <div className={cn(
+                                                    "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
+                                                    pendingConflictCanScrollPrev ? "opacity-100" : "opacity-0"
+                                                )} />
+                                                <div className={cn(
+                                                    "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
+                                                    pendingConflictCanScrollNext ? "opacity-100" : "opacity-0"
+                                                )} />
+
+                                                <CarouselContent className="-ml-4">
+                                                    {pendingConflictRequests.map(request => (
+                                                        <CarouselItem key={request.id} className="pl-4 basis-auto">
+                                                            <SmallRequestCard
+                                                                request={request}
+                                                                className="min-w-[400px] max-w-[400px] border-yellow-300 dark:border-yellow-700"
+                                                            />
+                                                        </CarouselItem>
+                                                    ))}
+                                                </CarouselContent>
+                                            </div>
+                                        </Carousel>
                                     </div>
                                 )}
 
                                 {approvedConflictRequests.length > 0 && (
                                     <div className="flex flex-col gap-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-700">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                                                Approved Conflicts
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">
-                                                {approvedConflictRequests.length} request{approvedConflictRequests.length !== 1 ? 's' : ''}
-                                            </span>
-                                        </div>
-                                        <ScrollArea className="w-full">
-                                            <div className="flex gap-4 pb-4">
-                                                {approvedConflictRequests.map(request => (
-                                                    <SmallRequestCard
-                                                        key={request.id}
-                                                        request={request}
-                                                        className="min-w-[700px] max-w-[700px] border-red-300 dark:border-red-700"
-                                                    />
-                                                ))}
+                                        <Carousel
+                                            opts={{ align: "start", dragFree: true, containScroll: "trimSnaps" }}
+                                            className="w-full"
+                                            setApi={setApprovedConflictApi}
+                                        >
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-700">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                                        Approved Conflicts
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {approvedConflictRequests.length} request{approvedConflictRequests.length !== 1 ? 's' : ''}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <CarouselPrevious className="static translate-y-0" />
+                                                    <CarouselNext className="static translate-y-0" />
+                                                </div>
                                             </div>
-                                            <ScrollBar orientation="horizontal" />
-                                        </ScrollArea>
+
+                                            <div className="relative">
+                                                <div className={cn(
+                                                    "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
+                                                    approvedConflictCanScrollPrev ? "opacity-100" : "opacity-0"
+                                                )} />
+                                                <div className={cn(
+                                                    "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
+                                                    approvedConflictCanScrollNext ? "opacity-100" : "opacity-0"
+                                                )} />
+
+                                                <CarouselContent className="-ml-4">
+                                                    {approvedConflictRequests.map(request => (
+                                                        <CarouselItem key={request.id} className="pl-4 basis-auto">
+                                                            <SmallRequestCard
+                                                                request={request}
+                                                                className="min-w-[400px] max-w-[400px] border-red-300 dark:border-red-700"
+                                                            />
+                                                        </CarouselItem>
+                                                    ))}
+                                                </CarouselContent>
+                                            </div>
+                                        </Carousel>
                                     </div>
                                 )}
                             </div>
