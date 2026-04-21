@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import DefaultLayout from '@/layout.tsx/default.';
 import { Link, usePage } from '@inertiajs/react';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import moment from 'moment';
 import FacilityCalendar from '@/components/FacilityCalendar';
 import { Request as FacilityRequest } from '@/types/request';
@@ -31,6 +31,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import RequestCard from '@/components/request-card';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { usePermission } from '@/hooks/use-permission';
+import SmallRequestCard from '@/components/small-request-card';
 
 interface Event {
     start: Date;
@@ -73,6 +76,9 @@ export default function Dashboard({
     const [data, setData] = useState<ChartRow[]>(chartData);
     const [loading, setLoading] = useState(false);
     const auth = usePage().props.auth;
+    const { hasRole } = usePermission();
+
+    const isAdmin: boolean = hasRole("admin");
 
     const rangeLabel = {
         week: 'Last 7 days',
@@ -100,6 +106,13 @@ export default function Dashboard({
         selectedBuildings.includes(e.building)
     );
 
+    const pendingConflictRequests = pending.data.filter(
+        r => r.pending_conflicts && r.pending_conflicts.length > 0
+    );
+    const approvedConflictRequests = pending.data.filter(
+        r => r.approved_conflicts && r.approved_conflicts.length > 0
+    );
+
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-6 md:p-8">
@@ -118,14 +131,82 @@ export default function Dashboard({
                             </div>
                         </div>
 
-                        <div className="flex w-full flex-col">
-                            <h2 className='text-lg font-bold tracking-tighter'>Pending Requests</h2>
-                            <div className="flex max-w-full flex-wrap gap-2 lg:grid grid-cols-2">
-                                {pending.data.map(request => (
-                                    <RequestCard request={request} />
-                                ))}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex justify-between w-full">
+                                <h2 className='text-lg font-bold tracking-tighter'>{isAdmin ? "Pending Requests" : "Your Pending Requests"}</h2>
+                                <Link className="hover:underline font-semibold text-sm flex items-center" href={route("requests.index", { status: "pending" })}>
+                                    <span>See All</span>
+                                    <ArrowUpRight size={16} />
+                                </Link>
                             </div>
+
+                            <ScrollArea className="w-full">
+                                <div className="flex gap-4 pb-4">
+                                    {pending.data.map(request => (
+                                        <SmallRequestCard key={request.id} request={request} className='min-w-[400px] max-w-[400px]' />
+                                    ))}
+                                </div>
+                                <ScrollBar orientation='horizontal' />
+                            </ScrollArea>
                         </div>
+
+                        {(pendingConflictRequests.length > 0 || approvedConflictRequests.length > 0) && (
+                            <div className="flex flex-col gap-6">
+                                <h2 className="text-lg font-bold tracking-tighter">Requests with Conflicts</h2>
+
+                                {pendingConflictRequests.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                                                Pending Conflicts
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {pendingConflictRequests.length} request{pendingConflictRequests.length !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <ScrollArea className="w-full">
+                                            <div className="flex gap-4 pb-4">
+                                                {pendingConflictRequests.map(request => (
+                                                    <SmallRequestCard
+                                                        key={request.id}
+                                                        request={request}
+                                                        className="min-w-[700px] max-w-[700px] border-yellow-300 dark:border-yellow-700"
+                                                    />
+                                                ))}
+                                            </div>
+                                            <ScrollBar orientation="horizontal" />
+                                        </ScrollArea>
+                                    </div>
+                                )}
+
+                                {approvedConflictRequests.length > 0 && (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-700">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                                Approved Conflicts
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {approvedConflictRequests.length} request{approvedConflictRequests.length !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <ScrollArea className="w-full">
+                                            <div className="flex gap-4 pb-4">
+                                                {approvedConflictRequests.map(request => (
+                                                    <SmallRequestCard
+                                                        key={request.id}
+                                                        request={request}
+                                                        className="min-w-[700px] max-w-[700px] border-red-300 dark:border-red-700"
+                                                    />
+                                                ))}
+                                            </div>
+                                            <ScrollBar orientation="horizontal" />
+                                        </ScrollArea>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="calendar">
@@ -307,6 +388,6 @@ export default function Dashboard({
                     </TabsContent>
                 </Tabs>
             </div>
-        </DefaultLayout>
+        </DefaultLayout >
     );
 }

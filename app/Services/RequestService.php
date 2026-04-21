@@ -30,6 +30,7 @@ class RequestService
         ?string $requester = null,
         ?string $facility = null,
         ?string $hasExternalEquipment = null,
+        ?bool $hasConflicts = false,
     ) {
         $user = Auth::user();
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';

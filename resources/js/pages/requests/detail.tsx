@@ -27,6 +27,7 @@ import { usePermission } from '@/hooks/use-permission';
 import { BookingCard } from '@/components/booking-card';
 import { cn } from '@/lib/utils';
 import AnimatedText from '@/components/animated-text';
+import { AttachedFileList } from '@/components/attached-file-list';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -272,6 +273,13 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                                 {auditLogs.length}
                             </span>
                         </TabsTrigger>
+
+                        <TabsTrigger value="files" className="flex items-center gap-2">
+                            <span>Files</span>
+                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                {request.files?.length ?? 0}
+                            </span>
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* Overview Tab */}
@@ -428,6 +436,30 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                     {/* Activity Tab */}
                     <TabsContent value="activity" className="flex flex-col gap-0 mt-6">
                         <ActivityFeed auditLogs={auditLogs} />
+                    </TabsContent>
+
+                    {/* Files Tab */}
+                    <TabsContent value="files" className="mt-6">
+                        {request.files && request.files.length > 0 ? (
+                            <AttachedFileList
+                                serverFiles={request.files.map(f => ({
+                                    path: f.path,
+                                    original_name: f.path.split('/').pop() ?? f.path,
+                                    mime_type: (() => {
+                                        const ext = f.path.split('.').pop()?.toLowerCase();
+                                        const map: Record<string, string> = {
+                                            png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+                                            gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf',
+                                        };
+                                        return map[ext ?? ''] ?? 'application/octet-stream';
+                                    })(),
+                                    size: 0,
+                                    url: `/storage/${f.path}`,
+                                }))}
+                            />
+                        ) : (
+                            <p className="text-muted-foreground text-sm">No files attached.</p>
+                        )}
                     </TabsContent>
                 </Tabs>
             </div>

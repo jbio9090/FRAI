@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger, } from "@/components/ui/tabs"
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
-import { ArrowUpRight, Calendar, Clock, MessageCircle, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, IterationCw, Sparkles } from 'lucide-react';
+import { ArrowUpRight, Calendar, Clock, MessageCircle, ThumbsUp, CheckLine, MessageCirclePlus, User, MessageCircleOff, X, Check, GraduationCap, BookMarked, UsersRound, Landmark, CirclePause, IterationCw, Sparkles, Paperclip } from 'lucide-react';
 import { PRIORITY_LABELS } from '@/types/request';
 import { motion } from 'motion/react';
 import { Request } from '@/types/request';
@@ -35,12 +35,14 @@ export default function RequestCard({
     handleSelection,
     isSelecting = false,
     isSelected = false,
+    className,
 }: {
     request: Request;
     page_title?: string;
     handleSelection?: (id: number) => void;
     isSelecting?: boolean;
     isSelected?: boolean;
+    className?: string;
 }) {
     const { hasPermission } = usePermission();
     const [isCommentInputOpen, setCommentInputState] = useState(false);
@@ -191,14 +193,7 @@ export default function RequestCard({
                     </Link>
                 </div>
 
-                <RequestDetails request={request} isLoadingRecommendation={isLoadingRecommendation} />
-
-                {request.files?.length > 0 && (
-                    <div className="w-full">
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Attachments</p>
-                        <AttachedFileList serverFiles={request.files} />
-                    </div>
-                )}
+                <RequestDetails request={request} isLoadingRecommendation={isLoadingRecommendation} files={request.files} />
 
                 {(hasPermission('approve requests') && ["Pending", "For Reschedule"].includes(request.status)) && (
                     <div className="flex flex-col w-full">
@@ -289,7 +284,15 @@ export default function RequestCard({
 }
 
 
-function RequestDetails({ request, isLoadingRecommendation }: { request: Request; isLoadingRecommendation: boolean }) {
+function RequestDetails({
+    request,
+    isLoadingRecommendation,
+    files,
+}: {
+    request: Request;
+    isLoadingRecommendation: boolean;
+    files?: typeof request.files;
+}) {
     const isPending: boolean = request.status === "Pending";
     const [activeTab, setActiveTab] = useState("facilities");
 
@@ -367,6 +370,17 @@ function RequestDetails({ request, isLoadingRecommendation }: { request: Request
                 <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comments yet</p>
             ),
         },
+        ...(files?.length > 0 ? [{
+            value: "attachments",
+            icon: <Paperclip size={16} />,
+            label: "Attachments",
+            badge: files.length,
+            content: (
+                <ScrollArea className='mt-4 max-h-96'>
+                    <AttachedFileList serverFiles={files} />
+                </ScrollArea>
+            ),
+        }] : []),
         ...(isPending ? [{
             value: "recommend",
             icon: <ThumbsUp size={16} />,
