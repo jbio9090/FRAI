@@ -30,6 +30,7 @@ class RequestService
         ?string $requester = null,
         ?string $facility = null,
         ?string $hasExternalEquipment = null,
+        ?bool $hasConflicts = false,
     ) {
         $user = Auth::user();
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
@@ -280,6 +281,7 @@ class RequestService
             foreach ($facilityRequest->files as $file) {
                 if (!in_array($file->id, $keptIds)) {
                     Storage::disk('public')->delete($file->path);
+                    $this->auditLogger::requestFileRemoved($facilityRequest, $file);
                     $file->delete();
                 }
             }
@@ -491,7 +493,7 @@ class RequestService
 
                 $conflictingRequest->update([
                     'pending_conflict_rf_ids'   => $merged,
-                    'recommended_action'        => RequestStatus::APPROVED,
+                    'recommended_action'        => RequestStatus::FOR_RESCHEDULE,
                     'recommended_action_reason' => 'Time conflict with pending requests',
                 ]);
             });
@@ -679,12 +681,14 @@ class RequestService
         foreach ($files as $file) {
             $path = $file->store('request-files', 'public');
 
-            $facilityRequest->files()->create([
+            $requestFile = $facilityRequest->files()->create([
                 'path'          => $path,
                 'original_name' => $file->getClientOriginalName(),
                 'mime_type'     => $file->getMimeType(),
                 'size'          => $file->getSize(),
             ]);
+
+            $this->auditLogger::requestFileUploaded($facilityRequest, $requestFile); // 👈
         }
     }
 
@@ -692,8 +696,9 @@ class RequestService
     {
         foreach ($facilityRequest->files as $file) {
             Storage::disk('local')->delete($file->path);
+            $this->auditLogger::requestFileRemoved($facilityRequest, $file); // 👈
+            $file->delete();
         }
-        $facilityRequest->files()->delete();
     }
 
     public function findConflictingLowerPriorityRequests(array $bookings, int $priorityLevel): Collection
@@ -782,6 +787,7 @@ class RequestService
             'description'     => $detail->description,
             'priority_level'  => $detail->priority_level,
             'priority_reason' => $detail->priority_reason,
+            'approved_by'     => $detail->approved_by ?? [],
             'existing_files'  => $detail->files->map(fn($f) => [
                 'id'            => $f->id,
                 'original_name' => $f->original_name,

@@ -9,6 +9,7 @@ use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Request as RequestFacade;
 use App\AuditEvent;
+use App\Models\RequestFile;
 
 class AuditLogger
 {
@@ -163,6 +164,36 @@ class AuditLogger
                 : "Request manually removed from hold: \"{$request->title}\"",
             subject: $request,
             properties: ['on_hold' => $onHold],
+        );
+    }
+
+    public static function requestFileUploaded(FacilityRequest $request, RequestFile $file): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::RequestFileUploaded,
+            description: "File uploaded on: \"{$request->title}\" — {$file->original_name}",
+            subject: $request,
+            properties: [
+                'file_id'       => $file->id,
+                'original_name' => $file->original_name,
+                'mime_type'     => $file->mime_type,
+                'size'          => $file->size,
+            ],
+        );
+    }
+
+    public static function requestFileRemoved(FacilityRequest $request, RequestFile $file): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::RequestFileRemoved,
+            description: "File removed on: \"{$request->title}\" — {$file->original_name}",
+            subject: $request,
+            properties: [
+                'file_id'       => $file->id,
+                'original_name' => $file->original_name,
+                'mime_type'     => $file->mime_type,
+                'size'          => $file->size,
+            ],
         );
     }
 }

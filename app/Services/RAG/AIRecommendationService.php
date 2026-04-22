@@ -11,8 +11,6 @@ class AIRecommendationService
 {
     public function __construct(protected OllamaService $ollama) {}
 
-    // app/Services/AIRecommendationService.php
-
     public function recommend(FacilityRequest $request): array
     {
         try {
@@ -33,10 +31,21 @@ class AIRecommendationService
                 return $this->fallback($request);
             }
 
-            $rulesText     = collect($relevantRules)->map(fn($r) => '- ' . $r->content)->join("\n");
-            $validStatuses = implode(', ', array_column(RequestStatus::cases(), 'value'));
+            \Log::debug('Relevant rules retrieved', [
+                'rules' => $relevantRules->map(fn($r) => [
+                    'content'    => $r->content,
+                    'similarity' => $r->similarity,
+                ])->toArray(),
+            ]);
 
-            $now = now()->toDateTimeString();
+            $rulesText     = collect($relevantRules)->map(fn($r) => '- ' . $r->content)->join("\n");
+            $validStatuses = implode(', ', array_column(
+                array_filter(RequestStatus::cases(), fn($case) => $case->name !== RequestStatus::PENDING->name),
+                'value'
+            ));
+
+            $now     = now()->toDateTimeString();
+            $signals = $this->buildSignals($request);
 
             $prompt = <<<PROMPT
 TODAY'S DATE AND TIME: {$now}
@@ -44,12 +53,15 @@ TODAY'S DATE AND TIME: {$now}
 RULES:
 {$rulesText}
 
+PRE-EVALUATED SIGNALS (these are computed facts — trust them exactly as written, do not reinterpret them):
+{$signals}
+
 REQUEST DETAILS:
 {$requestContext}
 
 VALID STATUSES (choose exactly one): {$validStatuses}
 
-Respond using exactly this structure:
+Respond using exactly this structure with no other text:
 {"status": "<valid status>", "reason": "<one sentence>"}
 PROMPT;
 
@@ -60,6 +72,80 @@ PROMPT;
             \Log::warning('AIRecommendationService failed, using fallback: ' . $e->getMessage());
             return $this->fallback($request);
         }
+    }
+
+    /**
+     * Pre-compute deterministic facts about the request and format them
+     * as unambiguous signals for the LLM. This prevents the model from
+     * doing its own (unreliable) date math or conflict reasoning.
+     */
+    private function buildSignals(FacilityRequest $request): string
+    {
+        $request->loadMissing([
+            'requestFacilities.facility',
+            'requestFacilities.externalEquipments',
+        ]);
+
+        $lines = [];
+
+        // --- Temporal signals 
+        $minDaysUntil = null;
+
+        foreach ($request->requestFacilities as $rf) {
+            $daysUntil = now()->startOfDay()->diffInDays(
+                \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
+                false
+            );
+
+            if ($minDaysUntil === null || $daysUntil < $minDaysUntil) {
+                $minDaysUntil = $daysUntil;
+            }
+        }
+
+        if ($minDaysUntil !== null) {
+            if ($minDaysUntil < 0) {
+                $lines[] = '- TEMPORAL: At least one facility date is in the PAST. This request cannot be approved.';
+            } elseif ($minDaysUntil < 3) {
+                $lines[] = "- TEMPORAL: Nearest facility date is only {$minDaysUntil} day(s) from today. The 3-day advance rule is VIOLATED. This request must be DENIED.";
+            } else {
+                $lines[] = "- TEMPORAL: Nearest facility date is {$minDaysUntil} days from today. The 3-day advance rule is NOT violated.";
+            }
+        }
+
+        // --- Conflict signals ---
+        $hasApprovedConflict = !empty($request->approved_conflict_rf_ids);
+        $hasPendingConflict  = !empty($request->pending_conflict_rf_ids);
+
+        if ($hasApprovedConflict) {
+            $lines[] = '- CONFLICT: There IS a schedule conflict with an already APPROVED booking. This request must be DENIED.';
+        } else {
+            $lines[] = '- CONFLICT: No conflicts with approved bookings.';
+        }
+
+        if ($hasPendingConflict) {
+            $lines[] = '- CONFLICT: There is a schedule conflict with a PENDING booking (not yet approved). This alone does not require denial.';
+        } else {
+            $lines[] = '- CONFLICT: No conflicts with pending bookings.';
+        }
+
+        // --- Equipment signals ---
+        $hasExternalEquipment = $request->requestFacilities
+            ->flatMap(fn($rf) => $rf->externalEquipments ?? collect())
+            ->isNotEmpty();
+
+        if ($hasExternalEquipment) {
+            $lines[] = '- EQUIPMENT: Request includes external (non-owned) equipment. Conditional approval is likely required.';
+        } else {
+            $lines[] = '- EQUIPMENT: No external equipment involved.';
+        }
+
+        // --- Pre-approval signal ---
+        if (!empty($request->approved_by)) {
+            $approvers = implode(', ', $request->approved_by);
+            $lines[]   = "- PRE-APPROVAL: This request has been pre-approved by: {$approvers}.";
+        }
+
+        return implode("\n", $lines);
     }
 
     private function fallback(FacilityRequest $request): array
@@ -108,7 +194,7 @@ PROMPT;
         $facilities = $request->requestFacilities->map(function ($rf) {
             $daysUntil = now()->startOfDay()->diffInDays(
                 \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
-                false 
+                false
             );
             $urgency = $daysUntil < 0
                 ? "PAST DATE"

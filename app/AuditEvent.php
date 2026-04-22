@@ -17,7 +17,9 @@ enum AuditEvent: string
 
     case RequestHeld                 = 'request.held';
     case RequestCommentAdded         = 'request.comment_added';
- 
+    case RequestFileUploaded = 'request.file_uploaded';
+    case RequestFileRemoved  = 'request.file_removed';
+
     public function label(): string
     {
         return match ($this) {
@@ -32,6 +34,8 @@ enum AuditEvent: string
             self::RequestHeld             => 'Request Held',
             self::RequestCommentAdded     => 'Comment Added',
             self::RequestMarkedForReschedule   => 'Marked Reschedule',
+            self::RequestFileUploaded => 'File Uploaded',
+            self::RequestFileRemoved  => 'File Removed',
         };
     }
 }

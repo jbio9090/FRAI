@@ -255,8 +255,8 @@ function AssignDialog({
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Assign to Facilities</DialogTitle>
-                    <DialogDescription>{equipment.name}</DialogDescription>
+                    <DialogTitle>{equipment.name}</DialogTitle>
+                    <DialogDescription>Assign to Facilities</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
@@ -281,14 +281,13 @@ function AssignDialog({
                 <Separator />
 
                 <ScrollArea className="h-64 pr-3 -mr-3">
-                    <div className="space-y-2">
                         {facilities.map((f) => {
                             const a = assignments.find((x) => x.facility_id === f.id);
                             const checked = !!a;
                             return (
                                 <div
                                     key={f.id}
-                                    className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors
+                                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors
                                         ${checked
                                             ? "border-primary/40 bg-primary/5"
                                             : "border-border bg-background"
@@ -318,7 +317,6 @@ function AssignDialog({
                                 </div>
                             );
                         })}
-                    </div>
                 </ScrollArea>
 
                 <DialogFooter>

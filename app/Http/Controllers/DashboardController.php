@@ -17,10 +17,6 @@ class DashboardController extends Controller
 
     public function index()
     {
-        $pending  = $this->requestService->get([RequestStatus::PENDING]);
-        $approved = $this->requestService->get([RequestStatus::APPROVED]);
-        $denied   = $this->requestService->get([RequestStatus::DENIED]);
-
         $start = now()->startOfMonth()->format('Y-m-d');
         $end   = now()->endOfMonth()->format('Y-m-d');
 
@@ -38,13 +34,15 @@ class DashboardController extends Controller
 
         return Inertia::render("dashboard", [
             'labeledBreadcrumb' => "Dashboard",
-            'pending'       => $pending,
-            'approved'      => $approved,
-            'denied'        => $denied,
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
             'buildings'     => Facility::distinct()->pluck('building')->filter()->values(),
-            'auditLogs'     => AuditLog::latest()->take(50)->get(),
+            'auditLogs' => AuditLog::with('user')
+                ->where('created_at', '>=', now()->subDays(6)->startOfDay())
+                ->latest()
+                ->take(100)
+                ->get(),
             'chartData'     => $chartData,
+            'pending' => $this->requestService->get([RequestStatus::PENDING]),
         ]);
     }
 
@@ -85,5 +83,25 @@ class DashboardController extends Controller
             ->values();
 
         return response()->json($data);
+    }
+
+    public function auditLogs(Request $request)
+    {
+        $range = $request->input('range', 'week');
+
+        [$start, $end] = match ($range) {
+            'day' => [now()->startOfDay(), now()->endOfDay()],
+            'month'   => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
+            '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
+            default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
+        };
+
+        $logs = AuditLog::with('user')
+            ->whereBetween('created_at', [$start, $end])
+            ->latest()
+            ->take(100)
+            ->get();
+
+        return response()->json($logs);
     }
 }
