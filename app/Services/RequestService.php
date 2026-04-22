@@ -493,7 +493,7 @@ class RequestService
 
                 $conflictingRequest->update([
                     'pending_conflict_rf_ids'   => $merged,
-                    'recommended_action'        => RequestStatus::APPROVED,
+                    'recommended_action'        => RequestStatus::FOR_RESCHEDULE,
                     'recommended_action_reason' => 'Time conflict with pending requests',
                 ]);
             });
