@@ -45,6 +45,8 @@ import {
     CarouselApi,
 } from "@/components/ui/carousel";
 import { cn } from '@/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ArrowDownUp } from 'lucide-react';
 
 interface Event {
     start: Date;
@@ -123,6 +125,21 @@ export default function Dashboard({
     const [approvedConflictApi, setApprovedConflictApi] = useState<CarouselApi | null>(null);
     const [approvedConflictCanScrollNext, setApprovedConflictCanScrollNext] = useState(false);
     const [approvedConflictCanScrollPrev, setApprovedConflictCanScrollPrev] = useState(false);
+
+    const [logFilter, setLogFilter] = useState<string>('all');
+    const [logSort, setLogSort] = useState<'newest' | 'oldest'>('newest');
+
+    const filteredLogs = useMemo(() => {
+        let logs = [...auditLogs];
+        if (logFilter !== 'all') {
+            logs = logs.filter(log => log.event === logFilter);
+        }
+        logs.sort((a, b) => {
+            const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            return logSort === 'newest' ? -diff : diff;
+        });
+        return logs;
+    }, [auditLogs, logFilter, logSort]);
 
     useEffect(() => {
         setLoading(true);
@@ -470,7 +487,6 @@ export default function Dashboard({
 
                     <TabsContent value="activity">
                         <div className="flex flex-col gap-8 mt-6">
-
                             {/* Header row */}
                             <div className="flex items-center justify-between flex-wrap gap-3">
                                 <div className="flex flex-col gap-0.5">
@@ -493,131 +509,124 @@ export default function Dashboard({
                             <div className="flex flex-col gap-2 xl:grid grid-cols-[5fr_3fr]">
 
                                 {/* Chart */}
-                                <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                                    <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-                                        <p className="text-sm font-semibold">Events per day</p>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="inline-block w-2 h-2 rounded-full bg-primary" />
-                                            <span className="text-xs text-muted-foreground">Total events</span>
-                                        </div>
-                                    </div>
-
-                                    {loading ? (
-                                        <div className="h-[300px] flex items-center justify-center">
-                                            <div className="flex flex-col items-center gap-3">
-                                                <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                                                <p className="text-xs text-muted-foreground">Fetching data...</p>
+                                <Card className="overflow-hidden">
+                                    <CardHeader className="pb-2">
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle className="text-sm font-semibold">Events per day</CardTitle>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="inline-block w-2 h-2 rounded-full bg-primary" />
+                                                <span className="text-sm text-muted-foreground">Total events</span>
                                             </div>
                                         </div>
-                                    ) : data.length === 0 ? (
-                                        <div className="h-[300px] flex items-center justify-center">
-                                            <p className="text-sm text-muted-foreground">No activity in this period.</p>
-                                        </div>
-                                    ) : (
-                                        <ChartContainer config={chartConfig} className="h-[300px] w-full px-2 pb-4">
-                                            <AreaChart
-                                                data={data}
-                                                margin={{ top: 10, right: 16, left: -10, bottom: 0 }}
-                                            >
-                                                <defs>
-                                                    <linearGradient id="fill-total" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
-                                                        <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
-                                                    </linearGradient>
-                                                </defs>
-                                                <CartesianGrid
-                                                    vertical={false}
-                                                    stroke="var(--border)"
-                                                    strokeDasharray="4 4"
-                                                    strokeOpacity={0.6}
-                                                />
-                                                <XAxis
-                                                    dataKey="date"
-                                                    tickLine={false}
-                                                    axisLine={false}
-                                                    tickMargin={10}
-                                                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                                                    tickFormatter={val => moment(val).format("MMM D")}
-                                                />
-                                                <YAxis
-                                                    tickLine={false}
-                                                    axisLine={false}
-                                                    tickMargin={8}
-                                                    allowDecimals={false}
-                                                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                                                    width={32}
-                                                />
-                                                <ChartTooltip
-                                                    cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
-                                                    content={
-                                                        <ChartTooltipContent
-                                                            labelFormatter={val => moment(val).format("dddd, MMM D YYYY")}
-                                                        />
-                                                    }
-                                                />
-                                                <Area
-                                                    type="monotoneX"
-                                                    dataKey="total"
-                                                    stroke="var(--primary)"
-                                                    fill="url(#fill-total)"
-                                                    strokeWidth={2}
-                                                    dot={false}
-                                                    activeDot={{ r: 4, fill: 'var(--primary)', stroke: 'var(--background)', strokeWidth: 2 }}
-                                                />
-                                            </AreaChart>
-                                        </ChartContainer>
-                                    )}
-                                </div>
+                                    </CardHeader>
+                                    <CardContent className="px-2 pb-4">
 
-                                {/* Activity Breakdown Pie Chart */}
-                                {!logsLoading && pieData.length > 0 && (
-                                    <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                                        <div className="px-5 pt-5 pb-2">
-                                            <p className="text-sm font-semibold">Activity Breakdown</p>
-                                            <p className="text-xs text-muted-foreground mt-0.5">Distribution of activity types in this period</p>
-                                        </div>
-
-                                        <div className="flex flex-col md:flex-row items-center gap-4 px-4 pb-5">
-                                            <ChartContainer
-                                                config={pieChartConfig}
-                                                className="mx-auto aspect-square max-h-[260px] min-w-[220px] [&_.recharts-pie-label-text]:fill-foreground"
-                                            >
-                                                <PieChart>
+                                        {loading ? (
+                                            <div className="h-[300px] flex items-center justify-center">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                                    <p className="text-sm text-muted-foreground">Fetching data...</p>
+                                                </div>
+                                            </div>
+                                        ) : data.length === 0 ? (
+                                            <div className="h-[300px] flex items-center justify-center">
+                                                <p className="text-sm text-muted-foreground">No activity in this period.</p>
+                                            </div>
+                                        ) : (
+                                            <ChartContainer config={chartConfig} className="h-[300px] w-full px-2 pb-4">
+                                                <AreaChart
+                                                    data={data}
+                                                    margin={{ top: 10, right: 16, left: -10, bottom: 0 }}
+                                                >
+                                                    <defs>
+                                                        <linearGradient id="fill-total" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
+                                                            <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <XAxis
+                                                        dataKey="date"
+                                                        tickLine={false}
+                                                        axisLine={false}
+                                                        tickMargin={10}
+                                                        tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
+                                                        tickFormatter={val => moment(val).format("MMM D")}
+                                                    />
                                                     <ChartTooltip
+                                                        cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
                                                         content={
                                                             <ChartTooltipContent
-                                                                nameKey="event"
-                                                                hideLabel
+                                                                labelFormatter={val => moment(val).format("dddd, MMM D YYYY")}
                                                             />
                                                         }
                                                     />
-                                                    <Pie
-                                                        data={pieData}
-                                                        dataKey="count"
-                                                        nameKey="event"
+                                                    <Area
+                                                        type="monotoneX"
+                                                        dataKey="total"
+                                                        stroke="var(--primary)"
+                                                        fill="url(#fill-total)"
+                                                        strokeWidth={2}
+                                                        dot={false}
+                                                        activeDot={{ r: 4, fill: 'var(--primary)', stroke: 'var(--background)', strokeWidth: 2 }}
                                                     />
-                                                </PieChart>
+                                                </AreaChart>
                                             </ChartContainer>
+                                        )}
+                                    </CardContent>
+                                </Card>
 
-                                            {/* Legend */}
-                                            <div className="flex flex-col gap-2 w-full">
-                                                {pieData.map((row, i) => (
-                                                    <div key={row.event} className="flex items-center justify-between gap-2 text-xs">
-                                                        <div className="flex items-center gap-2 min-w-0">
-                                                            <span
-                                                                className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
-                                                                style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                                <Card className="overflow-hidden">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-semibold">Activity Breakdown</CardTitle>
+                                        <CardDescription>Distribution of activity types in this period</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="flex flex-col md:flex-row items-center gap-4">
+                                            {!logsLoading && pieData.length > 0 && (
+                                                <div className="flex flex-col md:flex-row items-center gap-4 px-4 pb-5">
+                                                    <ChartContainer
+                                                        config={pieChartConfig}
+                                                        className="mx-auto aspect-square max-h-[260px] min-w-[220px] [&_.recharts-pie-label-text]:fill-foreground"
+                                                    >
+                                                        <PieChart>
+                                                            <ChartTooltip
+                                                                content={
+                                                                    <ChartTooltipContent
+                                                                        nameKey="event"
+                                                                        hideLabel
+                                                                    />
+                                                                }
                                                             />
-                                                            <span className="truncate text-muted-foreground">{row.label}</span>
-                                                        </div>
-                                                        <span className="font-semibold tabular-nums shrink-0">{row.count}</span>
+                                                            <Pie
+                                                                data={pieData}
+                                                                dataKey="count"
+                                                                nameKey="event"
+                                                            />
+                                                        </PieChart>
+                                                    </ChartContainer>
+
+                                                    {/* Legend */}
+                                                    <div className="flex flex-col gap-2 w-full">
+                                                        {pieData.map((row, i) => (
+                                                            <div key={row.event} className="flex items-center justify-between gap-2 text-xs">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <span
+                                                                        className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                                                                        style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                                                                    />
+                                                                    <span className="truncate text-muted-foreground">{row.label}</span>
+                                                                </div>
+                                                                <span className="font-semibold tabular-nums shrink-0">{row.count}</span>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                ))}
-                                            </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                )}
+                                    </CardContent>
+                                </Card>
                             </div>
+
 
                             {logsLoading ? (
                                 <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
@@ -625,7 +634,106 @@ export default function Dashboard({
                                     Loading activity...
                                 </div>
                             ) : (
-                                <ActivityFeed auditLogs={auditLogs} />
+                                <div className="flex flex-col gap-3">
+                                    {/* Filter + Sort bar */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className={cn(
+                                                        "flex items-center gap-2",
+                                                        logSort !== 'newest' && "border-primary text-primary bg-primary/5"
+                                                    )}
+                                                >
+                                                    <ArrowDownUp size={14} />
+                                                    <span>Sort By</span>
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="p-0 w-44" align="start">
+                                                <p className="px-3 pt-3 pb-1 text-xs text-muted-foreground font-semibold">Sort By</p>
+                                                <div className="flex flex-col p-1">
+                                                    {([
+                                                        { label: 'Newest first', value: 'newest' },
+                                                        { label: 'Oldest first', value: 'oldest' },
+                                                    ] as const).map(opt => (
+                                                        <Button
+                                                            key={opt.value}
+                                                            variant={logSort === opt.value ? 'secondary' : 'ghost'}
+                                                            size="sm"
+                                                            className="justify-start w-full px-2"
+                                                            onClick={() => setLogSort(opt.value)}
+                                                        >
+                                                            {opt.label}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className={cn(
+                                                        "flex items-center gap-2",
+                                                        logFilter !== 'all' && "border-primary text-primary bg-primary/5"
+                                                    )}
+                                                >
+                                                    <ListFilter size={14} />
+                                                    <span>Filter</span>
+                                                    {logFilter !== 'all' && (
+                                                        <span className="flex items-center justify-center bg-primary/12 text-primary h-4 min-w-[16px] px-1 rounded-full text-[10px] font-medium">
+                                                            1
+                                                        </span>
+                                                    )}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="p-0 w-52" align="start">
+                                                <div className="flex flex-col gap-1 p-3 max-h-72 overflow-y-auto">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <p className="text-xs text-muted-foreground font-semibold">Event Type</p>
+                                                        {logFilter !== 'all' && (
+                                                            <button
+                                                                className="text-xs text-primary hover:underline"
+                                                                onClick={() => setLogFilter('all')}
+                                                            >
+                                                                Clear
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {[{ label: 'All event types', value: 'all' }, ...Object.entries(eventLabels).map(([value, label]) => ({ value, label }))].map(opt => (
+                                                        <label
+                                                            key={opt.value}
+                                                            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                        >
+                                                            <input
+                                                                type="radio"
+                                                                name="log-filter"
+                                                                className="accent-primary"
+                                                                checked={logFilter === opt.value}
+                                                                onChange={() => setLogFilter(opt.value)}
+                                                            />
+                                                            {opt.label}
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+
+                                        <span className="ml-auto text-xs text-muted-foreground">
+                                            {filteredLogs.length} event{filteredLogs.length !== 1 ? 's' : ''}
+                                        </span>
+                                    </div>
+
+                                    {filteredLogs.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground py-4">No events match the current filter.</p>
+                                    ) : (
+                                        <ActivityFeed auditLogs={filteredLogs} />
+                                    )}
+                                </div>
                             )}
 
                         </div>
