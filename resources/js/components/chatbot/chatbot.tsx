@@ -2396,9 +2396,6 @@ export default function Chatbot() {
                         <MessageList
                             messages={messages}
                             messagesEndRef={messagesEndRef}
-                            showConfirmationButtons={!!pendingPayload}
-                            onConfirm={handleConfirmRequest}
-                            onCancel={handleCancelRequest}
                             equipmentSelectorActive={shouldRenderEquipmentPicker}
                         />
 

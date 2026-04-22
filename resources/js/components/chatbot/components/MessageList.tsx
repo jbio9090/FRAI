@@ -1,16 +1,12 @@
-import { Message } from '../types';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import type { Message } from '../types';
 import TypingText from './TypingText';
 
 interface MessageListProps {
     messages: Message[];
     messagesEndRef: React.RefObject<HTMLDivElement | null>;
-    showConfirmationButtons?: boolean;
-    onConfirm?: () => void;
-    onCancel?: () => void;
     equipmentSelectorActive?: boolean;
 }
 
@@ -72,12 +68,9 @@ const isGuidedAssistantMessage = (message: Message): boolean => {
     );
 };
 
-export default function MessageList({ 
-    messages, 
-    messagesEndRef, 
-    showConfirmationButtons = false,
-    onConfirm,
-    onCancel,
+export default function MessageList({
+    messages,
+    messagesEndRef,
     equipmentSelectorActive = false,
 }: MessageListProps) {
     return (
@@ -130,26 +123,7 @@ export default function MessageList({
                     </div>
                 </div>
             ))}
-            
-            {/* Confirmation Buttons */}
-            {showConfirmationButtons && onConfirm && onCancel && (
-                <div className="mt-4 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 sm:flex-row sm:justify-center sm:gap-3">
-                    <Button 
-                        onClick={onConfirm}
-                        className="w-full bg-green-600 text-white hover:bg-green-700 sm:w-auto"
-                    >
-                        ✅ Confirm & Submit
-                    </Button>
-                    <Button 
-                        onClick={onCancel}
-                        variant="outline"
-                        className="w-full border-red-300 text-red-600 hover:bg-red-50 sm:w-auto"
-                    >
-                        ❌ Cancel
-                    </Button>
-                </div>
-            )}
-            
+
             <div ref={messagesEndRef} />
         </>
     );
