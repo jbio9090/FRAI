@@ -60,6 +60,7 @@ REQUEST DETAILS:
 {$requestContext}
 
 VALID STATUSES (choose exactly one): {$validStatuses}
+DEFAULT STATUS: Approved
 
 Respond using exactly this structure with no other text:
 {"status": "<valid status>", "reason": "<one sentence>"}
@@ -77,18 +78,19 @@ PROMPT;
     /**
      * Pre-compute deterministic facts about the request and format them
      * as unambiguous signals for the LLM. This prevents the model from
-     * doing its own (unreliable) date math or conflict reasoning.
+     * doing its own (unreliable) date math or numeric comparisons.
      */
     private function buildSignals(FacilityRequest $request): string
     {
         $request->loadMissing([
             'requestFacilities.facility',
             'requestFacilities.externalEquipments',
+            'equipment',
         ]);
 
         $lines = [];
 
-        // --- Temporal signals 
+        // --- Temporal verdict (keep this — it's a policy decision, not just math) ---
         $minDaysUntil = null;
 
         foreach ($request->requestFacilities as $rf) {
@@ -112,34 +114,28 @@ PROMPT;
             }
         }
 
-        // --- Conflict signals ---
+        // --- Conflict signals (keep — boolean facts the model shouldn't infer) ---
         $hasApprovedConflict = !empty($request->approved_conflict_rf_ids);
         $hasPendingConflict  = !empty($request->pending_conflict_rf_ids);
 
-        if ($hasApprovedConflict) {
-            $lines[] = '- CONFLICT: There IS a schedule conflict with an already APPROVED booking. This request must be DENIED.';
-        } else {
-            $lines[] = '- CONFLICT: No conflicts with approved bookings.';
-        }
+        $lines[] = $hasApprovedConflict
+            ? '- CONFLICT: There IS a schedule conflict with an already APPROVED booking. This request must be DENIED.'
+            : '- CONFLICT: No conflicts with approved bookings.';
 
-        if ($hasPendingConflict) {
-            $lines[] = '- CONFLICT: There is a schedule conflict with a PENDING booking (not yet approved). This alone does not require denial.';
-        } else {
-            $lines[] = '- CONFLICT: No conflicts with pending bookings.';
-        }
+        $lines[] = $hasPendingConflict
+            ? '- CONFLICT: There is a schedule conflict with a PENDING booking (not yet approved). This alone does not require denial.'
+            : '- CONFLICT: No conflicts with pending bookings.';
 
-        // --- Equipment signals ---
+        // --- External equipment (keep — boolean fact) ---
         $hasExternalEquipment = $request->requestFacilities
             ->flatMap(fn($rf) => $rf->externalEquipments ?? collect())
             ->isNotEmpty();
 
-        if ($hasExternalEquipment) {
-            $lines[] = '- EQUIPMENT: Request includes external (non-owned) equipment. Conditional approval is likely required.';
-        } else {
-            $lines[] = '- EQUIPMENT: No external equipment involved.';
-        }
+        $lines[] = $hasExternalEquipment
+            ? '- EQUIPMENT: Request includes external (non-owned) equipment. Conditional approval is likely required.'
+            : '- EQUIPMENT: No external equipment involved.';
 
-        // --- Pre-approval signal ---
+        // --- Pre-approval (keep — boolean fact) ---
         if (!empty($request->approved_by)) {
             $approvers = implode(', ', $request->approved_by);
             $lines[]   = "- PRE-APPROVAL: This request has been pre-approved by: {$approvers}.";
