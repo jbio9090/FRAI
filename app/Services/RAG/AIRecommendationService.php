@@ -16,15 +16,19 @@ class AIRecommendationService
         try {
             $requestContext = $this->buildRequestContext($request);
             $embedding      = $this->ollama->embed($requestContext);
+            if (empty($embedding)) {
+                return $this->fallback($request);
+            }
 
             $vectorLiteral = '[' . implode(',', $embedding) . ']';
+            $ruleLimit = (int) config('ollama-laravel.recommendation_rule_limit', 3);
 
             $relevantRules = DB::table('rule_embeddings')
                 ->join('rules', 'rules.id', '=', 'rule_embeddings.rule_id')
                 ->where('rules.forPolicy', 0)
                 ->selectRaw('rule_embeddings.content, 1 - (rule_embeddings.embedding <=> ?) AS similarity', [$vectorLiteral])
                 ->orderByRaw('rule_embeddings.embedding <=> ?', [$vectorLiteral])
-                ->limit(5)
+                ->limit(max($ruleLimit, 1))
                 ->get();
 
             if ($relevantRules->isEmpty()) {

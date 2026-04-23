@@ -63,7 +63,6 @@ export default function RequestCard({
 
                 if (!res.ok) {
                     console.error('Recommendation endpoint error:', res.status);
-                    clearInterval(interval);
                     return;
                 }
 
@@ -80,7 +79,6 @@ export default function RequestCard({
                 }
             } catch (e) {
                 console.error('Polling error:', e);
-                clearInterval(interval);
             }
         }, 3000);
 

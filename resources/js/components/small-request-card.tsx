@@ -51,14 +51,16 @@ export default function SmallRequestCard({
                 const res = await fetch(route('request.recommendation', [request.id]), {
                     headers: { 'Accept': 'application/json' },
                 });
-                if (!res.ok) { clearInterval(interval); return; }
+                if (!res.ok) { return; }
                 const data = await res.json();
                 if (data.recommended_action) {
                     setRequest(prev => ({ ...prev, recommended_action: data.recommended_action, recommended_action_reason: data.recommended_action_reason }));
                     setIsLoadingRecommendation(false);
                     clearInterval(interval);
                 }
-            } catch { clearInterval(interval); }
+            } catch (e) {
+                console.error('Recommendation polling error:', e);
+            }
         }, 3000);
         return () => clearInterval(interval);
     }, [request.id, isLoadingRecommendation]);

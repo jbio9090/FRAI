@@ -118,11 +118,11 @@ export default function AvailabilityQuickFlow({
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-4 justify-start animate-in fade-in">
-                <div className="bg-muted h-10 w-10 rounded-lg flex items-center justify-center font-bold text-muted-foreground flex-shrink-0 text-sm">
+            <div className="flex justify-start gap-2 animate-in fade-in sm:gap-3 lg:gap-4">
+                <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center text-xs font-bold flex-shrink-0 sm:h-10 sm:w-10 sm:text-sm">
                     AI
                 </div>
-                <div className="max-w-[70%] px-5 py-3 rounded-lg border bg-muted border-border text-foreground">
+                <div className="max-w-[92%] rounded-lg border border-border bg-muted px-3 py-2.5 text-foreground sm:max-w-[82%] sm:px-4 sm:py-3 lg:max-w-[72%] lg:px-5">
                     <div className="text-xs uppercase font-mono text-muted-foreground mb-2 tracking-wide">
                         assistant
                     </div>
@@ -203,7 +203,7 @@ export default function AvailabilityQuickFlow({
                     )}
 
                     {!isTypingPrompt && (
-                        <div className="mt-3 flex gap-4">
+                        <div className="mt-3 flex flex-wrap gap-3">
                             {(selectedFacility || selectedDate || selectedStartTime) && (
                                 <button
                                     onClick={handleReturn}
