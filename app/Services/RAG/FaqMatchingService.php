@@ -9,6 +9,19 @@ class FaqMatchingService
 {
     public function __construct(protected OllamaService $ollama) {}
 
+    public function retrieveCandidates(?string $question, ?int $topK = null): array
+    {
+        $queryText = trim((string) $question);
+        if ($queryText === '') {
+            return [];
+        }
+
+        $resolvedTopK = $topK ?? (int) config('ollama-laravel.faq_mode_top_k', 5);
+        $resolvedTopK = max(1, min(20, $resolvedTopK));
+
+        return $this->getSemanticCandidates($queryText, $resolvedTopK);
+    }
+
     public function findByQuestion(string $question): ?array
     {
         $normalizedQuestion = trim($question);

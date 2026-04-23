@@ -20,6 +20,7 @@ use App\RequestStatus;
 use App\PriorityLevel;
 use App\Services\ChatbotLogService;
 use App\Services\RAG\FaqMatchingService;
+use App\Jobs\ProcessRequestRecommendation;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -45,6 +46,11 @@ class ChatController extends Controller
         return 'chat_session_' . Auth::id();
     }
 
+    private function faqStateCacheKey(): string
+    {
+        return 'chat_faq_state_' . Auth::id();
+    }
+
     private function saveSession(array $userMessages): void
     {
         Cache::put(
@@ -68,12 +74,33 @@ class ChatController extends Controller
     private function clearSession(): void
     {
         Cache::forget($this->sessionCacheKey());
+        Cache::forget($this->faqStateCacheKey());
     }
 
     public function newSession(): JsonResponse
     {
         $this->clearSession();
         return response()->json(['message' => 'Session cleared.']);
+    }
+
+    private function getFaqState(): array
+    {
+        $state = Cache::get($this->faqStateCacheKey(), []);
+        return is_array($state) ? $state : [];
+    }
+
+    private function saveFaqState(array $state): void
+    {
+        Cache::put(
+            $this->faqStateCacheKey(),
+            $state,
+            now()->addMinutes(self::SESSION_TTL_MINUTES)
+        );
+    }
+
+    private function clearFaqState(): void
+    {
+        Cache::forget($this->faqStateCacheKey());
     }
 
     private function normalizePositiveIntValue(mixed $value): ?int
@@ -1317,49 +1344,399 @@ class ChatController extends Controller
         ];
     }
 
-    private function paraphraseFaqAnswer(string $faqAnswer): array
+    private function getFaqConversationMessages(array $messages, int $limit = 12): array
     {
-        $sourceAnswer = trim($faqAnswer);
-        if ($sourceAnswer === '') {
-            return ['content' => '', 'paraphrased' => false];
+        $conversation = array_values(array_filter($messages, function ($message) {
+            $role = $message['role'] ?? null;
+            if (!in_array($role, ['user', 'assistant'], true)) {
+                return false;
+            }
+
+            return trim((string) ($message['content'] ?? '')) !== '';
+        }));
+
+        return array_slice($conversation, -$limit);
+    }
+
+    private function buildFaqKnowledgeBlock(array $retrievedFaqs): string
+    {
+        if (empty($retrievedFaqs)) {
+            return '(No FAQ snippets retrieved for this turn.)';
         }
 
-        $messages = [
-            [
-                'role' => 'system',
-                'content' => "You are an FAQ paraphrasing assistant.\n"
-                    . "Use only the provided FAQ answer as source-of-truth.\n"
-                    . "Do not add or invent facts, policies, steps, requirements, approvals, IDs, dates, or limits.\n"
-                    . "Do not infer unstated implications.\n"
-                    . "Rewrite in plain language while preserving the original meaning.\n"
-                    . "If the source is short, keep it short and do not expand it with new details.",
-            ],
-            [
-                'role' => 'user',
-                'content' => "Source FAQ answer:\n{$sourceAnswer}\n\nParaphrase this answer in clear plain language.",
-            ],
+        $lines = [];
+        foreach ($retrievedFaqs as $index => $faq) {
+            $ruleId = (int) ($faq['rule_id'] ?? 0);
+            $question = trim((string) ($faq['question'] ?? ''));
+            $answer = trim((string) ($faq['answer'] ?? ''));
+            $similarity = isset($faq['similarity']) ? round((float) $faq['similarity'], 4) : null;
+
+            $lines[] = "FAQ #" . ($index + 1)
+                . " (rule_id={$ruleId}" . ($similarity !== null ? ", similarity={$similarity}" : '') . ")\n"
+                . "Question: {$question}\n"
+                . "Answer: {$answer}";
+        }
+
+        return implode("\n\n", $lines);
+    }
+
+    private function buildFaqRetrievalMeta(array $retrievedFaqs): array
+    {
+        $ruleIds = [];
+        $similarities = [];
+
+        foreach ($retrievedFaqs as $faq) {
+            $ruleId = (int) ($faq['rule_id'] ?? 0);
+            if ($ruleId > 0) {
+                $ruleIds[] = $ruleId;
+            }
+
+            if (isset($faq['similarity'])) {
+                $similarities[] = round((float) $faq['similarity'], 4);
+            }
+        }
+
+        return [
+            'rule_ids' => array_slice($ruleIds, 0, 5),
+            'similarities' => array_slice($similarities, 0, 5),
         ];
+    }
+
+    private function prioritizeFaqCandidates(array $retrievedFaqs, array $primaryMatch): array
+    {
+        $primaryRuleId = (int) ($primaryMatch['rule_id'] ?? 0);
+        if ($primaryRuleId <= 0) {
+            return $retrievedFaqs;
+        }
+
+        $primary = [
+            'rule_id' => $primaryRuleId,
+            'question' => (string) ($primaryMatch['question'] ?? ''),
+            'answer' => (string) ($primaryMatch['answer'] ?? ''),
+            'similarity' => isset($primaryMatch['similarity']) ? (float) $primaryMatch['similarity'] : 1.0,
+        ];
+
+        $rest = array_values(array_filter($retrievedFaqs, fn(array $faq) => (int) ($faq['rule_id'] ?? 0) !== $primaryRuleId));
+        array_unshift($rest, $primary);
+
+        return array_slice($rest, 0, 5);
+    }
+
+    private function generateFaqConversationalAnswer(
+        array $messages,
+        ?string $latestUserMessage,
+        array $retrievedFaqs,
+        ?array $primaryMatch = null
+    ): ?string {
+        if (empty($retrievedFaqs)) {
+            return null;
+        }
+
+        $knowledgeBlock = $this->buildFaqKnowledgeBlock($retrievedFaqs);
+        $primaryHint = '';
+        if ($primaryMatch) {
+            $primaryQuestion = trim((string) ($primaryMatch['question'] ?? ''));
+            if ($primaryQuestion !== '') {
+                $primaryHint = "\nLikely primary FAQ for this turn: {$primaryQuestion}";
+            }
+        }
+
+        $faqConversationMessages = $this->getFaqConversationMessages($messages);
+        $llmMessages = array_merge(
+            [[
+                'role' => 'system',
+                'content' => "You are the assistant in FAQ mode.\n"
+                    . "You must answer conversationally using ONLY the FAQ snippets below as source-of-truth.\n"
+                    . "Do not invent facts, steps, approvals, IDs, or requirements not present in snippets.\n"
+                    . "If user asks outside FAQ knowledge, politely state FAQ mode is limited to FAQ content and suggest exiting FAQ mode for booking/availability help.\n"
+                    . "Do not cite FAQ IDs unless user explicitly asks for source.\n"
+                    . "Keep the answer natural and concise.\n\n"
+                    . "FAQ SNIPPETS:\n{$knowledgeBlock}{$primaryHint}",
+            ]],
+            $faqConversationMessages
+        );
+
+        if (
+            $latestUserMessage
+            && (
+                empty($faqConversationMessages)
+                || (($faqConversationMessages[array_key_last($faqConversationMessages)]['role'] ?? null) !== 'user')
+            )
+        ) {
+            $llmMessages[] = ['role' => 'user', 'content' => $latestUserMessage];
+        }
 
         try {
             $client = new Client(['timeout' => 120]);
             $response = $client->post($this->ollamaUrl . '/api/chat', [
                 'json' => [
                     'model' => $this->model,
-                    'messages' => $messages,
+                    'messages' => $llmMessages,
                     'stream' => false,
                 ],
             ]);
 
             $data = json_decode($response->getBody(), true);
-            $paraphrased = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
-            if ($paraphrased !== '') {
-                return ['content' => $paraphrased, 'paraphrased' => true];
-            }
+            $content = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+            return $content !== '' ? $content : null;
         } catch (\Throwable $exception) {
-            \Log::warning('FAQ paraphrase failed: ' . $exception->getMessage());
+            \Log::warning('FAQ conversational response failed: ' . $exception->getMessage());
+            return null;
+        }
+    }
+
+    private function generateFaqClarifyingResponse(
+        array $messages,
+        ?string $latestUserMessage,
+        array $retrievedFaqs,
+        ?array $nearMatch = null
+    ): string {
+        $nearQuestion = trim((string) ($nearMatch['question'] ?? ''));
+        $faqTitles = array_slice(array_map(
+            fn(array $faq) => trim((string) ($faq['question'] ?? '')),
+            $retrievedFaqs
+        ), 0, 5);
+        $faqTitles = array_values(array_filter($faqTitles, fn(string $title) => $title !== ''));
+
+        $fallback = $nearQuestion !== ''
+            ? 'Are you asking about "' . $nearQuestion . '"?'
+            : 'Could you clarify which FAQ topic you want help with?';
+
+        $conversation = $this->getFaqConversationMessages($messages, 10);
+        $llmMessages = array_merge(
+            [[
+                'role' => 'system',
+                'content' => "You are in FAQ mode. Ask ONE concise clarifying question only.\n"
+                    . "Do not answer yet.\n"
+                    . "Use the candidate FAQ titles to narrow intent.\n"
+                    . "Keep tone natural and helpful.\n"
+                    . "Write as the assistant addressing the user directly.\n"
+                    . "Do NOT write from the user's perspective (avoid lines like 'How can I...').\n"
+                    . "Prefer phrasing like: 'Are you asking ...?'\n"
+                    . "Use at most two short sentences.\n"
+                    . "Output plain text only.",
+            ]],
+            $conversation,
+            [[
+                'role' => 'user',
+                'content' => "User message: " . trim((string) $latestUserMessage) . "\n"
+                    . "Candidate FAQ titles:\n- " . (!empty($faqTitles) ? implode("\n- ", $faqTitles) : '(none)')
+                    . ($nearQuestion !== '' ? "\nClosest title: {$nearQuestion}" : ''),
+            ]]
+        );
+
+        $content = null;
+
+        try {
+            $client = new Client(['timeout' => 60]);
+            $response = $client->post($this->ollamaUrl . '/api/chat', [
+                'json' => [
+                    'model' => $this->model,
+                    'messages' => $llmMessages,
+                    'stream' => false,
+                ],
+            ]);
+
+            $data = json_decode($response->getBody(), true);
+            $content = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+        } catch (\Throwable $exception) {
+            \Log::warning('FAQ clarification response generation failed: ' . $exception->getMessage());
         }
 
-        return ['content' => $sourceAnswer, 'paraphrased' => false];
+        if ($content === null || $content === '') {
+            $content = $fallback;
+        }
+
+        $content = trim((string) preg_replace('/\s+/', ' ', $content));
+
+        // If the model accidentally writes as the user (first-person intent), rewrite to assistant voice.
+        if (preg_match('/^\s*(how|what|can|could|should|do)\s+i\b/i', $content)) {
+            $content = $fallback;
+        }
+
+        if ($nearQuestion !== '') {
+            $hasDidYouMean = preg_match('/did you mean/i', $content) === 1;
+            $mentionsNearQuestion = Str::contains(Str::lower($content), Str::lower($nearQuestion));
+
+            if (!$hasDidYouMean && !$mentionsNearQuestion) {
+                $content = rtrim($content, " \t\n\r\0\x0B.?");
+                $content .= '? Or did you mean: "' . $nearQuestion . '"?';
+            }
+        }
+
+        return $content;
+    }
+
+    private function buildFaqClarifierAnchorKey(?array $nearMatch, array $retrievedFaqs, ?string $latestUserMessage): string
+    {
+        $nearRuleId = (int) (($nearMatch['rule_id'] ?? 0));
+        if ($nearRuleId > 0) {
+            return "rule:{$nearRuleId}";
+        }
+
+        $topRuleId = (int) (($retrievedFaqs[0]['rule_id'] ?? 0));
+        if ($topRuleId > 0) {
+            return "rule:{$topRuleId}";
+        }
+
+        $normalizedMessage = Str::lower(trim((string) $latestUserMessage));
+        return 'msg:' . substr(md5($normalizedMessage), 0, 12);
+    }
+
+    private function handleFaqModeConversation(array $messages, ?string $latestUserMessage): array
+    {
+        $topK = max(1, min(20, (int) config('ollama-laravel.faq_mode_top_k', 5)));
+        $retrievedFaqs = $this->faqMatchingService->retrieveCandidates($latestUserMessage, $topK);
+        $retrievalMeta = $this->buildFaqRetrievalMeta($retrievedFaqs);
+
+        $suggestionConfirmation = $this->resolveFaqFromSuggestionConfirmation($messages, $latestUserMessage, true);
+        if ($suggestionConfirmation) {
+            $primaryMatch = [
+                'rule_id' => (int) ($suggestionConfirmation['deterministic']['rule_id'] ?? 0),
+                'question' => (string) ($suggestionConfirmation['deterministic']['question'] ?? ''),
+                'answer' => (string) ($suggestionConfirmation['content'] ?? ''),
+                'similarity' => (float) ($suggestionConfirmation['deterministic']['similarity'] ?? 1.0),
+            ];
+            $retrievedWithPrimary = $this->prioritizeFaqCandidates($retrievedFaqs, $primaryMatch);
+            $content = $this->generateFaqConversationalAnswer(
+                $messages,
+                $latestUserMessage,
+                $retrievedWithPrimary,
+                $primaryMatch
+            ) ?? (string) ($suggestionConfirmation['content'] ?? '');
+
+            $this->clearFaqState();
+
+            return [
+                'content' => $content,
+                'deterministic' => [
+                    'source' => 'faq_conversational_rag',
+                    'check' => 'faq',
+                    'status' => 'grounded_answer',
+                    'reason' => 'suggestion_confirmation',
+                    'faq_mode' => true,
+                    'rule_id' => $primaryMatch['rule_id'],
+                    'question' => $primaryMatch['question'],
+                    'similarity' => $primaryMatch['similarity'],
+                    'match_type' => 'suggestion_confirmation',
+                    'retrieved_rule_ids' => $retrievalMeta['rule_ids'],
+                    'retrieved_similarities' => $retrievalMeta['similarities'],
+                ],
+                'context' => array_merge(
+                    ['faq_mode' => true],
+                    $suggestionConfirmation['context'] ?? [],
+                    [
+                        'faq_paraphrased' => false,
+                        'faq_no_match' => false,
+                        'faq_clarifier_asked' => false,
+                        'faq_retrieval_rule_ids' => $retrievalMeta['rule_ids'],
+                        'faq_retrieval_similarities' => $retrievalMeta['similarities'],
+                        'response_source' => 'faq_conversational_rag',
+                    ]
+                ),
+            ];
+        }
+
+        $matchedFaq = $this->faqMatchingService->match($latestUserMessage);
+        if ($matchedFaq) {
+            $retrievedWithPrimary = $this->prioritizeFaqCandidates($retrievedFaqs, $matchedFaq);
+            $content = $this->generateFaqConversationalAnswer(
+                $messages,
+                $latestUserMessage,
+                $retrievedWithPrimary,
+                $matchedFaq
+            ) ?? (string) ($matchedFaq['answer'] ?? '');
+
+            $this->clearFaqState();
+
+            return [
+                'content' => $content,
+                'deterministic' => [
+                    'source' => 'faq_conversational_rag',
+                    'check' => 'faq',
+                    'status' => 'grounded_answer',
+                    'reason' => 'grounded_match',
+                    'faq_mode' => true,
+                    'rule_id' => (int) $matchedFaq['rule_id'],
+                    'question' => (string) $matchedFaq['question'],
+                    'similarity' => (float) $matchedFaq['similarity'],
+                    'match_type' => (string) ($matchedFaq['match_type'] ?? 'semantic'),
+                    'retrieved_rule_ids' => $retrievalMeta['rule_ids'],
+                    'retrieved_similarities' => $retrievalMeta['similarities'],
+                ],
+                'context' => [
+                    'faq_mode' => true,
+                    'faq_match_rule_id' => (int) $matchedFaq['rule_id'],
+                    'faq_match_question' => Str::limit((string) $matchedFaq['question'], 250),
+                    'faq_match_similarity' => round((float) $matchedFaq['similarity'], 4),
+                    'faq_match_type' => (string) ($matchedFaq['match_type'] ?? 'semantic'),
+                    'faq_paraphrased' => false,
+                    'faq_no_match' => false,
+                    'faq_clarifier_asked' => false,
+                    'faq_retrieval_rule_ids' => $retrievalMeta['rule_ids'],
+                    'faq_retrieval_similarities' => $retrievalMeta['similarities'],
+                    'response_source' => 'faq_conversational_rag',
+                ],
+            ];
+        }
+
+        $nearMatch = $this->faqMatchingService->suggestNearMatch($latestUserMessage);
+        $anchorKey = $this->buildFaqClarifierAnchorKey($nearMatch, $retrievedFaqs, $latestUserMessage);
+        $faqState = $this->getFaqState();
+        $clarifierAlreadyAsked = (bool) ($faqState['clarifier_asked'] ?? false)
+            && ((string) ($faqState['anchor_key'] ?? '') === $anchorKey);
+
+        if (!$clarifierAlreadyAsked) {
+            $content = $this->generateFaqClarifyingResponse($messages, $latestUserMessage, $retrievedFaqs, $nearMatch);
+            $this->saveFaqState([
+                'clarifier_asked' => true,
+                'anchor_key' => $anchorKey,
+                'updated_at' => now()->toIso8601String(),
+            ]);
+
+            return [
+                'content' => $content,
+                'deterministic' => [
+                    'source' => 'faq_conversational_rag',
+                    'check' => 'faq',
+                    'status' => 'needs_clarification',
+                    'reason' => 'low_confidence',
+                    'faq_mode' => true,
+                    'near_match_question' => trim((string) ($nearMatch['question'] ?? '')) ?: null,
+                    'near_match_similarity' => isset($nearMatch['similarity']) ? (float) $nearMatch['similarity'] : null,
+                    'near_match_type' => trim((string) ($nearMatch['match_type'] ?? '')) ?: null,
+                    'retrieved_rule_ids' => $retrievalMeta['rule_ids'],
+                    'retrieved_similarities' => $retrievalMeta['similarities'],
+                ],
+                'context' => [
+                    'faq_mode' => true,
+                    'faq_paraphrased' => false,
+                    'faq_no_match' => false,
+                    'faq_clarifier_asked' => true,
+                    'faq_near_match_question' => !empty($nearMatch['question']) ? Str::limit((string) $nearMatch['question'], 250) : null,
+                    'faq_near_match_similarity' => isset($nearMatch['similarity']) ? round((float) $nearMatch['similarity'], 4) : null,
+                    'faq_near_match_type' => !empty($nearMatch['match_type']) ? (string) $nearMatch['match_type'] : null,
+                    'faq_retrieval_rule_ids' => $retrievalMeta['rule_ids'],
+                    'faq_retrieval_similarities' => $retrievalMeta['similarities'],
+                    'response_source' => 'faq_conversational_rag',
+                ],
+            ];
+        }
+
+        $faqNoMatch = $this->buildFaqNoMatchResponse(true, $nearMatch);
+        $this->clearFaqState();
+        $faqNoMatch['deterministic']['source'] = 'faq_conversational_rag';
+        $faqNoMatch['deterministic']['reason'] = 'low_confidence_after_clarification';
+        $faqNoMatch['deterministic']['retrieved_rule_ids'] = $retrievalMeta['rule_ids'];
+        $faqNoMatch['deterministic']['retrieved_similarities'] = $retrievalMeta['similarities'];
+        $faqNoMatch['context'] = array_merge($faqNoMatch['context'] ?? [], [
+            'faq_clarifier_asked' => true,
+            'faq_retrieval_rule_ids' => $retrievalMeta['rule_ids'],
+            'faq_retrieval_similarities' => $retrievalMeta['similarities'],
+            'response_source' => 'faq_conversational_rag',
+        ]);
+
+        return $faqNoMatch;
     }
 
     private function buildFaqNoMatchResponse(bool $faqMode, ?array $nearMatch = null): array
@@ -1573,6 +1950,9 @@ class ChatController extends Controller
             $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
             $sessionId = $request->session()->getId();
             $faqMode = $request->boolean('faq_mode');
+            if (!$faqMode) {
+                $this->clearFaqState();
+            }
 
             $sessionMessages = array_filter($sessionMessages, function($msg) {
                 $content = $msg['content'] ?? '';
@@ -1640,54 +2020,8 @@ class ChatController extends Controller
                 }
                 if ($latestUserMessage) {
                     if ($faqMode) {
-                        $faqResult = $this->resolveFaqFromSuggestionConfirmation($messages, $latestUserMessage, true)
-                            ?? $this->tryFaqSemanticMatch($latestUserMessage, true);
-                        if ($faqResult) {
-                            $paraphraseResult = $this->paraphraseFaqAnswer((string) $faqResult['content']);
-                            $content = (string) $paraphraseResult['content'];
-                            $deterministic = array_merge($faqResult['deterministic'], [
-                                'source' => 'faq_semantic_match_paraphrased',
-                                'status' => 'matched_paraphrased',
-                            ]);
-                            $this->storeAssistantReply($incomingMessages, $content);
-                            $this->chatbotLogService->logAssistantReply(
-                                $latestUserMessage,
-                                $content,
-                                $this->buildLogContext(
-                                    $latestUserMessage,
-                                    $participantCount,
-                                    $bookingContext,
-                                    $allRequests,
-                                    $allFacilities,
-                                    $equipmentCount,
-                                    count($rules),
-                                    $rulesInjected,
-                                    $approvedBookingContextInjected,
-                                    $deterministicAvailabilityInjected,
-                                    $facilityFilterApplied,
-                                    array_merge(['faq_mode' => true], $faqResult['context'], [
-                                        'faq_paraphrased' => (bool) $paraphraseResult['paraphrased'],
-                                        'faq_no_match' => false,
-                                        'response_source' => 'faq_semantic_match_paraphrased',
-                                    ])
-                                ),
-                                $sessionId,
-                                'faq_answer',
-                                'faq',
-                            );
-
-                            return response()->json([
-                                'message' => [
-                                    'role' => 'assistant',
-                                    'content' => $content,
-                                ],
-                                'deterministic' => $deterministic,
-                            ]);
-                        }
-
-                        $nearMatch = $this->faqMatchingService->suggestNearMatch($latestUserMessage);
-                        $faqNoMatch = $this->buildFaqNoMatchResponse(true, $nearMatch);
-                        $content = (string) $faqNoMatch['content'];
+                        $faqModeResult = $this->handleFaqModeConversation($messages, $latestUserMessage);
+                        $content = (string) ($faqModeResult['content'] ?? '');
                         $this->storeAssistantReply($incomingMessages, $content);
                         $this->chatbotLogService->logAssistantReply(
                             $latestUserMessage,
@@ -1704,7 +2038,7 @@ class ChatController extends Controller
                                 $approvedBookingContextInjected,
                                 $deterministicAvailabilityInjected,
                                 $facilityFilterApplied,
-                                $faqNoMatch['context']
+                                array_merge(['faq_mode' => true], $faqModeResult['context'] ?? [])
                             ),
                             $sessionId,
                             'faq_answer',
@@ -1716,7 +2050,12 @@ class ChatController extends Controller
                                 'role' => 'assistant',
                                 'content' => $content,
                             ],
-                            'deterministic' => $faqNoMatch['deterministic'],
+                            'deterministic' => $faqModeResult['deterministic'] ?? [
+                                'source' => 'faq_conversational_rag',
+                                'check' => 'faq',
+                                'status' => 'info',
+                                'faq_mode' => true,
+                            ],
                         ]);
                     }
 
@@ -2001,6 +2340,9 @@ class ChatController extends Controller
             $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
             $sessionId = $request->session()->getId();
             $faqMode = $request->boolean('faq_mode');
+            if (!$faqMode) {
+                $this->clearFaqState();
+            }
             $rulesInjected = false;
             $approvedBookingContextInjected = false;
             $deterministicAvailabilityInjected = false;
@@ -2055,62 +2397,8 @@ class ChatController extends Controller
             }
             if ($latestUserMessage) {
                 if ($faqMode) {
-                    $faqResult = $this->resolveFaqFromSuggestionConfirmation($messages, $latestUserMessage, true)
-                        ?? $this->tryFaqSemanticMatch($latestUserMessage, true);
-                    if ($faqResult) {
-                        $paraphraseResult = $this->paraphraseFaqAnswer((string) $faqResult['content']);
-                        $content = (string) $paraphraseResult['content'];
-                        $deterministic = array_merge($faqResult['deterministic'], [
-                            'source' => 'faq_semantic_match_paraphrased',
-                            'status' => 'matched_paraphrased',
-                        ]);
-                        $incomingMessages = $request->input('messages', []);
-                        $this->storeAssistantReply($incomingMessages, $content);
-                        $this->chatbotLogService->logAssistantReply(
-                            $latestUserMessage,
-                            $content,
-                            $this->buildLogContext(
-                                $latestUserMessage,
-                                $participantCount,
-                                $bookingContext,
-                                $allRequests,
-                                $allFacilities,
-                                $equipmentCount,
-                                0,
-                                $rulesInjected,
-                                $approvedBookingContextInjected,
-                                $deterministicAvailabilityInjected,
-                                $facilityFilterApplied,
-                                array_merge(['faq_mode' => true], $faqResult['context'], [
-                                    'faq_paraphrased' => (bool) $paraphraseResult['paraphrased'],
-                                    'faq_no_match' => false,
-                                    'response_source' => 'faq_semantic_match_paraphrased',
-                                ])
-                            ),
-                            $sessionId,
-                            'faq_answer',
-                            'faq',
-                        );
-
-                        return response()->stream(function () use ($content, $deterministic) {
-                            $this->streamTextTokens($content);
-                            echo "data: " . json_encode(['deterministic' => $deterministic]) . "\n\n";
-                            ob_flush();
-                            flush();
-                            echo "data: " . json_encode(['done' => true]) . "\n\n";
-                            ob_flush();
-                            flush();
-                        }, 200, [
-                            'Content-Type'      => 'text/event-stream',
-                            'Cache-Control'     => 'no-cache',
-                            'X-Accel-Buffering' => 'no',
-                            'Connection'        => 'keep-alive',
-                        ]);
-                    }
-
-                    $nearMatch = $this->faqMatchingService->suggestNearMatch($latestUserMessage);
-                    $faqNoMatch = $this->buildFaqNoMatchResponse(true, $nearMatch);
-                    $content = (string) $faqNoMatch['content'];
+                    $faqModeResult = $this->handleFaqModeConversation($messages, $latestUserMessage);
+                    $content = (string) ($faqModeResult['content'] ?? '');
                     $incomingMessages = $request->input('messages', []);
                     $this->storeAssistantReply($incomingMessages, $content);
                     $this->chatbotLogService->logAssistantReply(
@@ -2128,16 +2416,23 @@ class ChatController extends Controller
                             $approvedBookingContextInjected,
                             $deterministicAvailabilityInjected,
                             $facilityFilterApplied,
-                            $faqNoMatch['context']
+                            array_merge(['faq_mode' => true], $faqModeResult['context'] ?? [])
                         ),
                         $sessionId,
                         'faq_answer',
                         'faq',
                     );
 
-                    return response()->stream(function () use ($content, $faqNoMatch) {
+                    $deterministic = $faqModeResult['deterministic'] ?? [
+                        'source' => 'faq_conversational_rag',
+                        'check' => 'faq',
+                        'status' => 'info',
+                        'faq_mode' => true,
+                    ];
+
+                    return response()->stream(function () use ($content, $deterministic) {
                         $this->streamTextTokens($content);
-                        echo "data: " . json_encode(['deterministic' => $faqNoMatch['deterministic']]) . "\n\n";
+                        echo "data: " . json_encode(['deterministic' => $deterministic]) . "\n\n";
                         ob_flush();
                         flush();
                         echo "data: " . json_encode(['done' => true]) . "\n\n";
@@ -3043,6 +3338,8 @@ class ChatController extends Controller
 
                 return $facilityRequest;
             });
+
+            ProcessRequestRecommendation::dispatch($facilityRequest, $validated['facility_bookings']);
 
             $this->clearSession();
 

@@ -9,6 +9,7 @@ return [
     "embed_model" => env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
     'faq_similarity_threshold' => (float) env('OLLAMA_FAQ_SIMILARITY_THRESHOLD', 0.65),
     'faq_top_k' => (int) env('OLLAMA_FAQ_TOP_K', 3),
+    'faq_mode_top_k' => (int) env('OLLAMA_FAQ_MODE_TOP_K', 5),
     'faq_lexical_threshold' => (float) env('OLLAMA_FAQ_LEXICAL_THRESHOLD', 0.5),
     'faq_near_match_ratio_min' => (float) env('OLLAMA_FAQ_NEAR_MATCH_RATIO_MIN', 0.8),
     'recommendation_rule_limit' => (int) env('OLLAMA_RECOMMENDATION_RULE_LIMIT', 3),
