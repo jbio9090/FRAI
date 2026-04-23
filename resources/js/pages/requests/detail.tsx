@@ -28,6 +28,7 @@ import { BookingCard } from '@/components/booking-card';
 import { cn } from '@/lib/utils';
 import AnimatedText from '@/components/animated-text';
 import { AttachedFileList } from '@/components/attached-file-list';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -250,37 +251,39 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                 </div>
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
-                    <TabsList variant={"line"}>
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <div className="w-full overflow-x-auto scrollbar-none">
+                        <TabsList variant={"line"} className='border-b w-max min-w-full'>
+                            <TabsTrigger value="overview">Overview</TabsTrigger>
 
-                        <TabsTrigger value="facilities" className="flex items-center gap-2">
-                            <span>Facilities</span>
-                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
-                                {request.facilities.length}
-                            </span>
-                        </TabsTrigger>
+                            <TabsTrigger value="facilities" className="flex items-center gap-2">
+                                <span>Facilities</span>
+                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                    {request.facilities.length}
+                                </span>
+                            </TabsTrigger>
 
-                        <TabsTrigger value="comments" className="flex items-center gap-2">
-                            <span>Comments</span>
-                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
-                                {request.comments.length}
-                            </span>
-                        </TabsTrigger>
+                            <TabsTrigger value="comments" className="flex items-center gap-2">
+                                <span>Comments</span>
+                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                    {request.comments.length}
+                                </span>
+                            </TabsTrigger>
 
-                        <TabsTrigger value="activity" className="flex items-center gap-2">
-                            <span>Activity</span>
-                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
-                                {auditLogs.length}
-                            </span>
-                        </TabsTrigger>
+                            <TabsTrigger value="activity" className="flex items-center gap-2">
+                                <span>Activity</span>
+                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                    {auditLogs.length}
+                                </span>
+                            </TabsTrigger>
 
-                        <TabsTrigger value="files" className="flex items-center gap-2">
-                            <span>Files</span>
-                            <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
-                                {request.files?.length ?? 0}
-                            </span>
-                        </TabsTrigger>
-                    </TabsList>
+                            <TabsTrigger value="files" className="flex items-center gap-2">
+                                <span>Files</span>
+                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                    {request.files?.length ?? 0}
+                                </span>
+                            </TabsTrigger>
+                        </TabsList>
+                    </div>
 
                     {/* Overview Tab */}
                     <TabsContent value="overview" className="flex flex-col gap-6 mt-6">

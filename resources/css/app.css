@@ -310,7 +310,7 @@
     --spacing: 0.25rem;
     --shadow-2xs: 0px 10px 24px 0px hsl(0, 0, 0 / 0.20);
     --shadow-xs: 0px 10px 24px 0px hsl(0, 0, 0 / 0.20);
-    --shadow-sm: 0px 10px 24px 0px hsl(0, 0, 0 / 0.40), 0px 1px 2px -1px hsl(0, 0, 0 / 0.40);
+    --shadow-sm: rgba(0, 0, 0, 0.16) 0px 1px 4px;
     --shadow: 0px 10px 24px 0px hsl(0, 0, 0 / 0.40), 0px 1px 2px -1px hsl(0, 0, 0 / 0.40);
     --shadow-md: 0px 10px 24px 0px hsl(0, 0, 0 / 0.40), 0px 2px 4px -1px hsl(0, 0, 0 / 0.40);
     --shadow-lg: 0px 10px 24px 0px hsl(0, 0, 0 / 0.40), 0px 4px 6px -1px hsl(0, 0, 0 / 0.40);

@@ -1,5 +1,6 @@
 import * as React from "react"
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
+
 import { cn } from "@/lib/utils"
 
 function ScrollArea({
@@ -7,60 +8,67 @@ function ScrollArea({
   children,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
-  const viewportRef = React.useRef<HTMLDivElement>(null);
-  const [showTop, setShowTop] = React.useState(false);
-  const [showBottom, setShowBottom] = React.useState(false);
+  const viewportRef = React.useRef<HTMLDivElement>(null)
+  const [showTopFade, setShowTopFade] = React.useState(false)
+  const [showBottomFade, setShowBottomFade] = React.useState(false)
 
-  const checkScroll = React.useCallback(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-    setShowTop(el.scrollTop > 8);
-    setShowBottom(el.scrollTop + el.clientHeight < el.scrollHeight - 8);
-  }, []);
+  const updateFades = React.useCallback(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const { scrollTop, scrollHeight, clientHeight } = el
+    setShowTopFade(scrollTop > 8)
+    setShowBottomFade(scrollTop + clientHeight < scrollHeight - 8)
+  }, [])
 
   React.useEffect(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-    checkScroll();
-    el.addEventListener("scroll", checkScroll);
-    const ro = new ResizeObserver(checkScroll);
-    ro.observe(el);
+    const el = viewportRef.current
+    if (!el) return
+    updateFades()
+    el.addEventListener("scroll", updateFades, { passive: true })
+    const ro = new ResizeObserver(updateFades)
+    ro.observe(el)
     return () => {
-      el.removeEventListener("scroll", checkScroll);
-      ro.disconnect();
-    };
-  }, [checkScroll]);
+      el.removeEventListener("scroll", updateFades)
+      ro.disconnect()
+    }
+  }, [updateFades])
 
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative overflow-hidden", className)}
+      className={cn("relative", className)}
       {...props}
     >
       {/* Top fade */}
-      <div className={cn(
-        "absolute top-0 inset-x-0 h-8 bg-gradient-to-b from-background to-transparent z-10 pointer-events-none rounded-t-[inherit] transition-opacity duration-200",
-        showTop ? "opacity-100" : "opacity-0"
-      )} />
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-background to-transparent transition-opacity duration-200",
+          showTopFade ? "opacity-100" : "opacity-0"
+        )}
+      />
 
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
         data-slot="scroll-area-viewport"
-        className="h-full w-full rounded-[inherit] overflow-y-auto transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
 
       {/* Bottom fade */}
-      <div className={cn(
-        "absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-background to-transparent z-10 pointer-events-none rounded-b-[inherit] transition-opacity duration-200",
-        showBottom ? "opacity-100" : "opacity-0"
-      )} />
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-background to-transparent transition-opacity duration-200",
+          showBottomFade ? "opacity-100" : "opacity-0"
+        )}
+      />
 
       <ScrollBar />
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
-  );
+  )
 }
 
 function ScrollBar({

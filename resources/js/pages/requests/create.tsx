@@ -891,12 +891,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                             <DialogTitle>Facility Info</DialogTitle>
                                                         </DialogHeader>
                                                         <FacilityInfo
-                                                            selectedFacility={selectedFacility}
                                                             facilities={facilities}
-                                                            currentDate={currentDate}
-                                                            loadingSchedule={loadingSchedule}
-                                                            facilitySchedule={facilitySchedule}
-                                                            formatTime={formatTime}
                                                             isForSidebar={false}
                                                         />
                                                     </DialogContent>
@@ -1263,13 +1258,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 {/* ── Right: sticky sidebar (desktop only) ── */}
                                 <Card className="hidden lg:block bg-background shadow-sm border">
                                     <CardContent className="sticky top-6">
+                                        {/* ── Desktop: FacilityInfo manages its own facility + date ── */}
                                         <FacilityInfo
-                                            selectedFacility={selectedFacility}
                                             facilities={facilities}
-                                            currentDate={currentDate}
-                                            loadingSchedule={loadingSchedule}
-                                            facilitySchedule={facilitySchedule}
-                                            formatTime={formatTime}
                                             isForSidebar={true}
                                         />
                                     </CardContent>
