@@ -10,12 +10,20 @@ class OllamaService
     private string $baseUrl;
     private string $model;
     private string $embedModel;
+    private ?string $keepAlive;
+    private int $generateTimeout;
+    private float $generateTemperature;
+    private int $generateNumPredict;
 
     public function __construct()
     {
         $this->baseUrl    = config('ollama-laravel.url', 'http://localhost:11434');
         $this->model      = config('ollama-laravel.model', 'FRAI');
         $this->embedModel = config('ollama-laravel.embed_model', 'nomic-embed-text');
+        $this->keepAlive = config('ollama-laravel.keep_alive');
+        $this->generateTimeout = (int) config('ollama-laravel.generate.timeout', 60);
+        $this->generateTemperature = (float) config('ollama-laravel.generate.temperature', 0.1);
+        $this->generateNumPredict = (int) config('ollama-laravel.generate.num_predict', 256);
     }
 
     public function embed(string $text): array
@@ -32,13 +40,13 @@ class OllamaService
 
     public function generate(string $prompt): string
     {
-        $response = Http::timeout(300)->post("{$this->baseUrl}/api/chat", [
+        $payload = [
             'model'  => $this->model,
             'stream' => false,
             'think'  => false,
             'options' => [
-                'temperature' => 0.1,
-                'num_predict' => 1024,
+                'temperature' => $this->generateTemperature,
+                'num_predict' => $this->generateNumPredict,
             ],
             'messages' => [
                 [
@@ -50,7 +58,13 @@ class OllamaService
                     'content' => $prompt,
                 ],
             ],
-        ]);
+        ];
+
+        if (!empty($this->keepAlive)) {
+            $payload['keep_alive'] = $this->keepAlive;
+        }
+
+        $response = Http::timeout($this->generateTimeout)->post("{$this->baseUrl}/api/chat", $payload);
 
         \Log::debug('Ollama generate response', [
             'status' => $response->status(),

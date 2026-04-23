@@ -8,6 +8,7 @@ return [
     'default_prompt' => env('OLLAMA_DEFAULT_PROMPT', 'Hello, how can I assist you today?'),
     "embed_model" => env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
     'faq_similarity_threshold' => (float) env('OLLAMA_FAQ_SIMILARITY_THRESHOLD', 0.72),
+    'recommendation_rule_limit' => (int) env('OLLAMA_RECOMMENDATION_RULE_LIMIT', 3),
 
     /*
     |--------------------------------------------------------------------------
@@ -23,6 +24,11 @@ return [
 
     'connection' => [
         'timeout' => env('OLLAMA_CONNECTION_TIMEOUT', 1200),
+    ],
+    'generate' => [
+        'timeout' => (int) env('OLLAMA_GENERATE_TIMEOUT', 60),
+        'temperature' => (float) env('OLLAMA_GENERATE_TEMPERATURE', 0.1),
+        'num_predict' => (int) env('OLLAMA_GENERATE_NUM_PREDICT', 256),
     ],
     'headers' => [
         'Authorization' => 'Bearer ' . env('OLLAMA_API_KEY'),
