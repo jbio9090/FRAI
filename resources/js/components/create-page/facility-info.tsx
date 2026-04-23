@@ -1,17 +1,17 @@
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { Facility } from "@/types/request";
 import { CalendarIcon, Building, User } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { BookingCard } from "@/components/booking-card";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface FacilityInfoProps {
-    selectedFacility: number | null;
     facilities: Facility[];
-    currentDate: Date | undefined;
-    loadingSchedule: boolean;
-    facilitySchedule: FacilityScheduleData | null;
-    formatTime(time: string): string;
     isForSidebar: boolean;
 }
 
@@ -27,47 +27,125 @@ interface FacilityScheduleData {
     date: string;
 }
 
-export function FacilityInfo({
-    selectedFacility,
-    facilities,
-    currentDate,
-    loadingSchedule,
-    facilitySchedule,
-    formatTime,
-    isForSidebar,
-}: FacilityInfoProps) {
-    const facility = selectedFacility
-        ? facilities.find(f => f.id === selectedFacility)
+export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
+    const [internalFacilityId, setInternalFacilityId] = useState<number | null>(null);
+    const [internalDate, setInternalDate] = useState<Date | undefined>(undefined);
+    const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
+    const [loadingSchedule, setLoadingSchedule] = useState(false);
+
+    const facility = internalFacilityId
+        ? facilities.find((f) => f.id === internalFacilityId)
         : null;
 
+    // Reset date + schedule when facility changes
+    useEffect(() => {
+        setFacilitySchedule(null);
+        setInternalDate(undefined);
+    }, [internalFacilityId]);
+
+    // Fetch schedule whenever facility + date are both set
+    useEffect(() => {
+        if (!internalFacilityId || !internalDate) return;
+
+        let cancelled = false;
+        setLoadingSchedule(true);
+
+        fetch(route("facility.schedule", { facility: internalFacilityId, date: format(internalDate, "yyyy-MM-dd") }))
+            .then((res) => res.json())
+            .then((data) => { if (!cancelled) setFacilitySchedule(data); })
+            .catch((err) => {
+                console.error("Failed to load schedule:", err);
+                if (!cancelled) setFacilitySchedule(null);
+            })
+            .finally(() => { if (!cancelled) setLoadingSchedule(false); });
+
+        return () => { cancelled = true; };
+    }, [internalFacilityId, internalDate]);
+
     return (
-        <div className={'space-y-4 ' + (isForSidebar ? 'hidden lg:block' : 'block lg:hidden')}>
+        <div className={"space-y-4 " + (isForSidebar ? "hidden lg:block" : "block lg:hidden")}>
             {isForSidebar && (
                 <h2 className="font-semibold text-sm text-foreground">Facility Info</h2>
             )}
 
+            {/* Facility picker — owned by this component */}
+            <Select
+                value={internalFacilityId?.toString() ?? ""}
+                onValueChange={(v) => setInternalFacilityId(Number(v))}
+            >
+                <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Choose a facility…" />
+                </SelectTrigger>
+                <SelectContent>
+                    {facilities.map((f) => (
+                        <SelectItem key={f.id} value={f.id.toString()}>
+                            <span className="font-medium">{f.name}</span>
+                            {f.capacity && (
+                                <span className="ml-1.5 text-xs text-muted-foreground flex items-center gap-1">
+                                    <User className="h-3 w-3" />
+                                    {f.capacity}
+                                </span>
+                            )}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+
             {facility ? (
-                <motion.div className="space-y-4">
+                <motion.div
+                    key={facility.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-4"
+                >
                     {/* Facility meta */}
                     <div>
-                        <h3 className="font-bold text-xl mt-2">{facility.name}</h3>
-                        <div className="flex gap-1 mt-2">
-                            <Building size={16} />
+                        <h3 className="font-bold text-xl">{facility.name}</h3>
+                        <div className="flex items-center gap-1 mt-1.5 text-muted-foreground">
+                            <Building size={14} />
                             <span className="text-sm">{facility.building}</span>
                         </div>
-                        <div className="flex items-center gap-1 mt-2">
-                            <User size={16} />
-                            <span className="text-sm">{facility.capacity ? facility.capacity + " Capacity":'N/A'}</span>
+                        <div className="flex items-center gap-1 mt-1 text-muted-foreground">
+                            <User size={14} />
+                            <span className="text-sm">
+                                {facility.capacity ? `${facility.capacity} capacity` : "N/A"}
+                            </span>
                         </div>
                     </div>
 
-                    {/* Schedule for selected date */}
-                    {currentDate ? (
-                        <div className="mt-2 space-y-3">
+                    {/* Date picker */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                    "w-full justify-start text-left font-normal",
+                                    !internalDate && "text-muted-foreground"
+                                )}
+                            >
+                                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                                {internalDate ? format(internalDate, "PPP") : "View schedule for a date…"}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="single"
+                                selected={internalDate}
+                                onSelect={setInternalDate}
+                                initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
+
+                    {/* Schedule */}
+                    {internalDate && (
+                        <div className="space-y-3">
                             <h4 className="text-sm font-semibold flex flex-wrap items-center gap-1">
                                 <CalendarIcon size={14} />
                                 <span className="text-muted-foreground">Schedule for</span>
-                                <span>{format(currentDate, 'PPP')}</span>
+                                <span>{format(internalDate, "PPP")}</span>
                             </h4>
 
                             {loadingSchedule ? (
@@ -82,16 +160,11 @@ export function FacilityInfo({
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                         >
-                                            {/*
-                                              Build a minimal FacilityBooking shape so BookingCard
-                                              can render the schedule entry read-only.
-                                              No onEdit / onRemove → action buttons won't appear.
-                                            */}
                                             <BookingCard
                                                 booking={{
-                                                    facility_id: selectedFacility!,
+                                                    facility_id: internalFacilityId!,
                                                     facility_name: booking.request_title,
-                                                    date: format(currentDate, 'yyyy-MM-dd'),
+                                                    date: format(internalDate, "yyyy-MM-dd"),
                                                     time_start: booking.time_start,
                                                     time_end: booking.time_end,
                                                     equipment: [],
@@ -117,16 +190,12 @@ export function FacilityInfo({
                                 </motion.div>
                             )}
                         </div>
-                    ) : (
-                        <div className="text-sm text-muted-foreground py-4 text-center">
-                            Select a date to view schedule
-                        </div>
                     )}
                 </motion.div>
             ) : (
-                <div className="px-6 pb-6 text-sm text-muted-foreground text-center py-8">
-                    Select a facility to view details
-                </div>
+                <p className="text-sm text-muted-foreground text-center py-6">
+                    Pick a facility above to view its details and schedule.
+                </p>
             )}
         </div>
     );

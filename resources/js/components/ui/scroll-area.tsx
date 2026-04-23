@@ -8,18 +8,63 @@ function ScrollArea({
   children,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+  const viewportRef = React.useRef<HTMLDivElement>(null)
+  const [showTopFade, setShowTopFade] = React.useState(false)
+  const [showBottomFade, setShowBottomFade] = React.useState(false)
+
+  const updateFades = React.useCallback(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const { scrollTop, scrollHeight, clientHeight } = el
+    setShowTopFade(scrollTop > 8)
+    setShowBottomFade(scrollTop + clientHeight < scrollHeight - 8)
+  }, [])
+
+  React.useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    updateFades()
+    el.addEventListener("scroll", updateFades, { passive: true })
+    const ro = new ResizeObserver(updateFades)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener("scroll", updateFades)
+      ro.disconnect()
+    }
+  }, [updateFades])
+
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
       className={cn("relative", className)}
       {...props}
     >
+      {/* Top fade */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-background to-transparent transition-opacity duration-200",
+          showTopFade ? "opacity-100" : "opacity-0"
+        )}
+      />
+
       <ScrollAreaPrimitive.Viewport
+        ref={viewportRef}
         data-slot="scroll-area-viewport"
         className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
+
+      {/* Bottom fade */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-background to-transparent transition-opacity duration-200",
+          showBottomFade ? "opacity-100" : "opacity-0"
+        )}
+      />
+
       <ScrollBar />
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
@@ -38,9 +83,9 @@ function ScrollBar({
       className={cn(
         "flex touch-none p-px transition-colors select-none",
         orientation === "vertical" &&
-          "h-full w-2.5 border-l border-l-transparent",
+        "h-full w-2.5 border-l border-l-transparent",
         orientation === "horizontal" &&
-          "h-2.5 flex-col border-t border-t-transparent",
+        "h-2.5 flex-col border-t border-t-transparent",
         className
       )}
       {...props}
