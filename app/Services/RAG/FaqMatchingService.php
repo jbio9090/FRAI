@@ -9,6 +9,34 @@ class FaqMatchingService
 {
     public function __construct(protected OllamaService $ollama) {}
 
+    public function findByQuestion(string $question): ?array
+    {
+        $normalizedQuestion = trim($question);
+        if ($normalizedQuestion === '') {
+            return null;
+        }
+
+        $row = DB::table('rules')
+            ->where('forPolicy', 1)
+            ->whereNotNull('faq_answer')
+            ->whereRaw("TRIM(faq_answer) <> ''")
+            ->whereRaw('LOWER(TRIM(rule)) = LOWER(TRIM(?))', [$normalizedQuestion])
+            ->select('id as rule_id', 'rule as faq_question', 'faq_answer')
+            ->first();
+
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'rule_id' => (int) $row->rule_id,
+            'question' => (string) $row->faq_question,
+            'answer' => (string) $row->faq_answer,
+            'similarity' => 1.0,
+            'match_type' => 'suggestion_confirmation',
+        ];
+    }
+
     public function match(?string $question): ?array
     {
         $evaluation = $this->evaluate($question);

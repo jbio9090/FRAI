@@ -211,6 +211,9 @@ class ChatbotLogService
             'faq_near_match_question' => Arr::get($context, 'faq_near_match_question'),
             'faq_near_match_similarity' => Arr::get($context, 'faq_near_match_similarity'),
             'faq_near_match_type' => Arr::get($context, 'faq_near_match_type'),
+            'faq_near_match_confirmed' => Arr::get($context, 'faq_near_match_confirmed'),
+            'faq_near_match_confirmation_source' => Arr::get($context, 'faq_near_match_confirmation_source'),
+            'faq_near_match_confirmation_intent' => Arr::get($context, 'faq_near_match_confirmation_intent'),
         ];
 
         if (Arr::has($context, 'validation_passed')) {

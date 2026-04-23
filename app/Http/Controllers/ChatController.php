@@ -1163,6 +1163,160 @@ class ChatController extends Controller
         ];
     }
 
+    private function isFaqSuggestionConfirmation(?string $latestUserMessage): bool
+    {
+        $message = Str::lower(trim((string) $latestUserMessage));
+        if ($message === '') {
+            return false;
+        }
+
+        return (bool) preg_match('/^(yes|y|yep|yeah|correct|right|sure|ok|okay|go ahead|please do)[.!?]*$/', $message);
+    }
+
+    private function isFaqSuggestionRejection(?string $latestUserMessage): bool
+    {
+        $message = Str::lower(trim((string) $latestUserMessage));
+        if ($message === '') {
+            return false;
+        }
+
+        return (bool) preg_match('/^(no|n|nope|nah|not that|different one|other one|wrong)[.!?]*$/', $message);
+    }
+
+    private function classifyFaqSuggestionIntent(?string $latestUserMessage, string $suggestedQuestion): string
+    {
+        $reply = trim((string) $latestUserMessage);
+        if ($reply === '') {
+            return 'other';
+        }
+
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "You classify user intent for FAQ suggestion confirmation.\n"
+                    . "Given a user's reply to a suggested FAQ question, return ONLY strict JSON with one key:\n"
+                    . "{\"intent\":\"confirm_suggestion\"|\"reject_suggestion\"|\"other\"}\n"
+                    . "Rules:\n"
+                    . "- confirm_suggestion: user agrees to use suggested FAQ (e.g., yes, yeah, that's it, that one, go with that).\n"
+                    . "- reject_suggestion: user rejects suggestion (e.g., no, not that, different one, wrong).\n"
+                    . "- other: unclear or unrelated.\n"
+                    . "Output JSON only. No extra text.",
+            ],
+            [
+                'role' => 'user',
+                'content' => "Suggested FAQ question: {$suggestedQuestion}\nUser reply: {$reply}",
+            ],
+        ];
+
+        try {
+            $client = new Client(['timeout' => 60]);
+            $response = $client->post($this->ollamaUrl . '/api/chat', [
+                'json' => [
+                    'model' => $this->model,
+                    'messages' => $messages,
+                    'stream' => false,
+                ],
+            ]);
+
+            $data = json_decode($response->getBody(), true);
+            $raw = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+            $parsed = json_decode($raw, true);
+
+            $intent = is_array($parsed) ? trim((string) ($parsed['intent'] ?? '')) : '';
+            return in_array($intent, ['confirm_suggestion', 'reject_suggestion', 'other'], true)
+                ? $intent
+                : 'other';
+        } catch (\Throwable $exception) {
+            \Log::warning('FAQ suggestion intent classifier failed: ' . $exception->getMessage());
+            return 'other';
+        }
+    }
+
+    private function extractLatestFaqSuggestedQuestion(array $messages): ?string
+    {
+        for ($index = count($messages) - 1; $index >= 0; $index--) {
+            $message = $messages[$index] ?? [];
+            if (($message['role'] ?? null) !== 'assistant') {
+                continue;
+            }
+
+            $content = trim((string) ($message['content'] ?? ''));
+            if ($content === '') {
+                continue;
+            }
+
+            if (preg_match('/Did you mean:\s*"([^"]+)"/i', $content, $matches)) {
+                $suggestedQuestion = trim((string) ($matches[1] ?? ''));
+                return $suggestedQuestion !== '' ? $suggestedQuestion : null;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveFaqFromSuggestionConfirmation(array $messages, ?string $latestUserMessage, bool $faqMode): ?array
+    {
+        if (!$faqMode) {
+            return null;
+        }
+
+        $suggestedQuestion = $this->extractLatestFaqSuggestedQuestion($messages);
+        if (!$suggestedQuestion) {
+            return null;
+        }
+
+        $confirmationSource = 'pattern';
+        $classifierIntent = null;
+        $confirmed = $this->isFaqSuggestionConfirmation($latestUserMessage);
+
+        if (!$confirmed) {
+            if ($this->isFaqSuggestionRejection($latestUserMessage)) {
+                return null;
+            }
+
+            $classifierIntent = $this->classifyFaqSuggestionIntent($latestUserMessage, $suggestedQuestion);
+            $confirmationSource = 'classifier';
+            $confirmed = $classifierIntent === 'confirm_suggestion';
+        }
+
+        if (!$confirmed) {
+            return null;
+        }
+
+        $match = $this->faqMatchingService->findByQuestion($suggestedQuestion);
+        if (!$match) {
+            return null;
+        }
+
+        return [
+            'content' => $match['answer'],
+            'deterministic' => [
+                'source' => 'faq_suggestion_confirmation',
+                'check' => 'faq',
+                'status' => 'matched',
+                'reason' => $confirmationSource === 'classifier'
+                    ? 'near_match_confirmation_classifier'
+                    : 'near_match_confirmation',
+                'faq_mode' => true,
+                'rule_id' => (int) $match['rule_id'],
+                'question' => (string) $match['question'],
+                'similarity' => (float) $match['similarity'],
+                'match_type' => 'suggestion_confirmation',
+            ],
+            'context' => [
+                'faq_mode' => true,
+                'faq_match_rule_id' => (int) $match['rule_id'],
+                'faq_match_question' => Str::limit((string) $match['question'], 250),
+                'faq_match_similarity' => round((float) $match['similarity'], 4),
+                'faq_match_type' => 'suggestion_confirmation',
+                'faq_near_match_confirmed' => true,
+                'faq_near_match_confirmation_source' => $confirmationSource,
+                'faq_near_match_confirmation_intent' => $classifierIntent,
+                'response_source' => 'faq_suggestion_confirmation',
+            ],
+        ];
+    }
+
     private function paraphraseFaqAnswer(string $faqAnswer): array
     {
         $sourceAnswer = trim($faqAnswer);
@@ -1486,7 +1640,8 @@ class ChatController extends Controller
                 }
                 if ($latestUserMessage) {
                     if ($faqMode) {
-                        $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, true);
+                        $faqResult = $this->resolveFaqFromSuggestionConfirmation($messages, $latestUserMessage, true)
+                            ?? $this->tryFaqSemanticMatch($latestUserMessage, true);
                         if ($faqResult) {
                             $paraphraseResult = $this->paraphraseFaqAnswer((string) $faqResult['content']);
                             $content = (string) $paraphraseResult['content'];
@@ -1900,7 +2055,8 @@ class ChatController extends Controller
             }
             if ($latestUserMessage) {
                 if ($faqMode) {
-                    $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, true);
+                    $faqResult = $this->resolveFaqFromSuggestionConfirmation($messages, $latestUserMessage, true)
+                        ?? $this->tryFaqSemanticMatch($latestUserMessage, true);
                     if ($faqResult) {
                         $paraphraseResult = $this->paraphraseFaqAnswer((string) $faqResult['content']);
                         $content = (string) $paraphraseResult['content'];
