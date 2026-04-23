@@ -6,7 +6,6 @@ use App\Models\Rule;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Services\RAG\RuleIndexingService;
-use App\Jobs\IndexRuleEmbedding;
 
 class RulesController extends Controller
 {
@@ -37,7 +36,7 @@ class RulesController extends Controller
             'faq_answer' => $forPolicy === 1 ? trim((string) $validated['faq_answer']) : null,
         ]);
 
-        IndexRuleEmbedding::dispatch($rule);
+        $this->rule_index->indexRule($rule);
 
         $this->normalizePriorities($forPolicy);
 
@@ -69,7 +68,7 @@ class RulesController extends Controller
 
         $rule->update($payload);
 
-        IndexRuleEmbedding::dispatch($rule);
+        $this->rule_index->indexRule($rule);
 
         $this->normalizePriorities($previousForPolicy);
         if ($previousForPolicy !== $nextForPolicy) {

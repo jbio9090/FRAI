@@ -1134,24 +1134,31 @@ class ChatController extends Controller
             return null;
         }
 
+        $matchType = (string) ($match['match_type'] ?? 'semantic');
+        $isLexical = $matchType === 'lexical';
+        $source = $isLexical ? 'faq_lexical_fallback' : 'faq_semantic_match';
+        $reason = $isLexical ? 'lexical_fallback' : 'semantic_similarity';
+
         return [
             'content' => $match['answer'],
             'deterministic' => [
-                'source' => 'faq_semantic_match',
+                'source' => $source,
                 'check' => 'faq',
                 'status' => 'matched',
-                'reason' => 'semantic_similarity',
+                'reason' => $reason,
                 'faq_mode' => $faqMode,
                 'rule_id' => (int) $match['rule_id'],
                 'question' => (string) $match['question'],
                 'similarity' => (float) $match['similarity'],
+                'match_type' => $matchType,
             ],
             'context' => [
                 'faq_mode' => $faqMode,
                 'faq_match_rule_id' => (int) $match['rule_id'],
                 'faq_match_question' => Str::limit((string) $match['question'], 250),
                 'faq_match_similarity' => round((float) $match['similarity'], 4),
-                'response_source' => 'faq_semantic_match',
+                'faq_match_type' => $matchType,
+                'response_source' => $source,
             ],
         ];
     }
@@ -1201,21 +1208,36 @@ class ChatController extends Controller
         return ['content' => $sourceAnswer, 'paraphrased' => false];
     }
 
-    private function buildFaqNoMatchResponse(bool $faqMode): array
+    private function buildFaqNoMatchResponse(bool $faqMode, ?array $nearMatch = null): array
     {
+        $nearQuestion = trim((string) ($nearMatch['question'] ?? ''));
+        $nearSimilarity = isset($nearMatch['similarity']) ? (float) $nearMatch['similarity'] : null;
+        $nearType = trim((string) ($nearMatch['match_type'] ?? ''));
+
+        $content = 'No FAQ match found. Please rephrase your question so I can match it to our configured FAQs.';
+        if ($nearQuestion !== '') {
+            $content .= " Did you mean: \"{$nearQuestion}\"?";
+        }
+
         return [
-            'content' => 'No FAQ match found. Please rephrase your question so I can match it to our configured FAQs.',
+            'content' => $content,
             'deterministic' => [
                 'source' => 'faq_no_match',
                 'check' => 'faq',
                 'status' => 'no_match',
-                'reason' => 'semantic_similarity_below_threshold',
+                'reason' => 'no_confident_faq_match',
                 'faq_mode' => $faqMode,
+                'near_match_question' => $nearQuestion !== '' ? $nearQuestion : null,
+                'near_match_similarity' => $nearSimilarity,
+                'near_match_type' => $nearType !== '' ? $nearType : null,
             ],
             'context' => [
                 'faq_mode' => $faqMode,
                 'faq_paraphrased' => false,
                 'faq_no_match' => true,
+                'faq_near_match_question' => $nearQuestion !== '' ? Str::limit($nearQuestion, 250) : null,
+                'faq_near_match_similarity' => $nearSimilarity !== null ? round($nearSimilarity, 4) : null,
+                'faq_near_match_type' => $nearType !== '' ? $nearType : null,
                 'response_source' => 'faq_no_match',
             ],
         ];
@@ -1508,7 +1530,8 @@ class ChatController extends Controller
                             ]);
                         }
 
-                        $faqNoMatch = $this->buildFaqNoMatchResponse(true);
+                        $nearMatch = $this->faqMatchingService->suggestNearMatch($latestUserMessage);
+                        $faqNoMatch = $this->buildFaqNoMatchResponse(true, $nearMatch);
                         $content = (string) $faqNoMatch['content'];
                         $this->storeAssistantReply($incomingMessages, $content);
                         $this->chatbotLogService->logAssistantReply(
@@ -1929,7 +1952,8 @@ class ChatController extends Controller
                         ]);
                     }
 
-                    $faqNoMatch = $this->buildFaqNoMatchResponse(true);
+                    $nearMatch = $this->faqMatchingService->suggestNearMatch($latestUserMessage);
+                    $faqNoMatch = $this->buildFaqNoMatchResponse(true, $nearMatch);
                     $content = (string) $faqNoMatch['content'];
                     $incomingMessages = $request->input('messages', []);
                     $this->storeAssistantReply($incomingMessages, $content);

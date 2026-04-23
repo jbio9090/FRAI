@@ -7,7 +7,10 @@ return [
     'url' => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
     'default_prompt' => env('OLLAMA_DEFAULT_PROMPT', 'Hello, how can I assist you today?'),
     "embed_model" => env("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
-    'faq_similarity_threshold' => (float) env('OLLAMA_FAQ_SIMILARITY_THRESHOLD', 0.72),
+    'faq_similarity_threshold' => (float) env('OLLAMA_FAQ_SIMILARITY_THRESHOLD', 0.65),
+    'faq_top_k' => (int) env('OLLAMA_FAQ_TOP_K', 3),
+    'faq_lexical_threshold' => (float) env('OLLAMA_FAQ_LEXICAL_THRESHOLD', 0.5),
+    'faq_near_match_ratio_min' => (float) env('OLLAMA_FAQ_NEAR_MATCH_RATIO_MIN', 0.8),
     'recommendation_rule_limit' => (int) env('OLLAMA_RECOMMENDATION_RULE_LIMIT', 3),
 
     /*
