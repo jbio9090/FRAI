@@ -128,8 +128,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const currentStatus = route().params?.status || new URLSearchParams(window.location.search).get("status");
 
   return (
-    <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100]">
-      <SidebarHeader className="bg-accent">
+    <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100] bg-sidebar-accent">
+      <SidebarHeader className="bg-sidebar-accent">
         <SidebarMenu>
           <div className="w-full flex flex-col items-center px-4 my-2">
             <h1 className="text-left w-full text-lg font-black">PLV - GSO</h1>
@@ -137,7 +137,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </div>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="bg-accent">
+      <SidebarContent className="bg-sidebar-accent">
         <SidebarMenu>
           <SidebarMenuItem key="create-request" className="mt-2 px-4">
             <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/90 cursor-pointer">
@@ -170,13 +170,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem className="px-4">
               <CollapsibleTrigger asChild>
                 <SidebarMenuButton
-                  isActive={route().current("requests.index")}
+                  isActive={route().current("requests.index") && !currentStatus}
+                  onClick={() => router.visit(route("requests.index"))}
                 >
                   <ClipboardList className="h-4 w-4" />
                   <span>Requests</span>
                   <ChevronRight
                     className="ml-auto h-4 w-4 transition-transform duration-200
-            group-data-[state=open]/collapsible:rotate-90"
+          group-data-[state=open]/collapsible:rotate-90"
                   />
                 </SidebarMenuButton>
               </CollapsibleTrigger>
@@ -207,7 +208,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarContent>
       <SidebarSeparator className="mx-0" />
-      <SidebarFooter className="bg-accent">
+      <SidebarFooter className="bg-sidebar-accent">
         <SidebarMenu className="pb-4">
           <SidebarMenuItem className="px-4">
             <SidebarMenuButton asChild>

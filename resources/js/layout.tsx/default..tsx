@@ -115,7 +115,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     return (
         <SidebarProvider className='bg-sidebar-accent pt-4'>
             <AppSidebar />
-            <SidebarInset className='relative rounded-tl-2xl overflow-hidden shadow-[-2px_0px_8px_rgba(0,0,0,0.08)]'>
+            <SidebarInset className='relative rounded-tl-2xl overflow-hidden'>
                 <motion.header
                     className="flex h-16 shrink-0 items-center gap-2 border-b px-4 top-0 right-0 fixed z-8 w-full md:static bg-background"
                     animate={{
