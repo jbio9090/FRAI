@@ -688,6 +688,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     { page, filter: filterMap[currentActiveFitler], search: searchQuery },
                                     { preserveState: true, preserveScroll: true }
                                 )}
+                                className={"my-4"}
                             />
                         )}
 
@@ -713,19 +714,19 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     <p>Nothing to see here</p>
                                 </motion.div>
                             )}
-
-                            {requests && requests.data.length > 9 && (
-                                <SmartPagination
-                                    currentPage={requests.current_page}
-                                    lastPage={requests.last_page}
-                                    onPageChange={(page) => router.get(
-                                        route(route().current(), { status: route().params.status }),
-                                        { page, filter: filterMap[currentActiveFitler], search: searchQuery },
-                                        { preserveState: true, preserveScroll: true }
-                                    )}
-                                />
-                            )}
                         </div>
+                        {requests && requests.data.length > 9 && (
+                            <SmartPagination
+                                currentPage={requests.current_page}
+                                lastPage={requests.last_page}
+                                onPageChange={(page) => router.get(
+                                    route(route().current(), { status: route().params.status }),
+                                    { page, filter: filterMap[currentActiveFitler], search: searchQuery },
+                                    { preserveState: true, preserveScroll: true }
+                                )}
+                                className={"my-5"}
+                            />
+                        )}
                     </>
                 </Deferred>
 

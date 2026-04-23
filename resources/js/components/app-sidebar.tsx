@@ -168,19 +168,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           <Collapsible defaultOpen className="group/collapsible">
             <SidebarMenuItem className="px-4">
-              <CollapsibleTrigger asChild>
-                <SidebarMenuButton
-                  isActive={route().current("requests.index") && !currentStatus}
-                  onClick={() => router.visit(route("requests.index"))}
-                >
+              <SidebarMenuButton
+                asChild
+                isActive={route().current("requests.index") && !currentStatus}
+              >
+                <Link href={route("requests.index")} className="flex items-center w-full">
                   <ClipboardList className="h-4 w-4" />
                   <span>Requests</span>
-                  <ChevronRight
-                    className="ml-auto h-4 w-4 transition-transform duration-200
-          group-data-[state=open]/collapsible:rotate-90"
-                  />
-                </SidebarMenuButton>
-              </CollapsibleTrigger>
+                  <CollapsibleTrigger asChild onClick={e => e.preventDefault()}>
+                    <div
+                      role="button"
+                      className="ml-auto flex items-center justify-center p-1 rounded-sm hover:bg-sidebar-accent-foreground/10"
+                    >
+                      <ChevronRight
+                        className="h-4 w-4 transition-transform duration-200
+                group-data-[state=open]/collapsible:rotate-90"
+                      />
+                    </div>
+                  </CollapsibleTrigger>
+                </Link>
+              </SidebarMenuButton>
             </SidebarMenuItem>
 
             <CollapsibleContent>

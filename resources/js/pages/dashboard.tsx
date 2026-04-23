@@ -149,7 +149,7 @@ export default function Dashboard({
             fetch(`/dashboard/chart-data?range=${range}`).then(r => r.json()),
             fetch(`/dashboard/audit-logs?range=${range}`).then(r => r.json()),
         ]).then(([chartJson, logsJson]) => {
-            setData(chartJson);
+            setData(fillDateRange(chartJson, range));
             setAuditLogs(logsJson);
         }).finally(() => {
             setLoading(false);
@@ -208,7 +208,7 @@ export default function Dashboard({
         setLoading(true);
         fetch(`/dashboard/chart-data?range=${range}`)
             .then(res => res.json())
-            .then(json => setData(json))
+            .then(json => setData(fillDateRange(json, range)))
             .finally(() => setLoading(false));
     }, [range]);
 
@@ -258,6 +258,21 @@ export default function Dashboard({
         return config;
     }, [pieData]);
 
+    function fillDateRange(data: ChartRow[], range: 'week' | 'month' | '3months'): ChartRow[] {
+        const days = range === 'week' ? 7 : range === 'month' ? 30 : 90;
+        const filled: ChartRow[] = [];
+        const dataMap = new Map(data.map(d => [d.date, d.total]));
+
+        for (let i = days - 1; i >= 0; i--) {
+            const date = moment().subtract(i, 'days').format('YYYY-MM-DD');
+            filled.push({ date, total: dataMap.get(date) ?? 0 });
+        }
+
+        return filled;
+    }
+    console.log(chartData);
+
+
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-6 md:p-8">
@@ -268,11 +283,12 @@ export default function Dashboard({
                         <TabsTrigger value="activity">Activity</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="overview" className="mt-4 flex flex-col gap-4">
-                        <div className="flex w-full">
-                            <div className="flex gap-4">
-                                <AvatarWithInitials className='border' username={auth.user.name} avatarSrc={auth.user.profile} />
-                                <h1 className='text-4xl font-bold tracking-tighter'><span className='font-medium'>Hello </span>{auth.user.name}!</h1>
+                    <TabsContent value="overview" className="mt-4 flex flex-col gap-10">
+                        <div className="flex gap-4 items-center">
+                            <AvatarWithInitials className='border' username={auth.user.name} avatarSrc={auth.user.profile} />
+                            <div className="flex flex-col gap-0.5">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Welcome back</p>
+                                <h1 className='text-3xl font-bold tracking-tight'>{auth.user.name}</h1>
                             </div>
                         </div>
 
@@ -283,9 +299,14 @@ export default function Dashboard({
                                 setApi={setCarouselApi}
                             >
                                 <div className="flex justify-between items-center mb-2">
-                                    <h2 className='text-lg font-bold tracking-tight'>
-                                        {isAdmin ? "Pending Requests" : "Your Pending Requests"}
-                                    </h2>
+                                    <div className="flex flex-col gap-0.5">
+                                        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                                            {isAdmin ? "Queue" : "Your Queue"}
+                                        </p>
+                                        <h2 className='text-base font-semibold tracking-tight'>
+                                            {isAdmin ? "Pending Requests" : "Your Pending Requests"}
+                                        </h2>
+                                    </div>
                                     <div className="flex items-center gap-1">
                                         <CarouselPrevious className="static translate-y-0" />
                                         <CarouselNext className="static translate-y-0" />
@@ -326,7 +347,10 @@ export default function Dashboard({
 
                         {(pendingConflictRequests.length > 0 || approvedConflictRequests.length > 0) && (
                             <div className="flex flex-col gap-6">
-                                <h2 className="text-lg font-bold tracking-tighter">Requests with Conflicts</h2>
+                                <div className="flex flex-col gap-0.5">
+                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Attention needed</p>
+                                    <h2 className="text-base font-semibold tracking-tight">Requests with Conflicts</h2>
+                                </div>
 
                                 {pendingConflictRequests.length > 0 && (
                                     <div className="flex flex-col gap-2">
@@ -547,10 +571,15 @@ export default function Dashboard({
                                                     <XAxis
                                                         dataKey="date"
                                                         tickLine={false}
-                                                        axisLine={false}
                                                         tickMargin={10}
                                                         tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
                                                         tickFormatter={val => moment(val).format("MMM D")}
+                                                    />
+                                                    <YAxis
+                                                        tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
+                                                        dataKey="total"
+                                                        tickLine={false}
+                                                        tickMargin={10}
                                                     />
                                                     <ChartTooltip
                                                         cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
