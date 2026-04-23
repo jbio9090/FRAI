@@ -128,8 +128,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const currentStatus = route().params?.status || new URLSearchParams(window.location.search).get("status");
 
   return (
-    <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100] bg-sidebar-accent">
-      <SidebarHeader className="bg-sidebar-accent">
+    <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100] [&_[data-slot=sidebar-inner]]:bg-sidebar-accent">
+      <SidebarHeader>
         <SidebarMenu>
           <div className="w-full flex flex-col items-center px-4 my-2">
             <h1 className="text-left w-full text-lg font-black">PLV - GSO</h1>
@@ -137,7 +137,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </div>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="bg-sidebar-accent">
+      <SidebarContent>
         <SidebarMenu>
           <SidebarMenuItem key="create-request" className="mt-2 px-4">
             <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/90 cursor-pointer">
@@ -167,27 +167,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           ))}
 
           <Collapsible defaultOpen className="group/collapsible">
-            <SidebarMenuItem className="px-4">
+            <SidebarMenuItem className="px-4 flex items-center gap-1">
               <SidebarMenuButton
                 asChild
                 isActive={route().current("requests.index") && !currentStatus}
+                className="flex-1"
               >
-                <Link href={route("requests.index")} className="flex items-center w-full">
+                <Link href={route("requests.index")}>
                   <ClipboardList className="h-4 w-4" />
                   <span>Requests</span>
-                  <CollapsibleTrigger asChild onClick={e => e.preventDefault()}>
-                    <div
-                      role="button"
-                      className="ml-auto flex items-center justify-center p-1 rounded-sm hover:bg-sidebar-accent-foreground/10"
-                    >
-                      <ChevronRight
-                        className="h-4 w-4 transition-transform duration-200
-                group-data-[state=open]/collapsible:rotate-90"
-                      />
-                    </div>
-                  </CollapsibleTrigger>
                 </Link>
               </SidebarMenuButton>
+
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center justify-center p-1 rounded-sm hover:bg-sidebar-accent-foreground/10 shrink-0">
+                  <ChevronRight
+                    className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
+                  />
+                </button>
+              </CollapsibleTrigger>
             </SidebarMenuItem>
 
             <CollapsibleContent>
@@ -215,7 +213,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarContent>
       <SidebarSeparator className="mx-0" />
-      <SidebarFooter className="bg-sidebar-accent">
+      <SidebarFooter>
         <SidebarMenu className="pb-4">
           <SidebarMenuItem className="px-4">
             <SidebarMenuButton asChild>

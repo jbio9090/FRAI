@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import DefaultLayout from '@/layout.tsx/default.';
 import { Link, usePage } from '@inertiajs/react';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, ArrowLeft, ArrowRight, ClipboardList, CirclePlus } from 'lucide-react';
 import moment from 'moment';
 import FacilityCalendar from '@/components/FacilityCalendar';
 import { Request as FacilityRequest } from '@/types/request';
@@ -269,7 +269,7 @@ export default function Dashboard({
         return filled;
     }
     console.log(chartData);
-    
+
 
     return (
         <DefaultLayout hasPadding={false}>
@@ -306,8 +306,24 @@ export default function Dashboard({
                                         </h2>
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        <CarouselPrevious className="static translate-y-0" />
-                                        <CarouselNext className="static translate-y-0" />
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 rounded-full"
+                                            onClick={() => carouselApi?.scrollPrev()}
+                                            disabled={!canScrollPrev}
+                                        >
+                                            <ArrowLeft className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="size-8 rounded-full"
+                                            onClick={() => carouselApi?.scrollNext()}
+                                            disabled={!canScrollNext}
+                                        >
+                                            <ArrowRight className="h-4 w-4" />
+                                        </Button>
                                     </div>
                                 </div>
 
@@ -323,22 +339,53 @@ export default function Dashboard({
                                         canScrollNext ? "opacity-100" : "opacity-0"
                                     )} />
 
-                                    <CarouselContent className="-ml-4">
-                                        {pending.data.map(request => (
-                                            <CarouselItem key={request.id} className="pl-4 basis-auto">
-                                                <SmallRequestCard request={request} className='min-w-[400px] max-w-[400px]' />
-                                            </CarouselItem>
-                                        ))}
-
-                                        <CarouselItem className="pl-4 basis-auto">
-                                            <Link href={route("requests.index", { status: "pending" })}>
-                                                <div className="min-w-[160px] max-w-[160px] h-full min-h-[160px] border rounded-lg flex flex-col items-center justify-center gap-2 text-sm font-semibold hover:bg-muted transition-colors cursor-pointer">
-                                                    <ArrowUpRight size={20} />
-                                                    <span>See All</span>
-                                                </div>
+                                    {pending.data.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center gap-3 py-10 border rounded-lg border-dashed text-center">
+                                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted">
+                                                <ClipboardList className="h-5 w-5 text-muted-foreground" />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-sm font-semibold">No pending requests</p>
+                                                <p className="text-xs text-muted-foreground">You're all caught up! Submit a new facility request to get started.</p>
+                                            </div>
+                                            <Link href={route("request.create")}>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="mt-1 gap-2 relative isolate overflow-hidden border-primary text-primary bg-transparent hover:bg-transparent hover:text-primary-foreground before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:before:scale-x-100"
+                                                >
+                                                    <CirclePlus className="h-4 w-4 z-10" />
+                                                    <span className="z-10">Create Request</span>
+                                                </Button>
                                             </Link>
-                                        </CarouselItem>
-                                    </CarouselContent>
+                                        </div>
+                                    ) : (
+                                        <div className="relative">
+                                            <div className={cn(
+                                                "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
+                                                canScrollPrev ? "opacity-100" : "opacity-0"
+                                            )} />
+                                            <div className={cn(
+                                                "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
+                                                canScrollNext ? "opacity-100" : "opacity-0"
+                                            )} />
+                                            <CarouselContent className="-ml-4">
+                                                {pending.data.map(request => (
+                                                    <CarouselItem key={request.id} className="pl-4 basis-auto">
+                                                        <SmallRequestCard request={request} className='min-w-[400px] max-w-[400px]' />
+                                                    </CarouselItem>
+                                                ))}
+                                                <CarouselItem className="pl-4 basis-auto">
+                                                    <Link href={route("requests.index", { status: "pending" })}>
+                                                        <div className="min-w-[160px] max-w-[160px] h-full min-h-[160px] border rounded-lg flex flex-col items-center justify-center gap-2 text-sm font-semibold hover:bg-muted transition-colors cursor-pointer">
+                                                            <ArrowUpRight size={20} />
+                                                            <span>See All</span>
+                                                        </div>
+                                                    </Link>
+                                                </CarouselItem>
+                                            </CarouselContent>
+                                        </div>
+                                    )}
                                 </div>
                             </Carousel>
                         </div>
@@ -368,8 +415,24 @@ export default function Dashboard({
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-1">
-                                                    <CarouselPrevious className="static translate-y-0" />
-                                                    <CarouselNext className="static translate-y-0" />
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="size-8 rounded-full"
+                                                        onClick={() => carouselApi?.scrollPrev()}
+                                                        disabled={!canScrollPrev}
+                                                    >
+                                                        <ArrowLeft className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="size-8 rounded-full"
+                                                        onClick={() => carouselApi?.scrollNext()}
+                                                        disabled={!canScrollNext}
+                                                    >
+                                                        <ArrowRight className="h-4 w-4" />
+                                                    </Button>
                                                 </div>
                                             </div>
 
@@ -416,8 +479,24 @@ export default function Dashboard({
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-1">
-                                                    <CarouselPrevious className="static translate-y-0" />
-                                                    <CarouselNext className="static translate-y-0" />
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="size-8 rounded-full"
+                                                        onClick={() => carouselApi?.scrollPrev()}
+                                                        disabled={!canScrollPrev}
+                                                    >
+                                                        <ArrowLeft className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="size-8 rounded-full"
+                                                        onClick={() => carouselApi?.scrollNext()}
+                                                        disabled={!canScrollNext}
+                                                    >
+                                                        <ArrowRight className="h-4 w-4" />
+                                                    </Button>
                                                 </div>
                                             </div>
 
