@@ -29,8 +29,17 @@ import {
   SidebarRail,
   SidebarFooter,
   SidebarSeparator,
+  SidebarGroup,
+  SidebarGroupContent,
 } from "@/components/ui/sidebar"
 import { usePermission } from "@/hooks/use-permission"
+import { ChevronRight } from "lucide-react"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { ClipboardList } from "lucide-react"
 
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -83,7 +92,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       {
         title: "For Reschedule",
         url: route("requests.index", { status: "for_reschedule" }),
-        status: "for reschedule",
+        status: "for_reschedule",
         icon: IterationCw
       },
       {
@@ -120,7 +129,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100]">
-      <SidebarHeader>
+      <SidebarHeader className="bg-accent">
         <SidebarMenu>
           <div className="w-full flex flex-col items-center px-4 my-2">
             <h1 className="text-left w-full text-lg font-black">PLV - GSO</h1>
@@ -128,9 +137,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </div>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="bg-accent">
         <SidebarMenu>
-
           <SidebarMenuItem key="create-request" className="mt-2 px-4">
             <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/90 cursor-pointer">
               <Link href={route("request.create")}>
@@ -158,30 +166,48 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuItem>
           ))}
 
-          <SidebarMenuItem className="px-4 mt-4">
-            <SidebarGroupLabel>
-              Requests
-            </SidebarGroupLabel>
-          </SidebarMenuItem>
-
-          {data.navMenu.map((item) => (
-            <SidebarMenuItem key={item.title} className="px-4">
-              <SidebarMenuButton asChild
-                isActive={
-                  route().current("requests.index") &&
-                  currentStatus === item.status
-                }>
-                <Link href={item.url}>
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
+          <Collapsible defaultOpen className="group/collapsible">
+            <SidebarMenuItem className="px-4">
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton
+                  isActive={route().current("requests.index")}
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  <span>Requests</span>
+                  <ChevronRight
+                    className="ml-auto h-4 w-4 transition-transform duration-200
+            group-data-[state=open]/collapsible:rotate-90"
+                  />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
             </SidebarMenuItem>
-          ))}
+
+            <CollapsibleContent>
+              <SidebarMenu>
+                {data.navMenu.map((item) => (
+                  <SidebarMenuItem key={item.title} className="px-4">
+                    <SidebarMenuButton
+                      asChild
+                      isActive={
+                        route().current("requests.index") &&
+                        currentStatus === item.status
+                      }
+                      className="pl-8"
+                    >
+                      <Link href={item.url}>
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </CollapsibleContent>
+          </Collapsible>
+
         </SidebarMenu>
       </SidebarContent>
-      <SidebarSeparator className="mx-0"/>
-      <SidebarFooter>
+      <SidebarSeparator className="mx-0" />
+      <SidebarFooter className="bg-accent">
         <SidebarMenu className="pb-4">
           <SidebarMenuItem className="px-4">
             <SidebarMenuButton asChild>
