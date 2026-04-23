@@ -106,7 +106,7 @@ export default function Dashboard({
     chartData: ChartRow[];
 }) {
     const [selectedBuildings, setSelectedBuildings] = useState<string[]>(buildings);
-    const [range, setRange] = useState<'week' | 'month' | '3months'>('week');
+    const [range, setRange] = useState<'day' | 'week' | 'month' | '3months'>('week');
     const [data, setData] = useState<ChartRow[]>(chartData);
     const [loading, setLoading] = useState(false);
     const auth = usePage().props.auth;
@@ -204,14 +204,6 @@ export default function Dashboard({
 
     const rangeLabel = rangeOptions[range];
 
-    useEffect(() => {
-        setLoading(true);
-        fetch(`/dashboard/chart-data?range=${range}`)
-            .then(res => res.json())
-            .then(json => setData(fillDateRange(json, range)))
-            .finally(() => setLoading(false));
-    }, [range]);
-
     const toggleBuilding = (building: string) => {
         setSelectedBuildings(prev =>
             prev.includes(building)
@@ -258,20 +250,26 @@ export default function Dashboard({
         return config;
     }, [pieData]);
 
-    function fillDateRange(data: ChartRow[], range: 'week' | 'month' | '3months'): ChartRow[] {
+    function fillDateRange(data: ChartRow[], range: 'day' | 'week' | 'month' | '3months'): ChartRow[] {
+        if (range === 'day') {
+            const dataMap = new Map(data.map(d => [d.date, d.total]));
+            return Array.from({ length: 24 }, (_, i) => {
+                const hour = String(i).padStart(2, '0') + ':00';
+                return { date: hour, total: dataMap.get(hour) ?? 0 };
+            });
+        }
+
         const days = range === 'week' ? 7 : range === 'month' ? 30 : 90;
         const filled: ChartRow[] = [];
         const dataMap = new Map(data.map(d => [d.date, d.total]));
-
         for (let i = days - 1; i >= 0; i--) {
             const date = moment().subtract(i, 'days').format('YYYY-MM-DD');
             filled.push({ date, total: dataMap.get(date) ?? 0 });
         }
-
         return filled;
     }
     console.log(chartData);
-
+    
 
     return (
         <DefaultLayout hasPadding={false}>
@@ -573,7 +571,7 @@ export default function Dashboard({
                                                         tickLine={false}
                                                         tickMargin={10}
                                                         tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
-                                                        tickFormatter={val => moment(val).format("MMM D")}
+                                                        tickFormatter={val => range === 'day' ? val : moment(val).format("MMM D")}
                                                     />
                                                     <YAxis
                                                         tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
@@ -585,7 +583,10 @@ export default function Dashboard({
                                                         cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
                                                         content={
                                                             <ChartTooltipContent
-                                                                labelFormatter={val => moment(val).format("dddd, MMM D YYYY")}
+                                                                labelFormatter={val => range === 'day'
+                                                                    ? `Today at ${val}`
+                                                                    : moment(val).format("dddd, MMM D YYYY")
+                                                                }
                                                             />
                                                         }
                                                     />

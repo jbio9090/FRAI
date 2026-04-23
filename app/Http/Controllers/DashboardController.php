@@ -63,17 +63,33 @@ class DashboardController extends Controller
     public function chartData(Request $request)
     {
         $range = $request->input('range', 'week');
+        $offset = now()->format('P'); // e.g. '+08:00'
+
+        if ($range === 'day') {
+            $data = AuditLog::query()
+                // PostgreSQL: Use TO_CHAR for padding and AT TIME ZONE for timezone conversion
+                ->selectRaw("TO_CHAR(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?, 'HH24') as hour, COUNT(*) as total", [$offset])
+                ->whereBetween('created_at', [now()->startOfDay(), now()->endOfDay()])
+                ->groupBy('hour')
+                ->orderBy('hour')
+                ->get()
+                ->map(fn($row) => [
+                    'date'  => $row->hour . ':00',
+                    'total' => (int) $row->total,
+                ])
+                ->values();
+
+            return response()->json($data);
+        }
 
         [$start, $end] = match ($range) {
-            'month'   => [now()->startOfMonth()->startOfDay(), now()->endOfDay()],
+            'month'   => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
             '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
-            default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()], 
+            default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
         };
 
-        $tz = config('app.timezone'); // e.g. 'Asia/Manila'
-
         $data = AuditLog::query()
-            ->selectRaw("DATE(CONVERT_TZ(created_at, 'UTC', ?)) as date, COUNT(*) as total", [$tz])
+            ->selectRaw("DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?) as date, COUNT(*) as total", [$offset])
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
             ->orderBy('date')
