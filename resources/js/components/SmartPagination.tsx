@@ -2,10 +2,11 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { useState } from "react";
 
 
-export default function SmartPagination({ currentPage, lastPage, onPageChange }: {
+export default function SmartPagination({ currentPage, lastPage, onPageChange, className }: {
     currentPage: number;
     lastPage: number;
     onPageChange: (page: number) => void;
+    className?: string | null;
 }) {
     const [editingLeft, setEditingLeft] = useState(false);
     const [editingRight, setEditingRight] = useState(false);
@@ -35,7 +36,7 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange }:
 
     return (
         <Pagination>
-            <PaginationContent>
+            <PaginationContent className={"w-full mx-auto justify-center" + (className ? " " + className : "")}>
                 {/* Prev */}
                 <PaginationItem>
                     <PaginationPrevious

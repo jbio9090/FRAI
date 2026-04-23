@@ -251,7 +251,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                 </div>
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
-                    <div className="w-full overflow-x-auto scrollbar-none">
+                    <ScrollArea className="w-full" type="scroll">
                         <TabsList variant={"line"} className='border-b w-max min-w-full'>
                             <TabsTrigger value="overview">Overview</TabsTrigger>
 
@@ -283,7 +283,8 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                                 </span>
                             </TabsTrigger>
                         </TabsList>
-                    </div>
+                        <ScrollBar orientation="horizontal" className="h-0" />
+                    </ScrollArea>
 
                     {/* Overview Tab */}
                     <TabsContent value="overview" className="flex flex-col gap-6 mt-6">

@@ -65,13 +65,15 @@ class DashboardController extends Controller
         $range = $request->input('range', 'week');
 
         [$start, $end] = match ($range) {
-            'month'   => [now()->startOfMonth()->format('Y-m-d'), now()->endOfMonth()->format('Y-m-d')],
-            '3months' => [now()->subMonths(3)->startOfDay()->format('Y-m-d'), now()->format('Y-m-d')],
-            default   => [now()->subDays(6)->startOfDay()->format('Y-m-d'), now()->format('Y-m-d')], // week
+            'month'   => [now()->startOfMonth()->startOfDay(), now()->endOfDay()],
+            '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
+            default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()], 
         };
 
+        $tz = config('app.timezone'); // e.g. 'Asia/Manila'
+
         $data = AuditLog::query()
-            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
+            ->selectRaw("DATE(CONVERT_TZ(created_at, 'UTC', ?)) as date, COUNT(*) as total", [$tz])
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
             ->orderBy('date')
