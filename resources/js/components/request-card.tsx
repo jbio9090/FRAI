@@ -20,7 +20,7 @@ import Comment from './comment';
 import StatusTag from './status-tag';
 import AnimatedText from './animated-text';
 import { BookingCard } from './booking-card';
-import { ScrollArea } from './ui/scroll-area';
+import { ScrollArea, ScrollBar } from './ui/scroll-area';
 
 export const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={14} />,
@@ -303,55 +303,57 @@ function RequestDetails({
             label: "Facilities",
             badge: request.facilities.length,
             content: (
-                <ScrollArea className='mt-4 max-h-96'>
-                    {request.request_facilities.map((rf) => {
-                        const facility = request.facilities.find(f => f.id === rf.facility_id);
+                <ScrollArea className='mt-4 h-96'>
+                    <div className="flex flex-col gap-2">
+                        {request.request_facilities.map((rf) => {
+                            const facility = request.facilities.find(f => f.id === rf.facility_id);
 
-                        const pendingConflicts = (request.pending_conflicts ?? [])
-                            .filter(c => c.facility_id === rf.facility_id)
-                            .map(c => ({
-                                request_id: c.request_id,
-                                request_title: c.request.title,
-                                status: "Pending",
-                                time_start: c.time_start,
-                                time_end: c.time_end,
-                            }));
+                            const pendingConflicts = (request.pending_conflicts ?? [])
+                                .filter(c => c.facility_id === rf.facility_id)
+                                .map(c => ({
+                                    request_id: c.request_id,
+                                    request_title: c.request.title,
+                                    status: "Pending",
+                                    time_start: c.time_start,
+                                    time_end: c.time_end,
+                                }));
 
-                        const approvedConflicts = (request.approved_conflicts ?? [])
-                            .filter(c => c.facility_id === rf.facility_id)
-                            .map(c => ({
-                                request_id: c.request_id,
-                                request_title: c.request.title,
-                                status: "Approved",
-                                time_start: c.time_start,
-                                time_end: c.time_end,
-                            }));
+                            const approvedConflicts = (request.approved_conflicts ?? [])
+                                .filter(c => c.facility_id === rf.facility_id)
+                                .map(c => ({
+                                    request_id: c.request_id,
+                                    request_title: c.request.title,
+                                    status: "Approved",
+                                    time_start: c.time_start,
+                                    time_end: c.time_end,
+                                }));
 
-                        const booking = {
-                            request_id: rf.request_id,
-                            facility_id: rf.facility_id,
-                            facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
-                            date: rf.date_requested,
-                            time_start: rf.time_start,
-                            time_end: rf.time_end,
-                            expected_capacity: rf.expected_capacity ?? null,
-                            has_outsiders: rf.has_outsiders ?? false,
-                            conflicts: [...pendingConflicts, ...approvedConflicts],
-                            equipment: rf.equipment ?? [],
-                            borrowed_equipment: rf.borrowed_equipment ?? [],
-                            external_equipment: rf.external_equipments ?? [],
-                            equipment_conflicts: rf.equipment_conflicts ?? {},
-                        };
+                            const booking = {
+                                request_id: rf.request_id,
+                                facility_id: rf.facility_id,
+                                facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
+                                date: rf.date_requested,
+                                time_start: rf.time_start,
+                                time_end: rf.time_end,
+                                expected_capacity: rf.expected_capacity ?? null,
+                                has_outsiders: rf.has_outsiders ?? false,
+                                conflicts: [...pendingConflicts, ...approvedConflicts],
+                                equipment: rf.equipment ?? [],
+                                borrowed_equipment: rf.borrowed_equipment ?? [],
+                                external_equipment: rf.external_equipments ?? [],
+                                equipment_conflicts: rf.equipment_conflicts ?? {},
+                            };
 
-                        return (
-                            <BookingCard
-                                key={rf.date_requested + rf.time_start}
-                                booking={booking}
-                                index={0}
-                                className='mt-4'
-                            />
-                        );
-                    })}
+                            return (
+                                <BookingCard
+                                    key={rf.date_requested + rf.time_start}
+                                    booking={booking}
+                                    index={0}
+                                    className='mt-4'
+                                />
+                            );
+                        })}
+                    </div>
                 </ScrollArea>
             ),
         },
@@ -361,10 +363,11 @@ function RequestDetails({
             label: "Comments",
             badge: request.comments?.length || undefined,
             content: request.comments?.length > 0 ? (
-                <ScrollArea className='mt-4 max-h-96'>
+                <ScrollArea className='mt-4 h-96'>
                     {request.comments.map((comment) => (
                         <Comment comment={comment} key={comment.id} />
                     ))}
+                    <ScrollBar />
                 </ScrollArea>
             ) : (
                 <p className='text-muted-foreground text-sm w-full p-8 text-center'>No comments yet</p>
@@ -376,8 +379,9 @@ function RequestDetails({
             label: "Attachments",
             badge: files.length,
             content: (
-                <ScrollArea className='mt-4 max-h-96'>
+                <ScrollArea className='mt-4 h-96'>
                     <AttachedFileList serverFiles={files} />
+                    <ScrollBar />
                 </ScrollArea>
             ),
         }] : []),

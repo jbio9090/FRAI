@@ -272,7 +272,7 @@ export default function Dashboard({
                         <div className="flex w-full">
                             <div className="flex gap-4">
                                 <AvatarWithInitials className='border' username={auth.user.name} avatarSrc={auth.user.profile} />
-                                <h1 className='text-4xl font-black tracking-tighter'>Hi {auth.user.name}!</h1>
+                                <h1 className='text-4xl font-bold tracking-tighter'><span className='font-medium'>Hello </span>{auth.user.name}!</h1>
                             </div>
                         </div>
 
