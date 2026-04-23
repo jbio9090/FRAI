@@ -85,7 +85,7 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
     return (
-        <div className={`group relative rounded-lg border border-border transition-shadow hover:shadow-sm ${className ?? ""}`}>
+        <div className={`group relative rounded-lg border border-border transition-shadow ${className ?? ""}`}>
             {/* Header */}
             <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b bg-card">
                 <div className="min-w-0">

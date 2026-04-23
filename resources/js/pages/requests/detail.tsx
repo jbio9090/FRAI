@@ -250,7 +250,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                 </div>
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
-                    <TabsList variant={"line"}>
+                    <TabsList variant={"line"} className='border-b max-w-full w-full'>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
 
                         <TabsTrigger value="facilities" className="flex items-center gap-2">

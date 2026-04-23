@@ -3,6 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { Tabs as TabsPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 
 function Tabs({
   className,
@@ -41,17 +42,35 @@ const tabsListVariants = cva(
 function TabsList({
   className,
   variant = "default",
+  scrollable = false,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List> &
-  VariantProps<typeof tabsListVariants>) {
-  return (
+  VariantProps<typeof tabsListVariants> & {
+    /** Wrap the list in a horizontal scroll container */
+    scrollable?: boolean
+  }) {
+  const list = (
     <TabsPrimitive.List
       data-slot="tabs-list"
       data-variant={variant}
-      className={cn(tabsListVariants({ variant }), className)}
+      className={cn(tabsListVariants({ variant }), scrollable && "w-max", className)}
       {...props}
     />
   )
+
+  if (scrollable) {
+    return (
+      <ScrollArea
+        data-slot="tabs-list-scroll"
+        className="group-data-[orientation=horizontal]/tabs:w-full"
+      >
+        {list}
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
+    )
+  }
+
+  return list
 }
 
 function TabsTrigger({
