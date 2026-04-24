@@ -17,15 +17,32 @@ class RuleIndexingService
 
     public function indexRule(Rule $rule): void
     {
-        $embedding = $this->ollama->embed($rule->rule);
+        $contentForEmbedding = $this->buildEmbeddingContent($rule);
+        $embedding = $this->ollama->embed($contentForEmbedding);
 
         RuleEmbedding::updateOrCreate(
             ['rule_id' => $rule->id],
             [
-                'content'   => $rule->rule,
+                'content'   => $contentForEmbedding,
                 'embedding' => $embedding,
             ]
         );
+    }
+
+    private function buildEmbeddingContent(Rule $rule): string
+    {
+        $question = trim((string) $rule->rule);
+
+        if ((int) $rule->forPolicy !== 1) {
+            return $question;
+        }
+
+        $answer = trim((string) $rule->faq_answer);
+        if ($answer === '') {
+            return $question;
+        }
+
+        return "FAQ Question: {$question}\nFAQ Answer: {$answer}";
     }
 
     public function deleteIndex(int $ruleId): void

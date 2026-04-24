@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { AttachedFileInfo } from '../types';
+import React, { useEffect, useRef } from 'react';
+import type { AttachedFileInfo } from '../types';
 
 interface ChatInputProps {
     value: string;
@@ -13,6 +13,7 @@ interface ChatInputProps {
     uploadError?: string | null;
     onAttachFile?: (files: FileList) => void;
     onRemoveFile?: (fileId: string) => void;
+    autoFocus?: boolean;
 }
 
 export default function ChatInput({
@@ -27,8 +28,16 @@ export default function ChatInput({
     uploadError = null,
     onAttachFile,
     onRemoveFile,
+    autoFocus = false,
 }: ChatInputProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (autoFocus && !disabled) {
+            textareaRef.current?.focus();
+        }
+    }, [autoFocus, disabled]);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && onAttachFile) {
@@ -98,6 +107,7 @@ export default function ChatInput({
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
                 <textarea
+                    ref={textareaRef}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     onKeyPress={onKeyPress}

@@ -1803,6 +1803,17 @@ export default function Chatbot() {
     const handleSendMessage = async () => {
         const message = input.trim();
         if (!message) return;
+
+        if (mode !== 'ai') {
+            addMessage({
+                role: 'assistant',
+                content:
+                    mode === 'idle'
+                        ? 'Choose a mode from quick actions first to start chatting.'
+                        : 'Chat is available only in AI mode. Finish or cancel the current guided flow first.',
+            });
+            return;
+        }
         setInput('');
         setAvailabilityFollowUp(null);
 
@@ -2632,13 +2643,15 @@ export default function Chatbot() {
                 </div>
             )}
 
-            {/* Input area â€” hidden during booking flow */}
+            {/* Input area */}
             <ChatInput
                 value={input}
                 onChange={setInput}
                 onKeyPress={handleKeyPress}
                 onSend={handleSendMessage}
-                disabled={uploading || isLoading}
+                disabled={uploading || isLoading || mode !== 'ai'}
+                autoFocus={mode === 'ai' || guidedFlow.mode === 'faq'}
+                placeholder={mode === 'ai' ? 'Type your message...' : 'Choose a mode from quick actions to start chatting...'}
                 attachedFiles={attachedFiles}
                 onAttachFile={handleAttachFiles}
                 uploading={uploading}
@@ -2650,6 +2663,3 @@ export default function Chatbot() {
         </div>
     );
 }
-
-
-
