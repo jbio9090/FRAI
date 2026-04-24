@@ -378,6 +378,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
         "flex min-h-0 flex-1 flex-col gap-2 group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
+      showfade={false}
     >
       <div className="flex flex-col gap-2" {...props} />
     </ScrollArea>
