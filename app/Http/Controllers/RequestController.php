@@ -174,17 +174,16 @@ class RequestController extends Controller
 
     public function detail(int $request_id)
     {
-        $requestModel  = FacilityRequest::findOrFail($request_id);
-        $requestDetail = $this->service->getDetail($request_id);
+        $requestModel = FacilityRequest::findOrFail($request_id);
 
         return Inertia::render("requests/detail", [
-            'request'           => $requestDetail,
-            'labeledBreadcrumb' => $requestDetail['title'],
-            'auditLogs'         => AuditLog::query()
+            'labeledBreadcrumb' => $requestModel->title,
+            'request'           => Inertia::defer(fn() => $this->service->getDetail($request_id)),
+            'auditLogs'         => Inertia::defer(fn() => AuditLog::query()
                 ->forSubject($requestModel)
                 ->with('user')
                 ->latest()
-                ->paginate(10),
+                ->paginate(10)),
         ]);
     }
 

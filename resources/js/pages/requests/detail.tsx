@@ -33,8 +33,8 @@ import SmartPagination from '@/components/SmartPagination';
 
 interface DetailProps {
     children?: React.ReactNode;
-    request: Request;
-    auditLogs: { data: any[]; current_page: number; last_page: number; total: number };
+    request: Request | null;
+    auditLogs: { data: any[]; current_page: number; last_page: number; total: number } | null;
 }
 
 type RecommendedAction = 'Approved' | 'Conditionally Approved' | 'Denied' | 'For Reschedule' | string;
@@ -83,13 +83,26 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
     const { hasRole } = usePermission();
     const isAdmin = hasRole("admin");
 
-    const [auditLogs, setAuditLogs] = useState(auditLogsProp.data ?? []);
-    const [currentPage, setCurrentPage] = useState(auditLogsProp.current_page ?? 1);
-    const [lastPage, setLastPage] = useState(auditLogsProp.last_page ?? 1);
-    const [totalLogs, setTotalLogs] = useState(auditLogsProp.total ?? 0);
+    const [auditLogs, setAuditLogs] = useState(auditLogsProp?.data ?? []);
+    const [currentPage, setCurrentPage] = useState(auditLogsProp?.current_page ?? 1);
+    const [lastPage, setLastPage] = useState(auditLogsProp?.last_page ?? 1);
+    const [totalLogs, setTotalLogs] = useState(auditLogsProp?.total ?? 0);
     const [logsLoading, setLogsLoading] = useState(false);
 
+
+    if (!request || !auditLogsProp) {
+        return (
+            <DefaultLayout>
+                <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                    <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    Loading request...
+                </div>
+            </DefaultLayout>
+        );
+    }
+
     const fetchAuditLogs = async (page: number) => {
+        if (!request) return;
         setLogsLoading(true);
         const res = await fetch(`/requests/${request.id}/audit-logs?page=${page}`);
         const json = await res.json();
