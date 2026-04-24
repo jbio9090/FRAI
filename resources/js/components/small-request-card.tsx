@@ -104,7 +104,7 @@ export default function SmallRequestCard({
 
                 {/* Row 1: Title + link button */}
                 <div className="flex items-start justify-between gap-2">
-                    <span className="font-bold text-xl leading-tight">{request.title}</span>
+                    <span className="font-semibold text-xl tracking-tight">{request.title}</span>
                     <Link href={route("requests.detail", request.id)} className="shrink-0 ml-auto">
                         <Button size="xs" variant="outline"><ArrowUpRight size={14} /></Button>
                     </Link>

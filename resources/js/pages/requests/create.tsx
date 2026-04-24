@@ -1,6 +1,6 @@
 import { useForm, router } from '@inertiajs/react';
 import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Minus, Plus, Paperclip, Info } from "lucide-react";
+import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Minus, Plus, Paperclip, Info, Search, ArrowUpDown, Box } from "lucide-react";
 import { motion } from "motion/react"
 import { useState, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { AttachedFileList } from '@/components/attached-file-list';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -219,6 +220,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [isExternalOpen, setIsExternalOpen] = useState(false);
     const [isBorrowOpen, setIsBorrowOpen] = useState(false);
 
+    // Borrow panel: search, sort, filter
+    const [borrowSearch, setBorrowSearch] = useState('');
+    const [borrowSort, setBorrowSort] = useState<'name-asc' | 'name-desc' | 'qty-asc' | 'qty-desc'>('name-asc');
+    const [borrowFacilityFilter, setBorrowFacilityFilter] = useState<string>('all');
+
     const handleCheckboxChange = (name: string) => {
         setData('approved_by', data.approved_by.includes(name)
             ? data.approved_by.filter((item) => item !== name)
@@ -238,6 +244,25 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             }
             return unique;
         }, [] as Array<FacilityEquipment & { sources: { facilityId: number; facilityName: string; quantity: number }[] }>);
+
+    // All unique source facilities for the filter dropdown
+    const allSourceFacilities = facilities.filter(f => f.id !== selectedFacility);
+
+    // Derived: filtered + sorted borrowable equipment list
+    const filteredBorrowableEquipment = allBorrowableEquipment
+        .filter(eq => eq.name.toLowerCase().includes(borrowSearch.toLowerCase()))
+        .filter(eq =>
+            borrowFacilityFilter === 'all' ||
+            eq.sources.some(s => s.facilityId === Number(borrowFacilityFilter))
+        )
+        .sort((a, b) => {
+            if (borrowSort === 'name-asc') return a.name.localeCompare(b.name);
+            if (borrowSort === 'name-desc') return b.name.localeCompare(a.name);
+            const totalA = a.sources.reduce((s, src) => s + (borrowableAvailability[src.facilityId]?.[a.id] ?? src.quantity), 0);
+            const totalB = b.sources.reduce((s, src) => s + (borrowableAvailability[src.facilityId]?.[b.id] ?? src.quantity), 0);
+            if (borrowSort === 'qty-asc') return totalA - totalB;
+            return totalB - totalA;
+        });
 
     const { data, setData, post, processing, errors, transform } = useForm({
         title: existingRequest?.title ?? '',
@@ -1121,7 +1146,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                             </CollapsibleContent>
                                         </Collapsible>
 
-                                        {/* ── Borrow from another facility — simplified ── */}
+                                        {/* ── Borrow from another facility ── */}
                                         {selectedFacility && (
                                             <Collapsible open={isBorrowOpen} onOpenChange={setIsBorrowOpen}>
                                                 <CollapsibleTrigger asChild>
@@ -1136,101 +1161,180 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     </Button>
                                                 </CollapsibleTrigger>
                                                 <CollapsibleContent className="mt-2">
-                                                    <div className="border rounded-md divide-y">
-                                                        {allBorrowableEquipment.length === 0 ? (
-                                                            <p className="text-sm text-muted-foreground text-center py-4">No equipment available to borrow.</p>
-                                                        ) : allBorrowableEquipment.map((equipment) => {
-                                                            const isExpanded = borrowingEquipmentId === equipment.id;
-                                                            const borrowed = selectedBorrowedEquipment.filter(e => e.equipment_id === equipment.id);
-                                                            const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
-
-                                                            return (
-                                                                <div key={equipment.id}>
-                                                                    {/* Equipment header row */}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setBorrowingEquipmentId(isExpanded ? null : equipment.id)}
-                                                                        className={cn(
-                                                                            "w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors text-left",
-                                                                            isExpanded ? "bg-muted/40" : "hover:bg-muted/20"
-                                                                        )}
-                                                                    >
-                                                                        <span className="font-medium">{equipment.name}</span>
-                                                                        <div className="flex items-center gap-2">
-                                                                            {totalBorrowed > 0 && (
-                                                                                <span className="text-xs text-primary font-medium">{totalBorrowed} selected</span>
-                                                                            )}
-                                                                            <MotionChevron openCollapsible={isExpanded} />
-                                                                        </div>
-                                                                    </button>
-
-                                                                    {/* Sources — shown when expanded */}
-                                                                    {isExpanded && (
-                                                                        <div className="bg-muted/10 border-t divide-y px-3">
-                                                                            {equipment.sources.map(source => {
-                                                                                const item = borrowed.find(e => e.source_facility_id === source.facilityId);
-                                                                                const available = borrowableAvailability[source.facilityId]?.[equipment.id] ?? source.quantity;
-                                                                                const isLimited = available < source.quantity;
-
-                                                                                return (
-                                                                                    <div key={source.facilityId} className="flex items-center gap-3 py-2.5">
-                                                                                        <Checkbox
-                                                                                            id={`borrow-${equipment.id}-${source.facilityId}`}
-                                                                                            checked={!!item}
-                                                                                            onCheckedChange={() => {
-                                                                                                if (item) {
-                                                                                                    setSelectedBorrowedEquipment(prev =>
-                                                                                                        prev.filter(e => !(e.equipment_id === equipment.id && e.source_facility_id === source.facilityId))
-                                                                                                    );
-                                                                                                } else {
-                                                                                                    setSelectedBorrowedEquipment(prev => [...prev, {
-                                                                                                        equipment_id: equipment.id,
-                                                                                                        equipment_name: equipment.name,
-                                                                                                        source_facility_id: source.facilityId,
-                                                                                                        source_facility_name: source.facilityName,
-                                                                                                        quantity_needed: 1,
-                                                                                                        max_quantity: available,
-                                                                                                    }]);
-                                                                                                }
-                                                                                            }}
-                                                                                        />
-                                                                                        <div className="flex-1 min-w-0">
-                                                                                            <Label htmlFor={`borrow-${equipment.id}-${source.facilityId}`} className="text-sm font-medium cursor-pointer block truncate">
-                                                                                                {source.facilityName}
-                                                                                            </Label>
-                                                                                            <span className={cn("text-xs", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
-                                                                                                {available} available{isLimited && ` of ${source.quantity}`}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                        {item && (
-                                                                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                                                                <Label className="text-xs text-muted-foreground">Qty</Label>
-                                                                                                <Input
-                                                                                                    type="number"
-                                                                                                    min="1"
-                                                                                                    max={available}
-                                                                                                    value={item.quantity_needed}
-                                                                                                    onChange={(e) => {
-                                                                                                        const qty = Math.min(Number(e.target.value), available);
-                                                                                                        setSelectedBorrowedEquipment(prev => prev.map(i =>
-                                                                                                            i.equipment_id === equipment.id && i.source_facility_id === source.facilityId
-                                                                                                                ? { ...i, quantity_needed: qty }
-                                                                                                                : i
-                                                                                                        ));
-                                                                                                    }}
-                                                                                                    className="w-16 h-7 text-sm px-2"
-                                                                                                />
-                                                                                            </div>
-                                                                                        )}
-                                                                                    </div>
-                                                                                );
-                                                                            })}
-                                                                        </div>
+                                                    {allBorrowableEquipment.length === 0 ? (
+                                                        <p className="text-sm text-muted-foreground text-center py-4">No equipment available to borrow.</p>
+                                                    ) : (
+                                                        <div className="border rounded-md overflow-hidden">
+                                                            {/* ── Search + Sort + Filter toolbar ── */}
+                                                            <div className="p-2 border-b bg-muted/20 space-y-2">
+                                                                {/* Search bar */}
+                                                                <div className="relative">
+                                                                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                                                    <Input
+                                                                        placeholder="Search equipment..."
+                                                                        value={borrowSearch}
+                                                                        onChange={(e) => setBorrowSearch(e.target.value)}
+                                                                        className="pl-8 h-8 text-sm"
+                                                                    />
+                                                                    {borrowSearch && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setBorrowSearch('')}
+                                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                                        >
+                                                                            <X size={13} />
+                                                                        </button>
                                                                     )}
                                                                 </div>
-                                                            );
-                                                        })}
-                                                    </div>
+
+                                                                {/* Sort + Filter row */}
+                                                                <div className="flex gap-2 flex-col md:flex-row">
+                                                                    {/* Sort */}
+                                                                    <Select value={borrowSort} onValueChange={(v) => setBorrowSort(v as typeof borrowSort)}>
+                                                                        <SelectTrigger className="h-8 text-sm flex-1 gap-1">
+                                                                            <ArrowUpDown size={16} className="shrink-0 text-muted-foreground" />
+                                                                            <SelectValue />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="name-asc">Name A–Z</SelectItem>
+                                                                            <SelectItem value="name-desc">Name Z–A</SelectItem>
+                                                                            <SelectItem value="qty-desc">Most Available</SelectItem>
+                                                                            <SelectItem value="qty-asc">Least Available</SelectItem>
+                                                                        </SelectContent>
+                                                                    </Select>
+
+                                                                    {/* Filter by facility */}
+                                                                    <Select value={borrowFacilityFilter} onValueChange={setBorrowFacilityFilter}>
+                                                                        <SelectTrigger className="h-8 text-sm flex-1 gap-1">
+                                                                            <Box size={16} className="shrink-0 text-muted-foreground" />
+                                                                            <SelectValue className='truncate'/>
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="all">All Facilities</SelectItem>
+                                                                            {allSourceFacilities.map(f => (
+                                                                                <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* ── Equipment list in ScrollArea ── */}
+                                                            <ScrollArea className="h-64">
+                                                                <div className="divide-y">
+                                                                    {filteredBorrowableEquipment.length === 0 ? (
+                                                                        <p className="text-sm text-muted-foreground text-center py-6">No equipment matches your search.</p>
+                                                                    ) : filteredBorrowableEquipment.map((equipment) => {
+                                                                        const isExpanded = borrowingEquipmentId === equipment.id;
+                                                                        const borrowed = selectedBorrowedEquipment.filter(e => e.equipment_id === equipment.id);
+                                                                        const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
+                                                                        const totalAvailable = equipment.sources.reduce((s, src) =>
+                                                                            s + (borrowableAvailability[src.facilityId]?.[equipment.id] ?? src.quantity), 0
+                                                                        );
+                                                                        const totalStock = equipment.sources.reduce((s, src) => s + src.quantity, 0);
+                                                                        const isAnyLimited = totalAvailable < totalStock;
+
+                                                                        return (
+                                                                            <div key={equipment.id}>
+                                                                                {/* Equipment header row */}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => setBorrowingEquipmentId(isExpanded ? null : equipment.id)}
+                                                                                    className={cn(
+                                                                                        "w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors text-left",
+                                                                                        isExpanded ? "bg-muted/40" : "hover:bg-muted/20"
+                                                                                    )}
+                                                                                >
+                                                                                    <span className="font-medium">{equipment.name}</span>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        {totalBorrowed > 0 && (
+                                                                                            <span className="text-xs text-primary font-medium">{totalBorrowed} selected</span>
+                                                                                        )}
+                                                                                        <span className={cn(
+                                                                                            "text-xs tabular-nums",
+                                                                                            isAnyLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground"
+                                                                                        )}>
+                                                                                            {totalAvailable} avail.
+                                                                                        </span>
+                                                                                        <MotionChevron openCollapsible={isExpanded} />
+                                                                                    </div>
+                                                                                </button>
+
+                                                                                {/* Sources — shown when expanded */}
+                                                                                {isExpanded && (
+                                                                                    <div className="bg-muted/10 border-t divide-y px-3">
+                                                                                        {equipment.sources
+                                                                                            .filter(source =>
+                                                                                                borrowFacilityFilter === 'all' ||
+                                                                                                source.facilityId === Number(borrowFacilityFilter)
+                                                                                            )
+                                                                                            .map(source => {
+                                                                                                const item = borrowed.find(e => e.source_facility_id === source.facilityId);
+                                                                                                const available = borrowableAvailability[source.facilityId]?.[equipment.id] ?? source.quantity;
+                                                                                                const isLimited = available < source.quantity;
+
+                                                                                                return (
+                                                                                                    <div key={source.facilityId} className="flex items-center gap-3 py-2.5">
+                                                                                                        <Checkbox
+                                                                                                            id={`borrow-${equipment.id}-${source.facilityId}`}
+                                                                                                            checked={!!item}
+                                                                                                            onCheckedChange={() => {
+                                                                                                                if (item) {
+                                                                                                                    setSelectedBorrowedEquipment(prev =>
+                                                                                                                        prev.filter(e => !(e.equipment_id === equipment.id && e.source_facility_id === source.facilityId))
+                                                                                                                    );
+                                                                                                                } else {
+                                                                                                                    setSelectedBorrowedEquipment(prev => [...prev, {
+                                                                                                                        equipment_id: equipment.id,
+                                                                                                                        equipment_name: equipment.name,
+                                                                                                                        source_facility_id: source.facilityId,
+                                                                                                                        source_facility_name: source.facilityName,
+                                                                                                                        quantity_needed: 1,
+                                                                                                                        max_quantity: available,
+                                                                                                                    }]);
+                                                                                                                }
+                                                                                                            }}
+                                                                                                        />
+                                                                                                        <div className="flex-1 min-w-0">
+                                                                                                            <Label htmlFor={`borrow-${equipment.id}-${source.facilityId}`} className="text-sm font-medium cursor-pointer block truncate">
+                                                                                                                {source.facilityName}
+                                                                                                            </Label>
+                                                                                                            <span className={cn("text-xs", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
+                                                                                                                {available} available{isLimited && ` of ${source.quantity}`}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                        {item && (
+                                                                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                                                                <Label className="text-xs text-muted-foreground">Qty</Label>
+                                                                                                                <Input
+                                                                                                                    type="number"
+                                                                                                                    min="1"
+                                                                                                                    max={available}
+                                                                                                                    value={item.quantity_needed}
+                                                                                                                    onChange={(e) => {
+                                                                                                                        const qty = Math.min(Number(e.target.value), available);
+                                                                                                                        setSelectedBorrowedEquipment(prev => prev.map(i =>
+                                                                                                                            i.equipment_id === equipment.id && i.source_facility_id === source.facilityId
+                                                                                                                                ? { ...i, quantity_needed: qty }
+                                                                                                                                : i
+                                                                                                                        ));
+                                                                                                                    }}
+                                                                                                                    className="w-16 h-7 text-sm px-2"
+                                                                                                                />
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </ScrollArea>
+                                                        </div>
+                                                    )}
 
                                                     {/* Summary when nothing is expanded */}
                                                     {!borrowingEquipmentId && selectedBorrowedEquipment.length > 0 && (
