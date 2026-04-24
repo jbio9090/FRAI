@@ -692,7 +692,10 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             />
                         )}
 
-                        <div className="gap-4 mt-6 md:flex flex-wrap items-start w-full grid">
+                        <div
+                            className="gap-4 mt-8 grid items-start w-full"
+                            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(max(24rem, calc(50% - 0.5rem)), 1fr))' }}
+                        >
                             {requests && requests.data.length > 0 ? requests.data.map((request) => (
                                 <RequestCard
                                     request={request}
@@ -701,7 +704,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     isSelecting={isSelecting}
                                     isSelected={selected.includes(request.id)}
                                     handleSelection={handleSelection}
-                                    className='flex-auto basis-[12rem] md:max-w-[calc(50%-0.5rem)] max-w-full'
+                                    className='w-full'
                                 />
                             )) : (
                                 <motion.div
