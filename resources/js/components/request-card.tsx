@@ -449,17 +449,20 @@ function RequestDetails({
     return (
         <>
             <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full hidden xs:block'>
-                <TabsList className="w-fit" variant={"line"}>
-                    {tabs.map((tab) => (
-                        <TabsTrigger key={tab.value} value={tab.value}>
-                            {tab.icon}
-                            <span>{tab.label}</span>
-                            {tab.badge !== undefined && (
-                                <span className='flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium'>{tab.badge}</span>
-                            )}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
+                <ScrollArea className="w-full" type="scroll">
+                    <TabsList className='border-b w-max min-w-full' variant="line">
+                        {tabs.map((tab) => (
+                            <TabsTrigger key={tab.value} value={tab.value}>
+                                {tab.icon}
+                                <span>{tab.label}</span>
+                                {tab.badge !== undefined && (
+                                    <span className='flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium'>{tab.badge}</span>
+                                )}
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                    <ScrollBar orientation="horizontal" className='translate-y-2' />
+                </ScrollArea>
                 {tabs.map((tab) => (
                     <TabsContent key={tab.value} value={tab.value}>
                         {tab.content}

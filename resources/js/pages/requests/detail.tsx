@@ -270,7 +270,7 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
                     <ScrollArea className="w-full" type="scroll">
-                        <TabsList variant={"line"} className='border-b w-max min-w-full'>
+                        <TabsList variant="line" className='border-b w-max min-w-full'>
                             <TabsTrigger value="overview">Overview</TabsTrigger>
 
                             <TabsTrigger value="facilities" className="flex items-center gap-2">
