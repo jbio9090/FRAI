@@ -29,11 +29,12 @@ import { cn } from '@/lib/utils';
 import AnimatedText from '@/components/animated-text';
 import { AttachedFileList } from '@/components/attached-file-list';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import SmartPagination from '@/components/SmartPagination';
 
 interface DetailProps {
     children?: React.ReactNode;
     request: Request;
-    auditLogs: any[];
+    auditLogs: { data: any[]; current_page: number; last_page: number; total: number };
 }
 
 type RecommendedAction = 'Approved' | 'Conditionally Approved' | 'Denied' | 'For Reschedule' | string;
@@ -75,12 +76,29 @@ function RecommendationBadge({ action }: { action: RecommendedAction }) {
     );
 }
 
-export default function RequestDetail({ request, auditLogs }: DetailProps) {
+export default function RequestDetail({ request, auditLogs: auditLogsProp }: DetailProps) {
     const auth = usePage().props.auth;
     const [comment, setComment] = useState("");
     const [isCommenting, setCommentInputState] = useState(false);
     const { hasRole } = usePermission();
     const isAdmin = hasRole("admin");
+
+    const [auditLogs, setAuditLogs] = useState(auditLogsProp.data ?? []);
+    const [currentPage, setCurrentPage] = useState(auditLogsProp.current_page ?? 1);
+    const [lastPage, setLastPage] = useState(auditLogsProp.last_page ?? 1);
+    const [totalLogs, setTotalLogs] = useState(auditLogsProp.total ?? 0);
+    const [logsLoading, setLogsLoading] = useState(false);
+
+    const fetchAuditLogs = async (page: number) => {
+        setLogsLoading(true);
+        const res = await fetch(`/requests/${request.id}/audit-logs?page=${page}`);
+        const json = await res.json();
+        setAuditLogs(json.data);
+        setCurrentPage(json.current_page);
+        setLastPage(json.last_page);
+        setTotalLogs(json.total);
+        setLogsLoading(false);
+    };
 
     const canEdit = request.status === 'Pending'
         && !request.on_hold
@@ -272,7 +290,7 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                             <TabsTrigger value="activity" className="flex items-center gap-2">
                                 <span>Activity</span>
                                 <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
-                                    {auditLogs.length}
+                                    {totalLogs}
                                 </span>
                             </TabsTrigger>
 
@@ -438,8 +456,22 @@ export default function RequestDetail({ request, auditLogs }: DetailProps) {
                     </TabsContent>
 
                     {/* Activity Tab */}
-                    <TabsContent value="activity" className="flex flex-col gap-0 mt-6">
-                        <ActivityFeed auditLogs={auditLogs} />
+                    <TabsContent value="activity" className="flex flex-col gap-4 mt-6">
+                        {logsLoading ? (
+                            <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+                                <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                Loading activity...
+                            </div>
+                        ) : (
+                            <>
+                                <ActivityFeed auditLogs={auditLogs} />
+                                <SmartPagination
+                                    currentPage={currentPage}
+                                    lastPage={lastPage}
+                                    onPageChange={fetchAuditLogs}
+                                />
+                            </>
+                        )}
                     </TabsContent>
 
                     {/* Files Tab */}

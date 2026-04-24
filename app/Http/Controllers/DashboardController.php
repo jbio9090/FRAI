@@ -39,8 +39,7 @@ class DashboardController extends Controller
             'auditLogs' => AuditLog::with('user')
                 ->where('created_at', '>=', now()->subDays(6)->startOfDay())
                 ->latest()
-                ->take(100)
-                ->get(),
+                ->paginate(10),
             'chartData'     => $chartData,
             'pending' => $this->requestService->get([RequestStatus::PENDING]),
         ]);
@@ -108,18 +107,17 @@ class DashboardController extends Controller
         $range = $request->input('range', 'week');
 
         [$start, $end] = match ($range) {
-            'day' => [now()->startOfDay(), now()->endOfDay()],
+            'day'     => [now()->startOfDay(), now()->endOfDay()],
             'month'   => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
             '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
             default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
         };
 
-        $logs = AuditLog::with('user')
-            ->whereBetween('created_at', [$start, $end])
-            ->latest()
-            ->take(100)
-            ->get();
-
-        return response()->json($logs);
+        return response()->json(
+            AuditLog::with('user')
+                ->whereBetween('created_at', [$start, $end])
+                ->latest()
+                ->paginate(10) 
+        );
     }
 }

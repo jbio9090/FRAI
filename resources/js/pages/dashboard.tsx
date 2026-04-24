@@ -47,6 +47,8 @@ import {
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowDownUp } from 'lucide-react';
+import axios from "axios";
+import SmartPagination from "@/components/SmartPagination";
 
 interface Event {
     start: Date;
@@ -102,7 +104,7 @@ export default function Dashboard({
     denied: FacilityRequest[];
     initialEvents: Event[];
     buildings: string[];
-    auditLogs: AuditLog[];
+    auditLogs: { data: AuditLog[]; current_page: number; last_page: number };
     chartData: ChartRow[];
 }) {
     const [selectedBuildings, setSelectedBuildings] = useState<string[]>(buildings);
@@ -111,8 +113,20 @@ export default function Dashboard({
     const [loading, setLoading] = useState(false);
     const auth = usePage().props.auth;
     const { hasRole } = usePermission();
-    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp);
     const [logsLoading, setLogsLoading] = useState(false);
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp.data ?? []);
+    const [currentPage, setCurrentPage] = useState(auditLogsProp.current_page ?? 1);
+    const [lastPage, setLastPage] = useState(auditLogsProp.last_page ?? 1);
+
+    const fetchAuditLogs = async (page = 1, selectedRange = range) => {
+        setLogsLoading(true);
+        const res = await fetch(`/dashboard/audit-logs?range=${selectedRange}&page=${page}`);
+        const json = await res.json();
+        setAuditLogs(json.data);
+        setCurrentPage(json.current_page);
+        setLastPage(json.last_page);
+        setLogsLoading(false);
+    };
 
     const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
     const [canScrollNext, setCanScrollNext] = useState(false);
@@ -143,18 +157,13 @@ export default function Dashboard({
 
     useEffect(() => {
         setLoading(true);
-        setLogsLoading(true);
 
-        Promise.all([
-            fetch(`/dashboard/chart-data?range=${range}`).then(r => r.json()),
-            fetch(`/dashboard/audit-logs?range=${range}`).then(r => r.json()),
-        ]).then(([chartJson, logsJson]) => {
-            setData(fillDateRange(chartJson, range));
-            setAuditLogs(logsJson);
-        }).finally(() => {
-            setLoading(false);
-            setLogsLoading(false);
-        });
+        fetch(`/dashboard/chart-data?range=${range}`)
+            .then(r => r.json())
+            .then(chartJson => setData(fillDateRange(chartJson, range)))
+            .finally(() => setLoading(false));
+
+        fetchAuditLogs(1, range);
     }, [range]);
 
     useEffect(() => {
@@ -833,14 +842,21 @@ export default function Dashboard({
                                         </Popover>
 
                                         <span className="ml-auto text-xs text-muted-foreground">
-                                            {filteredLogs.length} event{filteredLogs.length !== 1 ? 's' : ''}
+                                            {filteredLogs.length} event{filteredLogs.length !== 1 ? 's' : ''} · page {currentPage} of {lastPage}
                                         </span>
                                     </div>
 
                                     {filteredLogs.length === 0 ? (
                                         <p className="text-sm text-muted-foreground py-4">No events match the current filter.</p>
                                     ) : (
-                                        <ActivityFeed auditLogs={filteredLogs} />
+                                        <>
+                                            <ActivityFeed auditLogs={filteredLogs} />
+                                            <SmartPagination
+                                                currentPage={currentPage}
+                                                lastPage={lastPage}
+                                                onPageChange={(page) => fetchAuditLogs(page, range)}
+                                            />
+                                        </>
                                     )}
                                 </div>
                             )}

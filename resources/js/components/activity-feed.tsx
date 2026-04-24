@@ -14,6 +14,10 @@ import {
     LogIn,
     LogOut,
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import axios from "axios";
+import SmartPagination from "@/components/SmartPagination";
+
 
 export type AuditLog = {
     id: number;

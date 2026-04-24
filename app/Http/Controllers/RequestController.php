@@ -174,21 +174,31 @@ class RequestController extends Controller
 
     public function detail(int $request_id)
     {
-        $requestModel = FacilityRequest::findOrFail($request_id);
-
+        $requestModel  = FacilityRequest::findOrFail($request_id);
         $requestDetail = $this->service->getDetail($request_id);
 
-        $auditLogs = AuditLog::query()
-            ->forSubject($requestModel)
-            ->with('user')
-            ->latest()
-            ->get();
-
         return Inertia::render("requests/detail", [
-            'request' => $requestDetail,
+            'request'           => $requestDetail,
             'labeledBreadcrumb' => $requestDetail['title'],
-            'auditLogs' => $auditLogs,
+            'auditLogs'         => AuditLog::query()
+                ->forSubject($requestModel)
+                ->with('user')
+                ->latest()
+                ->paginate(10),
         ]);
+    }
+
+    public function auditLogs(Request $request, int $id)
+    {
+        $requestModel = FacilityRequest::findOrFail($id);
+
+        return response()->json(
+            AuditLog::query()
+                ->forSubject($requestModel)
+                ->with('user')
+                ->latest()
+                ->paginate(10)
+        );
     }
 
     public function store(FacilityFormRequest $request)
