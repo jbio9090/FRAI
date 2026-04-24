@@ -692,7 +692,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             />
                         )}
 
-                        <div className="gap-4 mt-6 flex flex-col items-start xl:grid grid-cols-[1fr_1fr]">
+                        <div className="gap-4 mt-6 md:flex flex-wrap items-start w-full grid">
                             {requests && requests.data.length > 0 ? requests.data.map((request) => (
                                 <RequestCard
                                     request={request}
@@ -701,6 +701,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     isSelecting={isSelecting}
                                     isSelected={selected.includes(request.id)}
                                     handleSelection={handleSelection}
+                                    className='flex-auto basis-[12rem] md:max-w-[calc(50%-0.5rem)] max-w-full'
                                 />
                             )) : (
                                 <motion.div
