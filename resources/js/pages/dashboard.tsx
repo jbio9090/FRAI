@@ -346,7 +346,7 @@ export default function Dashboard({
                                             </div>
                                             <div className="flex flex-col gap-1">
                                                 <p className="text-sm font-semibold">No pending requests</p>
-                                                <p className="text-xs text-muted-foreground">You're all caught up! Submit a new facility request to get started.</p>
+                                                <p className="text-sm text-muted-foreground">You're all caught up! Submit a new facility request to get started.</p>
                                             </div>
                                             <Link href={route("request.create")}>
                                                 <Button

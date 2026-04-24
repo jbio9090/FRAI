@@ -294,6 +294,7 @@ function RequestDetails({
     const isPending: boolean = request.status === "Pending";
     const [activeTab, setActiveTab] = useState("facilities");
 
+    const { hasPermission } = usePermission();
     const tabs = [
         {
             value: "facilities",
@@ -383,7 +384,7 @@ function RequestDetails({
                 </ScrollArea>
             ),
         }] : []),
-        ...(isPending ? [{
+        ...(hasPermission('approve requests') ? [{
             value: "recommend",
             icon: <ThumbsUp size={16} />,
             label: "Recommendation",

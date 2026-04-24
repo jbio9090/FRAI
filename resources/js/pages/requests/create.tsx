@@ -544,13 +544,47 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setEquipmentConflicts({});
     }
 
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const ALLOWED_TYPES = [
+        'image/jpeg', 'image/png',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ];
+
     function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
         const selected = Array.from(e.target.files ?? []);
-        const newFiles: AttachedFile[] = selected.map(file => ({
-            file,
-            preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
-        }));
-        setAttachedFiles(prev => [...prev, ...newFiles]);
+        const rejected: string[] = [];
+        const accepted: AttachedFile[] = [];
+
+        for (const file of selected) {
+            if (file.size > MAX_FILE_SIZE) {
+                rejected.push(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)}MB — max is 10MB`);
+                continue;
+            }
+            if (!ALLOWED_TYPES.includes(file.type)) {
+                rejected.push(`"${file.name}" is not an allowed file type`);
+                continue;
+            }
+            accepted.push({
+                file,
+                preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+            });
+        }
+
+        if (rejected.length > 0) {
+            toast.error('Some files were rejected', {
+                description: rejected.join('\n'),
+                duration: 5000,
+            });
+        }
+
+        if (accepted.length > 0) {
+            setAttachedFiles(prev => [...prev, ...accepted]);
+        }
+
         e.target.value = '';
     }
 
@@ -795,9 +829,20 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     onRemoveServer={removeExistingFile}
                                 />
 
-                                {errors.files && (
-                                    <p className="text-sm text-destructive">{errors.files}</p>
-                                )}
+                                {/* File errors — catches both array-level and per-file errors */}
+                                {(() => {
+                                    const fileErrors = Object.entries(errors)
+                                        .filter(([key]) => key === 'files' || key.startsWith('files.'))
+                                        .map(([, msg]) => msg as string);
+
+                                    return fileErrors.length > 0 ? (
+                                        <ul className="text-sm text-destructive space-y-1 mt-1">
+                                            {fileErrors.map((msg, i) => (
+                                                <li key={i}>{msg}</li>
+                                            ))}
+                                        </ul>
+                                    ) : null;
+                                })()}
                             </div>
                         </TabsContent>
 
@@ -1270,7 +1315,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         </TabsContent>
                     </Tabs>
 
-                    <div className="sticky bottom-0 z-50 -mx-6 md:-mx-8 px-6 md:px-8 flex justify-end gap-4 py-4 bg-background/80 backdrop-blur-sm border-t border-border">
+                    <div className="sticky bottom-0 z-5 -mx-6 md:-mx-8 px-6 md:px-8 flex justify-end gap-4 py-4 bg-background/80 backdrop-blur-sm border-t border-border">
                         <Button type="button" variant="outline" size="lg" className='text-md font-semibold' onClick={() => window.history.back()}>
                             Cancel
                         </Button>

@@ -133,13 +133,30 @@ class FacilityFormRequest extends FormRequest
 
     public function attributes(): array
     {
-        return [
+        $attrs = [
             'facility_bookings.*.facility_id'              => 'facility',
             'facility_bookings.*.date'                     => 'booking date',
             'facility_bookings.*.time_start'               => 'start time',
             'facility_bookings.*.time_end'                 => 'end time',
             'facility_bookings.*.equipment.*.quantity_needed' => 'equipment quantity',
             'facility_bookings.*.external_equipment'       => 'external equipment',
+        ];
+
+        // Dynamically label each file by its original name
+        foreach ($this->file('files', []) as $index => $file) {
+            $attrs["files.{$index}"] = $file?->getClientOriginalName() ?? "file " . ($index + 1);
+        }
+
+        return $attrs;
+    }
+
+    public function messages(): array
+    {
+        return [
+            'files.*.max'   => 'Each file must be under 10MB. ":attribute" exceeds the limit.',
+            'files.*.mimes' => '":attribute" is not an allowed file type. Accepted: JPG, PNG, PDF, DOC, DOCX, XLSX, PPTX.',
+            'files.*.file'  => '":attribute" could not be uploaded.',
+            'files.max'     => 'You may only attach up to 10 files.',
         ];
     }
 }
