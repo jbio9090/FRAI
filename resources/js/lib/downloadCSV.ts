@@ -55,7 +55,7 @@ export function downloadRequestsCSV(requests: Request[], filename = "requests.cs
                         moment(rf.date_requested).format("YYYY-MM-DD"),
                         formatTime(rf.time_start),
                         formatTime(rf.time_end),
-                        rf.external_equipment ?? "",
+                        rf.external_equipments?.map(e => e.name).join(" | ") ?? "",
                     ].map(escape)
                 );
             }
@@ -74,4 +74,9 @@ export function downloadRequestsCSV(requests: Request[], filename = "requests.cs
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+}
+
+export function downloadSingleRequestCSV(request: Request) {
+    const filename = `request-${request.id}.csv`;
+    downloadRequestsCSV([request], filename);
 }

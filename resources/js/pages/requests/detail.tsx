@@ -8,6 +8,7 @@ import {
     ClipboardCheck,
     MessageSquare,
     Sparkles,
+    Download,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -30,6 +31,7 @@ import AnimatedText from '@/components/animated-text';
 import { AttachedFileList } from '@/components/attached-file-list';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import SmartPagination from '@/components/SmartPagination';
+import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -313,6 +315,10 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                     {request.files?.length ?? 0}
                                 </span>
                             </TabsTrigger>
+
+                            <TabsTrigger value="export">
+                                Export
+                            </TabsTrigger>
                         </TabsList>
                         <ScrollBar orientation="horizontal" className="h-0" />
                     </ScrollArea>
@@ -509,6 +515,24 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                         ) : (
                             <p className="text-muted-foreground text-sm">No files attached.</p>
                         )}
+                    </TabsContent>
+
+                    <TabsContent value="export" className='flex flex-col gap-4'>
+                        <div className="p-4 flex justify-between items-center w-4/5 mx-auto">
+                            <p className="text-sm text-muted-foreground max-w-3/5">
+                                Export this request as a CSV file for reporting, sharing, or backup purposes.
+                                The downloaded file will include all relevant request details.
+                            </p>
+                            <Button
+                                onClick={() => downloadSingleRequestCSV(request)}
+                                size="sm"
+                                variant="outline"
+                                className="mt-1 gap-2 relative isolate overflow-hidden border-primary text-primary bg-transparent hover:bg-transparent hover:text-primary-foreground before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:before:scale-x-100"
+                            >
+                                <Download size={16} />
+                                <span>Export to CSV</span>
+                            </Button>
+                        </div>
                     </TabsContent>
                 </Tabs>
             </div>
