@@ -85,6 +85,7 @@ class RequestController extends Controller
 
         if ($action === 'approve') {
             $facilityRequest = $this->service->approve($id);
+            $this->auditLogger::requestApproved($facilityRequest);
         } else {
             $facilityRequest->update([
                 'status'       => $statusMap[$action],
