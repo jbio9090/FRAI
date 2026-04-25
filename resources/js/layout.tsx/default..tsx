@@ -113,7 +113,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     }, []);
 
     return (
-        <SidebarProvider className='bg-sidebar-accent pt-4'>
+        <SidebarProvider className='pt-4 bg-sidebar'>
             <AppSidebar />
             <SidebarInset className='relative rounded-tl-2xl overflow-hidden border'>
                 <motion.header

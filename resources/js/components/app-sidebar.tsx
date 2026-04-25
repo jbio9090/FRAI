@@ -128,7 +128,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const currentStatus = route().params?.status || new URLSearchParams(window.location.search).get("status");
 
   return (
-    <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100] [&_[data-slot=sidebar-inner]]:bg-sidebar-accent">
+    <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100] [&_[data-slot=sidebar-inner]]:bg-sidebar">
       <SidebarHeader>
         <SidebarMenu>
           <div className="w-full flex flex-col items-center px-4 my-2">
@@ -140,7 +140,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <SidebarMenu>
           <SidebarMenuItem key="create-request" className="mt-2 px-4">
-            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/90 cursor-pointer">
+            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:bg-primary/90 cursor-pointer">
               <Link href={route("request.create")}>
                 <CirclePlus className="h-4 w-4" />
                 <span>Create Request</span>
@@ -149,7 +149,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
 
           <SidebarMenuItem key="chatbot" className="px-4">
-            <SidebarMenuButton className="bg-primary text-primary-foreground dark:text-foreground hover:text-primary-foreground hover:bg-primary/80 cursor-pointer" onClick={() => setIsChatbotModalOpen(true)}>
+            <SidebarMenuButton className="bg-primary text-primary-foreground dark:text-foreground hover:bg-primary/80 cursor-pointer" onClick={() => setIsChatbotModalOpen(true)}>
               <Sparkles className="h-4 w-4" />
               <span>Chatbot</span>
             </SidebarMenuButton>
@@ -180,7 +180,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuButton>
 
               <CollapsibleTrigger asChild>
-                <button className="flex items-center justify-center p-1 rounded-sm hover:bg-sidebar-accent-foreground/10 shrink-0">
+                <button className="flex items-center justify-center p-1 rounded-sm hover:bg-sidebar-accent shrink-0">
                   <ChevronRight
                     className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
                   />

@@ -126,7 +126,7 @@
     --color-chart-5:
         var(--chart-5);
     --color-sidebar:
-        var(--background);
+        var(--sidebar);
     --color-sidebar-foreground:
         var(--sidebar-foreground);
     --color-sidebar-primary:
@@ -214,13 +214,13 @@
     --chart-3: oklch(0.2759 0.1300 262.2437);
     --chart-4: oklch(0.8103 0.0962 256.8592);
     --chart-5: oklch(0.5103 0 0);
-    --sidebar: oklch(97.015% 0.00011 271.152 / 0.681);
+    --sidebar: oklch(0.9128 0.0417 267.68);
     --sidebar-foreground: oklch(0.2484 0 0);
     --sidebar-primary: oklch(0.5194 0.2684 263.2391);
     --sidebar-primary-foreground: oklch(1.0000 0 0);
-    --sidebar-accent: oklch(94.693% 0.00599 240.363);
-    --sidebar-accent-foreground: oklch(0.5194 0.2684 263.2391);
-    --sidebar-border: oklch(0.9079 0 0);
+    --sidebar-accent: oklch(0.8003 0.0732 267.43);
+    --sidebar-accent-foreground: oklch(0.3348 0.1824 263.65);
+    --sidebar-border: oklch(0.9128 0.0417 267.68);
     --sidebar-ring: oklch(0.5194 0.2684 263.2391);
     --destructive-foreground: oklch(1.0000 0 0);
     --font-sans: Manrope, ui-sans-serif, sans-serif, system-ui;
