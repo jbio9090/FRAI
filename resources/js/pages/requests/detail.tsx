@@ -32,6 +32,7 @@ import { AttachedFileList } from '@/components/attached-file-list';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import SmartPagination from '@/components/SmartPagination';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
+import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -148,14 +149,27 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
         });
     };
 
+    // Build the bookings array for PDF export
+    const facilitiesForPDF = request.request_facilities.map((rf) => {
+        const facility = request.facilities.find(f => f.id === rf.facility_id);
+        return {
+            facility_name: facility?.name ?? 'Unknown Facility',
+            date: rf.date_requested,
+            time_start: rf.time_start,
+            time_end: rf.time_end,
+            has_outsiders: rf.has_outsiders ?? false,
+            expected_capacity: rf.expected_capacity ?? null,
+        };
+    });
+
     const isPending = request.status === 'Pending' || request.status === 'For Reschedule';
 
     return (
-        <DefaultLayout>
+        <DefaultLayout hasPadding={false}>
             <div className="flex flex-col w-full gap-4 *:text-sm">
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 px-6 md:px-8 pt-6 md:pt-8">
                     <div className="flex items-center gap-2">
-                        <h1 className='font-bold text-2xl'>{request.title}</h1>
+                        <h1 className='font-bold text-2xl tracking-tight'>{request.title}</h1>
                         {canEdit && (
                             <Link href={route("requests.edit", request.id)}>
                                 <Button variant={"ghost"} size={"icon-sm"}>
@@ -285,7 +299,7 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
                     <ScrollArea className="w-full" type="scroll">
-                        <TabsList variant="line" className='border-b w-max min-w-full'>
+                        <TabsList variant="line" className='border-b w-fit ml-6 md:ml-8'>
                             <TabsTrigger value="overview">Overview</TabsTrigger>
 
                             <TabsTrigger value="facilities" className="flex items-center gap-2">
@@ -320,62 +334,64 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     </ScrollArea>
 
                     {/* Overview Tab */}
-                    <TabsContent value="overview" className="flex flex-col gap-6 mt-6 md:grid grid-cols-2">
-                        <div className="flex flex-col max-w-full">
-                            <p className='font-semibold mb-2 text-muted-foreground'>Description</p>
-                            <p>{request.description ? request.description : "No Description Provided"}</p>
-                        </div>
+                    <TabsContent value="overview" className="flex flex-col gap-6 mt-6 md:grid grid-cols-[8fr_6fr] px-6 md:px-8">
+                        <div className="flex flex-col md:grid grid-cols-2 gap-4">
+                            <div className="flex flex-col max-w-full">
+                                <p className='font-semibold mb-2 text-muted-foreground'>Description</p>
+                                <p>{request.description ? request.description : "No Description Provided"}</p>
+                            </div>
 
-                        <div className="flex flex-wrap gap-12">
-                            <div className="flex flex-col">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Requested by</p>
-                                <div className="flex gap-2 items-center">
-                                    <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size='sm' />
-                                    <p>{request.user.name}</p>
+                            <div className="flex flex-wrap gap-12">
+                                <div className="flex flex-col">
+                                    <p className='font-semibold mb-2 text-muted-foreground'>Requested by</p>
+                                    <div className="flex gap-2 items-center">
+                                        <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size='sm' />
+                                        <p>{request.user.name}</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col">
+                                    <p className='font-semibold mb-2 text-muted-foreground'>Date Submitted</p>
+                                    <p>{moment(request.created_at).format("MMMM D, YYYY")}</p>
                                 </div>
                             </div>
+
+                            <div className="flex flex-wrap gap-12">
+                                <div className="flex flex-col">
+                                    <p className='font-semibold mb-2 text-muted-foreground'>Processed by</p>
+                                    {request.processed_by ? (
+                                        <div className="flex gap-2 items-center">
+                                            <AvatarWithInitials avatarSrc={request.processed_by.profile} username={request.processed_by.name} size='sm' />
+                                            <p>{request.processed_by.name}</p>
+                                        </div>
+                                    ) : (<span>None</span>)}
+                                </div>
+                                <div className="flex flex-col">
+                                    <p className='font-semibold mb-2 text-muted-foreground'>Processed At</p>
+                                    {request.processed_at ? (
+                                        <p>{moment(request.processed_at).format("MMMM D, YYYY")}</p>
+                                    ) : (<span>None</span>)}
+                                </div>
+                            </div>
+
                             <div className="flex flex-col">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Date Submitted</p>
-                                <p>{moment(request.created_at).format("MMMM D, YYYY")}</p>
+                                <p className='font-semibold mb-2 text-muted-foreground'>Approved By</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {request.approved_by !== null ? (
+                                        request.approved_by.map((approvedBy, index) => (
+                                            <span key={index} className="text-sm font-bold">
+                                                {approvedBy}
+                                                {index < request.approved_by.length - 1 && ", "}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className='text-sm font-semibold'>None</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-12">
-                            <div className="flex flex-col">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Processed by</p>
-                                {request.processed_by ? (
-                                    <div className="flex gap-2 items-center">
-                                        <AvatarWithInitials avatarSrc={request.processed_by.profile} username={request.processed_by.name} size='sm' />
-                                        <p>{request.processed_by.name}</p>
-                                    </div>
-                                ) : (<span>None</span>)}
-                            </div>
-                            <div className="flex flex-col">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Processed At</p>
-                                {request.processed_at ? (
-                                    <p>{moment(request.processed_at).format("MMMM D, YYYY")}</p>
-                                ) : (<span>None</span>)}
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col">
-                            <p className='font-semibold mb-2 text-muted-foreground'>Approved By</p>
-                            <div className="flex flex-wrap gap-2">
-                                {request.approved_by !== null ? (
-                                    request.approved_by.map((approvedBy, index) => (
-                                        <span key={index} className="text-sm font-bold">
-                                            {approvedBy}
-                                            {index < request.approved_by.length - 1 && ", "}
-                                        </span>
-                                    ))
-                                ) : (
-                                    <span className='text-sm font-semibold'>None</span>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="p-4 flex justify-between items-center w-4/5 mx-auto">
-                            <p className="text-sm text-muted-foreground max-w-3/5">
+                        <div className="flex justify-between items-center mx-auto">
+                            <p className="text-sm text-muted-foreground">
                                 Export this request as a CSV file for reporting, sharing, or backup purposes.
                                 The downloaded file will include all relevant request details.
                             </p>
@@ -392,80 +408,96 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     </TabsContent>
 
                     {/* Facilities Tab */}
-                    <TabsContent value="facilities" className="flex flex-col gap-4 mt-6 lg:grid grid-cols-[1fr_1fr]">
-                        {request.request_facilities.map((rf, index) => {
-                            const facility = request.facilities.find(f => f.id === rf.facility_id);
-                            if (!facility) return null;
+                    <TabsContent value="facilities" className="flex flex-col gap-4 mt-6 px-6 md:px-8">
+                        {/* ── PDF Export button ── */}
+                        <div className="flex justify-end">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-2 relative isolate overflow-hidden border-primary text-primary bg-transparent hover:bg-transparent hover:text-primary-foreground before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:before:scale-x-100"
+                                onClick={() => downloadFacilitiesPDF(request.title, facilitiesForPDF)}
+                            >
+                                <Download size={16} />
+                                <span>Export Facilities to PDF</span>
+                            </Button>
+                        </div>
 
-                            const ownEquipment = request.equipment
-                                ?.filter(eq => !eq.pivot?.is_borrowed && eq.facilities?.some(f => f.id === rf.facility_id))
-                                .map(eq => ({
-                                    equipment_id: eq.id,
-                                    equipment_name: eq.name,
-                                    quantity_needed: eq.pivot.quantity_needed,
-                                    max_quantity: eq.pivot.quantity_needed,
-                                })) ?? [];
+                        {/* ── Booking Cards grid ── */}
+                        <div className="lg:grid grid-cols-[1fr_1fr] gap-4 flex flex-col">
+                            {request.request_facilities.map((rf, index) => {
+                                const facility = request.facilities.find(f => f.id === rf.facility_id);
+                                if (!facility) return null;
 
-                            const borrowedEquipment = request.equipment
-                                ?.filter(eq => eq.pivot?.is_borrowed)
-                                .map(eq => ({
-                                    equipment_id: eq.id,
-                                    equipment_name: eq.name,
-                                    source_facility_id: eq.pivot.source_facility_id,
-                                    source_facility_name: eq.facilities?.find(f => f.id === eq.pivot.source_facility_id)?.name ?? '',
-                                    quantity_needed: eq.pivot.quantity_needed,
-                                    max_quantity: eq.pivot.quantity_needed,
-                                })) ?? [];
+                                const ownEquipment = request.equipment
+                                    ?.filter(eq => !eq.pivot?.is_borrowed && eq.facilities?.some(f => f.id === rf.facility_id))
+                                    .map(eq => ({
+                                        equipment_id: eq.id,
+                                        equipment_name: eq.name,
+                                        quantity_needed: eq.pivot.quantity_needed,
+                                        max_quantity: eq.pivot.quantity_needed,
+                                    })) ?? [];
 
-                            const approvedConflicts = request.approved_conflicts
-                                ?.filter(c => c.facility_id === rf.facility_id)
-                                .map(c => ({
-                                    request_id: c.request_id,
-                                    request_title: c.request.title,
-                                    status: c.request.status,
-                                    time_start: c.time_start,
-                                    time_end: c.time_end,
-                                })) ?? [];
+                                const borrowedEquipment = request.equipment
+                                    ?.filter(eq => eq.pivot?.is_borrowed)
+                                    .map(eq => ({
+                                        equipment_id: eq.id,
+                                        equipment_name: eq.name,
+                                        source_facility_id: eq.pivot.source_facility_id,
+                                        source_facility_name: eq.facilities?.find(f => f.id === eq.pivot.source_facility_id)?.name ?? '',
+                                        quantity_needed: eq.pivot.quantity_needed,
+                                        max_quantity: eq.pivot.quantity_needed,
+                                    })) ?? [];
 
-                            const pendingConflicts = request.pending_conflicts
-                                ?.filter(c => c.facility_id === rf.facility_id)
-                                .map(c => ({
-                                    request_id: c.request_id,
-                                    request_title: c.request.title,
-                                    status: c.request.status,
-                                    time_start: c.time_start,
-                                    time_end: c.time_end,
-                                })) ?? [];
+                                const approvedConflicts = request.approved_conflicts
+                                    ?.filter(c => c.facility_id === rf.facility_id)
+                                    .map(c => ({
+                                        request_id: c.request_id,
+                                        request_title: c.request.title,
+                                        status: c.request.status,
+                                        time_start: c.time_start,
+                                        time_end: c.time_end,
+                                    })) ?? [];
 
-                            const booking = {
-                                facility_id: rf.facility_id,
-                                facility_name: facility.name,
-                                date: rf.date_requested,
-                                time_start: rf.time_start,
-                                time_end: rf.time_end,
-                                expected_capacity: rf.expected_capacity ?? null,
-                                has_outsiders: rf.has_outsiders ?? false,
-                                equipment: ownEquipment,
-                                borrowed_equipment: borrowedEquipment,
-                                external_equipment: rf.external_equipments?.map(e => ({ name: e.name })) ?? [],
-                                conflicts: [...approvedConflicts, ...pendingConflicts],
-                                equipment_conflicts: {},
-                            };
+                                const pendingConflicts = request.pending_conflicts
+                                    ?.filter(c => c.facility_id === rf.facility_id)
+                                    .map(c => ({
+                                        request_id: c.request_id,
+                                        request_title: c.request.title,
+                                        status: c.request.status,
+                                        time_start: c.time_start,
+                                        time_end: c.time_end,
+                                    })) ?? [];
 
-                            return (
-                                <BookingCard
-                                    key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
-                                    booking={booking}
-                                    index={index}
-                                />
-                            );
-                        })}
+                                const booking = {
+                                    facility_id: rf.facility_id,
+                                    facility_name: facility.name,
+                                    date: rf.date_requested,
+                                    time_start: rf.time_start,
+                                    time_end: rf.time_end,
+                                    expected_capacity: rf.expected_capacity ?? null,
+                                    has_outsiders: rf.has_outsiders ?? false,
+                                    equipment: ownEquipment,
+                                    borrowed_equipment: borrowedEquipment,
+                                    external_equipment: rf.external_equipments?.map(e => ({ name: e.name })) ?? [],
+                                    conflicts: [...approvedConflicts, ...pendingConflicts],
+                                    equipment_conflicts: {},
+                                };
+
+                                return (
+                                    <BookingCard
+                                        key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
+                                        booking={booking}
+                                        index={index}
+                                    />
+                                );
+                            })}
+                        </div>
                     </TabsContent>
 
                     {/* Comments Tab */}
                     <TabsContent
                         value="comments"
-                        className="mt-6 w-full relative flex flex-col items-start md:grid md:grid-cols-[3fr_4fr] gap-4"
+                        className="mt-6 w-full relative flex flex-col items-start md:grid md:grid-cols-[3fr_4fr] gap-4 px-6 md:px-8"
                     >
                         <div className="order-1 md:order-2 w-full max-w-2xl h-full overflow-y-auto pr-2 pb-32 md:pb-0">
                             <div className="flex flex-col gap-3">
@@ -487,7 +519,7 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     </TabsContent>
 
                     {/* Activity Tab */}
-                    <TabsContent value="activity" className="flex flex-col gap-4 mt-6">
+                    <TabsContent value="activity" className="flex flex-col gap-4 mt-6 px-6 md:px-8">
                         {logsLoading ? (
                             <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
                                 <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -506,7 +538,7 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     </TabsContent>
 
                     {/* Files Tab */}
-                    <TabsContent value="files" className="mt-6">
+                    <TabsContent value="files" className="mt-6 px-6 md:px-8">
                         {request.files && request.files.length > 0 ? (
                             <AttachedFileList
                                 serverFiles={request.files.map(f => ({

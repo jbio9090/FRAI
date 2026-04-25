@@ -171,15 +171,15 @@ export default function RequestCard({
                             </div>
                         )}
 
-                        <div className="text-sm mt-4 flex gap-2 items-center">
+                        <div className="text-sm mt-4 flex gap-1 items-center">
                             <AvatarWithInitials
                                 username={request.user.name}
                                 avatarSrc={request.user.profile}
                                 size='sm'
                             />
-                            <span className='text-sm'>{request.user.name}</span>
+                            <span className='text-sm ml-1'>{request.user.name}</span>
                             <p className="text-sm text-muted-foreground">
-                                Submitted {moment(request.updated_at).fromNow()}
+                                submitted {moment(request.updated_at).fromNow()}
                             </p>
                         </div>
                     </div>
