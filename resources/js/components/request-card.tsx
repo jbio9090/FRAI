@@ -127,7 +127,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection?.(request.id)}
             className={cn(
-                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-2xs",
+                "border rounded-lg p-8 h-content min-h-0 mx-auto w-full transition-all duration-200 shadow-2xs", className,
                 isSelecting && "cursor-pointer hover:border-primary/50",
                 isSelected && "border-primary ring-1 ring-primary"
             )}
