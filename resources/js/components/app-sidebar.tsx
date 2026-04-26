@@ -182,7 +182,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuButton>
 
               <CollapsibleTrigger asChild>
-                <button className="flex items-center justify-center p-1 rounded-sm hover:bg-sidebar-accent shrink-0">
+                <button className="flex items-center justify-center p-1 rounded-sm hover:bg-white shrink-0">
                   <ChevronRight
                     className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
                   />

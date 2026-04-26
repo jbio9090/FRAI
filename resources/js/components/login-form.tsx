@@ -8,6 +8,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { motion, useMotionValue, useMotionTemplate } from "framer-motion"
+import { useState } from "react"
+import { Eye, EyeOff } from "lucide-react"
 
 const MotionButton = motion(Button);
 
@@ -20,11 +22,11 @@ export function LoginForm({
     password: '',
   });
 
-  // 1. Setup motion values for mouse position
+  const [showPassword, setShowPassword] = useState(false);
+
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  // 2. Handle mouse movement to update coordinates
   function handleMouseMove({ currentTarget, clientX, clientY }: React.MouseEvent) {
     const { left, top } = currentTarget.getBoundingClientRect();
     mouseX.set(clientX - left);
@@ -41,8 +43,13 @@ export function LoginForm({
       onSubmit={submit} {...props}>
 
       <FieldGroup>
-        <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Login to your account</h1>
+        <div className="w-full flex gap-2 items-center justify-center px-4 mb-2 mt-4 mx-auto">
+          <img src="FRAI.svg" alt="FRAI website logo on the sidebar" className="max-h-13" />
+          <h2 className="text-left font-display font-black text-3xl w-fit block">FRAI</h2>
+        </div>
+
+        <div className="flex flex-col items-center gap-1">
+          <h1 className="text-2xl font-bold tracking-tight">Login to your account</h1>
           <p className="text-muted-foreground text-sm text-balance">
             Enter your email below to login to your account
           </p>
@@ -63,29 +70,43 @@ export function LoginForm({
             onChange={e => setData('email', e.target.value)}
             required />
         </Field>
-        
+
         <Field>
           <div className="flex items-center">
             <FieldLabel htmlFor="password">Password</FieldLabel>
           </div>
-          <Input id="password"
-            type="password"
-            value={data.password}
-            onChange={e => setData('password', e.target.value)}
-            required />
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              value={data.password}
+              onChange={e => setData('password', e.target.value)}
+              className="pr-10"
+              required
+            />
+            <Button
+              type="button"
+              onClick={() => setShowPassword(prev => !prev)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              variant="ghost"
+              size="icon-sm"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </Button>
+          </div>
         </Field>
-        
+
         <Field>
           <div className="group relative">
-            <MotionButton 
+            <MotionButton
               type="submit"
               onMouseMove={handleMouseMove}
               className="relative w-full bg-blue-600 hover:bg-blue-600 text-white border-none overflow-hidden"
               whileTap={{ scale: 0.98 }}
             >
-              {/* 3. The Animated Gradient Layer */}
               <motion.div
-                className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
+                className="pointer-events-none absolute hover:rounded-full -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
                 style={{
                   background: useMotionTemplate`
                     radial-gradient(
