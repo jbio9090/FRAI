@@ -253,6 +253,9 @@
     --shadow-xl: 0px 6px 16px 0px hsl(0 0% 0% / 0.12), 0px 8px 10px -1px hsl(0 0% 0% / 0.12);
     --shadow-2xl: 0px 6px 16px 0px hsl(0 0% 0% / 0.30);
     --tracking-normal: 0em;
+    --tag-bg-l: 0.88;
+    --tag-bg-alpha: 0.35;
+    --tag-text-l: 0.35;
 }
 
 .dark {
@@ -296,6 +299,9 @@
     --sidebar-accent: oklch(0.25 0.03 263.24);
     --sidebar-accent-foreground: oklch(0.90 0.01 263.24);
     --sidebar-border: oklch(0.24 0.02 263.24);
+    --tag-bg-l: 0.38;
+    --tag-bg-alpha: 0.6;
+    --tag-text-l: 0.90;
 }
 
 @layer base {
@@ -362,4 +368,9 @@
     --badge-c: 0.03;
     --badge-text-l: 0.85;
     --badge-text-c: 0.04;
+}
+
+.tag {
+    background: oklch(var(--tag-bg-l) var(--tag-c) var(--tag-h) / var(--tag-bg-alpha));
+    color: oklch(var(--tag-text-l) var(--tag-c) var(--tag-h));
 }

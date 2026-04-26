@@ -105,13 +105,14 @@ function CustomEvent({ event, isDashboard }: { event: Event; isDashboard: boolea
         : [event.title, event.title];
 
     const colorSeed = isDashboard ? facilityName : event.title + event.start + event.end;
-    const { text, background } = wordToColor(colorSeed);
+    const isDark = document.documentElement.classList.contains("dark");
+    const style = wordToColor(colorSeed);
 
     return (
         <Link href={route("requests.detail", [event.request_id])}>
             <div
-                className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm border-1 px-1 mx-2'
-                style={{ backgroundColor: background, color: text, borderColor: text }}
+                className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm border-1 px-1 mx-2 tag'
+                style={style}
             >
                 <span className='font-bold text-xs truncate'>{requestTitle}</span>
                 <div className="flex text-left items-center gap-1">

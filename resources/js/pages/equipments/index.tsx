@@ -281,42 +281,42 @@ function AssignDialog({
                 <Separator />
 
                 <ScrollArea className="h-64 pr-3 -mr-3">
-                        {facilities.map((f) => {
-                            const a = assignments.find((x) => x.facility_id === f.id);
-                            const checked = !!a;
-                            return (
-                                <div
-                                    key={f.id}
-                                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors
+                    {facilities.map((f) => {
+                        const a = assignments.find((x) => x.facility_id === f.id);
+                        const checked = !!a;
+                        return (
+                            <div
+                                key={f.id}
+                                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors
                                         ${checked
-                                            ? "border-primary/40 bg-primary/5"
-                                            : "border-border bg-background"
-                                        }`}
+                                        ? "border-primary/40 bg-primary/5"
+                                        : "border-border bg-background"
+                                    }`}
+                            >
+                                <Checkbox
+                                    id={`fac-${f.id}`}
+                                    checked={checked}
+                                    onCheckedChange={(v) => toggle(f.id, !!v)}
+                                />
+                                <Label
+                                    htmlFor={`fac-${f.id}`}
+                                    className="flex-1 cursor-pointer font-normal text-sm"
                                 >
-                                    <Checkbox
-                                        id={`fac-${f.id}`}
-                                        checked={checked}
-                                        onCheckedChange={(v) => toggle(f.id, !!v)}
+                                    {f.name}
+                                </Label>
+                                {checked && (
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        value={a!.quantity}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onChange={(e) => setQty(f.id, Number(e.target.value))}
+                                        className="w-20 h-8 text-center text-sm"
                                     />
-                                    <Label
-                                        htmlFor={`fac-${f.id}`}
-                                        className="flex-1 cursor-pointer font-normal text-sm"
-                                    >
-                                        {f.name}
-                                    </Label>
-                                    {checked && (
-                                        <Input
-                                            type="number"
-                                            min={1}
-                                            value={a!.quantity}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) => setQty(f.id, Number(e.target.value))}
-                                            className="w-20 h-8 text-center text-sm"
-                                        />
-                                    )}
-                                </div>
-                            );
-                        })}
+                                )}
+                            </div>
+                        );
+                    })}
                 </ScrollArea>
 
                 <DialogFooter>
@@ -558,13 +558,13 @@ export default function EquipmentsPage({
                                                 </span>
                                             ) : (
                                                 eq.facilities.map((f) => {
-                                                    const { text, background } = wordToColor(f.name);
+                                                    const style = wordToColor(f.name);
                                                     return (
                                                         <Badge
                                                             key={f.id}
                                                             variant="secondary"
-                                                            className="text-xs flex items-center font-bold"
-                                                            style={{ background, color: text }}
+                                                            className="text-xs flex items-center font-bold tag"
+                                                            style={style}
                                                         >
                                                             {(f.pivot?.quantity && f.pivot.quantity > 1)
                                                                 ? (<span className="">{`${f.pivot.quantity} in `}</span>)
