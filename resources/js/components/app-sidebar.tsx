@@ -40,6 +40,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { ClipboardList } from "lucide-react"
+import logo from "@/svg/FRAI.svg";
 
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -133,7 +134,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <Link href={route("dashboard")} className="w-fit">
             <div className="w-fit flex gap-2 items-center px-4 mb-2 mt-4">
-              <img src="FRAI.svg" alt="FRAI website logo on the sidebar" className="max-h-10" />
+              <img src={logo} alt="FRAI website logo on the sidebar" className="max-h-10" />
               <h2 className="text-left w-full font-display font-black text-2xl">FRAI</h2>
             </div>
           </Link>
