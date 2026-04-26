@@ -131,16 +131,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar {...props} className="[&_[data-slot=sidebar-container]]:z-[100] [&_[data-slot=sidebar-inner]]:bg-sidebar">
       <SidebarHeader>
         <SidebarMenu>
-          <div className="w-full flex flex-col items-center px-4 my-2">
-            <h1 className="text-left w-full text-lg font-black">PLV - GSO</h1>
-            <h2 className="text-left w-full text-sm">Facility Request System</h2>
-          </div>
+          <Link href={route("dashboard")} >
+            <div className="w-full flex gap-2 items-center px-4 mb-2 mt-4">
+              <img src="FRAI.svg" alt="FRAI website logo on the sidebar" className="max-h-10" />
+              <h2 className="text-left w-full font-display font-black text-2xl">FRAI</h2>
+            </div>
+          </Link>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
           <SidebarMenuItem key="create-request" className="mt-2 px-4">
-            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:bg-primary/90 cursor-pointer">
+            <SidebarMenuButton asChild className="bg-primary text-primary-foreground dark:text-foreground hover:bg-primary/90 hover:text-primary-foreground cursor-pointer">
               <Link href={route("request.create")}>
                 <CirclePlus className="h-4 w-4" />
                 <span>Create Request</span>
@@ -149,7 +151,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
 
           <SidebarMenuItem key="chatbot" className="px-4">
-            <SidebarMenuButton className="bg-primary text-primary-foreground dark:text-foreground hover:bg-primary/80 cursor-pointer" onClick={() => setIsChatbotModalOpen(true)}>
+            <SidebarMenuButton className="bg-primary text-primary-foreground dark:text-foreground hover:bg-primary/80 hover:text-primary-foreground cursor-pointer" onClick={() => setIsChatbotModalOpen(true)}>
               <Sparkles className="h-4 w-4" />
               <span>Chatbot</span>
             </SidebarMenuButton>

@@ -55,6 +55,15 @@
     font-style: normal;
 }
 
+@font-face {
+    font-family: "ClashDisplay";
+    src: url("/fonts/ClashDisplay-Variable.ttf") format("truetype");
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
@@ -144,6 +153,7 @@
     --font-sans: Manrope, ui-sans-serif, sans-serif, system-ui;
     --font-mono: JetBrains Mono, SFMono-Regular, Menlo, monospace;
     --font-serif: Georgia, serif;
+    --font-display: "ClashDisplay", ui-sans-serif, system-ui;
     --radius: 0.75rem;
     --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
     --tracking-tight: calc(var(--tracking-normal) - 0.025em);
