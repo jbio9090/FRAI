@@ -48,13 +48,13 @@ class AdminAiRecommendationReady extends Notification implements ShouldQueue
             ->markdown('emails.admin-ai-recommendation-ready', [
                 'requestModel' => $request,
                 'hasFiles' => $request->files->isNotEmpty(),
-                'approveUrl' => $this->signedActionUrl($request, 'approve'),
-                'rescheduleUrl' => $this->signedActionUrl($request, 'for_reschedule'),
+                'approveUrl' => $this->signedActionUrl($request, 'approve', $notifiable->id),
+                'rescheduleUrl' => $this->signedActionUrl($request, 'for_reschedule', $notifiable->id),
                 'detailUrl' => route('requests.detail', ['request_id' => $request->id]),
             ]);
     }
 
-    private function signedActionUrl(FacilityRequest $request, string $action): string
+    private function signedActionUrl(FacilityRequest $request, string $action, int $adminId): string
     {
         return URL::temporarySignedRoute(
             'requests.email-action',
@@ -62,6 +62,7 @@ class AdminAiRecommendationReady extends Notification implements ShouldQueue
             [
                 'id' => $request->id,
                 'action' => $action,
+                'admin_id' => $adminId,
             ],
         );
     }

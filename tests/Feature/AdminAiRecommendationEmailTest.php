@@ -84,15 +84,19 @@ class AdminAiRecommendationEmailTest extends TestCase
         $this->assertStringContainsString('Visit website', $html);
     }
 
-    public function test_signed_approve_email_link_requires_login(): void
+    public function test_signed_approve_email_link_does_not_require_login(): void
     {
+        Notification::fake();
         $this->setUpRoles();
 
+        $admin = $this->adminUser();
         $facilityRequest = FacilityRequest::factory()->pending()->create();
 
-        $response = $this->get($this->signedEmailActionUrl($facilityRequest, 'approve'));
+        $this->get($this->signedEmailActionUrl($facilityRequest, 'approve', $admin))
+            ->assertOk()
+            ->assertSee('Request Approved');
 
-        $response->assertRedirect(route('login.show'));
+        $this->assertSame(RequestStatus::APPROVED, $facilityRequest->fresh()->status);
     }
 
     public function test_signed_approve_email_link_approves_pending_request(): void
@@ -103,9 +107,10 @@ class AdminAiRecommendationEmailTest extends TestCase
         $admin = $this->adminUser();
         $facilityRequest = FacilityRequest::factory()->pending()->create();
 
-        $this->actingAs($admin)
-            ->get($this->signedEmailActionUrl($facilityRequest, 'approve'))
-            ->assertRedirect(route('requests.detail', ['request_id' => $facilityRequest->id]));
+        $this->get($this->signedEmailActionUrl($facilityRequest, 'approve', $admin))
+            ->assertOk()
+            ->assertSee('Request Approved')
+            ->assertSee('The request was approved successfully.');
 
         $facilityRequest->refresh();
 
@@ -128,9 +133,10 @@ class AdminAiRecommendationEmailTest extends TestCase
         $admin = $this->adminUser();
         $facilityRequest = FacilityRequest::factory()->pending()->create();
 
-        $this->actingAs($admin)
-            ->get($this->signedEmailActionUrl($facilityRequest, 'for_reschedule'))
-            ->assertRedirect(route('requests.detail', ['request_id' => $facilityRequest->id]));
+        $this->get($this->signedEmailActionUrl($facilityRequest, 'for_reschedule', $admin))
+            ->assertOk()
+            ->assertSee('Request Marked For Reschedule')
+            ->assertSee('The request was marked for rescheduling successfully.');
 
         $facilityRequest->refresh();
 
@@ -151,11 +157,11 @@ class AdminAiRecommendationEmailTest extends TestCase
 
         $admin = $this->adminUser();
         $facilityRequest = FacilityRequest::factory()->pending()->create();
-        $url = $this->signedEmailActionUrl($facilityRequest, 'approve');
+        $url = $this->signedEmailActionUrl($facilityRequest, 'approve', $admin);
 
         Carbon::setTestNow(now()->addHours(7));
 
-        $this->actingAs($admin)->get($url)->assertForbidden();
+        $this->get($url)->assertForbidden();
 
         Carbon::setTestNow();
     }
@@ -171,9 +177,9 @@ class AdminAiRecommendationEmailTest extends TestCase
             'processed_at' => now(),
         ]);
 
-        $this->actingAs($admin)
-            ->get($this->signedEmailActionUrl($facilityRequest, 'for_reschedule'))
-            ->assertRedirect(route('requests.detail', ['request_id' => $facilityRequest->id]));
+        $this->get($this->signedEmailActionUrl($facilityRequest, 'for_reschedule', $admin))
+            ->assertOk()
+            ->assertSee('Request Already Processed');
 
         $this->assertSame(RequestStatus::APPROVED, $facilityRequest->fresh()->status);
         Notification::assertNothingSent();
@@ -193,7 +199,7 @@ class AdminAiRecommendationEmailTest extends TestCase
         return $admin;
     }
 
-    private function signedEmailActionUrl(FacilityRequest $facilityRequest, string $action): string
+    private function signedEmailActionUrl(FacilityRequest $facilityRequest, string $action, User $admin): string
     {
         return URL::temporarySignedRoute(
             'requests.email-action',
@@ -201,6 +207,7 @@ class AdminAiRecommendationEmailTest extends TestCase
             [
                 'id' => $facilityRequest->id,
                 'action' => $action,
+                'admin_id' => $admin->id,
             ],
         );
     }

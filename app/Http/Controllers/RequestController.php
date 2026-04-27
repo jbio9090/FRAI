@@ -349,12 +349,19 @@ class RequestController extends Controller
     {
         abort_unless(in_array($action, ['approve', 'for_reschedule'], true), 404);
 
+        $admin = User::find($request->integer('admin_id'));
+        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+        abort_unless(auth()->onceUsingId($admin->id), 403);
+
         $facilityRequest = FacilityRequest::findOrFail($id);
 
         if ($facilityRequest->status !== RequestStatus::PENDING) {
-            return redirect()
-                ->route('requests.detail', ['request_id' => $facilityRequest->id])
-                ->with('message', 'This request has already been processed.');
+            return response()->view('requests.email-action-result', [
+                'title' => 'Request Already Processed',
+                'message' => 'This request has already been processed. No changes were made.',
+                'requestTitle' => $facilityRequest->title,
+                'detailUrl' => route('requests.detail', ['request_id' => $facilityRequest->id]),
+            ]);
         }
 
         if ($action === 'approve') {
@@ -362,26 +369,29 @@ class RequestController extends Controller
 
             $facilityRequest->comments()->create([
                 'body' => 'Approved from email notification.',
-                'user_id' => $request->user()->id,
+                'user_id' => $admin->id,
             ]);
 
             $this->notification->notifyUser($facilityRequest);
 
-            return redirect()
-                ->route('requests.detail', ['request_id' => $facilityRequest->id])
-                ->with('success', 'Request approved successfully from email notification.');
+            return response()->view('requests.email-action-result', [
+                'title' => 'Request Approved',
+                'message' => 'The request was approved successfully.',
+                'requestTitle' => $facilityRequest->title,
+                'detailUrl' => route('requests.detail', ['request_id' => $facilityRequest->id]),
+            ]);
         }
 
-        DB::transaction(function () use ($facilityRequest, $request) {
+        DB::transaction(function () use ($facilityRequest, $admin) {
             $facilityRequest->update([
                 'status' => RequestStatus::FOR_RESCHEDULE,
-                'processed_by' => $request->user()->id,
+                'processed_by' => $admin->id,
                 'processed_at' => now(),
             ]);
 
             $facilityRequest->comments()->create([
                 'body' => 'Marked for rescheduling from email notification.',
-                'user_id' => $request->user()->id,
+                'user_id' => $admin->id,
             ]);
 
             $this->auditLogger::requestMarkedForReschedule($facilityRequest);
@@ -389,8 +399,11 @@ class RequestController extends Controller
 
         $this->notification->notifyUser($facilityRequest->fresh());
 
-        return redirect()
-            ->route('requests.detail', ['request_id' => $facilityRequest->id])
-            ->with('success', 'Request marked for rescheduling from email notification.');
+        return response()->view('requests.email-action-result', [
+            'title' => 'Request Marked For Reschedule',
+            'message' => 'The request was marked for rescheduling successfully.',
+            'requestTitle' => $facilityRequest->title,
+            'detailUrl' => route('requests.detail', ['request_id' => $facilityRequest->id]),
+        ]);
     }
 }
