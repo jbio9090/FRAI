@@ -19,6 +19,7 @@ use App\Models\Equipment;
 use App\RequestStatus;
 use App\PriorityLevel;
 use App\Services\ChatbotLogService;
+use App\Services\OllamaModelResolver;
 use App\Services\RAG\FaqMatchingService;
 use App\Jobs\ProcessRequestRecommendation;
 use GuzzleHttp\Client;
@@ -34,11 +35,17 @@ class ChatController extends Controller
 
     public function __construct(
         protected ChatbotLogService $chatbotLogService,
-        protected FaqMatchingService $faqMatchingService
+        protected FaqMatchingService $faqMatchingService,
+        protected OllamaModelResolver $ollamaModelResolver
     )
     {
         $this->ollamaUrl = config('ollama-laravel.url');
-        $this->model     = config('ollama-laravel.model', 'FRAI');
+        $this->model     = config('ollama-laravel.model', 'qwen2.5:3b');
+    }
+
+    private function chatModel(): string
+    {
+        return $this->ollamaModelResolver->resolve($this->ollamaUrl, $this->model);
     }
 
     private function sessionCacheKey(): string
@@ -1239,7 +1246,7 @@ class ChatController extends Controller
             $client = new Client(['timeout' => 60]);
             $response = $client->post($this->ollamaUrl . '/api/chat', [
                 'json' => [
-                    'model' => $this->model,
+                    'model' => $this->chatModel(),
                     'messages' => $messages,
                     'stream' => false,
                 ],
@@ -1470,7 +1477,7 @@ class ChatController extends Controller
             $client = new Client(['timeout' => 120]);
             $response = $client->post($this->ollamaUrl . '/api/chat', [
                 'json' => [
-                    'model' => $this->model,
+                    'model' => $this->chatModel(),
                     'messages' => $llmMessages,
                     'stream' => false,
                 ],
@@ -1531,7 +1538,7 @@ class ChatController extends Controller
             $client = new Client(['timeout' => 60]);
             $response = $client->post($this->ollamaUrl . '/api/chat', [
                 'json' => [
-                    'model' => $this->model,
+                    'model' => $this->chatModel(),
                     'messages' => $llmMessages,
                     'stream' => false,
                 ],
@@ -2194,7 +2201,7 @@ class ChatController extends Controller
             $client   = new Client(['timeout' => 580]);
             $response = $client->post($this->ollamaUrl . '/api/chat', [
                 'json' => [
-                    'model'    => $this->model,
+                    'model'    => $this->chatModel(),
                     'messages' => $messages,
                     'stream'   => false,
                 ],
@@ -2229,7 +2236,7 @@ class ChatController extends Controller
 
                     try {
                         $validatorResp = $client->post($this->ollamaUrl . '/api/chat', [
-                            'json' => ['model' => $this->model, 'messages' => $validatorMessages, 'stream' => false],
+                            'json' => ['model' => $this->chatModel(), 'messages' => $validatorMessages, 'stream' => false],
                         ]);
 
                         if ($validatorResp->getStatusCode() >= 400) {
@@ -2603,7 +2610,7 @@ class ChatController extends Controller
             try {
                 $response = $client->post($this->ollamaUrl . '/api/chat', [
                     'json' => [
-                        'model'    => $this->model,
+                        'model'    => $this->chatModel(),
                         'messages' => $messages,
                         'stream'   => true,
                     ],
@@ -2699,7 +2706,7 @@ class ChatController extends Controller
                         ];
 
                         $validatorResp = $client->post($this->ollamaUrl . '/api/chat', [
-                            'json' => ['model' => $this->model, 'messages' => $validatorMessages, 'stream' => false],
+                            'json' => ['model' => $this->chatModel(), 'messages' => $validatorMessages, 'stream' => false],
                         ]);
 
                         $validatorData = json_decode($validatorResp->getBody(), true);
@@ -2793,6 +2800,8 @@ class ChatController extends Controller
 
             return response()->json([
                 'message'   => 'Connected to Ollama',
+                'configured_model' => $this->model,
+                'resolved_model' => $this->chatModel(),
                 'models'    => $data['models'] ?? [],
                 'timestamp' => now(),
             ]);
@@ -2812,7 +2821,11 @@ class ChatController extends Controller
             $response = $client->get($this->ollamaUrl . '/api/tags');
             $data     = json_decode($response->getBody(), true);
 
-            return response()->json(['models' => $data['models'] ?? []]);
+            return response()->json([
+                'configured_model' => $this->model,
+                'resolved_model' => $this->chatModel(),
+                'models' => $data['models'] ?? [],
+            ]);
         } catch (\Exception $e) {
             \Log::error('Models fetch error: ' . $e->getMessage());
             return response()->json([
