@@ -10,6 +10,7 @@ use App\Services\FacilityService;
 use App\Services\RequestService;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
 {
@@ -17,18 +18,25 @@ class DashboardController extends Controller
 
     public function index()
     {
+        $user = Auth::user();
         $start = now()->startOfMonth()->format('Y-m-d');
         $end   = now()->endOfMonth()->format('Y-m-d');
 
+        $tz = config('app.timezone');
+
         $chartData = AuditLog::query()
-            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
+            ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id))
+            ->selectRaw(
+                "DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?) as date, COUNT(*) as total",
+                [$tz]
+            )
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
             ->orderBy('date')
             ->get()
             ->map(fn($row) => [
                 'date'  => $row->date,
-                'total' => $row->total,
+                'total' => (int) $row->total, 
             ])
             ->values();
 
@@ -36,7 +44,9 @@ class DashboardController extends Controller
             'labeledBreadcrumb' => "Dashboard",
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
             'buildings'     => Facility::distinct()->pluck('building')->filter()->values(),
+            // Filter recent logs list
             'auditLogs' => AuditLog::with('user')
+                ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id))
                 ->where('created_at', '>=', now()->subDays(6)->startOfDay())
                 ->latest()
                 ->paginate(10),
@@ -61,22 +71,27 @@ class DashboardController extends Controller
 
     public function chartData(Request $request)
     {
+        $user = Auth::user();
         $range = $request->input('range', 'week');
-        $offset = now()->format('P'); // e.g. '+08:00'
+        $tz = config('app.timezone'); // ← always 'Asia/Manila' from .env
 
-        if ($range === 'day') {
-            $data = AuditLog::query()
-                // PostgreSQL: Use TO_CHAR for padding and AT TIME ZONE for timezone conversion
-                ->selectRaw("TO_CHAR(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?, 'HH24') as hour, COUNT(*) as total", [$offset])
+        $query = AuditLog::query()
+            ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id));
+
+        if ($range === 'day' || $range === 'today') {
+            $logs = $query
+                ->selectRaw("TO_CHAR(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?, 'HH24') as hour, COUNT(*) as total", [$tz])
                 ->whereBetween('created_at', [now()->startOfDay(), now()->endOfDay()])
                 ->groupBy('hour')
-                ->orderBy('hour')
-                ->get()
-                ->map(fn($row) => [
-                    'date'  => $row->hour . ':00',
-                    'total' => (int) $row->total,
-                ])
-                ->values();
+                ->pluck('total', 'hour');
+
+            $data = collect(range(0, 23))->map(function ($hour) use ($logs) {
+                $formattedHour = str_pad($hour, 2, '0', STR_PAD_LEFT);
+                return [
+                    'date'  => $formattedHour . ':00',
+                    'total' => (int) ($logs[$formattedHour] ?? 0),
+                ];
+            })->values();
 
             return response()->json($data);
         }
@@ -87,23 +102,20 @@ class DashboardController extends Controller
             default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
         };
 
-        $data = AuditLog::query()
-            ->selectRaw("DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?) as date, COUNT(*) as total", [$offset])
-            ->whereBetween('created_at', [$start, $end])
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get()
-            ->map(fn($row) => [
-                'date'  => $row->date,
-                'total' => (int) $row->total,
-            ])
-            ->values();
-
-        return response()->json($data);
+        return response()->json(
+            $query->selectRaw("DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?) as date, COUNT(*) as total", [$tz])
+                ->whereBetween('created_at', [$start, $end])
+                ->groupBy('date')
+                ->orderBy('date')
+                ->get()
+                ->map(fn($row) => ['date' => $row->date, 'total' => (int) $row->total])
+                ->values()
+        );
     }
 
     public function auditLogs(Request $request)
     {
+        $user = Auth::user();
         $range = $request->input('range', 'week');
 
         [$start, $end] = match ($range) {
@@ -115,9 +127,10 @@ class DashboardController extends Controller
 
         return response()->json(
             AuditLog::with('user')
+                ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id))
                 ->whereBetween('created_at', [$start, $end])
                 ->latest()
-                ->paginate(10) 
+                ->paginate(10)
         );
     }
 }

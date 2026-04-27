@@ -657,9 +657,18 @@ export default function Dashboard({
                                                     <XAxis
                                                         dataKey="date"
                                                         tickLine={false}
+                                                        axisLine={false}
                                                         tickMargin={10}
-                                                        tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
-                                                        tickFormatter={val => range === 'day' ? val : moment(val).format("MMM D")}
+                                                        interval={range === 'day' ? 2 : "preserveStartEnd"}
+                                                        minTickGap={range === 'day' ? 0 : 40}
+                                                        tickFormatter={(val) => {
+                                                            if (range === 'day') {
+                                                                const h = parseInt(val);
+                                                                if (h % 4 !== 0 && h !== 23) return '';
+                                                                return moment(val, "HH:mm").format("h A");
+                                                            }
+                                                            return moment(val).format("MMM D");
+                                                        }}
                                                     />
                                                     <YAxis
                                                         tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
@@ -672,7 +681,7 @@ export default function Dashboard({
                                                         content={
                                                             <ChartTooltipContent
                                                                 labelFormatter={val => range === 'day'
-                                                                    ? `Today at ${val}`
+                                                                    ? `Today at ${moment(val, "HH:mm").format("h:mm A")}`
                                                                     : moment(val).format("dddd, MMM D YYYY")
                                                                 }
                                                             />
