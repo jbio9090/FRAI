@@ -13,11 +13,11 @@ import {
     AlertCircle,
     LogIn,
     LogOut,
+    Upload,
+    Trash2,
+    KeyRound,
+    ShieldCheck,
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import axios from "axios";
-import SmartPagination from "@/components/SmartPagination";
-
 
 export type AuditLog = {
     id: number;
@@ -39,16 +39,32 @@ function getEventKind(event: string): EventKind {
 
 function getEventIcon(event: string) {
     const e = event.toLowerCase();
+
     if (e.includes("comment")) return MessageSquare;
     if (e.includes("tag")) return Tag;
     if (e.includes("assign")) return UserPlus;
+
     if (e.includes("approved") || e.includes("approve")) return CheckCircle;
+    if (e.includes("conditionally_approved")) return ShieldCheck;
+
     if (e.includes("denied") || e.includes("deny")) return XCircle;
+
     if (e.includes("created")) return Plus;
+    if (e.includes("updated")) return Activity;
+
     if (e.includes("hold")) return Clock;
     if (e.includes("reschedule")) return AlertCircle;
+
+    if (e.includes("login_failed")) return AlertCircle;
     if (e.includes("login")) return LogIn;
     if (e.includes("logout")) return LogOut;
+
+    if (e.includes("file_uploaded")) return Upload;
+    if (e.includes("file_removed")) return Trash2;
+
+    if (e.includes("password_reset")) return KeyRound;
+    if (e.includes("password_self_updated")) return ShieldCheck;
+
     return Activity;
 }
 
