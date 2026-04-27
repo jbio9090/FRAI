@@ -32,6 +32,19 @@ interface PageProps {
 
 const isMobile = () => window.innerWidth < 768;
 
+/**
+ * Reads the sidebar open/closed preference that shadcn persists in a cookie.
+ * Falls back to `true` (expanded) on first visit or when the cookie is absent.
+ */
+function getSidebarDefaultOpen(): boolean {
+    if (typeof document === "undefined") return true;
+    const match = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("sidebar_state="));
+    if (!match) return true;
+    return match.split("=")[1] === "true";
+}
+
 export default function DefaultLayout({ children, hasPadding = true }: DashboardProps) {
     const page = usePage<PageProps>();
     const breadcrumbs = page.props.breadcrumbs;
@@ -51,9 +64,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
         const applyTheme = () => {
             const theme = localStorage.getItem("theme");
             const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-
             const isDark = theme === "dark" || (!theme && systemPrefersDark);
-
             document.documentElement.classList.toggle("dark", isDark);
         };
 
@@ -61,9 +72,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
 
         const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
         const handleChange = () => {
-            if (!localStorage.getItem("theme")) {
-                applyTheme();
-            }
+            if (!localStorage.getItem("theme")) applyTheme();
         };
 
         mediaQuery.addEventListener("change", handleChange);
@@ -113,7 +122,18 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     }, []);
 
     return (
-        <SidebarProvider className='pt-4 bg-sidebar'>
+        /*
+         * `defaultOpen` is seeded from the cookie so the sidebar remembers its
+         * collapsed/expanded state across page navigations.
+         *
+         * On mobile the Sidebar component renders a Sheet overlay regardless of
+         * this value — the icon-rail collapse only applies at ≥ md breakpoint.
+         */
+        <SidebarProvider
+            defaultOpen={getSidebarDefaultOpen()}
+            className='pt-4 bg-sidebar'
+            style={{ "--sidebar-width": "18rem", "--sidebar-width-icon": "70px" } as React.CSSProperties}
+        >
             <AppSidebar />
             <SidebarInset className='relative rounded-tl-2xl overflow-hidden border'>
                 <motion.header
@@ -166,16 +186,11 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                                 );
                             })}
 
-                            {(labeledBreadcrumb) && (
+                            {labeledBreadcrumb && (
                                 <React.Fragment key={labeledBreadcrumb}>
-                                    {(breadcrumbs.length > 0) && (
-                                        <BreadcrumbSeparator />
-                                    )}
-
+                                    {breadcrumbs.length > 0 && <BreadcrumbSeparator />}
                                     <BreadcrumbItem>
-                                        <BreadcrumbPage>
-                                            {labeledBreadcrumb}
-                                        </BreadcrumbPage>
+                                        <BreadcrumbPage>{labeledBreadcrumb}</BreadcrumbPage>
                                     </BreadcrumbItem>
                                 </React.Fragment>
                             )}
@@ -183,7 +198,12 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                     </Breadcrumb>
                 </motion.header>
 
-                <div className={"flex flex-1 flex-col gap-4 justify-start overflow-visible mt-16 md:mt-0 max-w-7xl mx-auto w-full " + ((hasPadding) ? " p-6 md:p-8" : "")}>
+                <div
+                    className={
+                        "flex flex-1 flex-col gap-4 justify-start overflow-visible mt-16 md:mt-0 max-w-7xl mx-auto w-full" +
+                        (hasPadding ? " p-6 md:p-8" : "")
+                    }
+                >
                     {children}
                 </div>
 
@@ -193,7 +213,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                             toast: "group toast",
                             description: "group-[.toast]:text-foreground",
                             title: "font-bold",
-                        }
+                        },
                     }}
                     position='top-right'
                 />
