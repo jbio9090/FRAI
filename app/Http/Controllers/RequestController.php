@@ -3,17 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\FacilityFormRequest;
-use Illuminate\Http\Request;
-use App\Models\Request as FacilityRequest;
-use Inertia\Inertia;
+use App\Jobs\ProcessRequestRecommendation;
+use App\Models\AuditLog;
 use App\Models\Facility;
+use App\Models\Request as FacilityRequest;
 use App\Models\User;
 use App\RequestStatus;
-use App\Services\RequestService;
-use App\Services\NotificationService;
-use App\Jobs\ProcessRequestRecommendation;
 use App\Services\AuditLogger;
-use App\Models\AuditLog;
+use App\Services\NotificationService;
+use App\Services\RequestService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class RequestController extends Controller
 {
@@ -29,29 +30,29 @@ class RequestController extends Controller
 
         $statusValues = $statusParam
             ? collect(explode(',', $statusParam))
-            ->map(fn($s) => collect(RequestStatus::cases())
-                ->firstWhere(fn($case) => strtolower($case->name) === strtolower(trim($s))))
-            ->filter()
-            ->values()
+                ->map(fn ($s) => collect(RequestStatus::cases())
+                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s))))
+                ->filter()
+                ->values()
             : collect();
 
         $pageTitle = $statusValues->isNotEmpty()
-            ? $statusValues->map(fn($s) => $s->value)->join(', ')
+            ? $statusValues->map(fn ($s) => $s->value)->join(', ')
             : 'All Requests';
 
         return Inertia::render('requests/index', [
-            'requests' => Inertia::defer(fn() => $this->service->get(
+            'requests' => Inertia::defer(fn () => $this->service->get(
                 $statusValues->isNotEmpty() ? $statusValues->all() : null,
-                $request->input("filter", "this_week"),
-                $request->input("search"),
-                $request->input("sort"),
-                $request->input("order", "asc"),
-                $request->input("requester"),
-                $request->input("facility"),
-                $request->input("has_external_equipment"),
+                $request->input('filter', 'this_week'),
+                $request->input('search'),
+                $request->input('sort'),
+                $request->input('order', 'asc'),
+                $request->input('requester'),
+                $request->input('facility'),
+                $request->input('has_external_equipment'),
             )),
             'page_title' => $pageTitle,
-            'filters'    => ['status' => $statusParam],
+            'filters' => ['status' => $statusParam],
             'facilities' => Facility::select('id', 'name')->orderBy('name')->get(),
             'requesters' => User::select('id', 'name')->orderBy('name')->get(),
         ]);
@@ -60,27 +61,27 @@ class RequestController extends Controller
     public function updateStatus(Request $request, int $id)
     {
         $validated = $request->validate([
-            'action'  => ['required', 'in:approve,reject,conditionally_approve,for_reschedule'],
+            'action' => ['required', 'in:approve,reject,conditionally_approve,for_reschedule'],
             'comment' => ['nullable', 'string'],
         ]);
 
         $facilityRequest = FacilityRequest::findOrFail($id);
 
         $statusMap = [
-            'approve'               => RequestStatus::APPROVED,
-            'reject'                => RequestStatus::DENIED,
+            'approve' => RequestStatus::APPROVED,
+            'reject' => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
-            'for_reschedule'        => RequestStatus::FOR_RESCHEDULE,
+            'for_reschedule' => RequestStatus::FOR_RESCHEDULE,
         ];
 
         $defaultCommentMap = [
-            'approve'               => 'Your request has been approved.',
-            'reject'                => 'Your request has been denied.',
+            'approve' => 'Your request has been approved.',
+            'reject' => 'Your request has been denied.',
             'conditionally_approve' => 'Your request has been conditionally approved.',
-            'for_reschedule'        => 'Your request has been marked for rescheduling.',
+            'for_reschedule' => 'Your request has been marked for rescheduling.',
         ];
 
-        $action      = $validated['action'];
+        $action = $validated['action'];
         $commentBody = $validated['comment'] ?? $defaultCommentMap[$action];
 
         if ($action === 'approve') {
@@ -88,37 +89,37 @@ class RequestController extends Controller
             $this->auditLogger::requestApproved($facilityRequest);
         } else {
             $facilityRequest->update([
-                'status'       => $statusMap[$action],
+                'status' => $statusMap[$action],
                 'processed_by' => auth()->id(),
                 'processed_at' => now(),
             ]);
 
             match ($action) {
-                'reject'                => $this->auditLogger::requestDenied($facilityRequest),
+                'reject' => $this->auditLogger::requestDenied($facilityRequest),
                 'conditionally_approve' => $this->auditLogger::requestConditionallyApproved($facilityRequest),
-                'for_reschedule'        => $this->auditLogger::requestMarkedForReschedule($facilityRequest),
-                default                 => null,
+                'for_reschedule' => $this->auditLogger::requestMarkedForReschedule($facilityRequest),
+                default => null,
             };
         }
 
         $facilityRequest->comments()->create([
-            'body'    => $commentBody,
+            'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
         $this->notification->notifyUser($facilityRequest);
 
-        return back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' successful');
+        return back()->with('success', ucfirst(str_replace('_', ' ', $action)).' successful');
     }
 
     public function approve(Request $request, $id)
     {
-        $commentBody     = $request->input('comment', 'Your request has been approved.');
+        $commentBody = $request->input('comment', 'Your request has been approved.');
         $facilityRequest = FacilityRequest::findOrFail($id);
         $facilityRequest = $this->service->approve($id);
 
         $facilityRequest->comments()->create([
-            'body'    => $commentBody,
+            'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
@@ -133,12 +134,12 @@ class RequestController extends Controller
 
     public function reject(Request $request, $id)
     {
-        $commentBody     = $request->input('comment', 'Your request has been denied.');
+        $commentBody = $request->input('comment', 'Your request has been denied.');
         $facilityRequest = FacilityRequest::findOrFail($id);
 
         $facilityRequest->update(['status' => RequestStatus::DENIED]);
         $facilityRequest->comments()->create([
-            'body'    => $commentBody,
+            'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
@@ -149,12 +150,12 @@ class RequestController extends Controller
 
     public function conditionally_approve(Request $request, $id)
     {
-        $commentBody     = $request->input('comment', 'Your request has been conditionally approved.');
+        $commentBody = $request->input('comment', 'Your request has been conditionally approved.');
         $facilityRequest = FacilityRequest::findOrFail($id);
 
         $facilityRequest->update(['status' => RequestStatus::CONDITIONALLY_APPROVED]);
         $facilityRequest->comments()->create([
-            'body'    => $commentBody,
+            'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
@@ -165,10 +166,10 @@ class RequestController extends Controller
 
     public function createPage()
     {
-        return Inertia::render("requests/create", [
+        return Inertia::render('requests/create', [
             'facilities' => Facility::with([
-                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
-                    ->orderBy('equipments.name')
+                'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                    ->orderBy('equipments.name'),
             ])->select('id', 'name', 'capacity', 'building')->get(),
         ]);
     }
@@ -177,10 +178,10 @@ class RequestController extends Controller
     {
         $requestModel = FacilityRequest::findOrFail($request_id);
 
-        return Inertia::render("requests/detail", [
+        return Inertia::render('requests/detail', [
             'labeledBreadcrumb' => $requestModel->title,
-            'request'           => Inertia::defer(fn() => $this->service->getDetail($request_id)),
-            'auditLogs'         => Inertia::defer(fn() => AuditLog::query()
+            'request' => Inertia::defer(fn () => $this->service->getDetail($request_id)),
+            'auditLogs' => Inertia::defer(fn () => AuditLog::query()
                 ->forSubject($requestModel)
                 ->with('user')
                 ->latest()
@@ -219,7 +220,7 @@ class RequestController extends Controller
     {
         $facilityRequest = \App\Models\Request::findOrFail($id);
 
-        $facilityRequest->on_hold = !$facilityRequest->on_hold;
+        $facilityRequest->on_hold = ! $facilityRequest->on_hold;
         $facilityRequest->save();
 
         $this->auditLogger::requestHoldToggled($facilityRequest, $facilityRequest->on_hold);
@@ -230,24 +231,24 @@ class RequestController extends Controller
     public function bulkAction(Request $request)
     {
         $validated = $request->validate([
-            'ids'     => ['required', 'array', 'min:1'],
-            'ids.*'   => ['integer', 'exists:requests,id'],
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:requests,id'],
             'action' => ['required', 'string', 'in:approve,reject,conditionally_approve,comment,for_reschedule'],
             'comment' => ['nullable', 'string'],
         ]);
 
         $statusMap = [
-            'reject'                => RequestStatus::DENIED,
+            'reject' => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
         ];
 
         $defaultCommentMap = [
-            'approve'               => 'Your request has been approved.',
-            'reject'                => 'Your request has been denied.',
+            'approve' => 'Your request has been approved.',
+            'reject' => 'Your request has been denied.',
             'conditionally_approve' => 'Your request has been conditionally approved.',
         ];
 
-        $action      = $validated['action'];
+        $action = $validated['action'];
         $commentBody = $validated['comment'] ?? null;
 
         $facilityRequests = FacilityRequest::whereIn('id', $validated['ids'])->get();
@@ -271,34 +272,34 @@ class RequestController extends Controller
             if ($body) {
                 $facilityRequest->comments()->create([
                     'user_id' => auth()->id(),
-                    'body'    => $body,
+                    'body' => $body,
                 ]);
             }
 
             $this->notification->notifyUser($facilityRequest);
         }
 
-        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' applied to ' . count($facilityRequests) . ' request(s).');
+        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)).' applied to '.count($facilityRequests).' request(s).');
     }
 
     public function edit(FacilityRequest $request)
     {
         abort_if($request->user_id !== auth()->id(), 403);
-        abort_if(!in_array($request->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
+        abort_if(! in_array($request->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
 
         return Inertia::render('requests/create', [
             'facilities' => Facility::with([
-                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
-                    ->orderBy('equipments.name')
+                'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                    ->orderBy('equipments.name'),
             ])->select('id', 'name', 'capacity', 'building')->get(),
-            'existingRequest'   => $this->service->getEditData($request->id),
+            'existingRequest' => $this->service->getEditData($request->id),
         ]);
     }
 
     public function update(FacilityFormRequest $httpRequest, FacilityRequest $request)
     {
         abort_if($request->user_id !== auth()->id(), 403);
-        abort_if(!in_array($request->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
+        abort_if(! in_array($request->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
 
         $validated = $httpRequest->validated();
 
@@ -319,7 +320,7 @@ class RequestController extends Controller
 
         $facilityRequest->comments()->create([
             'user_id' => auth()->id(),
-            'body'    => $validated['body'],
+            'body' => $validated['body'],
         ]);
 
         $this->auditLogger::commentAdded($facilityRequest, $validated['body']);
@@ -329,12 +330,12 @@ class RequestController extends Controller
 
     public function forReschedule(Request $request, $id)
     {
-        $commentBody     = $request->input('comment', 'Your request has been marked for rescheduling.');
+        $commentBody = $request->input('comment', 'Your request has been marked for rescheduling.');
         $facilityRequest = FacilityRequest::findOrFail($id);
 
         $facilityRequest->update(['status' => RequestStatus::FOR_RESCHEDULE]);
         $facilityRequest->comments()->create([
-            'body'    => $commentBody,
+            'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
@@ -342,5 +343,54 @@ class RequestController extends Controller
         $this->notification->notifyUser($facilityRequest);
 
         return redirect()->back()->with('success', 'Request marked for rescheduling.');
+    }
+
+    public function handleSignedEmailAction(Request $request, int $id, string $action)
+    {
+        abort_unless(in_array($action, ['approve', 'for_reschedule'], true), 404);
+
+        $facilityRequest = FacilityRequest::findOrFail($id);
+
+        if ($facilityRequest->status !== RequestStatus::PENDING) {
+            return redirect()
+                ->route('requests.detail', ['request_id' => $facilityRequest->id])
+                ->with('message', 'This request has already been processed.');
+        }
+
+        if ($action === 'approve') {
+            $facilityRequest = $this->service->approve($id);
+
+            $facilityRequest->comments()->create([
+                'body' => 'Approved from email notification.',
+                'user_id' => $request->user()->id,
+            ]);
+
+            $this->notification->notifyUser($facilityRequest);
+
+            return redirect()
+                ->route('requests.detail', ['request_id' => $facilityRequest->id])
+                ->with('success', 'Request approved successfully from email notification.');
+        }
+
+        DB::transaction(function () use ($facilityRequest, $request) {
+            $facilityRequest->update([
+                'status' => RequestStatus::FOR_RESCHEDULE,
+                'processed_by' => $request->user()->id,
+                'processed_at' => now(),
+            ]);
+
+            $facilityRequest->comments()->create([
+                'body' => 'Marked for rescheduling from email notification.',
+                'user_id' => $request->user()->id,
+            ]);
+
+            $this->auditLogger::requestMarkedForReschedule($facilityRequest);
+        });
+
+        $this->notification->notifyUser($facilityRequest->fresh());
+
+        return redirect()
+            ->route('requests.detail', ['request_id' => $facilityRequest->id])
+            ->with('success', 'Request marked for rescheduling from email notification.');
     }
 }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Request;
 use App\Models\User;
+use App\Notifications\AdminAiRecommendationReady;
 use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
 use App\Notifications\Reschedule;
@@ -16,19 +17,34 @@ class NotificationService
     public function notifyAdmin(string $request_title, string $user_name, string $request_id)
     {
         try {
-            foreach (User::role("admin")->get() as $user) {
+            foreach (User::role('admin')->get() as $user) {
                 $user->notify(new NewPendingRequest(
                     $request_title,
                     $user_name,
-                    route("requests.detail", [$request_id])
+                    route('requests.detail', [$request_id])
                 ));
             }
         } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Push notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 
+    public function notifyAdminsAfterAiRecommendation(Request $request): void
+    {
+        try {
+            $request->loadMissing(['user', 'files']);
+
+            User::role('admin')
+                ->whereNotNull('email')
+                ->get()
+                ->filter(fn (User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))
+                ->each(fn (User $user) => $user->notify(new AdminAiRecommendationReady($request)));
+        } catch (\Exception $e) {
+            Log::error('Admin AI recommendation email notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
+        }
+    }
 
     public function notifyUser(Request $request)
     {
@@ -37,14 +53,13 @@ class NotificationService
             $user->notify(new RequestResult(
                 $request->title,
                 $request->status,
-                route("requests.detail", ["request_id" => $request->id])
+                route('requests.detail', ['request_id' => $request->id])
             ));
         } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Push notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
-
 
     public function notifyUserForRequestReschedule(Request $request)
     {
@@ -54,7 +69,7 @@ class NotificationService
             $facilityNames = $request->facilities->pluck('name')->join(', ');
             $dates = $request->requestFacilities->pluck('date_requested')->join(', ');
             $times = $request->requestFacilities
-                ->map(fn($rf) => Carbon::parse($rf->time_start)->format('g:i A') . ' - ' . Carbon::parse($rf->time_end)->format('g:i A'))
+                ->map(fn ($rf) => Carbon::parse($rf->time_start)->format('g:i A').' - '.Carbon::parse($rf->time_end)->format('g:i A'))
                 ->join(', ');
 
             $user->notify(new Reschedule(
@@ -66,8 +81,8 @@ class NotificationService
                 $times,
             ));
         } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Push notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 
@@ -80,11 +95,11 @@ class NotificationService
             $user->notify(new RequestResult(
                 $targetRequest->title,
                 RequestStatus::ON_HOLD,
-                route("requests.detail", ["request_id" => $targetRequest->id]),
+                route('requests.detail', ['request_id' => $targetRequest->id]),
             ));
         } catch (\Exception $e) {
-            Log::error('On-hold notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('On-hold notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 }

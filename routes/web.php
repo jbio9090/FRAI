@@ -42,6 +42,9 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
         Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
         Route::post('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
+        Route::get('/requests/{id}/email-action/{action}', [RequestController::class, 'handleSignedEmailAction'])
+            ->middleware('signed')
+            ->name('requests.email-action');
     });
 
     Route::get('/requests/{id}/recommendation', function ($id) {
