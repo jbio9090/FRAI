@@ -90,8 +90,8 @@ Route::middleware("auth")->group(function () {
 
     Route::prefix("/push")->group(function () {
         Route::post("/subscribe", [NotificationController::class, "subscribe"])->name("notification.subscribe");
-        Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.subscribe");
-        Route::post("/send", [NotificationController::class, "send"])->name("notification.subscribe");
+        Route::post("/unsubscribe", [NotificationController::class, "unsubscribe"])->name("notification.unsubscribe");
+        Route::post("/send", [NotificationController::class, "send"])->name("notification.send");
     });
 
     Route::middleware('permission:manage users')->group(function () {
