@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { usePage } from "@inertiajs/react";
-import { UserPlus2, Trash2, Pencil, UserPen } from "lucide-react";
+import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key } from "lucide-react";
 import DefaultLayout from "@/layout.tsx/default.";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,14 @@ interface AccountForm {
 interface PageProps {
     errors: Partial<Record<keyof AccountForm, string>>;
     [key: string]: unknown;
+    flash?: {
+        success?: string;
+        error?: string;
+        temp_password_reset?: {
+            temp_password: string;
+            target_user: string;
+        }
+    };
 }
 
 const emptyForm: UserForm = { username: "", email: "", password: "", role: "", profile: null };
@@ -65,6 +73,42 @@ export default function AccountsPage({ users, roles }: Props) {
     const [editForm, setEditForm] = useState<UserForm>(emptyForm);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { errors } = usePage<PageProps>().props;
+    const { flash } = usePage<PageProps>().props;
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        if (flash?.temp_password_reset) {
+            setShowPasswordModal(true);
+            setCopied(false);
+        }
+    }, [flash?.temp_password_reset]);
+
+    useEffect(() => {
+        if (flash?.temp_password_reset) {
+            setShowPasswordModal(true);
+            setCopied(false);
+        }
+    }, [flash?.temp_password_reset]);
+
+
+    const copyToClipboard = async () => {
+        if (flash?.temp_password_reset) {
+            await navigator.clipboard.writeText(flash.temp_password_reset.temp_password);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
+    const handleResetPassword = (targetUser: User) => {
+        if (window.confirm(`Are you sure you want to force a password reset for ${targetUser.name}?`)) {
+            setEditingUser(null);
+
+            router.post(route('accounts.reset-password', targetUser.id), {}, {
+                preserveScroll: true,
+            });
+        }
+    };
 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
@@ -153,64 +197,62 @@ export default function AccountsPage({ users, roles }: Props) {
                     }}
                 />
             </div>
-            <div className="flex flex-col gap-1.5">
-                <Label>
-                    <span>Username</span>
-                </Label>
-                <Input
-                    type="text"
-                    placeholder="Enter username"
-                    value={form.username}
-                    className={errors.username ? "border-destructive focus-visible:ring-destructive" : ""}
-                    onChange={(e) => onChange({ ...form, username: e.target.value })}
-                />
-                {errors.username && (
-                    <p className="text-sm text-destructive">{errors.username}</p>
+
+            <div className="space-y-4">
+                <div className="flex flex-col gap-1.5">
+                    <Label>Username</Label>
+                    <Input
+                        type="text"
+                        placeholder="Enter username"
+                        value={form.username}
+                        className={errors.username ? "border-destructive" : ""}
+                        onChange={(e) => onChange({ ...form, username: e.target.value })}
+                    />
+                    {errors.username && <p className="text-sm text-destructive">{errors.username}</p>}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                    <Label>Email</Label>
+                    <Input
+                        type="email"
+                        placeholder="Enter email"
+                        value={form.email}
+                        className={errors.email ? "border-destructive" : ""}
+                        onChange={(e) => onChange({ ...form, email: e.target.value })}
+                    />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                </div>
+
+                {/* ONLY show password field if NOT editing */}
+                {!isEdit && (
+                    <div className="flex flex-col gap-1.5">
+                        <Label>Password</Label>
+                        <Input
+                            type="password"
+                            placeholder="Enter password"
+                            value={form.password}
+                            className={errors.password ? "border-destructive" : ""}
+                            onChange={(e) => onChange({ ...form, password: e.target.value })}
+                        />
+                        {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                    </div>
                 )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-                <Label>Email</Label>
-                <Input
-                    type="email"
-                    placeholder="Enter email"
-                    value={form.email}
-                    className={errors.email ? "border-destructive focus-visible:ring-destructive" : ""}
-                    onChange={(e) => onChange({ ...form, email: e.target.value })}
-                />
-                {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email}</p>
-                )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-                <Label>{isEdit ? "New Password" : "Password"}</Label>
-                <Input
-                    type="password"
-                    placeholder={isEdit ? "Leave blank to keep current" : "Enter password"}
-                    value={form.password}
-                    className={errors.password ? "border-destructive focus-visible:ring-destructive" : ""}
-                    onChange={(e) => onChange({ ...form, password: e.target.value })}
-                />
-                {errors.password && (
-                    <p className="text-sm text-destructive">{errors.password}</p>
-                )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-                <Label>Role</Label>
-                <Select
-                    value={form.role}
-                    onValueChange={(v) => onChange({ ...form, role: v })}
-                >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {roles.map((r) => (
-                            <SelectItem key={r} value={r}>
-                                {r[0].toUpperCase() + r.slice(1)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+
+                <div className="flex flex-col gap-1.5">
+                    <Label>Role</Label>
+                    <Select value={form.role} onValueChange={(v) => onChange({ ...form, role: v })}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {roles.map((r) => (
+                                <SelectItem key={r} value={r}>
+                                    {r[0].toUpperCase() + r.slice(1)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
         </>
     );
@@ -229,6 +271,48 @@ export default function AccountsPage({ users, roles }: Props) {
                     Add User
                 </Button>
             </div>
+
+            <Dialog open={showPasswordModal} onOpenChange={setShowPasswordModal}>
+                <DialogContent className="sm:max-w-md border-t-4 border-t-primary">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Key className="h-5 w-5 text-primary" />
+                            Temporary Password Generated
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-4 py-2">
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                            The password for <strong className="text-foreground">{flash?.temp_password_reset?.target_user}</strong> has been
+                            reset. Copy this and share it securely — the user must change it on next login.
+                        </p>
+
+                        <div className="flex items-center space-x-2">
+                            <div className="grid flex-1 gap-2">
+                                <Input
+                                    readOnly
+                                    value={flash?.temp_password_reset?.temp_password || ""}
+                                    className="font-mono text-lg text-center tracking-[0.3em] bg-muted h-12"
+                                />
+                            </div>
+                            <Button
+                                size="icon"
+                                variant="secondary"
+                                className="h-12 w-12"
+                                onClick={copyToClipboard}
+                            >
+                                {copied ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button className="w-full" onClick={() => setShowPasswordModal(false)}>
+                            I have saved the password
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Add Dialog */}
             <Dialog open={isAddOpen} onOpenChange={(open) => {
@@ -255,23 +339,45 @@ export default function AccountsPage({ users, roles }: Props) {
             </Dialog>
 
             {/* Edit Dialog */}
-            <Dialog open={!!editingUser} onOpenChange={(open) => {
-                if (!open) setEditingUser(null);
-            }}>
-                <DialogContent>
+            <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+                <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 mb-8">
-                            <UserPen />
-                            Edit User
+                        <DialogTitle className="flex items-center gap-2">
+                            <UserPen className="h-5 w-5" />
+                            Edit User Profile
                         </DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleEdit} className="flex flex-col gap-4">
+
+                    <form onSubmit={handleEdit} className="space-y-6">
                         <FormFields form={editForm} onChange={setEditForm} isEdit />
+
+                        {/* Password Reset Trigger inside Edit Dialog */}
+                        <div className="pt-4 border-t">
+                            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-dashed">
+                                <div className="space-y-0.5">
+                                    <Label className="text-sm font-medium">Account Security</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Force a random password reset.
+                                    </p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
+                                    onClick={() => editingUser && handleResetPassword(editingUser)}
+                                >
+                                    <Key className="h-3.5 w-3.5" />
+                                    Reset Password
+                                </Button>
+                            </div>
+                        </div>
+
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
                                 Cancel
                             </Button>
-                            <Button type="submit">Update</Button>
+                            <Button type="submit">Save Changes</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
@@ -306,10 +412,20 @@ export default function AccountsPage({ users, roles }: Props) {
                                     <Button
                                         variant="ghost"
                                         size="icon"
+                                        onClick={() => handleResetPassword(user)}
+                                        title="Force Password Reset"
+                                    >
+                                        <Key className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
                                         onClick={() => openEdit(user)}
                                     >
                                         <Pencil className="h-4 w-4" />
                                     </Button>
+
                                     <Button
                                         variant="ghost"
                                         size="icon"

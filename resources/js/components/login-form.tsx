@@ -45,7 +45,7 @@ export function LoginForm({
       <FieldGroup>
         <div className="w-full flex gap-2 items-center justify-center px-4 mb-2 mt-4 mx-auto">
           <img src="FRAI.svg" alt="FRAI website logo on the sidebar" className="max-h-13" />
-          <h2 className="text-left font-display font-black text-3xl w-fit block">FRAI</h2>
+          <h2 className="text-left font-display font-semibold text-3xl w-fit block">FRAI</h2>
         </div>
 
         <div className="flex flex-col items-center gap-1">

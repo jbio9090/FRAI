@@ -99,7 +99,14 @@ Route::middleware("auth")->group(function () {
         Route::post("/accounts/create", [AccountController::class, 'store'])->name("accounts.store");
         Route::put('/accounts/{user}', [AccountController::class, 'update'])->name('accounts.update');
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+        Route::middleware(['auth'])->group(function () {
+            Route::post('/accounts/{user}/reset-password', [\App\Http\Controllers\AccountController::class, 'resetPassword'])->name('accounts.reset-password');
+        });
     });
+
+    Route::get('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');
+    Route::post('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'update'])->name('password.force.update');
+
 
     Route::middleware('permission:view chatbot logs')->group(function () {
         Route::get('/chatbot-logs', [ChatbotLogController::class, 'index'])->name('chatbot.logs.index');

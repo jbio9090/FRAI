@@ -105,7 +105,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <Link href={route("dashboard")}>
                 <img src={logo} alt="FRAI logo" className="h-8 w-8 shrink-0" />
-                <span className="font-display font-black text-2xl group-data-[collapsible=icon]:hidden">
+                <span className="font-display font-semibold text-2xl group-data-[collapsible=icon]:hidden">
                   FRAI
                 </span>
               </Link>

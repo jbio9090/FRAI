@@ -132,7 +132,6 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
         <SidebarProvider
             defaultOpen={getSidebarDefaultOpen()}
             className='pt-4 bg-sidebar'
-            style={{ "--sidebar-width": "18rem", "--sidebar-width-icon": "70px" } as React.CSSProperties}
         >
             <AppSidebar />
             <SidebarInset className='relative rounded-tl-2xl overflow-hidden border'>

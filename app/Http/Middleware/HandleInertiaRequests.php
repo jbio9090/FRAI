@@ -48,9 +48,10 @@ class HandleInertiaRequests extends Middleware
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),
             'flash' => fn() => [
-                'success' => session('success'),
-                'error'   => session('error'),
-            ]
+                'success'            => session('success'),
+                'error'              => session('error'),
+                'temp_password_reset' => session('temp_password_reset'),
+            ],
         ]);
     }
 

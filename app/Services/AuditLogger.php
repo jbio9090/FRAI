@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Request as RequestFacade;
 use App\AuditEvent;
 use App\Models\RequestFile;
+use App\Models\User;
 
 class AuditLogger
 {
@@ -194,6 +195,26 @@ class AuditLogger
                 'mime_type'     => $file->mime_type,
                 'size'          => $file->size,
             ],
+        );
+    }
+
+    public static function passwordResetInitiated(User $targetUser, User $admin): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::AuthPasswordResetInitiated,
+            description: "Admin reset password for user: {$targetUser->email}",
+            subject: $targetUser,
+            userId: $admin->id,
+        );
+    }
+
+    public static function passwordSelfUpdated(User $user): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::AuthPasswordSelfUpdated,
+            description: "User successfully updated their forced password.",
+            subject: $user,
+            userId: $user->id,
         );
     }
 }
