@@ -2,6 +2,7 @@
 
 namespace App\Services\RAG;
 
+use App\Services\OllamaModelResolver;
 use Cloudstudio\Ollama\Facades\Ollama;
 use Illuminate\Support\Facades\Http;
 
@@ -15,10 +16,10 @@ class OllamaService
     private float $generateTemperature;
     private int $generateNumPredict;
 
-    public function __construct()
+    public function __construct(protected OllamaModelResolver $ollamaModelResolver)
     {
         $this->baseUrl    = config('ollama-laravel.url', 'http://localhost:11434');
-        $this->model      = config('ollama-laravel.model', 'FRAI');
+        $this->model      = config('ollama-laravel.model', 'qwen2.5:3b');
         $this->embedModel = config('ollama-laravel.embed_model', 'nomic-embed-text');
         $this->keepAlive = config('ollama-laravel.keep_alive');
         $this->generateTimeout = (int) config('ollama-laravel.generate.timeout', 60);
@@ -26,9 +27,14 @@ class OllamaService
         $this->generateNumPredict = (int) config('ollama-laravel.generate.num_predict', 256);
     }
 
+    private function chatModel(): string
+    {
+        return $this->ollamaModelResolver->resolve($this->baseUrl, $this->model);
+    }
+
     public function embed(string $text): array
     {
-        $response = Ollama::model($this->embedModel)->embeddings($text);
+        $response = Ollama::model($this->ollamaModelResolver->resolve($this->baseUrl, $this->embedModel))->embeddings($text);
 
         if (empty($response['embedding'])) {
             \Log::warning('Ollama embed failed', ['response' => $response]);
@@ -41,7 +47,7 @@ class OllamaService
     public function generate(string $prompt): string
     {
         $payload = [
-            'model'  => $this->model,
+            'model'  => $this->chatModel(),
             'stream' => false,
             'think'  => false,
             'options' => [
