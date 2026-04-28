@@ -688,7 +688,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     { page, filter: filterMap[currentActiveFitler], search: searchQuery },
                                     { preserveState: true, preserveScroll: true }
                                 )}
-                                className={"my-4 px-4 md:px-8"}
+                                className={"my-4 px-4 md:px-8 py-0"}
                             />
                         )}
 
@@ -715,7 +715,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                 >
                                     <FolderOpen size={32} />
                                     <h1 className='font-bold text-2xl'>No Requests</h1>
-                                    <p>Nothing to see here</p>
+                                    <p>Nothing to see here...</p>
                                 </motion.div>
                             )}
                         </div>
