@@ -755,7 +755,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         {/* ── Details Tab ── */}
                         <TabsContent value="details" className="space-y-6 mt-0 max-w-2xl">
                             <div className="space-y-2">
-                                <Label htmlFor="title">Request Title</Label>
+                                <Label htmlFor="title">Request Title <span className="text-destructive">*</span></Label>
                                 <Input
                                     id="title"
                                     type="text"
@@ -1207,7 +1207,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                     <Select value={borrowFacilityFilter} onValueChange={setBorrowFacilityFilter}>
                                                                         <SelectTrigger className="h-8 text-sm flex-1 gap-1">
                                                                             <Box size={16} className="shrink-0 text-muted-foreground" />
-                                                                            <SelectValue className='truncate'/>
+                                                                            <SelectValue className='truncate' />
                                                                         </SelectTrigger>
                                                                         <SelectContent>
                                                                             <SelectItem value="all">All Facilities</SelectItem>
