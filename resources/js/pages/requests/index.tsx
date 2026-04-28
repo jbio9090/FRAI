@@ -693,7 +693,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         )}
 
                         <div
-                            className="gap-4 mt-8 flex flex-col sm:grid items-start w-full p-2 sm:px-4 md:px-8"
+                            className="gap-4 mt-8 flex flex-col sm:grid w-full p-2 sm:px-4 md:px-8"
                             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(max(24rem, calc(50% - 0.5rem)), 1fr))' }}
                         >
                             {requests && requests.data.length > 0 ? requests.data.map((request) => (

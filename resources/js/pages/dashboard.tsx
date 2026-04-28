@@ -272,12 +272,11 @@ export default function Dashboard({
         const filled: ChartRow[] = [];
         const dataMap = new Map(data.map(d => [d.date, d.total]));
         for (let i = days - 1; i >= 0; i--) {
-            const date = moment().subtract(i, 'days').format('YYYY-MM-DD');
+            const date = moment.utc().subtract(i, 'days').format('YYYY-MM-DD');
             filled.push({ date, total: dataMap.get(date) ?? 0 });
         }
         return filled;
     }
-    console.log(chartData);
 
 
     return (
