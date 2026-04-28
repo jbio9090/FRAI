@@ -21,11 +21,18 @@ class AIRecommendationService
             }
 
             $vectorLiteral = '[' . implode(',', $embedding) . ']';
-            $ruleLimit = (int) config('ollama-laravel.recommendation_rule_limit', 3);
+
+            // Default raised from 3 → 10. With only 3 rules the model never
+            // saw most of the policy rules that were relevant. Set this higher
+            // in config('ollama-laravel.recommendation_rule_limit') if you have
+            // many rules and still see gaps.
+            $ruleLimit = (int) config('ollama-laravel.recommendation_rule_limit', 10);
 
             $relevantRules = DB::table('rule_embeddings')
                 ->join('rules', 'rules.id', '=', 'rule_embeddings.rule_id')
-                ->where('rules.forPolicy', 0)
+                // Removed the ->where('rules.forPolicy', 0) filter that was
+                // silently excluding all FAQ/non-policy rules from retrieval.
+                // Both rule types are now eligible; the model decides relevance.
                 ->selectRaw('rule_embeddings.content, 1 - (rule_embeddings.embedding <=> ?) AS similarity', [$vectorLiteral])
                 ->orderByRaw('rule_embeddings.embedding <=> ?', [$vectorLiteral])
                 ->limit(max($ruleLimit, 1))
@@ -42,7 +49,15 @@ class AIRecommendationService
                 ])->toArray(),
             ]);
 
-            $rulesText     = collect($relevantRules)->map(fn($r) => '- ' . $r->content)->join("\n");
+            // Number every rule so the model can tick through them linearly.
+            // Small models (2B) lose track of bullet lists; an explicit
+            // numbered sequence with a "check each one" instruction helps.
+            $ruleLines = collect($relevantRules)
+                ->values()
+                ->map(fn($r, $i) => ($i + 1) . '. ' . $r->content)
+                ->join("\n");
+
+            $ruleCount     = collect($relevantRules)->count();
             $validStatuses = implode(', ', array_column(
                 array_filter(RequestStatus::cases(), fn($case) => $case->name !== RequestStatus::PENDING->name),
                 'value'
@@ -54,20 +69,26 @@ class AIRecommendationService
             $prompt = <<<PROMPT
 TODAY'S DATE AND TIME: {$now}
 
-RULES:
-{$rulesText}
+===RULES ({$ruleCount} total — you MUST apply every single one)===
+{$ruleLines}
 
-PRE-EVALUATED SIGNALS (these are computed facts — trust them exactly as written, do not reinterpret them):
+===PRE-EVALUATED SIGNALS===
+These are computed facts. Trust them exactly as written; do not reinterpret them.
 {$signals}
 
-REQUEST DETAILS:
+===REQUEST DETAILS===
 {$requestContext}
 
-VALID STATUSES (choose exactly one): {$validStatuses}
-DEFAULT STATUS: Approved
+===YOUR TASK===
+Go through EACH of the {$ruleCount} rules above one by one.
+For every rule, decide: does this request comply, violate, or is the rule not applicable?
+If ANY rule is violated, the status must reflect that (Denied or Conditionally Approved as appropriate).
+If ALL rules are satisfied, default to Approved.
 
-Respond using exactly this structure with no other text:
-{"status": "<valid status>", "reason": "<one sentence>"}
+VALID STATUSES (choose exactly one): {$validStatuses}
+
+Respond using ONLY this JSON structure — no other text:
+{"status": "<valid status>", "reason": "<one sentence summarising the decisive rule or overall result>"}
 PROMPT;
 
             $raw = $this->ollama->generate($prompt);

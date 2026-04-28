@@ -24,7 +24,9 @@ class OllamaService
         $this->keepAlive = config('ollama-laravel.keep_alive');
         $this->generateTimeout = (int) config('ollama-laravel.generate.timeout', 60);
         $this->generateTemperature = (float) config('ollama-laravel.generate.temperature', 0.1);
-        $this->generateNumPredict = (int) config('ollama-laravel.generate.num_predict', 256);
+        // Raised from 256 → 512. With 10 rules in context the model needs
+        // more token budget to reach its conclusion before being cut off.
+        $this->generateNumPredict = (int) config('ollama-laravel.generate.num_predict', 512);
     }
 
     private function chatModel(): string
