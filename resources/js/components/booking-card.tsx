@@ -41,6 +41,7 @@ interface FacilityBooking {
     conflicts: BookingSchedule[];
     external_equipment: { name: string }[];
     expected_capacity: number | null;
+    facility_capacity: number | null;
     has_outsiders: boolean;
     equipment_conflicts: Record<number, EquipmentConflict[]>;
 }
@@ -82,7 +83,14 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
         booking.conflicts.length > 0 ||
         Object.keys(booking.equipment_conflicts ?? {}).length > 0;
 
+    const isCapacityExceeded =
+        booking.expected_capacity != null &&
+        booking.facility_capacity != null &&
+        booking.expected_capacity > booking.facility_capacity;
+
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
+    console.log(booking);
+    
 
     return (
         <div className={`group relative rounded-lg border border-border transition-shadow ${className ?? ""}`}>
@@ -102,6 +110,12 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
                             <span className="flex items-center gap-1 bg-destructive/10 text-destructive font-medium rounded-full text-xs px-1">
                                 <AlertCircleIcon size={10} />
                                 Conflicts
+                            </span>
+                        )}
+                        {isCapacityExceeded && (
+                            <span className="flex items-center gap-1 bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 font-medium rounded-full text-xs px-1">
+                                <Users size={10} />
+                                Capacity Exceeded
                             </span>
                         )}
                     </div>
