@@ -221,9 +221,11 @@ export default function Dashboard({
         );
     };
 
-    const filteredEvents = initialEvents.filter(e =>
-        selectedBuildings.includes(e.building)
-    );
+    const filteredEvents = useMemo(() => {
+        return initialEvents.filter(e =>
+            !e.building || selectedBuildings.includes(e.building)
+        );
+    }, [initialEvents, selectedBuildings]);
 
     const pendingConflictRequests = pending.data.filter(
         r => r.pending_conflicts && r.pending_conflicts.length > 0
@@ -588,8 +590,9 @@ export default function Dashboard({
                             </div>
                             <FacilityCalendar
                                 facilityId={0}
-                                initialEvents={filteredEvents}
+                                initialEvents={initialEvents}
                                 calendarRoute="dashboard.calendar"
+                                filterBuildings={selectedBuildings}
                             />
                         </div>
                     </TabsContent>

@@ -24,12 +24,14 @@ interface Event {
     title: string;
     id: number;
     request_id: string | number;
+    building?: string;
 }
 
 interface CalendarProps {
     facilityId: number;
     initialEvents?: Event[];
     calendarRoute?: string;
+    filterBuildings?: string[];
 }
 
 function CustomToolbar(toolbar: ToolbarProps) {
@@ -130,14 +132,21 @@ export default function FacilityCalendar({
     facilityId,
     initialEvents = [],
     calendarRoute = 'facility.schedule.calendar',
+    filterBuildings,
 }: CalendarProps) {
     const isDashboard = calendarRoute === 'dashboard.calendar';
-    const [events, setEvents] = useState<Event[]>([]);
+    const [rawEvents, setRawEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState(false);
     const [currentView, setCurrentView] = useState<View>('month');
+    const [currentDate, setCurrentDate] = useState(new Date());
+
+    // Apply building filter if provided, otherwise show everything
+    const events = filterBuildings
+        ? rawEvents.filter(e => !e.building || filterBuildings.includes(e.building))
+        : rawEvents;
 
     useEffect(() => {
-        setEvents(initialEvents.map((event) => ({
+        setRawEvents(initialEvents.map((event) => ({
             ...event,
             start: moment(event.start).toDate(),
             end: moment(event.end).toDate(),
@@ -159,7 +168,8 @@ export default function FacilityCalendar({
                 }
             );
 
-            setEvents(response.data.map((event: Event) => ({
+            // Store unfiltered — the filter is applied reactively above
+            setRawEvents(response.data.map((event: Event) => ({
                 ...event,
                 start: moment(event.start).toDate(),
                 end: moment(event.end).toDate(),
@@ -195,6 +205,9 @@ export default function FacilityCalendar({
                 endAccessor="end"
                 view={currentView}
                 onView={(view) => setCurrentView(view)}
+                date={currentDate}
+                onNavigate={(newDate) => setCurrentDate(newDate)}
+
                 onRangeChange={handleRangeChange}
                 className={(loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : '')}
                 components={{
