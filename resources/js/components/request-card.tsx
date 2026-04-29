@@ -341,6 +341,7 @@ function RequestDetails({
                                 borrowed_equipment: rf.borrowed_equipment ?? [],
                                 external_equipment: rf.external_equipments ?? [],
                                 equipment_conflicts: rf.equipment_conflicts ?? {},
+                                facility_capacity: facility?.capacity ?? null,
                             };
 
                             return (

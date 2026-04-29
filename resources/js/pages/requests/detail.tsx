@@ -481,6 +481,7 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                     external_equipment: rf.external_equipments?.map(e => ({ name: e.name })) ?? [],
                                     conflicts: [...approvedConflicts, ...pendingConflicts],
                                     equipment_conflicts: {},
+                                    facility_capacity: facility.capacity,
                                 };
 
                                 return (

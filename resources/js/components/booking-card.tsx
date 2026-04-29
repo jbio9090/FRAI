@@ -83,6 +83,8 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
         booking.conflicts.length > 0 ||
         Object.keys(booking.equipment_conflicts ?? {}).length > 0;
 
+    console.log(booking);
+
     const isCapacityExceeded =
         booking.expected_capacity != null &&
         booking.facility_capacity != null &&
@@ -90,7 +92,7 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
 
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
     console.log(booking);
-    
+
 
     return (
         <div className={`group relative rounded-lg border border-border transition-shadow ${className ?? ""}`}>
