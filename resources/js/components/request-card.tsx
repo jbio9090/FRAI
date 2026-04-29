@@ -132,7 +132,7 @@ export default function RequestCard({
                 isSelected && "border-primary ring-1 ring-primary"
             )}
         >
-            <div className={cn("flex justify-between items-start w-full flex-col gap-6", isSelecting && "pointer-events-none")}>
+            <div className={cn("flex justify-between items-start w-full flex-col gap-6 h-full", isSelecting && "pointer-events-none")}>
                 <div className="flex justify-around w-full">
                     <div className='flex flex-col gap-1'>
                         <h3 className="font-semibold text-xl tracking-tight">{request.title}</h3>
@@ -221,7 +221,7 @@ export default function RequestCard({
 
                             </div>
 
-                            <div className="flex justify-end gap-2 w-content ml-auto">
+                            <div className="flex justify-end mb-0 mt-auto gap-2 w-content ml-auto">
                                 <Button onClick={() => handleAction("approve")} variant="default" className='hidden xs:block'>
                                     Approve
                                 </Button>
