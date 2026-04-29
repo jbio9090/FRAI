@@ -16,24 +16,25 @@ class RolePermissionSeeder extends Seeder
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         // Create permissions
-        Permission::create(['name' => 'view requests']);
-        Permission::create(['name' => 'create requests']);
-        Permission::create(['name' => 'approve requests']);
-        Permission::create(['name' => 'reject requests']);
-        Permission::create(['name' => 'manage facilities']);
-        Permission::create(['name' => 'manage users']);
-        Permission::create(['name' => 'modify rules']);
-        Permission::create(['name' => 'view chatbot logs']);
+        Permission::updateOrCreate(['name' => 'view requests']);
+        Permission::updateOrCreate(['name' => 'create requests']);
+        Permission::updateOrCreate(['name' => 'approve requests']);
+        Permission::updateOrCreate(['name' => 'reject requests']);
+        Permission::updateOrCreate(['name' => 'manage facilities']);
+        Permission::updateOrCreate(['name' => 'manage equipments']);
+        Permission::updateOrCreate(['name' => 'manage users']);
+        Permission::updateOrCreate(['name' => 'modify rules']);
+        Permission::updateOrCreate(['name' => 'view chatbot logs']);
 
         // Create roles and assign permissions
-        $userRole = Role::create(['name' => 'Department Head']);
+        $userRole = Role::updateOrCreate(['name' => 'Department Head']);
         $userRole->givePermissionTo(['view requests', 'create requests']);
 
-        $adminRole = Role::create(['name' => 'admin']);
+        $adminRole = Role::updateOrCreate(['name' => 'admin']);
         $adminRole->givePermissionTo(Permission::all());
 
         // Create admin user
-        $admin = User::create([
+        $admin = User::updateOrCreate([
             'name' => 'Admin User',
             'email' => 'admin@example.com',
             'password' => Hash::make('password'),
@@ -41,7 +42,7 @@ class RolePermissionSeeder extends Seeder
         $admin->assignRole('admin');
 
         // Create regular user
-        $user = User::create([
+        $user = User::updateOrCreate([
             'name' => 'Regular User',
             'email' => 'user@example.com',
             'password' => Hash::make('password'),
