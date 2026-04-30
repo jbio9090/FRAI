@@ -825,6 +825,28 @@ class RequestService
                             'max_quantity'         => $eq->pivot->quantity_needed,
                         ])->values();
 
+                    $dateOnly  = Carbon::parse($rf->date_requested)->format('Y-m-d');
+                    $timeStart = substr($rf->time_start, 0, 5);
+                    $timeEnd   = substr($rf->time_end, 0, 5);
+
+                    $scheduleConflicts = RequestFacility::where('facility_id', $rf->facility_id)
+                        ->where('date_requested', $dateOnly)
+                        ->where('id', '!=', $rf->id)
+                        ->whereIn('status', [RequestStatus::PENDING, RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])
+                        ->where('time_start', '<', $timeEnd)
+                        ->where('time_end', '>', $timeStart)
+                        ->whereHas('request', fn($q) => $q->where('on_hold', false)->where('id', '!=', $detail->id))
+                        ->with('request')
+                        ->get()
+                        ->map(fn($conflictRf) => [
+                            'request_id'    => $conflictRf->request_id,
+                            'request_title' => $conflictRf->request->title ?? '',
+                            'status'        => $conflictRf->request->status,
+                            'time_start'    => substr($conflictRf->time_start, 0, 5),
+                            'time_end'      => substr($conflictRf->time_end, 0, 5),
+                        ])
+                        ->values();
+
                     return [
                         'facility_id'        => $rf->facility_id,
                         'facility_name'      => $rf->facility->name ?? '',
@@ -835,7 +857,7 @@ class RequestService
                         'external_equipment' => $rf->externalEquipments->map(fn($e) => ['name' => $e->name])->values(),
                         'equipment'          => $ownEquipment,
                         'borrowed_equipment' => $borrowedEquipment,
-                        'conflicts'          => [],
+                        'conflicts'          => $scheduleConflicts,
                         'has_outsiders'      => (bool) $rf->has_outsiders,
                     ];
                 },

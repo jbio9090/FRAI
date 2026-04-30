@@ -13,7 +13,7 @@ export default function StatusTag({ requestStatus, variant = 'default' }: Status
                 statusColor = 'bg-primary/20 border-primary text-primary';
                 break;
             case 'Pending':
-                statusColor = 'border-foreground bg-gray-100/80';
+                statusColor = 'border-foreground bg-gray-100/20';
                 break;
             case 'Denied':
                 statusColor = 'bg-destructive/20 border-destructive text-destructive';

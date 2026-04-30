@@ -25,7 +25,7 @@ interface EquipmentRequest {
 }
 
 interface BookingSchedule {
-    request_id: number;
+    request_id?: number;
     request_title: string;
     status: string;
     time_start: string;
@@ -33,7 +33,7 @@ interface BookingSchedule {
 }
 
 interface FacilityBooking {
-    request_id: number;
+    request_id?: number;
     facility_id: number;
     facility_name: string;
     date: string;
@@ -44,10 +44,10 @@ interface FacilityBooking {
     conflicts: BookingSchedule[];
     external_equipment: { name: string }[];
     expected_capacity: number | null;
-    facility_capacity: number | null;
+    facility_capacity?: number | null;
     has_outsiders: boolean;
     equipment_conflicts: Record<number, EquipmentConflict[]>;
-    request_facility_status: string;
+    request_facility_status?: string;
 }
 
 interface BookingCardProps {
@@ -56,6 +56,9 @@ interface BookingCardProps {
     onEdit?: (index: number) => void;
     onRemove?: (index: number) => void;
     className?: string;
+    showActions?: boolean;
+    /** When true the card is the one currently being edited in the form above */
+    isEditing?: boolean;
 }
 
 function formatTime(time: string): string {
@@ -76,7 +79,7 @@ function groupBorrowed(borrowed: BorrowedEquipmentRequest[]): Record<string, Bor
     );
 }
 
-export function BookingCard({ booking, index, onEdit, onRemove, className }: BookingCardProps) {
+export function BookingCard({ booking, index, onEdit, onRemove, className, showActions = true, isEditing = false }: BookingCardProps) {
     const { hasPermission } = usePermission();
 
     const hasOwnEquipment = booking.equipment.length > 0;
@@ -90,7 +93,7 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
 
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
-    const canMakeDecision = hasPermission('approve requests');
+    const canMakeDecision = hasPermission('approve requests') && showActions;
 
     const handleAction = (action: string) => {
         router.post(
@@ -106,7 +109,11 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
     };
 
     return (
-        <div className={`group relative flex flex-col rounded-lg border border-border bg-card transition-shadow ${className ?? ''}`}>
+        <div
+            className={`group relative flex flex-col rounded-lg border transition-shadow ${
+                isEditing ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border bg-card'
+            } ${className ?? ''}`}
+        >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b px-4 py-3.5">
                 <div className="min-w-0">
@@ -117,7 +124,13 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
                         >
                             {booking.facility_name}
                         </Link>
-                        <StatusTag requestStatus={booking.request_facility_status} variant="small" />
+                        {isEditing && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                                <Pen size={9} />
+                                Editing
+                            </span>
+                        )}
+                        {booking.request_facility_status && <StatusTag requestStatus={booking.request_facility_status} variant="small" />}
 
                         {booking.has_outsiders && (
                             <span className="rounded-full bg-amber-100 px-1 text-xs font-medium text-amber-600 dark:text-amber-400">Outsiders</span>
@@ -182,16 +195,20 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
             </div>
 
             {/* Content Body */}
-            <div className="flex-1 space-y-1.5 bg-background px-4">
+            <div className="flex-1 space-y-1.5 rounded-sm bg-background px-4">
                 {/* Conflicts */}
                 {hasConflicts && (
                     <div className="my-2 mb-2 space-y-1.5">
                         {booking.conflicts.map((conflict, i) => (
                             <p key={i} className="text-sm text-destructive">
                                 Schedule conflict with{' '}
-                                <Link className="font-bold hover:underline" href={route('requests.detail', [conflict.request_id])}>
-                                    <span>"{conflict.request_title}"</span>
-                                </Link>{' '}
+                                {conflict.request_id ? (
+                                    <Link className="font-bold hover:underline" href={route('requests.detail', [conflict.request_id])}>
+                                        <span>"{conflict.request_title}"</span>
+                                    </Link>
+                                ) : (
+                                    <span className="font-bold">"{conflict.request_title}"</span>
+                                )}{' '}
                                 ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
                             </p>
                         ))}
