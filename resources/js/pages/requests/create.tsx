@@ -1653,13 +1653,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         )}
                                     </div>
 
-                                    <div className="mt-12 flex flex-col gap-1">
+                                    <div className="w-fullflex-col mt-12 flex gap-1">
                                         {data.facility_bookings.length === 0 && editingIndex === null && (
                                             <p className="text-xs text-destructive">At least one facility booking is required.</p>
                                         )}
-                                        <div className="flex gap-2">
+                                        <div className="flex w-full grid-cols-3 gap-2 md:grid">
                                             {editingIndex !== null && (
-                                                <Button type="button" variant="outline" onClick={cancelEditBooking} className="flex-1">
+                                                <Button type="button" variant="outline" onClick={cancelEditBooking} className="">
                                                     Cancel Edit
                                                 </Button>
                                             )}
@@ -1668,7 +1668,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 variant="secondary"
                                                 onClick={addFacilityBooking}
                                                 disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
-                                                className="flex-basis-2 w-full max-w-full"
+                                                className={'w-full ' + (editingIndex !== null ? 'col-span-2' : 'col-span-full')}
                                             >
                                                 {editingIndex !== null ? 'Save changes to facility booking' : 'Add Facility Booking'}
                                             </Button>
