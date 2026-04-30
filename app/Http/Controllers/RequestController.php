@@ -84,14 +84,21 @@ class RequestController extends Controller
         $commentBody = $validated['comment'] ?? $defaultCommentMap[$action];
 
         if ($action === 'approve') {
+            // The service already loops through requestFacilities and updates them
             $facilityRequest = $this->service->approve($id);
             $this->auditLogger::requestApproved($facilityRequest);
         } else {
+            // Update the parent request
             $facilityRequest->update([
                 'status'       => $statusMap[$action],
                 'processed_by' => auth()->id(),
                 'processed_at' => now(),
             ]);
+
+            // individual facilties
+            $facilityRequest->requestFacilities()
+                ->whereNotIn('status', [RequestStatus::APPROVED, RequestStatus::DENIED])
+                ->update(['status' => $statusMap[$action]]);
 
             match ($action) {
                 'reject'                => $this->auditLogger::requestDenied($facilityRequest),
@@ -263,6 +270,7 @@ class RequestController extends Controller
                 );
             } elseif ($action !== 'comment') {
                 $facilityRequest->update(['status' => $statusMap[$action]]);
+                $facilityRequest->requestFacilities()->update(['status' => $statusMap[$action]]);
                 $body = $commentBody ?? $defaultCommentMap[$action];
             } else {
                 $body = $commentBody;

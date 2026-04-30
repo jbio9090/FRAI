@@ -71,6 +71,7 @@ interface RequestFacility {
     expected_capacity: number | null;
     external_equipments: { id: number; name: string }[];
     has_outsiders: boolean;
+    status: string;
 }
 
 export interface Facility {

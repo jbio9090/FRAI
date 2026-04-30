@@ -175,6 +175,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                                                     has_outsiders: false,
                                                     equipment_conflicts: {},
                                                     facility_capacity: facility?.capacity ?? null,
+                                                    request_facility_status: booking.status ?? null,
                                                 }}
                                                 index={idx}
                                             />
