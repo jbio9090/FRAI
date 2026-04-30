@@ -1,9 +1,11 @@
 import { format } from 'date-fns';
-import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, ArrowLeftRight, MapPin } from 'lucide-react';
+import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, ArrowLeftRight, MapPin, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EquipmentConflict } from '@/types/equipment';
-import { Link } from '@inertiajs/react';
+import { router, Link } from '@inertiajs/react';
 import StatusTag from './status-tag';
+import { usePermission } from '@/hooks/use-permission';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
 interface BorrowedEquipmentRequest {
     equipment_id: number;
@@ -75,24 +77,38 @@ function groupBorrowed(borrowed: BorrowedEquipmentRequest[]): Record<string, Bor
 }
 
 export function BookingCard({ booking, index, onEdit, onRemove, className }: BookingCardProps) {
+    const { hasPermission } = usePermission();
+
     const hasOwnEquipment = booking.equipment.length > 0;
     const hasBorrowedEquipment = (booking.borrowed_equipment ?? []).length > 0;
     const hasExternalEquipment = (booking.external_equipment ?? []).length > 0;
     const hasAnyEquipment = hasOwnEquipment || hasBorrowedEquipment || hasExternalEquipment;
     const hasConflicts = booking.conflicts.length > 0 || Object.keys(booking.equipment_conflicts ?? {}).length > 0;
 
-    console.log(booking);
-
     const isCapacityExceeded =
         booking.expected_capacity != null && booking.facility_capacity != null && booking.expected_capacity > booking.facility_capacity;
 
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
-    console.log(booking);
+
+    const canMakeDecision = hasPermission('approve requests');
+
+    const handleAction = (action: string) => {
+        router.post(
+            route('requests.facilities.updateStatus', {
+                request: booking.request_id,
+                facility: booking.facility_id,
+            }),
+            {
+                action,
+            },
+            { preserveScroll: true },
+        );
+    };
 
     return (
-        <div className={`group relative rounded-lg border border-border transition-shadow ${className ?? ''}`}>
+        <div className={`group relative flex flex-col rounded-lg border border-border bg-card transition-shadow ${className ?? ''}`}>
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 border-b bg-card px-4 py-3.5">
+            <div className="flex items-start justify-between gap-3 border-b px-4 py-3.5">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                         <Link
@@ -165,65 +181,102 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
                 )}
             </div>
 
-            {/* Conflicts */}
-            {hasConflicts && (
-                <div className="space-y-1.5 px-4 py-2">
-                    {booking.conflicts.map((conflict, i) => (
-                        <p key={i} className="text-sm text-destructive">
-                            Schedule conflict with{' '}
-                            <Link className="font-bold hover:underline" href={route('requests.detail', [conflict.request_id])}>
-                                <span>"{conflict.request_title}"</span>
-                            </Link>{' '}
-                            ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
-                        </p>
-                    ))}
-                    {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
-                        conflicts.map((c, i) => {
-                            const eqName = booking.equipment.find((e) => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
-                            return (
-                                <p key={`eq-${eqId}-${i}`} className="text-[12px] text-amber-600 dark:text-amber-400">
-                                    Equipment conflict ({eqName}) — also requested by "{c.request_title}" ({c.status})
-                                </p>
-                            );
-                        }),
-                    )}
-                </div>
-            )}
+            {/* Content Body */}
+            <div className="flex-1 space-y-1.5 bg-background px-4">
+                {/* Conflicts */}
+                {hasConflicts && (
+                    <div className="my-2 mb-2 space-y-1.5">
+                        {booking.conflicts.map((conflict, i) => (
+                            <p key={i} className="text-sm text-destructive">
+                                Schedule conflict with{' '}
+                                <Link className="font-bold hover:underline" href={route('requests.detail', [conflict.request_id])}>
+                                    <span>"{conflict.request_title}"</span>
+                                </Link>{' '}
+                                ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
+                            </p>
+                        ))}
+                        {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
+                            conflicts.map((c, i) => {
+                                const eqName = booking.equipment.find((e) => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
+                                return (
+                                    <p key={`eq-${eqId}-${i}`} className="text-[12px] text-amber-600 dark:text-amber-400">
+                                        Equipment conflict ({eqName}) — also requested by "{c.request_title}" ({c.status})
+                                    </p>
+                                );
+                            }),
+                        )}
+                    </div>
+                )}
 
-            {/* Equipment */}
-            {hasAnyEquipment && (
-                <div className="space-y-2.5 rounded-md bg-background px-4 py-3.5">
-                    {hasOwnEquipment && (
-                        <EquipmentRow label="Facility">
-                            {booking.equipment.map((eq, i) => (
-                                <Chip key={i}>
-                                    {eq.equipment_name} <strong>×{eq.quantity_needed}</strong>
-                                </Chip>
-                            ))}
-                        </EquipmentRow>
-                    )}
-                    {hasBorrowedEquipment && (
-                        <EquipmentRow label="Borrowed">
-                            {Object.entries(borrowedGroups).map(([name, items]) => (
-                                <Chip key={name}>
-                                    {name} <strong>×{items.reduce((s, e) => s + e.quantity_needed, 0)}</strong>
-                                    <span className="ml-1 flex items-center gap-0.5 text-muted-foreground/60">
-                                        <MapPin size={10} />
-                                        {items.map((e) => e.source_facility_name).join(', ')}
-                                    </span>
-                                </Chip>
-                            ))}
-                        </EquipmentRow>
-                    )}
-                    {hasExternalEquipment && (
-                        <EquipmentRow label="External">
-                            {booking.external_equipment.map((eq, i) => (
-                                <Chip key={i} muted>
-                                    {eq.name}
-                                </Chip>
-                            ))}
-                        </EquipmentRow>
-                    )}
+                {/* Equipment */}
+                {hasAnyEquipment && (
+                    <div className="my-2 space-y-2.5 rounded-md bg-background py-1">
+                        {hasOwnEquipment && (
+                            <EquipmentRow label="Facility">
+                                {booking.equipment.map((eq, i) => (
+                                    <Chip key={i}>
+                                        {eq.equipment_name} <strong>×{eq.quantity_needed}</strong>
+                                    </Chip>
+                                ))}
+                            </EquipmentRow>
+                        )}
+                        {hasBorrowedEquipment && (
+                            <EquipmentRow label="Borrowed">
+                                {Object.entries(borrowedGroups).map(([name, items]) => (
+                                    <Chip key={name}>
+                                        {name} <strong>×{items.reduce((s, e) => s + e.quantity_needed, 0)}</strong>
+                                        <span className="ml-1 flex items-center gap-0.5 text-muted-foreground/60">
+                                            <MapPin size={10} />
+                                            {items.map((e) => e.source_facility_name).join(', ')}
+                                        </span>
+                                    </Chip>
+                                ))}
+                            </EquipmentRow>
+                        )}
+                        {hasExternalEquipment && (
+                            <EquipmentRow label="External">
+                                {booking.external_equipment.map((eq, i) => (
+                                    <Chip key={i} muted>
+                                        {eq.name}
+                                    </Chip>
+                                ))}
+                            </EquipmentRow>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Individual Facility Decision Actions Footer */}
+            {canMakeDecision && (
+                <div className="flex items-center justify-between border-t border-border bg-background bg-muted/20 px-4 py-2.5">
+                    <span className="text-xs font-medium text-muted-foreground">Facility Decision</span>
+                    <div className="flex items-center gap-2">
+                        <Button onClick={() => handleAction('approve')} size="sm" className="h-7 px-3 text-xs">
+                            Approve
+                        </Button>
+                        <Button
+                            onClick={() => handleAction('reject')}
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-3 text-xs hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                            Deny
+                        </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                                    <MoreHorizontal size={14} />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuGroup className="text-sm *:cursor-pointer">
+                                    <DropdownMenuItem onClick={() => handleAction('conditionally_approve')}>Conditionally Approve</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleAction('for_reschedule')}>Mark for Reschedule</DropdownMenuItem>
+                                </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
             )}
         </div>

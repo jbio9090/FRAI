@@ -42,6 +42,9 @@ Route::middleware("auth")->group(function () {
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name("bulk.action");
         Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
         Route::post('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
+
+        Route::post('/requests/{request}/facilities/{facility}/update-status', [RequestController::class, 'updateFacilityStatus'])
+            ->name('requests.facilities.updateStatus');
     });
 
     Route::get('/requests/{id}/recommendation', function ($id) {

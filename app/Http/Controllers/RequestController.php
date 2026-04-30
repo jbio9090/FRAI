@@ -97,7 +97,6 @@ class RequestController extends Controller
 
             // individual facilties
             $facilityRequest->requestFacilities()
-                ->whereNotIn('status', [RequestStatus::APPROVED, RequestStatus::DENIED])
                 ->update(['status' => $statusMap[$action]]);
 
             match ($action) {
@@ -350,5 +349,50 @@ class RequestController extends Controller
         $this->notification->notifyUser($facilityRequest);
 
         return redirect()->back()->with('success', 'Request marked for rescheduling.');
+    }
+
+    public function updateFacilityStatus(Request $request, int $requestId, int $facilityId)
+    {
+        $validated = $request->validate([
+            'action' => ['required', 'in:approve,reject,conditionally_approve,for_reschedule'],
+        ]);
+
+        $statusMap = [
+            'approve'               => RequestStatus::APPROVED,
+            'reject'                => RequestStatus::DENIED,
+            'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
+            'for_reschedule'        => RequestStatus::FOR_RESCHEDULE,
+        ];
+
+        $facilityRequest = FacilityRequest::findOrFail($requestId);
+
+        $facilityRequest->requestFacilities()
+            ->where('facility_id', $facilityId)
+            ->update(['status' => $statusMap[$validated['action']]]);
+
+        $allFacilityStatuses = $facilityRequest->requestFacilities()->pluck('status');
+        $uniqueStatuses = $allFacilityStatuses->unique();
+        $totalFacilities = $allFacilityStatuses->count();
+
+        if ($uniqueStatuses->count() === 1) {
+            $facilityRequest->update([
+                'status' => $uniqueStatuses->first()
+            ]);
+        } else {
+            $hasApproved = $allFacilityStatuses->contains(fn($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
+
+            if ($hasApproved && $totalFacilities >= 2) {
+                $facilityRequest->update([
+                    'status' => RequestStatus::PARTIALLY_APPROVED
+                ]);
+            }
+        }
+
+        $facilityRequest->comments()->create([
+            'body'    => "Facility decision updated to: " . ucfirst(str_replace('_', ' ', $validated['action'])),
+            'user_id' => auth()->id(),
+        ]);
+
+        return back()->with('success', 'Facility status updated successfully.');
     }
 }
