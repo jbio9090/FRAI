@@ -196,6 +196,145 @@ const approversList = [
     { id: 8, name: 'President' },
 ];
 
+/* ─────────────────────────────────────────────────────────────────────────
+ | BookingCardList — sortable, filterable, collapsible list of booked slots
+ ───────────────────────────────────────────────────────────────────────── */
+
+type BookingSortKey = 'date-asc' | 'date-desc' | 'facility-asc' | 'facility-desc' | 'time-asc' | 'time-desc';
+
+interface BookingCardListProps {
+    bookings: FacilityBooking[];
+    editingIndex: number | null;
+    onEdit: (index: number) => void;
+    onRemove: (index: number) => void;
+    facilities: Facility[];
+}
+
+function BookingCardList({ bookings, editingIndex, onEdit, onRemove, facilities }: BookingCardListProps) {
+    const [isOpen, setIsOpen] = useState(true);
+    const [sortKey, setSortKey] = useState<BookingSortKey>('date-asc');
+    const [filterFacility, setFilterFacility] = useState<string>('all');
+    const [filterConflicts, setFilterConflicts] = useState<boolean>(false);
+
+    const uniqueFacilities = Array.from(new Map(bookings.map((b) => [b.facility_id, b.facility_name])).entries());
+
+    // Build a sorted+filtered index map so we can pass the original index to onEdit/onRemove
+    const processed = bookings
+        .map((b, originalIndex) => ({ b, originalIndex }))
+        .filter(({ b }) => {
+            if (filterFacility !== 'all' && b.facility_id !== Number(filterFacility)) return false;
+            if (filterConflicts && b.conflicts.length === 0) return false;
+            return true;
+        })
+        .sort((x, y) => {
+            const { b: a } = x;
+            const { b: bv } = y;
+            switch (sortKey) {
+                case 'date-asc':  return a.date.localeCompare(bv.date);
+                case 'date-desc': return bv.date.localeCompare(a.date);
+                case 'facility-asc':  return a.facility_name.localeCompare(bv.facility_name);
+                case 'facility-desc': return bv.facility_name.localeCompare(a.facility_name);
+                case 'time-asc':  return a.time_start.localeCompare(bv.time_start);
+                case 'time-desc': return bv.time_start.localeCompare(a.time_start);
+                default: return 0;
+            }
+        });
+
+    const hasConflicts = bookings.some((b) => b.conflicts.length > 0);
+
+    return (
+        <div className="mt-9">
+            <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+                {/* Header row — accordion trigger only */}
+                <div className="mb-2 flex items-center gap-2">
+                    <CollapsibleTrigger asChild>
+                        <button
+                            type="button"
+                            className="flex items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            <h2 className="flex items-center gap-2 font-semibold tracking-tight">
+                                Facility Bookings
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-background">
+                                    {bookings.length}
+                                </span>
+                            </h2>
+                            <MotionChevron openCollapsible={isOpen} className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                    </CollapsibleTrigger>
+                </div>
+
+                <CollapsibleContent className="space-y-2">
+                    {/* Sort + Filter toolbar — inside the accordion, same style as borrow panel */}
+                    <div className="space-y-2 rounded-md border-b bg-muted/20 p-2">
+                        <div className="flex flex-col gap-2 md:flex-row">
+                            {/* Sort */}
+                            <Select value={sortKey} onValueChange={(v) => setSortKey(v as BookingSortKey)}>
+                                <SelectTrigger className="h-8 flex-1 gap-1 text-sm">
+                                    <ArrowUpDown size={16} className="shrink-0 text-muted-foreground" />
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="date-asc">Date: Earliest first</SelectItem>
+                                    <SelectItem value="date-desc">Date: Latest first</SelectItem>
+                                    <SelectItem value="facility-asc">Facility A–Z</SelectItem>
+                                    <SelectItem value="facility-desc">Facility Z–A</SelectItem>
+                                    <SelectItem value="time-asc">Start time: Earliest</SelectItem>
+                                    <SelectItem value="time-desc">Start time: Latest</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            {/* Facility filter */}
+                            <Select value={filterFacility} onValueChange={setFilterFacility}>
+                                <SelectTrigger className="h-8 flex-1 gap-1 text-sm">
+                                    <Building size={16} className="shrink-0 text-muted-foreground" />
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Facilities</SelectItem>
+                                    {uniqueFacilities.map(([id, name]) => (
+                                        <SelectItem key={id} value={String(id)}>
+                                            {name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            {/* Conflicts filter */}
+                            {hasConflicts && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={filterConflicts ? 'destructive' : 'outline'}
+                                    className="h-8 gap-1.5 text-sm"
+                                    onClick={() => setFilterConflicts((v) => !v)}
+                                >
+                                    <AlertCircleIcon size={16} />
+                                    Conflicts only
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                    {processed.length === 0 ? (
+                        <p className="py-3 text-center text-xs text-muted-foreground">No bookings match the current filter.</p>
+                    ) : (
+                        processed.map(({ b: booking, originalIndex }) => (
+                            <BookingCard
+                                key={originalIndex}
+                                booking={booking}
+                                index={originalIndex}
+                                onEdit={onEdit}
+                                onRemove={editingIndex === originalIndex ? undefined : onRemove}
+                                showActions={false}
+                                isEditing={editingIndex === originalIndex}
+                            />
+                        ))
+                    )}
+                </CollapsibleContent>
+            </Collapsible>
+        </div>
+    );
+}
+
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
@@ -215,7 +354,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
     const [selectedFacility, setSelectedFacility] = useState<number | null>(null);
-    const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
+    const [selectedDates, setSelectedDates] = useState<Date[]>([]);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
     const [externalEquipment, setExternalEquipment] = useState<{ name: string }[]>([]);
@@ -340,20 +479,20 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         if (ids.length > 0) fetchEquipmentConflicts(ids);
         else setEquipmentConflicts({});
 
-        if (selectedFacility && currentDate && currentTimeStart && currentTimeEnd) {
+        if (selectedFacility && selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
             fetchEquipmentAvailability();
         } else {
             setEquipmentAvailability({});
         }
-    }, [currentTimeStart, currentTimeEnd, currentDate, selectedFacility]);
+    }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility]);
 
     useEffect(() => {
-        if (currentDate && currentTimeStart && currentTimeEnd) {
+        if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
             fetchBorrowableAvailability();
         } else {
             setBorrowableAvailability({});
         }
-    }, [currentTimeStart, currentTimeEnd, currentDate, selectedFacility]);
+    }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility]);
 
     // Add this useEffect to sync attachedFiles -> form data
     useEffect(() => {
@@ -367,7 +506,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         const booking = data.facility_bookings[index];
 
         setSelectedFacility(booking.facility_id);
-        setCurrentDate(new Date(booking.date));
+        setSelectedDates([new Date(booking.date)]);
         setCurrentTimeStart(booking.time_start);
         setCurrentTimeEnd(booking.time_end);
         setSelectedEquipment(booking.equipment);
@@ -390,7 +529,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setEditingIndex(null);
         setOriginalBookingData(null);
         setSelectedFacility(null);
-        setCurrentDate(undefined);
+        setSelectedDates([]);
         setCurrentTimeStart('');
         setCurrentTimeEnd('');
         setSelectedEquipment([]);
@@ -454,12 +593,20 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
         setSelectedEquipment([]);
-        if (currentDate) loadSchedule(facilityId, currentDate);
+        // Load schedule for the first selected date (for conflict preview)
+        if (selectedDates.length > 0) loadSchedule(facilityId, selectedDates[0]);
     }
 
-    const handleDateChange = (date: Date | undefined) => {
-        setCurrentDate(date);
-        if (selectedFacility && date) loadSchedule(selectedFacility, date);
+    const handleDateChange = (dates: Date[] | undefined) => {
+        const next = dates ?? [];
+        // In edit mode, clamp to single selection
+        if (editingIndex !== null && next.length > 1) {
+            setSelectedDates([next[next.length - 1]]);
+        } else {
+            setSelectedDates(next);
+        }
+        const primary = (dates ?? [])[0];
+        if (selectedFacility && primary) loadSchedule(selectedFacility, primary);
     };
 
     function clearEquipmentSelection(e: React.MouseEvent<HTMLButtonElement>) {
@@ -480,7 +627,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     async function fetchBorrowableAvailability() {
-        if (!currentDate || !currentTimeStart || !currentTimeEnd) return;
+        if (!selectedDates.length || !currentTimeStart || !currentTimeEnd) return;
+        const currentDate = selectedDates[0];
 
         const sourceFacilities = facilities.filter((f) => f.id !== selectedFacility);
         if (sourceFacilities.length === 0) return;
@@ -585,29 +733,28 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     function addFacilityBooking() {
-        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) return;
+        if (!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd) return;
         const facility = facilities.find((f) => f.id === selectedFacility);
         if (!facility) return;
 
-        const newBooking: FacilityBooking = {
-            facility_id: selectedFacility,
-            facility_name: facility.name,
-            date: format(currentDate, 'yyyy-MM-dd'),
-            time_start: currentTimeStart,
-            time_end: currentTimeEnd,
-            equipment: selectedEquipment,
-            borrowed_equipment: selectedBorrowedEquipment,
-            conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
-            external_equipment: externalEquipment,
-            expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
-            has_outsiders: hasOutsiders,
-            // Preserve equipment_conflicts from the original booking when editing,
-            // merged with any freshly-fetched conflicts for the current selection.
-            equipment_conflicts: equipmentConflicts,
-        };
-
         if (editingIndex !== null) {
             // ── EDIT MODE ──────────────────────────────────────────────────────────
+            const date = selectedDates[0];
+            const newBooking: FacilityBooking = {
+                facility_id: selectedFacility,
+                facility_name: facility.name,
+                date: format(date, 'yyyy-MM-dd'),
+                time_start: currentTimeStart,
+                time_end: currentTimeEnd,
+                equipment: selectedEquipment,
+                borrowed_equipment: selectedBorrowedEquipment,
+                conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
+                external_equipment: externalEquipment,
+                expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+                has_outsiders: hasOutsiders,
+                equipment_conflicts: equipmentConflicts,
+            };
+
             // If nothing changed, just exit edit mode without touching the array.
             if (originalBookingData && JSON.stringify(newBooking) === JSON.stringify(originalBookingData)) {
                 cancelEditBooking();
@@ -618,15 +765,34 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             const updatedBookings = data.facility_bookings.map((b, i) => (i === editingIndex ? newBooking : b));
             setData('facility_bookings', updatedBookings);
         } else {
-            // ── ADD MODE ───────────────────────────────────────────────────────────
-            setData('facility_bookings', [...data.facility_bookings, newBooking]);
+            // ── BATCH ADD MODE ─────────────────────────────────────────────────────
+            // For each selected date, create an individual booking object.
+            const newBatch: FacilityBooking[] = selectedDates.map((date) => ({
+                facility_id: selectedFacility,
+                facility_name: facility.name,
+                date: format(date, 'yyyy-MM-dd'),
+                time_start: currentTimeStart,
+                time_end: currentTimeEnd,
+                equipment: selectedEquipment,
+                borrowed_equipment: selectedBorrowedEquipment,
+                // Conflicts are date-specific: use the cached schedule for the first
+                // date (already loaded); remaining dates share the same time pattern
+                // so conflicts will surface when the server validates them.
+                conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
+                external_equipment: externalEquipment,
+                expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+                has_outsiders: hasOutsiders,
+                equipment_conflicts: equipmentConflicts,
+            }));
+
+            setData('facility_bookings', [...data.facility_bookings, ...newBatch]);
         }
 
         // Reset all facility form state and edit tracking.
         setEditingIndex(null);
         setOriginalBookingData(null);
         setSelectedFacility(null);
-        setCurrentDate(undefined);
+        setSelectedDates([]);
         setCurrentTimeStart('');
         setCurrentTimeEnd('');
         setSelectedEquipment([]);
@@ -724,7 +890,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     async function fetchEquipmentConflicts(equipmentIds: number[]) {
-        if (!currentDate || !currentTimeStart || !currentTimeEnd || equipmentIds.length === 0) return;
+        if (!selectedDates.length || !currentTimeStart || !currentTimeEnd || equipmentIds.length === 0) return;
+        const currentDate = selectedDates[0];
 
         setCheckingEquipmentConflicts(true);
         try {
@@ -751,7 +918,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     async function fetchEquipmentAvailability() {
-        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) return;
+        if (!selectedFacility || !selectedDates.length || !currentTimeStart || !currentTimeEnd) return;
+        const currentDate = selectedDates[0];
 
         setCheckingAvailability(true);
         try {
@@ -965,17 +1133,21 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                         variant="outline"
                                                         className={cn(
                                                             'w-full justify-start text-left font-normal',
-                                                            !currentDate && 'text-muted-foreground',
+                                                            selectedDates.length === 0 && 'text-muted-foreground',
                                                         )}
                                                     >
                                                         <CalendarIcon className="mr-1 h-4 w-4" />
-                                                        {currentDate ? format(currentDate, 'PPP') : 'Pick a date'}
+                                                        {selectedDates.length === 0
+                                                            ? 'Pick a date'
+                                                            : selectedDates.length === 1
+                                                              ? format(selectedDates[0], 'PPP')
+                                                              : `${selectedDates.length} dates selected`}
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-auto p-0">
                                                     <Calendar
-                                                        mode="single"
-                                                        selected={currentDate}
+                                                        mode="multiple"
+                                                        selected={selectedDates}
                                                         onSelect={handleDateChange}
                                                         initialFocus
                                                         disabled={(date) => date <= new Date(new Date().setHours(0, 0, 0, 0))}
@@ -1667,29 +1839,26 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 type="button"
                                                 variant="secondary"
                                                 onClick={addFacilityBooking}
-                                                disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
+                                                disabled={!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd}
                                                 className={'w-full ' + (editingIndex !== null ? 'col-span-2' : 'col-span-full')}
                                             >
-                                                {editingIndex !== null ? 'Save changes to facility booking' : 'Add Facility Booking'}
+                                                {editingIndex !== null
+                                                    ? 'Save changes to facility booking'
+                                                    : selectedDates.length > 1
+                                                      ? `Add ${selectedDates.length} Facility Bookings`
+                                                      : 'Add Facility Booking'}
                                             </Button>
                                         </div>
                                     </div>
 
                                     {data.facility_bookings.length > 0 && (
-                                        <div className="mt-4 flex flex-col gap-2">
-                                            {/* Booked entries */}
-                                            {data.facility_bookings.map((booking, index) => (
-                                                <BookingCard
-                                                    key={index}
-                                                    booking={booking}
-                                                    index={index}
-                                                    onEdit={editBooking}
-                                                    onRemove={editingIndex === index ? undefined : removeBooking}
-                                                    showActions={false}
-                                                    isEditing={editingIndex === index}
-                                                />
-                                            ))}
-                                        </div>
+                                        <BookingCardList
+                                            bookings={data.facility_bookings}
+                                            editingIndex={editingIndex}
+                                            onEdit={editBooking}
+                                            onRemove={removeBooking}
+                                            facilities={facilities}
+                                        />
                                     )}
                                 </div>
 

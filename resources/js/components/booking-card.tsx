@@ -110,9 +110,8 @@ export function BookingCard({ booking, index, onEdit, onRemove, className, showA
 
     return (
         <div
-            className={`group relative flex flex-col rounded-lg border transition-shadow ${
-                isEditing ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border bg-card'
-            } ${className ?? ''}`}
+            className={`group relative flex flex-col rounded-lg border transition-shadow ${isEditing ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border bg-card'
+                } ${className ?? ''}`}
         >
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b px-4 py-3.5">
@@ -151,11 +150,13 @@ export function BookingCard({ booking, index, onEdit, onRemove, className, showA
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                             <CalendarIcon size={11} />
-                            {format(booking.date, 'PPP')}
+                            <span className='text-foreground'>{format(booking.date, 'PPP')}</span>
                         </span>
                         <span className="flex items-center gap-1">
                             <Clock size={11} />
-                            {formatTime(booking.time_start)} – {formatTime(booking.time_end)}
+                            <span className="text-foreground">
+                                {formatTime(booking.time_start)} – {formatTime(booking.time_end)}
+                            </span>
                         </span>
                         {booking.expected_capacity && (
                             <span className="flex items-center gap-1">
@@ -314,9 +315,8 @@ function EquipmentRow({ label, children }: { label: string; children: React.Reac
 function Chip({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
     return (
         <span
-            className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-sm ${
-                muted ? 'border-border/40 text-muted-foreground' : 'border-border/50 text-foreground/80'
-            }`}
+            className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-sm ${muted ? 'border-border/40 text-muted-foreground' : 'border-border/50 text-foreground/80'
+                }`}
         >
             {children}
         </span>
