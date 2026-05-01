@@ -21,16 +21,28 @@ class AdminAiRecommendationEmailTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_ai_recommendation_email_is_sent_to_valid_admin_emails(): void
+    public function test_admin_ai_recommendation_email_is_sent_to_subscribed_valid_admin_emails(): void
     {
         Notification::fake();
         $this->setUpRoles();
 
-        $admin = User::factory()->create(['email' => 'admin@example.com']);
+        $admin = User::factory()->create([
+            'email' => 'admin@example.com',
+            'admin_email_notifications_enabled' => true,
+        ]);
         $admin->assignRole('admin');
 
-        $invalidAdmin = User::factory()->create(['email' => 'not-an-email']);
+        $invalidAdmin = User::factory()->create([
+            'email' => 'not-an-email',
+            'admin_email_notifications_enabled' => true,
+        ]);
         $invalidAdmin->assignRole('admin');
+
+        $unsubscribedAdmin = User::factory()->create([
+            'email' => 'unsubscribed@example.com',
+            'admin_email_notifications_enabled' => false,
+        ]);
+        $unsubscribedAdmin->assignRole('admin');
 
         $requester = User::factory()->create();
         $facilityRequest = FacilityRequest::factory()->create([
@@ -44,6 +56,60 @@ class AdminAiRecommendationEmailTest extends TestCase
 
         Notification::assertSentTo($admin, AdminAiRecommendationReady::class);
         Notification::assertNotSentTo($invalidAdmin, AdminAiRecommendationReady::class);
+        Notification::assertNotSentTo($unsubscribedAdmin, AdminAiRecommendationReady::class);
+    }
+
+    public function test_admin_ai_recommendation_email_is_not_sent_to_admins_by_default(): void
+    {
+        Notification::fake();
+        $this->setUpRoles();
+
+        $admin = User::factory()->create(['email' => 'admin@example.com']);
+        $admin->assignRole('admin');
+
+        $requester = User::factory()->create();
+        $facilityRequest = FacilityRequest::factory()->create([
+            'user_id' => $requester->id,
+            'status' => RequestStatus::PENDING,
+            'recommended_action' => RequestStatus::APPROVED,
+            'recommended_action_reason' => 'No conflicts found.',
+        ]);
+
+        app(NotificationService::class)->notifyAdminsAfterAiRecommendation($facilityRequest);
+
+        Notification::assertNotSentTo($admin, AdminAiRecommendationReady::class);
+    }
+
+    public function test_admin_can_toggle_email_notification_subscription(): void
+    {
+        $this->setUpRoles();
+
+        $admin = $this->adminUser();
+
+        $this->actingAs($admin)
+            ->post(route('settings.admin-email-notifications'), ['subscribed' => true])
+            ->assertRedirect();
+
+        $this->assertTrue($admin->fresh()->admin_email_notifications_enabled);
+
+        $this->actingAs($admin)
+            ->post(route('settings.admin-email-notifications'), ['subscribed' => false])
+            ->assertRedirect();
+
+        $this->assertFalse($admin->fresh()->admin_email_notifications_enabled);
+    }
+
+    public function test_non_admin_cannot_toggle_email_notification_subscription(): void
+    {
+        $this->setUpRoles();
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('settings.admin-email-notifications'), ['subscribed' => true])
+            ->assertForbidden();
+
+        $this->assertFalse($user->fresh()->admin_email_notifications_enabled);
     }
 
     public function test_admin_ai_recommendation_email_contains_request_details_and_links(): void

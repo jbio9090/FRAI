@@ -1,7 +1,25 @@
-import PushNotifications from '@/components/notification/pushNotification';
-import DefaultLayout from '@/layout.tsx/default.';
+import { router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
-import { useForm, usePage } from '@inertiajs/react';
+
+import AvatarWithInitials from '@/components/avatar-with-initials';
+import PushNotifications from '@/components/notification/pushNotification';
+import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -10,32 +28,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-    DialogClose,
-} from "@/components/ui/dialog";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import AvatarWithInitials from '@/components/avatar-with-initials';
-import { Button } from '@/components/ui/button';
+import DefaultLayout from '@/layout.tsx/default.';
 
-interface PageProps {
+interface PageProps extends Record<string, unknown> {
     auth: {
         user: {
             id: number;
             name: string;
             profile: string;
-            roles: string;
+            roles: string[];
+            admin_email_notifications_enabled: boolean;
         };
     };
 }
@@ -56,6 +58,7 @@ export default function Settings() {
         password: '',
         password_confirmation: '',
     });
+    const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
 
     const handlePasswordChange = () => {
         postPw(route('settings.change-password'), {
@@ -117,7 +120,22 @@ export default function Settings() {
         destroy(route('settings.profile-picture.remove'));
     };
 
+    const handleAdminEmailNotificationToggle = () => {
+        router.post(
+            route('settings.admin-email-notifications'),
+            {
+                subscribed: !auth.user.admin_email_notifications_enabled,
+            },
+            {
+                preserveScroll: true,
+                onStart: () => setEmailNotificationProcessing(true),
+                onFinish: () => setEmailNotificationProcessing(false),
+            },
+        );
+    };
+
     const hasCustomPicture = auth.user.profile !== 'default.png';
+    const isAdmin = auth.user.roles?.includes('admin') ?? false;
 
     return (
         <DefaultLayout>
@@ -142,7 +160,7 @@ export default function Settings() {
 
                     <div className="flex flex-col gap-0.5 min-w-0">
                         <span className="text-sm font-semibold leading-none truncate">{auth.user.name}</span>
-                        <span className="text-sm text-muted-foreground capitalize">{auth.user.roles}</span>
+                        <span className="text-sm text-muted-foreground capitalize">{auth.user.roles.join(', ')}</span>
                     </div>
 
                     <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -263,6 +281,25 @@ export default function Settings() {
                 </Dialog>
 
                 <PushNotifications />
+
+                {isAdmin && (
+                    <div className="flex justify-between items-center gap-4">
+                        <span className="text-sm font-semibold">Email Notifications</span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={handleAdminEmailNotificationToggle}
+                            disabled={emailNotificationProcessing}
+                        >
+                            {emailNotificationProcessing
+                                ? 'Saving...'
+                                : auth.user.admin_email_notifications_enabled
+                                    ? 'Unsubscribe'
+                                    : 'Subscribe'}
+                        </Button>
+                    </div>
+                )}
 
                 <div className="flex justify-between items-center">
                     <span className="text-sm font-semibold">Theme</span>

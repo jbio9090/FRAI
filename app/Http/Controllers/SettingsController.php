@@ -3,16 +3,16 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 class SettingsController extends Controller
 {
     public function index()
     {
-        return Inertia::render("settings/index");
+        return Inertia::render('settings/index');
     }
 
     public function updateProfilePicture(Request $request)
@@ -24,10 +24,10 @@ class SettingsController extends Controller
         $user = Auth::user();
 
         if ($user->profile !== 'default.png') {
-            Storage::disk('public')->delete('profiles/' . $user->profile);
+            Storage::disk('public')->delete('profiles/'.$user->profile);
         }
 
-        $filename = $user->id . '_' . time() . '.' . $request->file('profile')->extension();
+        $filename = $user->id.'_'.time().'.'.$request->file('profile')->extension();
         $request->file('profile')->storeAs('profiles', $filename, 'public');
 
         $user->update(['profile' => $filename]);
@@ -40,7 +40,7 @@ class SettingsController extends Controller
         $user = Auth::user();
 
         if ($user->profile !== 'default.png') {
-            Storage::disk('public')->delete('profiles/' . $user->profile);
+            Storage::disk('public')->delete('profiles/'.$user->profile);
             $user->update(['profile' => 'default.png']);
         }
 
@@ -50,14 +50,14 @@ class SettingsController extends Controller
     public function changePassword(Request $request)
     {
         $request->validate([
-            'current_password'      => ['required'],
-            'password'              => ['required', 'min:8', 'confirmed', 'different:current_password'],
+            'current_password' => ['required'],
+            'password' => ['required', 'min:8', 'confirmed', 'different:current_password'],
             'password_confirmation' => ['required'],
         ]);
 
         $user = Auth::user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return back()->withErrors(['current_password' => 'The current password is incorrect.']);
         }
 
@@ -69,5 +69,23 @@ class SettingsController extends Controller
         Auth::logoutOtherDevices($request->password);
 
         return back()->with('success', 'Password changed successfully.');
+    }
+
+    public function updateAdminEmailNotifications(Request $request)
+    {
+        $validated = $request->validate([
+            'subscribed' => ['required', 'boolean'],
+        ]);
+
+        $request->user()->update([
+            'admin_email_notifications_enabled' => $validated['subscribed'],
+        ]);
+
+        return back()->with(
+            'success',
+            $validated['subscribed']
+                ? 'Email notifications subscribed.'
+                : 'Email notifications unsubscribed.'
+        );
     }
 }
