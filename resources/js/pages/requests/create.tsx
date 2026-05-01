@@ -23,6 +23,7 @@ import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { AttachedFileList } from '@/components/attached-file-list';
 import { BookingCard } from '@/components/booking-card';
 import { FacilityInfo } from '@/components/create-page/facility-info';
+import { BookingCardList } from '@/components/request/create/booking-card-list';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     AlertDialog,
@@ -63,7 +64,7 @@ interface BorrowedEquipmentRequest {
     max_quantity: number;
 }
 
-interface FacilityBooking {
+export interface FacilityBooking {
     facility_id: number;
     facility_name: string;
     date: string;
@@ -92,6 +93,7 @@ interface BookingSchedule {
     status: string;
     time_start: string;
     time_end: string;
+    date?: string;
 }
 
 interface FacilityScheduleData {
@@ -196,145 +198,6 @@ const approversList = [
     { id: 8, name: 'President' },
 ];
 
-/* ─────────────────────────────────────────────────────────────────────────
- | BookingCardList — sortable, filterable, collapsible list of booked slots
- ───────────────────────────────────────────────────────────────────────── */
-
-type BookingSortKey = 'date-asc' | 'date-desc' | 'facility-asc' | 'facility-desc' | 'time-asc' | 'time-desc';
-
-interface BookingCardListProps {
-    bookings: FacilityBooking[];
-    editingIndex: number | null;
-    onEdit: (index: number) => void;
-    onRemove: (index: number) => void;
-    facilities: Facility[];
-}
-
-function BookingCardList({ bookings, editingIndex, onEdit, onRemove, facilities }: BookingCardListProps) {
-    const [isOpen, setIsOpen] = useState(true);
-    const [sortKey, setSortKey] = useState<BookingSortKey>('date-asc');
-    const [filterFacility, setFilterFacility] = useState<string>('all');
-    const [filterConflicts, setFilterConflicts] = useState<boolean>(false);
-
-    const uniqueFacilities = Array.from(new Map(bookings.map((b) => [b.facility_id, b.facility_name])).entries());
-
-    // Build a sorted+filtered index map so we can pass the original index to onEdit/onRemove
-    const processed = bookings
-        .map((b, originalIndex) => ({ b, originalIndex }))
-        .filter(({ b }) => {
-            if (filterFacility !== 'all' && b.facility_id !== Number(filterFacility)) return false;
-            if (filterConflicts && b.conflicts.length === 0) return false;
-            return true;
-        })
-        .sort((x, y) => {
-            const { b: a } = x;
-            const { b: bv } = y;
-            switch (sortKey) {
-                case 'date-asc':  return a.date.localeCompare(bv.date);
-                case 'date-desc': return bv.date.localeCompare(a.date);
-                case 'facility-asc':  return a.facility_name.localeCompare(bv.facility_name);
-                case 'facility-desc': return bv.facility_name.localeCompare(a.facility_name);
-                case 'time-asc':  return a.time_start.localeCompare(bv.time_start);
-                case 'time-desc': return bv.time_start.localeCompare(a.time_start);
-                default: return 0;
-            }
-        });
-
-    const hasConflicts = bookings.some((b) => b.conflicts.length > 0);
-
-    return (
-        <div className="mt-9">
-            <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                {/* Header row — accordion trigger only */}
-                <div className="mb-2 flex items-center gap-2">
-                    <CollapsibleTrigger asChild>
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                            <h2 className="flex items-center gap-2 font-semibold tracking-tight">
-                                Facility Bookings
-                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-background">
-                                    {bookings.length}
-                                </span>
-                            </h2>
-                            <MotionChevron openCollapsible={isOpen} className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                    </CollapsibleTrigger>
-                </div>
-
-                <CollapsibleContent className="space-y-2">
-                    {/* Sort + Filter toolbar — inside the accordion, same style as borrow panel */}
-                    <div className="space-y-2 rounded-md border-b bg-muted/20 p-2">
-                        <div className="flex flex-col gap-2 md:flex-row">
-                            {/* Sort */}
-                            <Select value={sortKey} onValueChange={(v) => setSortKey(v as BookingSortKey)}>
-                                <SelectTrigger className="h-8 flex-1 gap-1 text-sm">
-                                    <ArrowUpDown size={16} className="shrink-0 text-muted-foreground" />
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="date-asc">Date: Earliest first</SelectItem>
-                                    <SelectItem value="date-desc">Date: Latest first</SelectItem>
-                                    <SelectItem value="facility-asc">Facility A–Z</SelectItem>
-                                    <SelectItem value="facility-desc">Facility Z–A</SelectItem>
-                                    <SelectItem value="time-asc">Start time: Earliest</SelectItem>
-                                    <SelectItem value="time-desc">Start time: Latest</SelectItem>
-                                </SelectContent>
-                            </Select>
-
-                            {/* Facility filter */}
-                            <Select value={filterFacility} onValueChange={setFilterFacility}>
-                                <SelectTrigger className="h-8 flex-1 gap-1 text-sm">
-                                    <Building size={16} className="shrink-0 text-muted-foreground" />
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Facilities</SelectItem>
-                                    {uniqueFacilities.map(([id, name]) => (
-                                        <SelectItem key={id} value={String(id)}>
-                                            {name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-
-                            {/* Conflicts filter */}
-                            {hasConflicts && (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={filterConflicts ? 'destructive' : 'outline'}
-                                    className="h-8 gap-1.5 text-sm"
-                                    onClick={() => setFilterConflicts((v) => !v)}
-                                >
-                                    <AlertCircleIcon size={16} />
-                                    Conflicts only
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                    {processed.length === 0 ? (
-                        <p className="py-3 text-center text-xs text-muted-foreground">No bookings match the current filter.</p>
-                    ) : (
-                        processed.map(({ b: booking, originalIndex }) => (
-                            <BookingCard
-                                key={originalIndex}
-                                booking={booking}
-                                index={originalIndex}
-                                onEdit={onEdit}
-                                onRemove={editingIndex === originalIndex ? undefined : onRemove}
-                                showActions={false}
-                                isEditing={editingIndex === originalIndex}
-                            />
-                        ))
-                    )}
-                </CollapsibleContent>
-            </Collapsible>
-        </div>
-    );
-}
-
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
@@ -360,13 +223,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [externalEquipment, setExternalEquipment] = useState<{ name: string }[]>([]);
     const [externalEquipmentInput, setExternalEquipmentInput] = useState<string>('');
     const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
-    const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
-    const [hasTimeConflict, setHasTimeConflict] = useState(false);
+    const [scheduleConflicts, setScheduleConflicts] = useState<BookingSchedule[]>([]);
     const [borrowingEquipmentId, setBorrowingEquipmentId] = useState<number | null>(null);
     const [selectedBorrowedEquipment, setSelectedBorrowedEquipment] = useState<BorrowedEquipmentRequest[]>([]);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [expectedCapacity, setExpectedCapacity] = useState<number | ''>('');
     const [hasOutsiders, setHasOutsiders] = useState<boolean>(false);
     const [existingFiles, setExistingFiles] = useState<ExistingFile[]>(existingRequest?.existing_files ?? []);
@@ -494,13 +357,30 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         }
     }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility]);
 
-    // Add this useEffect to sync attachedFiles -> form data
     useEffect(() => {
         setData(
             'files',
             attachedFiles.map((f) => f.file),
         );
     }, [attachedFiles]);
+
+    useEffect(() => {
+        if (!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd) {
+            setScheduleConflicts([]);
+            return;
+        }
+
+        const allConflicts = selectedDates.flatMap((date) => {
+            const formattedDate = format(date, 'yyyy-MM-dd');
+
+            return checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd).map((conflict) => ({
+                ...conflict,
+                date: formattedDate,
+            }));
+        });
+
+        setScheduleConflicts(allConflicts);
+    }, [selectedFacility, selectedDates, currentTimeStart, currentTimeEnd, facilitySchedule]);
 
     function editBooking(index: number) {
         const booking = data.facility_bookings[index];
@@ -535,13 +415,12 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setSelectedEquipment([]);
         setSelectedBorrowedEquipment([]);
         setBorrowingEquipmentId(null);
-        setFacilitySchedule(null);
-        setHasTimeConflict(false);
         setExternalEquipment([]);
         setExternalEquipmentInput('');
         setExpectedCapacity('');
         setHasOutsiders(false);
         setEquipmentConflicts({});
+        setScheduleConflicts([]);
     }
 
     const restoreDraft = () => {
@@ -573,14 +452,23 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     async function loadSchedule(facilityId: number, date: Date) {
         setLoadingSchedule(true);
+
         try {
             const dateString = format(date, 'yyyy-MM-dd');
-            const response = await fetch(route('facility.schedule', { facility: facilityId, date: dateString }));
+
+            const response = await fetch(
+                route('facility.schedule', {
+                    facility: facilityId,
+                    date: dateString,
+                }),
+            );
+
             const data = await response.json();
-            setFacilitySchedule(data);
-            if (currentTimeStart && currentTimeEnd) {
-                setHasTimeConflict(checkTimeConflictWithData(data, currentTimeStart, currentTimeEnd));
-            }
+
+            setFacilitySchedule({
+                bookings: data.bookings ?? [],
+                date: dateString,
+            });
         } catch (error) {
             console.error('Failed to load schedule:', error);
             setFacilitySchedule(null);
@@ -593,6 +481,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
         setSelectedEquipment([]);
+        setScheduleConflicts([]);
         // Load schedule for the first selected date (for conflict preview)
         if (selectedDates.length > 0) loadSchedule(facilityId, selectedDates[0]);
     }
@@ -723,13 +612,33 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     function handleTimeStartChange(e: React.ChangeEvent<HTMLInputElement>) {
         const newStartTime = e.target.value;
         setCurrentTimeStart(newStartTime);
-        if (newStartTime && currentTimeEnd) setHasTimeConflict(checkTimeConflict(newStartTime, currentTimeEnd));
     }
 
     function handleTimeEndChange(e: React.ChangeEvent<HTMLInputElement>) {
         const newEndTime = e.target.value;
         setCurrentTimeEnd(newEndTime);
-        if (currentTimeStart && newEndTime) setHasTimeConflict(checkTimeConflict(currentTimeStart, newEndTime));
+    }
+
+    function checkLocalConflicts(facilityId: number, date: string, startTime: string, endTime: string): BookingSchedule[] {
+        if (!facilitySchedule) return [];
+
+        if (facilityId !== selectedFacility) return [];
+
+        if (facilitySchedule.date !== date) return [];
+
+        const start = new Date(`2000-01-01T${startTime}`);
+        const end = new Date(`2000-01-01T${endTime}`);
+
+        return facilitySchedule.bookings.filter((booking) => {
+            if (booking.status !== 'Approved' && booking.status !== 'Conditionally Approved') {
+                return false;
+            }
+
+            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
+            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+
+            return start < bookingEnd && end > bookingStart;
+        });
     }
 
     function addFacilityBooking() {
@@ -748,7 +657,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                 time_end: currentTimeEnd,
                 equipment: selectedEquipment,
                 borrowed_equipment: selectedBorrowedEquipment,
-                conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
+                conflicts: scheduleConflicts.filter((c) => c.date === format(date, 'yyyy-MM-dd')),
                 external_equipment: externalEquipment,
                 expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
                 has_outsiders: hasOutsiders,
@@ -766,24 +675,24 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             setData('facility_bookings', updatedBookings);
         } else {
             // ── BATCH ADD MODE ─────────────────────────────────────────────────────
-            // For each selected date, create an individual booking object.
-            const newBatch: FacilityBooking[] = selectedDates.map((date) => ({
-                facility_id: selectedFacility,
-                facility_name: facility.name,
-                date: format(date, 'yyyy-MM-dd'),
-                time_start: currentTimeStart,
-                time_end: currentTimeEnd,
-                equipment: selectedEquipment,
-                borrowed_equipment: selectedBorrowedEquipment,
-                // Conflicts are date-specific: use the cached schedule for the first
-                // date (already loaded); remaining dates share the same time pattern
-                // so conflicts will surface when the server validates them.
-                conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
-                external_equipment: externalEquipment,
-                expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
-                has_outsiders: hasOutsiders,
-                equipment_conflicts: equipmentConflicts,
-            }));
+            const newBatch: FacilityBooking[] = selectedDates.map((date) => {
+                const formattedDate = format(date, 'yyyy-MM-dd');
+
+                return {
+                    facility_id: selectedFacility,
+                    facility_name: facility.name,
+                    date: formattedDate,
+                    time_start: currentTimeStart,
+                    time_end: currentTimeEnd,
+                    equipment: selectedEquipment,
+                    borrowed_equipment: selectedBorrowedEquipment,
+                    conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd),
+                    external_equipment: externalEquipment,
+                    expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+                    has_outsiders: hasOutsiders,
+                    equipment_conflicts: equipmentConflicts,
+                };
+            });
 
             setData('facility_bookings', [...data.facility_bookings, ...newBatch]);
         }
@@ -798,8 +707,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setSelectedEquipment([]);
         setSelectedBorrowedEquipment([]);
         setBorrowingEquipmentId(null);
-        setFacilitySchedule(null);
-        setHasTimeConflict(false);
+        setScheduleConflicts([]);
         setExternalEquipment([]);
         setExternalEquipmentInput('');
         setExpectedCapacity('');
@@ -1213,11 +1121,43 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         </div>
                                     </div>
 
-                                    {hasTimeConflict && (
-                                        <Alert variant="destructive" className="border-destructive bg-destructive/4">
-                                            <AlertCircleIcon />
-                                            <AlertTitle>Time Conflict Detected</AlertTitle>
-                                            <AlertDescription>Your selected time overlaps with an existing event.</AlertDescription>
+                                    {scheduleConflicts.length > 0 && (
+                                        <Alert
+                                            variant="destructive"
+                                            className="border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-400"
+                                        >
+                                            <AlertCircleIcon className="text-amber-600 dark:text-amber-500" />
+                                            <AlertTitle className="font-semibold text-amber-800 dark:text-amber-300">
+                                                Time Conflict Detected
+                                            </AlertTitle>
+                                            <AlertDescription>
+                                                <p className="mb-2 text-amber-700 dark:text-amber-400">
+                                                    Your selected time overlaps with existing facility bookings:
+                                                </p>
+                                                <div className="space-y-1.5">
+                                                    {scheduleConflicts.map((c, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className="flex items-start gap-1.5 rounded border border-amber-200 bg-amber-100/50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                                        >
+                                                            <AlertCircleIcon size={14} className="mt-0.5 shrink-0" />
+                                                            <span>
+                                                                <strong>{c.request_title}</strong> <br />
+                                                                Time: {formatTime(c.time_start)} - {formatTime(c.time_end)} —{' '}
+                                                                <span
+                                                                    className={
+                                                                        c.status === 'Approved'
+                                                                            ? 'font-semibold text-red-600 dark:text-red-400'
+                                                                            : 'font-semibold'
+                                                                    }
+                                                                >
+                                                                    {c.status}
+                                                                </span>
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </AlertDescription>
                                         </Alert>
                                     )}
 

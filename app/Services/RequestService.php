@@ -395,10 +395,14 @@ class RequestService
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $status = $existing->request->status;
                     $conflicts[] = [
-                        'request_id' => $existing->request_id,
+                        'request_id'          => $existing->request_id,
                         'request_facility_id' => $existing->id,
-                        'status'     => $status,
-                        'message'    => sprintf(
+                        'request_title'       => $existing->request->title,
+                        'date'                => $existing->date_requested,
+                        'time_start'          => $existing->time_start,
+                        'time_end'            => $existing->time_end,
+                        'status'              => $status,
+                        'message'             => sprintf(
                             'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing %s booking (%s - %s)',
                             $existing->facility->name,
                             Carbon::parse($requestedDate)->format('F j, Y'),
