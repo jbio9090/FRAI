@@ -2,7 +2,7 @@ import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import moment from 'moment';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { ToolbarProps, View } from 'react-big-calendar';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -131,8 +131,13 @@ export default function FacilityCalendar({
     const [currentView, setCurrentView] = useState<View>('month');
     const [currentDate, setCurrentDate] = useState(new Date());
 
-    // Apply building filter if provided, otherwise show everything
-    const events = filterBuildings ? rawEvents.filter((e) => !e.building || filterBuildings.includes(e.building)) : rawEvents;
+    const events = useMemo(
+        () =>
+            filterBuildings
+                ? rawEvents.filter((e) => !e.building || filterBuildings.includes(e.building))
+                : rawEvents,
+        [rawEvents, filterBuildings],
+    );
 
     useEffect(() => {
         setRawEvents(
