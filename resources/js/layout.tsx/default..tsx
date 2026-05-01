@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/react';
-import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
+import React, { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { AppSidebar } from "@/components/app-sidebar"
 import {
     Breadcrumb,
@@ -17,7 +18,6 @@ import {
     SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
-import { toast } from 'sonner';
 
 interface DashboardProps {
     children: React.ReactNode;

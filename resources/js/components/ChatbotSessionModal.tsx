@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -8,7 +9,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
 
 interface ChatbotSessionModalProps {
     isOpen: boolean;

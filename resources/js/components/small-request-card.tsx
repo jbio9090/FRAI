@@ -1,22 +1,22 @@
-import { useState, useEffect } from 'react';
 import { router, Link } from '@inertiajs/react';
-import { usePermission } from '@/hooks/use-permission';
-import { cn } from '@/lib/utils';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import {
     ArrowUpRight, Calendar, MessageCircle, CheckLine, MessageCirclePlus,
     MessageCircleOff, CirclePause, IterationCw, Paperclip, AlertTriangle,
     BookMarked, UsersRound, GraduationCap, Landmark,
 } from 'lucide-react';
-import { PRIORITY_LABELS } from '@/types/request';
+import moment from 'moment';
 import { motion } from 'motion/react';
-import { Request } from '@/types/request';
+import { useState, useEffect } from 'react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { usePermission } from '@/hooks/use-permission';
+import { cn } from '@/lib/utils';
+import { PRIORITY_LABELS } from '@/types/request';
+import type { Request } from '@/types/request';
+import AvatarWithInitials from './avatar-with-initials';
+import StatusTag from './status-tag';
 import { Button } from './ui/button';
 import { Field, FieldDescription } from './ui/field';
 import { Textarea } from './ui/textarea';
-import moment from 'moment';
-import AvatarWithInitials from './avatar-with-initials';
-import StatusTag from './status-tag';
 
 const PRIORITY_ICONS: Record<0 | 1 | 2 | 3, React.ReactNode> = {
     0: <BookMarked size={12} />,

@@ -1,19 +1,13 @@
 import { Link } from '@inertiajs/react';
-import axios from 'axios'
-import { ChevronLeft, ChevronRight, Clock } from 'lucide-react'
-import moment from 'moment'
-import { useState, useEffect, useCallback } from 'react'
+import axios from 'axios';
+import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import moment from 'moment';
+import { useState, useEffect } from 'react';
 import type { ToolbarProps, View } from 'react-big-calendar';
-import { Calendar, momentLocalizer } from 'react-big-calendar'
-import 'react-big-calendar/lib/css/react-big-calendar.css'
-import { Button } from '@/components/ui/button'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { Calendar, momentLocalizer } from 'react-big-calendar';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import wordToColor from '@/lib/wordToColor';
 
 const localizer = momentLocalizer(moment);
@@ -44,9 +38,9 @@ function CustomToolbar(toolbar: ToolbarProps) {
 
         if (toolbar.view === 'day') {
             return (
-                <div className="flex flex-col font-light text-sm">
+                <div className="flex flex-col text-sm font-light">
                     <h4>{date.format('YYYY')}</h4>
-                    <h3 className="font-bold text-lg">{date.format('MMMM D')}</h3>
+                    <h3 className="text-lg font-bold">{date.format('MMMM D')}</h3>
                     <span className="text-xs text-muted-foreground">{date.format('dddd')}</span>
                 </div>
             );
@@ -56,9 +50,9 @@ function CustomToolbar(toolbar: ToolbarProps) {
             const startOfWeek = date.clone().startOf('week');
             const endOfWeek = date.clone().endOf('week');
             return (
-                <div className="flex flex-col font-light text-sm">
+                <div className="flex flex-col text-sm font-light">
                     <h4>{date.format('YYYY')}</h4>
-                    <h3 className="font-bold text-lg">
+                    <h3 className="text-lg font-bold">
                         {startOfWeek.format('MMM D')} – {endOfWeek.format('MMM D')}
                     </h3>
                 </div>
@@ -66,20 +60,22 @@ function CustomToolbar(toolbar: ToolbarProps) {
         }
 
         return (
-            <div className="flex flex-col font-light text-sm">
+            <div className="flex flex-col text-sm font-light">
                 <h4>{date.format('YYYY')}</h4>
-                <h3 className="font-bold text-lg">{date.format('MMMM')}</h3>
+                <h3 className="text-lg font-bold">{date.format('MMMM')}</h3>
             </div>
         );
     };
 
     return (
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 p-2 sticky left-0 w-full">
+        <div className="sticky left-0 mb-4 flex w-full flex-wrap items-center justify-between gap-4 p-2">
             <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" onClick={goToBack}>
                     <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" onClick={goToToday}>Today</Button>
+                <Button variant="outline" onClick={goToToday}>
+                    Today
+                </Button>
                 <Button variant="outline" size="icon" onClick={goToNext}>
                     <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -102,25 +98,20 @@ function CustomToolbar(toolbar: ToolbarProps) {
 const FACILITY_SEPARATOR = ' — ';
 
 function CustomEvent({ event, isDashboard }: { event: Event; isDashboard: boolean }) {
-    const [facilityName, requestTitle] = isDashboard && event.title.includes(FACILITY_SEPARATOR)
-        ? event.title.split(FACILITY_SEPARATOR)
-        : [event.title, event.title];
+    const [facilityName, requestTitle] =
+        isDashboard && event.title.includes(FACILITY_SEPARATOR) ? event.title.split(FACILITY_SEPARATOR) : [event.title, event.title];
 
     const colorSeed = isDashboard ? facilityName : event.title + event.start + event.end;
-    const isDark = document.documentElement.classList.contains("dark");
     const style = wordToColor(colorSeed);
 
     return (
-        <Link href={route("requests.detail", [event.request_id])}>
-            <div
-                className='h-full flex flex-row lg:flex-col flex-wrap rounded-sm border-1 px-1 mx-2 tag'
-                style={style}
-            >
-                <span className='font-bold text-xs truncate'>{requestTitle}</span>
-                <div className="flex text-left items-center gap-1">
+        <Link href={route('requests.detail', [event.request_id])}>
+            <div className="tag mx-2 flex h-full flex-row flex-wrap rounded-sm border-1 px-1 lg:flex-col" style={style}>
+                <span className="truncate text-xs font-bold">{requestTitle}</span>
+                <div className="flex items-center gap-1 text-left">
                     <Clock size={12} />
-                    <span className='text-xs'>
-                        {moment(event.start).format("h:mma")}-{moment(event.end).format("h:mma")}
+                    <span className="text-xs">
+                        {moment(event.start).format('h:mma')}-{moment(event.end).format('h:mma')}
                     </span>
                 </div>
             </div>
@@ -141,39 +132,36 @@ export default function FacilityCalendar({
     const [currentDate, setCurrentDate] = useState(new Date());
 
     // Apply building filter if provided, otherwise show everything
-    const events = filterBuildings
-        ? rawEvents.filter(e => !e.building || filterBuildings.includes(e.building))
-        : rawEvents;
+    const events = filterBuildings ? rawEvents.filter((e) => !e.building || filterBuildings.includes(e.building)) : rawEvents;
 
     useEffect(() => {
-        setRawEvents(initialEvents.map((event) => ({
-            ...event,
-            start: moment(event.start).toDate(),
-            end: moment(event.end).toDate(),
-        })));
+        setRawEvents(
+            initialEvents.map((event) => ({
+                ...event,
+                start: moment(event.start).toDate(),
+                end: moment(event.end).toDate(),
+            })),
+        );
     }, [initialEvents]);
 
     const fetchEvents = async (start: Date, end: Date) => {
         setLoading(true);
         try {
-            const response = await axios.get(
-                isDashboard
-                    ? route('dashboard.calendar')
-                    : route('facility.schedule.calendar', [facilityId]),
-                {
-                    params: {
-                        start: moment(start).format('YYYY-MM-DD'),
-                        end: moment(end).format('YYYY-MM-DD'),
-                    }
-                }
-            );
+            const response = await axios.get(isDashboard ? route('dashboard.calendar') : route('facility.schedule.calendar', [facilityId]), {
+                params: {
+                    start: moment(start).format('YYYY-MM-DD'),
+                    end: moment(end).format('YYYY-MM-DD'),
+                },
+            });
 
             // Store unfiltered — the filter is applied reactively above
-            setRawEvents(response.data.map((event: Event) => ({
-                ...event,
-                start: moment(event.start).toDate(),
-                end: moment(event.end).toDate(),
-            })));
+            setRawEvents(
+                response.data.map((event: Event) => ({
+                    ...event,
+                    start: moment(event.start).toDate(),
+                    end: moment(event.end).toDate(),
+                })),
+            );
         } catch (error) {
             console.error('Failed to fetch events:', error);
         } finally {
@@ -196,7 +184,7 @@ export default function FacilityCalendar({
     };
 
     return (
-        <div className="h-[57rem] relative">
+        <div className="relative h-[57rem]">
             <Calendar
                 views={['month', 'week', 'day']}
                 localizer={localizer}
@@ -207,9 +195,8 @@ export default function FacilityCalendar({
                 onView={(view) => setCurrentView(view)}
                 date={currentDate}
                 onNavigate={(newDate) => setCurrentDate(newDate)}
-
                 onRangeChange={handleRangeChange}
-                className={(loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : '')}
+                className={loading ? '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50' : ''}
                 components={{
                     toolbar: CustomToolbar,
                     event: (props) => <CustomEvent {...props} isDashboard={isDashboard} />,

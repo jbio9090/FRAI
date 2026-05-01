@@ -1,20 +1,18 @@
-import { useState, useRef, useEffect } from "react";
 import { usePage } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key } from "lucide-react";
-import DefaultLayout from "@/layout.tsx/default.";
+import { useState, useRef, useEffect } from "react";
+import AvatarWithInitials from "@/components/avatar-with-initials";
 import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { router } from "@inertiajs/react";
-import AvatarWithInitials from "@/components/avatar-with-initials";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 import {
     Select,
     SelectContent,
@@ -23,13 +21,15 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@/components/ui/dialog";
-import { User } from "@/types";
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import DefaultLayout from "@/layout.tsx/default.";
+import type { User } from "@/types";
 
 interface Props {
     users: User[];

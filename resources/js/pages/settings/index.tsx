@@ -1,17 +1,8 @@
-import PushNotifications from '@/components/notification/pushNotification';
-import DefaultLayout from '@/layout.tsx/default.';
-import { useEffect, useRef, useState } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useEffect, useRef, useState } from 'react';
+import AvatarWithInitials from '@/components/avatar-with-initials';
+import PushNotifications from '@/components/notification/pushNotification';
+import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
@@ -26,8 +17,17 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import AvatarWithInitials from '@/components/avatar-with-initials';
-import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import DefaultLayout from '@/layout.tsx/default.';
 
 interface PageProps {
     auth: {

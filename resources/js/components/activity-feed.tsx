@@ -1,6 +1,3 @@
-import moment from "moment";
-import { cn } from "@/lib/utils";
-import AvatarWithInitials from "./avatar-with-initials";
 import {
     MessageSquare,
     Tag,
@@ -18,6 +15,9 @@ import {
     KeyRound,
     ShieldCheck,
 } from "lucide-react";
+import moment from "moment";
+import { cn } from "@/lib/utils";
+import AvatarWithInitials from "./avatar-with-initials";
 
 export type AuditLog = {
     id: number;

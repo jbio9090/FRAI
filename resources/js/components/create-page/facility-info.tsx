@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react";
-import { motion } from "motion/react";
-import { Facility } from "@/types/request";
-import { CalendarIcon, Building, User } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { CalendarIcon, Building, User } from "lucide-react";
+import { motion } from "motion/react";
+import { useState, useEffect } from "react";
 import { BookingCard } from "@/components/booking-card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import type { Facility } from "@/types/request";
 
 interface FacilityInfoProps {
     facilities: Facility[];

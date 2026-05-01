@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Facility } from '../hooks/useBookingFlow';
+import type { Facility } from '../hooks/useBookingFlow';
 import DatePicker from './DatePicker';
 import TypingMessage from './TypingMessage';
 

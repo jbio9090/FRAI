@@ -1,11 +1,11 @@
+import { router, Link } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, ArrowLeftRight, MapPin, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { EquipmentConflict } from '@/types/equipment';
-import { router, Link } from '@inertiajs/react';
-import StatusTag from './status-tag';
-import { usePermission } from '@/hooks/use-permission';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { usePermission } from '@/hooks/use-permission';
+import type { EquipmentConflict } from '@/types/equipment';
+import StatusTag from './status-tag';
 
 interface BorrowedEquipmentRequest {
     equipment_id: number;

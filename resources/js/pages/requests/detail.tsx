@@ -1,27 +1,27 @@
-import { Calendar, Clock, SendHorizontal, Pen, CheckCircle, XCircle, ClipboardCheck, MessageSquare, Sparkles, Download } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import DefaultLayout from '@/layout.tsx/default.';
-import { Request } from '@/types/request';
 import { Link, usePage } from '@inertiajs/react';
-import moment from 'moment';
-import AvatarWithInitials from '@/components/avatar-with-initials';
-import { Button } from '@/components/ui/button';
-import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { Textarea } from '@/components/ui/textarea';
-import Comment from '@/components/comment';
-import StatusTag from '@/components/status-tag';
+import { Calendar, Clock, SendHorizontal, Pen, CheckCircle, XCircle, ClipboardCheck, MessageSquare, Sparkles, Download } from 'lucide-react';
+import moment from 'moment';
+import { useState } from 'react';
 import { ActivityFeed } from '@/components/activity-feed';
-import { usePermission } from '@/hooks/use-permission';
 import { BookingCard } from '@/components/booking-card';
 import { cn } from '@/lib/utils';
 import AnimatedText from '@/components/animated-text';
 import { AttachedFileList } from '@/components/attached-file-list';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import SmartPagination from '@/components/SmartPagination';
+import AvatarWithInitials from '@/components/avatar-with-initials';
+import Comment from '@/components/comment';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
+import SmartPagination from '@/components/SmartPagination';
+import StatusTag from '@/components/status-tag';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { usePermission } from '@/hooks/use-permission';
+import DefaultLayout from '@/layout.tsx/default.';
+import type { Request } from '@/types/request';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -106,33 +106,40 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
     const canReschedule = request.status === 'For Reschedule' && request.user.id === auth.user.id;
 
     const handleAction = (action: string) => {
+        const inertiaOptions = {
+            preserveState: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                setComment('');
+                setCommentInputState(false);
+            },
+        };
+
         if (action === 'hold') {
-            router.post(route('requests.hold', request.id));
+            router.post(route('requests.hold', request.id), {}, inertiaOptions);
             return;
         }
 
         if (action === 'comment') {
-            if (comment.trim().length === 0) return;
             router.post(
                 route('requests.updateStatus', request.id),
                 {
                     action: 'comment',
                     comment: comment.trim(),
                 },
-                {
-                    onSuccess: () => {
-                        setComment('');
-                        setCommentInputState(false);
-                    },
-                },
+                inertiaOptions,
             );
             return;
         }
 
-        router.post(route('requests.updateStatus', request.id), {
-            action,
-            comment: comment.trim().length > 0 ? comment.trim() : null,
-        });
+        router.post(
+            route('requests.updateStatus', request.id),
+            {
+                action,
+                comment: comment.length > 0 ? comment : null,
+            },
+            inertiaOptions,
+        );
     };
 
     // Build the bookings array for PDF export

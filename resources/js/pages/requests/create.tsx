@@ -18,12 +18,12 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import MotionChevron from '@/components/animated_icons/MotionChevron';
+import { AttachedFileList } from '@/components/attached-file-list';
+import { BookingCard } from '@/components/booking-card';
+import { FacilityInfo } from '@/components/create-page/facility-info';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -34,25 +34,25 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AttachedFileList } from '@/components/attached-file-list';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from '@/lib/utils';
-import MotionChevron from '@/components/animated_icons/MotionChevron';
-import { Facility } from '@/types/facility';
-import { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
+import type { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
+import type { Facility } from '@/types/facility';
 import { PRIORITY_LABELS } from '@/types/request';
-import { toast } from 'sonner';
-import { BookingCard } from '@/components/booking-card';
-import { FacilityInfo } from '@/components/create-page/facility-info';
-import { Card, CardContent } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 
 interface BorrowedEquipmentRequest {
     equipment_id: number;
