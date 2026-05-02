@@ -221,9 +221,11 @@ export default function Dashboard({
         );
     };
 
-    const filteredEvents = initialEvents.filter(e =>
-        selectedBuildings.includes(e.building)
-    );
+    const filteredEvents = useMemo(() => {
+        return initialEvents.filter(e =>
+            !e.building || selectedBuildings.includes(e.building)
+        );
+    }, [initialEvents, selectedBuildings]);
 
     const pendingConflictRequests = pending.data.filter(
         r => r.pending_conflicts && r.pending_conflicts.length > 0
@@ -272,12 +274,11 @@ export default function Dashboard({
         const filled: ChartRow[] = [];
         const dataMap = new Map(data.map(d => [d.date, d.total]));
         for (let i = days - 1; i >= 0; i--) {
-            const date = moment().subtract(i, 'days').format('YYYY-MM-DD');
+            const date = moment.utc().subtract(i, 'days').format('YYYY-MM-DD');
             filled.push({ date, total: dataMap.get(date) ?? 0 });
         }
         return filled;
     }
-    console.log(chartData);
 
 
     return (
@@ -589,8 +590,9 @@ export default function Dashboard({
                             </div>
                             <FacilityCalendar
                                 facilityId={0}
-                                initialEvents={filteredEvents}
+                                initialEvents={initialEvents}
                                 calendarRoute="dashboard.calendar"
+                                filterBuildings={selectedBuildings}
                             />
                         </div>
                     </TabsContent>

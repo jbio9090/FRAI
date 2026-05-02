@@ -174,6 +174,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                                                     expected_capacity: null,
                                                     has_outsiders: false,
                                                     equipment_conflicts: {},
+                                                    facility_capacity: facility?.capacity ?? null,
                                                 }}
                                                 index={idx}
                                             />

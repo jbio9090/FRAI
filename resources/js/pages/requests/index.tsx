@@ -220,7 +220,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
             <div className="max-w-7xl mx-auto w-full">
                 <h1 className="text-xl font-bold mb-6 p-4 md:p-8">{page_title} Requests</h1>
 
-                <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4  p-4 md:p-8">
+                <div className="flex flex-col justify-center w-full mt-4 flex-wrap gap-4  px-4 md:px-8">
                     <div className="flex gap-2">
                         <InputGroup className='max-w-xs sm:max-w-sm md:max-w-md'>
                             <InputGroupAddon>
@@ -640,7 +640,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="w-full mt-4 mb-2 overflow-hidden p-4 md:p-8"
+                            className="w-full mt-4 mb-2 overflow-hidden px-4 md:px-8"
                         >
                             <Field>
                                 <FieldDescription>Comment to attach to all selected requests</FieldDescription>
@@ -688,12 +688,12 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     { page, filter: filterMap[currentActiveFitler], search: searchQuery },
                                     { preserveState: true, preserveScroll: true }
                                 )}
-                                className={"my-4 p-4 md:p-8"}
+                                className={"my-4 px-4 md:px-8 py-0"}
                             />
                         )}
 
                         <div
-                            className="gap-4 mt-8 flex flex-col sm:grid items-start w-full p-2 sm:p-4 md:p-8"
+                            className="gap-4 mt-8 flex flex-col sm:grid items-stretch w-full p-2 sm:px-4 md:px-8"
                             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(max(24rem, calc(50% - 0.5rem)), 1fr))' }}
                         >
                             {requests && requests.data.length > 0 ? requests.data.map((request) => (
@@ -715,7 +715,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                 >
                                     <FolderOpen size={32} />
                                     <h1 className='font-bold text-2xl'>No Requests</h1>
-                                    <p>Nothing to see here</p>
+                                    <p>Nothing to see here...</p>
                                 </motion.div>
                             )}
                         </div>
@@ -728,7 +728,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     { page, filter: filterMap[currentActiveFitler], search: searchQuery },
                                     { preserveState: true, preserveScroll: true }
                                 )}
-                                className={"my-5 p-4 md:p-8"}
+                                className={"my-5 px-4 md:px-8"}
                             />
                         )}
                     </>

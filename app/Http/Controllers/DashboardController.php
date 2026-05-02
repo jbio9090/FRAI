@@ -22,14 +22,9 @@ class DashboardController extends Controller
         $start = now()->startOfMonth()->format('Y-m-d');
         $end   = now()->endOfMonth()->format('Y-m-d');
 
-        $tz = config('app.timezone');
-
         $chartData = AuditLog::query()
             ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id))
-            ->selectRaw(
-                "DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?) as date, COUNT(*) as total",
-                [$tz]
-            )
+            ->selectRaw("DATE(created_at) as date, COUNT(*) as total")
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
             ->orderBy('date')
@@ -73,15 +68,14 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         $range = $request->input('range', 'week');
-        $tz = config('app.timezone'); // ← always 'Asia/Manila' from .env
 
         $query = AuditLog::query()
             ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id));
 
         if ($range === 'day' || $range === 'today') {
             $logs = $query
-                ->selectRaw("TO_CHAR(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?, 'HH24') as hour, COUNT(*) as total", [$tz])
-                ->whereBetween('created_at', [now()->startOfDay(), now()->endOfDay()])
+                ->selectRaw("EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*) as total")
+                ->whereBetween('created_at', [now()->utc()->startOfDay(), now()->utc()->endOfDay()])
                 ->groupBy('hour')
                 ->pluck('total', 'hour');
 
@@ -89,7 +83,7 @@ class DashboardController extends Controller
                 $formattedHour = str_pad($hour, 2, '0', STR_PAD_LEFT);
                 return [
                     'date'  => $formattedHour . ':00',
-                    'total' => (int) ($logs[$formattedHour] ?? 0),
+                    'total' => (int) ($logs[$hour] ?? 0),
                 ];
             })->values();
 
@@ -97,13 +91,13 @@ class DashboardController extends Controller
         }
 
         [$start, $end] = match ($range) {
-            'month'   => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
-            '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
-            default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
+            'month'   => [now()->utc()->startOfMonth()->startOfDay(), now()->utc()->endOfMonth()->endOfDay()],
+            '3months' => [now()->utc()->subMonths(3)->startOfDay(), now()->utc()->endOfDay()],
+            default   => [now()->utc()->subDays(6)->startOfDay(), now()->utc()->endOfDay()],
         };
 
         return response()->json(
-            $query->selectRaw("DATE(created_at AT TIME ZONE 'UTC' AT TIME ZONE ?) as date, COUNT(*) as total", [$tz])
+            $query->selectRaw("DATE(created_at) as date, COUNT(*) as total")
                 ->whereBetween('created_at', [$start, $end])
                 ->groupBy('date')
                 ->orderBy('date')

@@ -60,6 +60,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import wordToColor from "@/lib/wordToColor";
 import useDarkMode from "@/hooks/use-darkMode";
+import { usePermission } from "@/hooks/use-permission";
 
 interface FacilityPivot {
     equipment_id: number;
@@ -102,6 +103,11 @@ function EquipmentDialog({
     const [quantity, setQuantity] = useState(1);
     const [errors, setErrors] = useState<{ name?: string; quantity?: string }>({});
     const [processing, setProcessing] = useState(false);
+    const { hasRole } = usePermission();
+
+    if (!hasRole("admin")) {
+        return;
+    }
 
     useEffect(() => {
         if (open) {
@@ -358,12 +364,8 @@ export default function EquipmentsPage({
     const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [sortValue, setSortValue] = useState<SortValue | "">("");
-    const isDark = useDarkMode();
+    const { hasRole } = usePermission();
 
-    const totalUnits = useMemo(
-        () => equipments.reduce((s, e) => s + e.quantity, 0),
-        [equipments]
-    );
 
     const filtered = useMemo(
         () => equipments.filter((e) =>
@@ -401,41 +403,43 @@ export default function EquipmentsPage({
 
     return (
         <DefaultLayout>
-            <EquipmentDialog open={addOpen} onClose={() => setAddOpen(false)} />
-            <EquipmentDialog
-                open={!!editTarget}
-                equipment={editTarget ?? undefined}
-                onClose={() => setEditTarget(null)}
-            />
-            <AssignDialog
-                open={!!assignTarget}
-                equipment={assignTarget}
-                facilities={facilities}
-                onClose={() => setAssignTarget(null)}
-            />
+            {(hasRole("admin")) && (
+                <>
+                    <EquipmentDialog open={addOpen} onClose={() => setAddOpen(false)} />
+                    <EquipmentDialog
+                        open={!!editTarget}
+                        equipment={editTarget ?? undefined}
+                        onClose={() => setEditTarget(null)}
+                    />
+                    <AssignDialog
+                        open={!!assignTarget}
+                        equipment={assignTarget}
+                        facilities={facilities}
+                        onClose={() => setAssignTarget(null)}
+                    />
 
-            <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Equipment</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Are you sure you want to delete{" "}
-                            <span className="font-medium text-foreground">{deleteTarget?.name}</span>?
-                            This action cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={confirmDelete}
-                            disabled={deleting}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                            {deleting ? "Deleting…" : "Delete"}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                    <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Equipment</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Are you sure you want to delete{" "}
+                                    <span className="font-medium text-foreground">{deleteTarget?.name}</span>?
+                                    This action cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={confirmDelete}
+                                    disabled={deleting}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                    {deleting ? "Deleting…" : "Delete"}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog></>)}
 
             <div className="mb-4">
                 <h1 className="text-xl font-bold">Equipments</h1>
@@ -486,10 +490,11 @@ export default function EquipmentsPage({
                     </PopoverContent>
                 </Popover>
 
-                <Button onClick={() => setAddOpen(true)}>
+                {(hasRole("admin")) && (<Button onClick={() => setAddOpen(true)}>
                     <Plus size={16} />
                     Add Equipment
-                </Button>
+                </Button>)
+                }
             </div>
 
             <Table>
