@@ -1,35 +1,59 @@
 import { useForm, router } from '@inertiajs/react';
-import { format } from "date-fns";
-import { CalendarIcon, X, User, Clock, Building, AlertCircleIcon, SquareMousePointer, Minus, Plus, Paperclip, Info, Search, ArrowUpDown, Box } from "lucide-react";
-import { motion } from "motion/react"
-import { useState, useEffect } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { AttachedFileList } from '@/components/attached-file-list';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import DefaultLayout from '@/layout.tsx/default.';
-import { cn } from "@/lib/utils";
+import { format } from 'date-fns';
+import {
+    CalendarIcon,
+    X,
+    User,
+    Clock,
+    Building,
+    AlertCircleIcon,
+    SquareMousePointer,
+    Minus,
+    Plus,
+    Paperclip,
+    Info,
+    Search,
+    ArrowUpDown,
+    Box,
+} from 'lucide-react';
+import { motion } from 'motion/react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import MotionChevron from '@/components/animated_icons/MotionChevron';
-import { Facility } from '@/types/facility';
-import { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
-import { PRIORITY_LABELS } from '@/types/request';
-import { toast } from "sonner";
+import { AttachedFileList } from '@/components/attached-file-list';
 import { BookingCard } from '@/components/booking-card';
 import { FacilityInfo } from '@/components/create-page/facility-info';
+import { BookingCardList } from '@/components/request/create/booking-card-list';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import DefaultLayout from '@/layout.tsx/default.';
+import { cn } from '@/lib/utils';
+import type { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
+import type { Facility } from '@/types/facility';
+import { PRIORITY_LABELS } from '@/types/request';
 
 interface BorrowedEquipmentRequest {
     equipment_id: number;
@@ -40,7 +64,7 @@ interface BorrowedEquipmentRequest {
     max_quantity: number;
 }
 
-interface FacilityBooking {
+export interface FacilityBooking {
     facility_id: number;
     facility_name: string;
     date: string;
@@ -64,10 +88,12 @@ interface EquipmentRequest {
 }
 
 interface BookingSchedule {
+    request_id?: number;
     request_title: string;
     status: string;
     time_start: string;
     time_end: string;
+    date?: string;
 }
 
 interface FacilityScheduleData {
@@ -138,10 +164,13 @@ function loadDraft(existingId?: number): DraftData | null {
 
 function saveDraft(data: Omit<DraftData, 'savedAt'>, existingId?: number) {
     try {
-        localStorage.setItem(getDraftKey(existingId), JSON.stringify({
-            ...data,
-            savedAt: Date.now(),
-        }));
+        localStorage.setItem(
+            getDraftKey(existingId),
+            JSON.stringify({
+                ...data,
+                savedAt: Date.now(),
+            }),
+        );
     } catch (err) {
         console.error(err);
     }
@@ -160,15 +189,14 @@ function timeAgo(ts: number): string {
 }
 
 const approversList = [
-    { id: 1, name: "Faculty" },
-    { id: 3, name: "College Dean" },
-    { id: 4, name: "Chairperson" },
-    { id: 5, name: "OSA" },
-    { id: 6, name: "VP AA" },
-    { id: 7, name: "VP Admin" },
-    { id: 8, name: "President" },
+    { id: 1, name: 'Faculty' },
+    { id: 3, name: 'College Dean' },
+    { id: 4, name: 'Chairperson' },
+    { id: 5, name: 'OSA' },
+    { id: 6, name: 'VP AA' },
+    { id: 7, name: 'VP Admin' },
+    { id: 8, name: 'President' },
 ];
-
 
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
@@ -183,42 +211,43 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         return false;
     }
 
-    const hasMeaningfulDraft =
-        !!draft && (!isEditing || (!!existingRequest && draftDiffersFromExisting(draft, existingRequest)));
+    const hasMeaningfulDraft = !!draft && (!isEditing || (!!existingRequest && draftDiffersFromExisting(draft, existingRequest)));
 
     const [showDraftBanner, setShowDraftBanner] = useState<boolean>(hasMeaningfulDraft);
     const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
     const [selectedFacility, setSelectedFacility] = useState<number | null>(null);
-    const [currentDate, setCurrentDate] = useState<Date | undefined>(undefined);
+    const [selectedDates, setSelectedDates] = useState<Date[]>([]);
     const [currentTimeStart, setCurrentTimeStart] = useState<string>('');
     const [currentTimeEnd, setCurrentTimeEnd] = useState<string>('');
     const [externalEquipment, setExternalEquipment] = useState<{ name: string }[]>([]);
     const [externalEquipmentInput, setExternalEquipmentInput] = useState<string>('');
     const [selectedEquipment, setSelectedEquipment] = useState<EquipmentRequest[]>([]);
-    const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
-    const [hasTimeConflict, setHasTimeConflict] = useState(false);
+    const [scheduleConflicts, setScheduleConflicts] = useState<BookingSchedule[]>([]);
     const [borrowingEquipmentId, setBorrowingEquipmentId] = useState<number | null>(null);
     const [selectedBorrowedEquipment, setSelectedBorrowedEquipment] = useState<BorrowedEquipmentRequest[]>([]);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [expectedCapacity, setExpectedCapacity] = useState<number | ''>('');
     const [hasOutsiders, setHasOutsiders] = useState<boolean>(false);
-    const [existingFiles, setExistingFiles] = useState<ExistingFile[]>(
-        existingRequest?.existing_files ?? []
-    );
+    const [existingFiles, setExistingFiles] = useState<ExistingFile[]>(existingRequest?.existing_files ?? []);
     const [deletedFileIds, setDeletedFileIds] = useState<number[]>([]);
-    const [approvedBy, setApprovedBy] = useState<string[]>(
-        existingRequest?.approved_by ?? []
-    );
+    const [approvedBy, setApprovedBy] = useState<string[]>(existingRequest?.approved_by ?? []);
     const [equipmentConflicts, setEquipmentConflicts] = useState<Record<number, EquipmentConflict[]>>({});
     const [checkingEquipmentConflicts, setCheckingEquipmentConflicts] = useState(false);
-    const [equipmentAvailability, setEquipmentAvailability] = useState<Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>>({});
+    const [equipmentAvailability, setEquipmentAvailability] = useState<
+        Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>
+    >({});
     const [checkingAvailability, setCheckingAvailability] = useState(false);
     const [borrowableAvailability, setBorrowableAvailability] = useState<Record<number, Record<number, number>>>({});
     const [isExternalOpen, setIsExternalOpen] = useState(false);
     const [isBorrowOpen, setIsBorrowOpen] = useState(false);
+
+    // Edit-in-place state
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [originalBookingData, setOriginalBookingData] = useState<FacilityBooking | null>(null);
 
     // Borrow panel: search, sort, filter
     const [borrowSearch, setBorrowSearch] = useState('');
@@ -226,35 +255,32 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [borrowFacilityFilter, setBorrowFacilityFilter] = useState<string>('all');
 
     const handleCheckboxChange = (name: string) => {
-        setData('approved_by', data.approved_by.includes(name)
-            ? data.approved_by.filter((item) => item !== name)
-            : [...data.approved_by, name]
-        );
+        setData('approved_by', data.approved_by.includes(name) ? data.approved_by.filter((item) => item !== name) : [...data.approved_by, name]);
     };
 
     const allBorrowableEquipment = facilities
-        .filter(f => f.id !== selectedFacility)
-        .flatMap(f => (f.equipment ?? []).map(eq => ({ ...eq, facilityId: f.id, facilityName: f.name })))
-        .reduce((unique, eq) => {
-            const existing = unique.find(e => e.id === eq.id);
-            if (!existing) {
-                unique.push({ ...eq, sources: [{ facilityId: eq.facilityId, facilityName: eq.facilityName, quantity: eq.pivot.quantity }] });
-            } else {
-                existing.sources.push({ facilityId: eq.facilityId, facilityName: eq.facilityName, quantity: eq.pivot.quantity });
-            }
-            return unique;
-        }, [] as Array<FacilityEquipment & { sources: { facilityId: number; facilityName: string; quantity: number }[] }>);
+        .filter((f) => f.id !== selectedFacility)
+        .flatMap((f) => (f.equipment ?? []).map((eq) => ({ ...eq, facilityId: f.id, facilityName: f.name })))
+        .reduce(
+            (unique, eq) => {
+                const existing = unique.find((e) => e.id === eq.id);
+                if (!existing) {
+                    unique.push({ ...eq, sources: [{ facilityId: eq.facilityId, facilityName: eq.facilityName, quantity: eq.pivot.quantity }] });
+                } else {
+                    existing.sources.push({ facilityId: eq.facilityId, facilityName: eq.facilityName, quantity: eq.pivot.quantity });
+                }
+                return unique;
+            },
+            [] as Array<FacilityEquipment & { sources: { facilityId: number; facilityName: string; quantity: number }[] }>,
+        );
 
     // All unique source facilities for the filter dropdown
-    const allSourceFacilities = facilities.filter(f => f.id !== selectedFacility);
+    const allSourceFacilities = facilities.filter((f) => f.id !== selectedFacility);
 
     // Derived: filtered + sorted borrowable equipment list
     const filteredBorrowableEquipment = allBorrowableEquipment
-        .filter(eq => eq.name.toLowerCase().includes(borrowSearch.toLowerCase()))
-        .filter(eq =>
-            borrowFacilityFilter === 'all' ||
-            eq.sources.some(s => s.facilityId === Number(borrowFacilityFilter))
-        )
+        .filter((eq) => eq.name.toLowerCase().includes(borrowSearch.toLowerCase()))
+        .filter((eq) => borrowFacilityFilter === 'all' || eq.sources.some((s) => s.facilityId === Number(borrowFacilityFilter)))
         .sort((a, b) => {
             if (borrowSort === 'name-asc') return a.name.localeCompare(b.name);
             if (borrowSort === 'name-desc') return b.name.localeCompare(a.name);
@@ -267,10 +293,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const { data, setData, post, processing, errors, transform } = useForm({
         title: existingRequest?.title ?? '',
         description: existingRequest?.description ?? '',
-        facility_bookings: existingRequest?.facility_bookings ?? [] as FacilityBooking[],
+        facility_bookings: existingRequest?.facility_bookings ?? ([] as FacilityBooking[]),
         priority_level: existingRequest?.priority_level ?? 0,
         priority_reason: existingRequest?.priority_reason ?? '',
-        approved_by: existingRequest?.approved_by ?? [] as string[],
+        approved_by: existingRequest?.approved_by ?? ([] as string[]),
         files: [] as File[],
         existing_file_ids: [] as number[],
         _method: '',
@@ -289,58 +315,78 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         if (isEmpty) return;
 
         const timeout = setTimeout(() => {
-            saveDraft({
-                title: data.title,
-                description: data.description,
-                facility_bookings: data.facility_bookings,
-                priority_level: data.priority_level as 0 | 1 | 2,
-                priority_reason: data.priority_reason,
-                approved_by: data.approved_by,
-            }, existingRequest?.id);
-
-            toast.success(
-                'Draft saved',
+            saveDraft(
                 {
-                    description: 'Your progress has been saved locally.',
-                    duration: 2000,
-                    position: "top-right"
-                }
+                    title: data.title,
+                    description: data.description,
+                    facility_bookings: data.facility_bookings,
+                    priority_level: data.priority_level as 0 | 1 | 2,
+                    priority_reason: data.priority_reason,
+                    approved_by: data.approved_by,
+                },
+                existingRequest?.id,
             );
+
+            toast.success('Draft saved', {
+                description: 'Your progress has been saved locally.',
+                duration: 2000,
+                position: 'top-right',
+            });
         }, 2000);
 
         return () => clearTimeout(timeout);
     }, [data.title, data.description, data.priority_level, data.priority_reason, data.facility_bookings, data.approved_by, showDraftBanner]);
 
     useEffect(() => {
-        const ids = selectedEquipment.map(e => e.equipment_id);
+        const ids = selectedEquipment.map((e) => e.equipment_id);
         if (ids.length > 0) fetchEquipmentConflicts(ids);
         else setEquipmentConflicts({});
 
-        if (selectedFacility && currentDate && currentTimeStart && currentTimeEnd) {
+        if (selectedFacility && selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
             fetchEquipmentAvailability();
         } else {
             setEquipmentAvailability({});
         }
-    }, [currentTimeStart, currentTimeEnd, currentDate, selectedFacility]);
+    }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility]);
 
     useEffect(() => {
-        if (currentDate && currentTimeStart && currentTimeEnd) {
+        if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
             fetchBorrowableAvailability();
         } else {
             setBorrowableAvailability({});
         }
-    }, [currentTimeStart, currentTimeEnd, currentDate, selectedFacility]);
+    }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility]);
 
-    // Add this useEffect to sync attachedFiles -> form data
     useEffect(() => {
-        setData('files', attachedFiles.map(f => f.file));
+        setData(
+            'files',
+            attachedFiles.map((f) => f.file),
+        );
     }, [attachedFiles]);
+
+    useEffect(() => {
+        if (!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd) {
+            setScheduleConflicts([]);
+            return;
+        }
+
+        const allConflicts = selectedDates.flatMap((date) => {
+            const formattedDate = format(date, 'yyyy-MM-dd');
+
+            return checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd).map((conflict) => ({
+                ...conflict,
+                date: formattedDate,
+            }));
+        });
+
+        setScheduleConflicts(allConflicts);
+    }, [selectedFacility, selectedDates, currentTimeStart, currentTimeEnd, facilitySchedule]);
 
     function editBooking(index: number) {
         const booking = data.facility_bookings[index];
 
         setSelectedFacility(booking.facility_id);
-        setCurrentDate(new Date(booking.date));
+        setSelectedDates([new Date(booking.date)]);
         setCurrentTimeStart(booking.time_start);
         setCurrentTimeEnd(booking.time_end);
         setSelectedEquipment(booking.equipment);
@@ -348,10 +394,33 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setExternalEquipment(booking.external_equipment ?? []);
         setExpectedCapacity(booking.expected_capacity ?? '');
         setHasOutsiders(booking.has_outsiders ?? false);
+        setEquipmentConflicts(booking.equipment_conflicts ?? {});
+
+        // Store which card is being edited and a snapshot for change-detection
+        setEditingIndex(index);
+        setOriginalBookingData({ ...booking });
 
         loadSchedule(booking.facility_id, new Date(booking.date));
+        // NOTE: removeBooking is intentionally NOT called here —
+        // the card stays in the list while the form is populated.
+    }
 
-        removeBooking(index);
+    function cancelEditBooking() {
+        setEditingIndex(null);
+        setOriginalBookingData(null);
+        setSelectedFacility(null);
+        setSelectedDates([]);
+        setCurrentTimeStart('');
+        setCurrentTimeEnd('');
+        setSelectedEquipment([]);
+        setSelectedBorrowedEquipment([]);
+        setBorrowingEquipmentId(null);
+        setExternalEquipment([]);
+        setExternalEquipmentInput('');
+        setExpectedCapacity('');
+        setHasOutsiders(false);
+        setEquipmentConflicts({});
+        setScheduleConflicts([]);
     }
 
     const restoreDraft = () => {
@@ -371,9 +440,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         setShowDraftBanner(false);
     };
 
-    const availableEquipment: FacilityEquipment[] = selectedFacility
-        ? facilities.find(f => f.id === selectedFacility)?.equipment ?? []
-        : [];
+    const availableEquipment: FacilityEquipment[] = selectedFacility ? (facilities.find((f) => f.id === selectedFacility)?.equipment ?? []) : [];
 
     function formatTime(time: string): string {
         return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
@@ -385,16 +452,23 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     async function loadSchedule(facilityId: number, date: Date) {
         setLoadingSchedule(true);
+
         try {
             const dateString = format(date, 'yyyy-MM-dd');
+
             const response = await fetch(
-                route('facility.schedule', { facility: facilityId, date: dateString })
+                route('facility.schedule', {
+                    facility: facilityId,
+                    date: dateString,
+                }),
             );
+
             const data = await response.json();
-            setFacilitySchedule(data);
-            if (currentTimeStart && currentTimeEnd) {
-                setHasTimeConflict(checkTimeConflictWithData(data, currentTimeStart, currentTimeEnd));
-            }
+
+            setFacilitySchedule({
+                bookings: data.bookings ?? [],
+                date: dateString,
+            });
         } catch (error) {
             console.error('Failed to load schedule:', error);
             setFacilitySchedule(null);
@@ -407,12 +481,21 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         const facilityId = Number(value);
         setSelectedFacility(facilityId);
         setSelectedEquipment([]);
-        if (currentDate) loadSchedule(facilityId, currentDate);
+        setScheduleConflicts([]);
+        // Load schedule for the first selected date (for conflict preview)
+        if (selectedDates.length > 0) loadSchedule(facilityId, selectedDates[0]);
     }
 
-    const handleDateChange = (date: Date | undefined) => {
-        setCurrentDate(date);
-        if (selectedFacility && date) loadSchedule(selectedFacility, date);
+    const handleDateChange = (dates: Date[] | undefined) => {
+        const next = dates ?? [];
+        // In edit mode, clamp to single selection
+        if (editingIndex !== null && next.length > 1) {
+            setSelectedDates([next[next.length - 1]]);
+        } else {
+            setSelectedDates(next);
+        }
+        const primary = (dates ?? [])[0];
+        if (selectedFacility && primary) loadSchedule(selectedFacility, primary);
     };
 
     function clearEquipmentSelection(e: React.MouseEvent<HTMLButtonElement>) {
@@ -422,18 +505,21 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     function selectAllEquipment(e: React.MouseEvent<HTMLButtonElement>) {
         e.preventDefault();
-        setSelectedEquipment(availableEquipment.map((equipment) => ({
-            equipment_id: equipment.id,
-            equipment_name: equipment.name,
-            quantity_needed: equipment.pivot.quantity,
-            max_quantity: equipment.pivot.quantity,
-        })));
+        setSelectedEquipment(
+            availableEquipment.map((equipment) => ({
+                equipment_id: equipment.id,
+                equipment_name: equipment.name,
+                quantity_needed: equipment.pivot.quantity,
+                max_quantity: equipment.pivot.quantity,
+            })),
+        );
     }
 
     async function fetchBorrowableAvailability() {
-        if (!currentDate || !currentTimeStart || !currentTimeEnd) return;
+        if (!selectedDates.length || !currentTimeStart || !currentTimeEnd) return;
+        const currentDate = selectedDates[0];
 
-        const sourceFacilities = facilities.filter(f => f.id !== selectedFacility);
+        const sourceFacilities = facilities.filter((f) => f.id !== selectedFacility);
         if (sourceFacilities.length === 0) return;
 
         const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content;
@@ -452,7 +538,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                 });
                 const json = await res.json();
                 return { facilityId: facility.id, availability: json.availability ?? [] };
-            })
+            }),
         );
 
         const map: Record<number, Record<number, number>> = {};
@@ -469,34 +555,39 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     function handleEquipmentToggle(equipment: FacilityEquipment) {
-        const exists = selectedEquipment.find(e => e.equipment_id === equipment.id);
+        const exists = selectedEquipment.find((e) => e.equipment_id === equipment.id);
         let updated: EquipmentRequest[];
         if (exists) {
-            updated = selectedEquipment.filter(e => e.equipment_id !== equipment.id);
-            setEquipmentConflicts(prev => { const n = { ...prev }; delete n[equipment.id]; return n; });
+            updated = selectedEquipment.filter((e) => e.equipment_id !== equipment.id);
+            setEquipmentConflicts((prev) => {
+                const n = { ...prev };
+                delete n[equipment.id];
+                return n;
+            });
         } else {
-            updated = [...selectedEquipment, {
-                equipment_id: equipment.id,
-                equipment_name: equipment.name,
-                quantity_needed: equipment.pivot.quantity,
-                max_quantity: equipment.pivot.quantity,
-            }];
+            updated = [
+                ...selectedEquipment,
+                {
+                    equipment_id: equipment.id,
+                    equipment_name: equipment.name,
+                    quantity_needed: equipment.pivot.quantity,
+                    max_quantity: equipment.pivot.quantity,
+                },
+            ];
         }
         setSelectedEquipment(updated);
-        fetchEquipmentConflicts(updated.map(e => e.equipment_id));
+        fetchEquipmentConflicts(updated.map((e) => e.equipment_id));
     }
 
     function updateEquipmentQuantity(equipmentId: number, quantity: number) {
-        setSelectedEquipment(selectedEquipment.map(e =>
-            e.equipment_id === equipmentId ? { ...e, quantity_needed: quantity } : e
-        ));
+        setSelectedEquipment(selectedEquipment.map((e) => (e.equipment_id === equipmentId ? { ...e, quantity_needed: quantity } : e)));
     }
 
     function checkTimeConflictWithData(schedule: FacilityScheduleData | null, startTime: string, endTime: string): boolean {
         if (!schedule || !schedule.bookings.length) return false;
         const start = new Date(`2000-01-01T${startTime}`);
         const end = new Date(`2000-01-01T${endTime}`);
-        return schedule.bookings.some(booking => {
+        return schedule.bookings.some((booking) => {
             const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
             const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
             return start < bookingEnd && end > bookingStart;
@@ -511,7 +602,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         if (!schedule || !schedule.bookings.length) return [];
         const start = new Date(`2000-01-01T${startTime}`);
         const end = new Date(`2000-01-01T${endTime}`);
-        return schedule.bookings.filter(booking => {
+        return schedule.bookings.filter((booking) => {
             const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
             const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
             return start < bookingEnd && end > bookingStart;
@@ -521,47 +612,102 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     function handleTimeStartChange(e: React.ChangeEvent<HTMLInputElement>) {
         const newStartTime = e.target.value;
         setCurrentTimeStart(newStartTime);
-        if (newStartTime && currentTimeEnd) setHasTimeConflict(checkTimeConflict(newStartTime, currentTimeEnd));
     }
 
     function handleTimeEndChange(e: React.ChangeEvent<HTMLInputElement>) {
         const newEndTime = e.target.value;
         setCurrentTimeEnd(newEndTime);
-        if (currentTimeStart && newEndTime) setHasTimeConflict(checkTimeConflict(currentTimeStart, newEndTime));
+    }
+
+    function checkLocalConflicts(facilityId: number, date: string, startTime: string, endTime: string): BookingSchedule[] {
+        if (!facilitySchedule) return [];
+
+        if (facilityId !== selectedFacility) return [];
+
+        if (facilitySchedule.date !== date) return [];
+
+        const start = new Date(`2000-01-01T${startTime}`);
+        const end = new Date(`2000-01-01T${endTime}`);
+
+        return facilitySchedule.bookings.filter((booking) => {
+            if (booking.status !== 'Approved' && booking.status !== 'Conditionally Approved') {
+                return false;
+            }
+
+            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
+            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+
+            return start < bookingEnd && end > bookingStart;
+        });
     }
 
     function addFacilityBooking() {
-        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) return;
-        const facility = facilities.find(f => f.id === selectedFacility);
+        if (!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd) return;
+        const facility = facilities.find((f) => f.id === selectedFacility);
         if (!facility) return;
 
-        const newBooking: FacilityBooking = {
-            facility_id: selectedFacility,
-            facility_name: facility.name,
-            date: format(currentDate, "yyyy-MM-dd"),
-            time_start: currentTimeStart,
-            time_end: currentTimeEnd,
-            equipment: selectedEquipment,
-            borrowed_equipment: selectedBorrowedEquipment,
-            conflicts: getTimeConflictsFromData(facilitySchedule, currentTimeStart, currentTimeEnd),
-            external_equipment: externalEquipment,
-            expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
-            has_outsiders: hasOutsiders,
-            equipment_conflicts: equipmentConflicts,
-        };
+        if (editingIndex !== null) {
+            // ── EDIT MODE ──────────────────────────────────────────────────────────
+            const date = selectedDates[0];
+            const newBooking: FacilityBooking = {
+                facility_id: selectedFacility,
+                facility_name: facility.name,
+                date: format(date, 'yyyy-MM-dd'),
+                time_start: currentTimeStart,
+                time_end: currentTimeEnd,
+                equipment: selectedEquipment,
+                borrowed_equipment: selectedBorrowedEquipment,
+                conflicts: scheduleConflicts.filter((c) => c.date === format(date, 'yyyy-MM-dd')),
+                external_equipment: externalEquipment,
+                expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+                has_outsiders: hasOutsiders,
+                equipment_conflicts: equipmentConflicts,
+            };
 
-        const updatedBookings = [...data.facility_bookings, newBooking];
-        setData('facility_bookings', updatedBookings);
+            // If nothing changed, just exit edit mode without touching the array.
+            if (originalBookingData && JSON.stringify(newBooking) === JSON.stringify(originalBookingData)) {
+                cancelEditBooking();
+                return;
+            }
 
+            // Update the booking at editingIndex in-place.
+            const updatedBookings = data.facility_bookings.map((b, i) => (i === editingIndex ? newBooking : b));
+            setData('facility_bookings', updatedBookings);
+        } else {
+            // ── BATCH ADD MODE ─────────────────────────────────────────────────────
+            const newBatch: FacilityBooking[] = selectedDates.map((date) => {
+                const formattedDate = format(date, 'yyyy-MM-dd');
+
+                return {
+                    facility_id: selectedFacility,
+                    facility_name: facility.name,
+                    date: formattedDate,
+                    time_start: currentTimeStart,
+                    time_end: currentTimeEnd,
+                    equipment: selectedEquipment,
+                    borrowed_equipment: selectedBorrowedEquipment,
+                    conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd),
+                    external_equipment: externalEquipment,
+                    expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+                    has_outsiders: hasOutsiders,
+                    equipment_conflicts: equipmentConflicts,
+                };
+            });
+
+            setData('facility_bookings', [...data.facility_bookings, ...newBatch]);
+        }
+
+        // Reset all facility form state and edit tracking.
+        setEditingIndex(null);
+        setOriginalBookingData(null);
         setSelectedFacility(null);
-        setCurrentDate(undefined);
+        setSelectedDates([]);
         setCurrentTimeStart('');
         setCurrentTimeEnd('');
         setSelectedEquipment([]);
         setSelectedBorrowedEquipment([]);
         setBorrowingEquipmentId(null);
-        setFacilitySchedule(null);
-        setHasTimeConflict(false);
+        setScheduleConflicts([]);
         setExternalEquipment([]);
         setExternalEquipmentInput('');
         setExpectedCapacity('');
@@ -571,7 +717,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     const ALLOWED_TYPES = [
-        'image/jpeg', 'image/png',
+        'image/jpeg',
+        'image/png',
         'application/pdf',
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -607,14 +754,14 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         }
 
         if (accepted.length > 0) {
-            setAttachedFiles(prev => [...prev, ...accepted]);
+            setAttachedFiles((prev) => [...prev, ...accepted]);
         }
 
         e.target.value = '';
     }
 
     function removeFile(index: number) {
-        setAttachedFiles(prev => {
+        setAttachedFiles((prev) => {
             const updated = [...prev];
             if (updated[index].preview) URL.revokeObjectURL(updated[index].preview!);
             updated.splice(index, 1);
@@ -623,7 +770,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     function removeExistingFile(index: number) {
-        setExistingFiles(prev => prev.filter((_, i) => i !== index));
+        setExistingFiles((prev) => prev.filter((_, i) => i !== index));
     }
 
     function removeBooking(index: number) {
@@ -637,13 +784,11 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         transform((d) => ({
             ...d,
             facility_bookings: JSON.stringify(d.facility_bookings),
-            existing_file_ids: existingFiles.map(f => f.id),
+            existing_file_ids: existingFiles.map((f) => f.id),
             _method: isEditing ? 'PUT' : '',
         }));
 
-        const url = isEditing
-            ? route('requests.update', existingRequest!.id)
-            : route('requests.store');
+        const url = isEditing ? route('requests.update', existingRequest!.id) : route('requests.store');
 
         post(url, {
             forceFormData: true,
@@ -653,13 +798,17 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     async function fetchEquipmentConflicts(equipmentIds: number[]) {
-        if (!currentDate || !currentTimeStart || !currentTimeEnd || equipmentIds.length === 0) return;
+        if (!selectedDates.length || !currentTimeStart || !currentTimeEnd || equipmentIds.length === 0) return;
+        const currentDate = selectedDates[0];
 
         setCheckingEquipmentConflicts(true);
         try {
             const res = await fetch(route('equipment.check-conflicts'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content,
+                },
                 body: JSON.stringify({
                     equipment_ids: equipmentIds,
                     date: format(currentDate, 'yyyy-MM-dd'),
@@ -677,13 +826,17 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     async function fetchEquipmentAvailability() {
-        if (!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd) return;
+        if (!selectedFacility || !selectedDates.length || !currentTimeStart || !currentTimeEnd) return;
+        const currentDate = selectedDates[0];
 
         setCheckingAvailability(true);
         try {
             const res = await fetch(route('equipment.availability'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content,
+                },
                 body: JSON.stringify({
                     facility_id: selectedFacility,
                     date: format(currentDate, 'yyyy-MM-dd'),
@@ -710,34 +863,35 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
     return (
         <DefaultLayout>
-            <AlertDialog open={showDraftBanner} onOpenChange={(open) => { if (!open) discardDraft(); }}>
+            <AlertDialog
+                open={showDraftBanner}
+                onOpenChange={(open) => {
+                    if (!open) discardDraft();
+                }}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Restore unsaved draft?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            You have an unsaved draft from <span className="font-medium text-foreground">{draft ? timeAgo(draft.savedAt) : ''}</span>. Would you like to restore it, or start fresh?
+                            You have an unsaved draft from <span className="font-medium text-foreground">{draft ? timeAgo(draft.savedAt) : ''}</span>.
+                            Would you like to restore it, or start fresh?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel onClick={discardDraft}>
-                            Discard
-                        </AlertDialogCancel>
-                        <AlertDialogAction onClick={restoreDraft}>
-                            Restore Draft
-                        </AlertDialogAction>
+                        <AlertDialogCancel onClick={discardDraft}>Discard</AlertDialogCancel>
+                        <AlertDialogAction onClick={restoreDraft}>Restore Draft</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
 
-            <div className="w-full relative">
-                <form onSubmit={submit} className="space-y-8 flex flex-col gap-6">
-
+            <div className="relative w-full">
+                <form onSubmit={submit} className="flex flex-col gap-6 space-y-8">
                     {Object.keys(errors).length > 0 && (
-                        <Alert variant="destructive" className="max-w-2xl border-destructive bg-destructive/4 mb-0 mt-0">
+                        <Alert variant="destructive" className="mt-0 mb-0 max-w-2xl border-destructive bg-destructive/4">
                             <AlertCircleIcon />
                             <AlertTitle>Error with submission. Please properly fill in all the details.</AlertTitle>
                             <AlertDescription>
-                                <ul className="list-disc pl-5 space-y-1 mt-1">
+                                <ul className="mt-1 list-disc space-y-1 pl-5">
                                     {Object.entries(errors).map(([key, msg]) => (
                                         <li key={key}>{msg as string}</li>
                                     ))}
@@ -747,15 +901,21 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                     )}
 
                     <Tabs defaultValue="details" className="w-full">
-                        <TabsList className="w-full mb-6 max-w-2xl">
-                            <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-                            <TabsTrigger value="facility" className="flex-1">Facility</TabsTrigger>
+                        <TabsList className="mb-6 w-full max-w-2xl">
+                            <TabsTrigger value="details" className="flex-1">
+                                Details
+                            </TabsTrigger>
+                            <TabsTrigger value="facility" className="flex-1">
+                                Facility
+                            </TabsTrigger>
                         </TabsList>
 
                         {/* ── Details Tab ── */}
-                        <TabsContent value="details" className="space-y-6 mt-0 max-w-2xl">
+                        <TabsContent value="details" className="mt-0 max-w-2xl space-y-6">
                             <div className="space-y-2">
-                                <Label htmlFor="title">Request Title <span className="text-destructive">*</span></Label>
+                                <Label htmlFor="title">
+                                    Request Title <span className="text-destructive">*</span>
+                                </Label>
                                 <Input
                                     id="title"
                                     type="text"
@@ -782,12 +942,14 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     value={data.priority_level.toString()}
                                     onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}
                                 >
-                                    <SelectTrigger className='w-full'>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Select priority" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-                                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                                            <SelectItem key={value} value={value}>
+                                                {label}
+                                            </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
@@ -796,47 +958,36 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                             <div className="space-y-4">
                                 <Label className="font-semibold">Approved By</Label>
 
-                                <div className="flex flex-wrap gap-4 mt-2">
+                                <div className="mt-2 flex flex-wrap gap-4">
                                     {approversList.map((approver) => {
-                                        const isChecked = data.approved_by.includes(approver.name)
+                                        const isChecked = data.approved_by.includes(approver.name);
 
                                         return (
                                             <div key={approver.id} className="flex items-center space-x-2">
                                                 <Checkbox
                                                     id={`approver-${approver.id}`}
                                                     checked={isChecked}
-                                                    onCheckedChange={() =>
-                                                        handleCheckboxChange(approver.name)
-                                                    }
+                                                    onCheckedChange={() => handleCheckboxChange(approver.name)}
                                                 />
-                                                <Label htmlFor={`approver-${approver.id}`}>
-                                                    {approver.name}
-                                                </Label>
+                                                <Label htmlFor={`approver-${approver.id}`}>{approver.name}</Label>
                                             </div>
-                                        )
+                                        );
                                     })}
                                 </div>
                             </div>
 
-
                             {/* File Attachments */}
                             <div className="space-y-3">
                                 <Label>Attachments</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Attach supporting documents, images, or files (max 10MB each).
-                                </p>
+                                <p className="text-xs text-muted-foreground">Attach supporting documents, images, or files (max 10MB each).</p>
 
                                 <label
                                     htmlFor="file-upload"
-                                    className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-border rounded-md cursor-pointer hover:border-primary/50 hover:bg-muted/20 transition-colors"
+                                    className="flex h-28 w-full cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-border transition-colors hover:border-primary/50 hover:bg-muted/20"
                                 >
-                                    <Paperclip size={20} className="text-muted-foreground mb-2" />
-                                    <span className="text-sm text-muted-foreground">
-                                        Click to attach files
-                                    </span>
-                                    <span className="text-xs text-muted-foreground mt-1">
-                                        JPG, PNG, PDF, DOC, XLSX, PPTX up to 10MB
-                                    </span>
+                                    <Paperclip size={20} className="mb-2 text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Click to attach files</span>
+                                    <span className="mt-1 text-xs text-muted-foreground">JPG, PNG, PDF, DOC, XLSX, PPTX up to 10MB</span>
                                     <input
                                         id="file-upload"
                                         type="file"
@@ -861,7 +1012,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         .map(([, msg]) => msg as string);
 
                                     return fileErrors.length > 0 ? (
-                                        <ul className="text-sm text-destructive space-y-1 mt-1">
+                                        <ul className="mt-1 space-y-1 text-sm text-destructive">
                                             {fileErrors.map((msg, i) => (
                                                 <li key={i}>{msg}</li>
                                             ))}
@@ -872,32 +1023,39 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         </TabsContent>
 
                         {/* Facility Tab */}
-                        <TabsContent value="facility" className="space-y-6 mt-0">
+                        <TabsContent value="facility" className="mt-0 space-y-6">
                             {/* Two-column grid on desktop — form | sticky sidebar */}
-                            <div className="lg:grid lg:grid-cols-[5fr_3fr] lg:gap-12 lg:items-start">
-
+                            <div className="lg:grid lg:grid-cols-[5fr_3fr] lg:items-start lg:gap-12">
                                 {/* ── Left: form content ── */}
                                 <div className="space-y-6">
-
                                     {/* Date + Time row */}
-                                    <div className="grid grid-cols-[1fr_1fr] md:grid-cols-[3fr_2fr_2fr] gap-4 w-full">
-                                        <div className="space-y-2 col-span-full md:col-span-1">
-                                            <Label>Date <span className="text-destructive">*</span></Label>
+                                    <div className="grid w-full grid-cols-[1fr_1fr] gap-4 md:grid-cols-[3fr_2fr_2fr]">
+                                        <div className="col-span-full space-y-2 md:col-span-1">
+                                            <Label>
+                                                Date <span className="text-destructive">*</span>
+                                            </Label>
                                             <Popover>
                                                 <PopoverTrigger asChild>
                                                     <Button
                                                         type="button"
                                                         variant="outline"
-                                                        className={cn("w-full justify-start text-left font-normal", !currentDate && "text-muted-foreground")}
+                                                        className={cn(
+                                                            'w-full justify-start text-left font-normal',
+                                                            selectedDates.length === 0 && 'text-muted-foreground',
+                                                        )}
                                                     >
                                                         <CalendarIcon className="mr-1 h-4 w-4" />
-                                                        {currentDate ? format(currentDate, "PPP") : "Pick a date"}
+                                                        {selectedDates.length === 0
+                                                            ? 'Pick a date'
+                                                            : selectedDates.length === 1
+                                                              ? format(selectedDates[0], 'PPP')
+                                                              : `${selectedDates.length} dates selected`}
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-auto p-0">
                                                     <Calendar
-                                                        mode="single"
-                                                        selected={currentDate}
+                                                        mode="multiple"
+                                                        selected={selectedDates}
                                                         onSelect={handleDateChange}
                                                         initialFocus
                                                         disabled={(date) => date <= new Date(new Date().setHours(0, 0, 0, 0))}
@@ -907,19 +1065,39 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label htmlFor="time_start">Start Time <span className="text-destructive">*</span></Label>
-                                            <Input id="time_start" type="time" value={currentTimeStart} onChange={handleTimeStartChange} min="7:00" max="20:00" className="text-sm" />
+                                            <Label htmlFor="time_start">
+                                                Start Time <span className="text-destructive">*</span>
+                                            </Label>
+                                            <Input
+                                                id="time_start"
+                                                type="time"
+                                                value={currentTimeStart}
+                                                onChange={handleTimeStartChange}
+                                                min="7:00"
+                                                max="20:00"
+                                                className="text-sm"
+                                            />
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label htmlFor="time_end">End Time <span className="text-destructive">*</span></Label>
-                                            <Input id="time_end" type="time" value={currentTimeEnd} onChange={handleTimeEndChange} min="7:00" max="20:00" className="text-sm" />
+                                            <Label htmlFor="time_end">
+                                                End Time <span className="text-destructive">*</span>
+                                            </Label>
+                                            <Input
+                                                id="time_end"
+                                                type="time"
+                                                value={currentTimeEnd}
+                                                onChange={handleTimeEndChange}
+                                                min="7:00"
+                                                max="20:00"
+                                                className="text-sm"
+                                            />
                                         </div>
                                     </div>
 
                                     {/* Attendees + Outsiders */}
-                                    <div className="flex items-end gap-4 w-fit">
-                                        <div className="space-y-2 flex-1">
+                                    <div className="flex w-fit items-end gap-4">
+                                        <div className="flex-1 space-y-2">
                                             <Label htmlFor="expected_capacity">Expected Attendees</Label>
                                             <Input
                                                 id="expected_capacity"
@@ -928,31 +1106,76 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 value={expectedCapacity}
                                                 onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
                                                 placeholder="How many attendees?"
-                                                className="text-sm max-w-84"
+                                                className="max-w-84 text-sm"
                                             />
                                         </div>
-                                        <div className="flex items-center gap-2 pb-2 shrink-0">
-                                            <Checkbox id="has_outsiders" checked={hasOutsiders} onCheckedChange={(checked) => setHasOutsiders(!!checked)} />
-                                            <Label htmlFor="has_outsiders" className="text-sm cursor-pointer whitespace-nowrap">Has Outsiders</Label>
+                                        <div className="flex shrink-0 items-center gap-2 pb-2">
+                                            <Checkbox
+                                                id="has_outsiders"
+                                                checked={hasOutsiders}
+                                                onCheckedChange={(checked) => setHasOutsiders(!!checked)}
+                                            />
+                                            <Label htmlFor="has_outsiders" className="cursor-pointer text-sm whitespace-nowrap">
+                                                Has Outsiders
+                                            </Label>
                                         </div>
                                     </div>
 
-                                    {hasTimeConflict && (
-                                        <Alert variant="destructive" className="border-destructive bg-destructive/4">
-                                            <AlertCircleIcon />
-                                            <AlertTitle>Time Conflict Detected</AlertTitle>
-                                            <AlertDescription>Your selected time overlaps with an existing event.</AlertDescription>
+                                    {scheduleConflicts.length > 0 && (
+                                        <Alert
+                                            variant="destructive"
+                                            className="border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-400"
+                                        >
+                                            <AlertCircleIcon className="text-amber-600 dark:text-amber-500" />
+                                            <AlertTitle className="font-semibold text-amber-800 dark:text-amber-300">
+                                                Time Conflict Detected
+                                            </AlertTitle>
+                                            <AlertDescription>
+                                                <p className="mb-2 text-amber-700 dark:text-amber-400">
+                                                    Your selected time overlaps with existing facility bookings:
+                                                </p>
+                                                <div className="space-y-1.5">
+                                                    {scheduleConflicts.map((c, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className="flex items-start gap-1.5 rounded border border-amber-200 bg-amber-100/50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                                        >
+                                                            <AlertCircleIcon size={14} className="mt-0.5 shrink-0" />
+                                                            <span>
+                                                                <strong>{c.request_title}</strong> <br />
+                                                                Time: {formatTime(c.time_start)} - {formatTime(c.time_end)} —{' '}
+                                                                <span
+                                                                    className={
+                                                                        c.status === 'Approved'
+                                                                            ? 'font-semibold text-red-600 dark:text-red-400'
+                                                                            : 'font-semibold'
+                                                                    }
+                                                                >
+                                                                    {c.status}
+                                                                </span>
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </AlertDescription>
                                         </Alert>
                                     )}
 
                                     {/* Facility picker */}
                                     <div className="space-y-2">
                                         <div className="flex justify-start gap-1">
-                                            <Label>Facility <span className="text-destructive">*</span></Label>
+                                            <Label>
+                                                Facility <span className="text-destructive">*</span>
+                                            </Label>
                                             <div className="block lg:hidden">
                                                 <Dialog>
                                                     <DialogTrigger asChild>
-                                                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                                                        >
                                                             <Info size={14} />
                                                         </Button>
                                                     </DialogTrigger>
@@ -960,10 +1183,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                         <DialogHeader>
                                                             <DialogTitle>Facility Info</DialogTitle>
                                                         </DialogHeader>
-                                                        <FacilityInfo
-                                                            facilities={facilities}
-                                                            isForSidebar={false}
-                                                        />
+                                                        <FacilityInfo facilities={facilities} isForSidebar={false} />
                                                     </DialogContent>
                                                 </Dialog>
                                             </div>
@@ -992,43 +1212,65 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                             <div className="flex items-center">
                                                 <Label className="mr-auto">Equipment</Label>
                                                 {selectedEquipment.length < availableEquipment.length && (
-                                                    <Button variant="ghost" size="sm" onClick={selectAllEquipment} className="text-muted-foreground hover:text-foreground">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={selectAllEquipment}
+                                                        className="text-muted-foreground hover:text-foreground"
+                                                    >
                                                         <span className="text-sm">Select All</span>
                                                         <SquareMousePointer />
                                                     </Button>
                                                 )}
                                                 {selectedEquipment.length > 0 && (
-                                                    <Button variant="ghost" size="sm" onClick={clearEquipmentSelection} className="text-muted-foreground hover:text-foreground">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={clearEquipmentSelection}
+                                                        className="text-muted-foreground hover:text-foreground"
+                                                    >
                                                         <span className="text-sm">Clear All</span>
                                                         <X />
                                                     </Button>
                                                 )}
                                             </div>
 
-                                            <div className="border rounded-md p-3 space-y-3 max-h-64 overflow-y-auto">
+                                            <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-3">
                                                 {availableEquipment.map((equipment) => {
-                                                    const selected = selectedEquipment.find(e => e.equipment_id === equipment.id);
+                                                    const selected = selectedEquipment.find((e) => e.equipment_id === equipment.id);
                                                     const conflicts = equipmentConflicts[equipment.id] ?? [];
                                                     const availability = equipmentAvailability[equipment.id];
                                                     const displayQty = availability ? availability.available_quantity : equipment.pivot.quantity;
                                                     const isLimited = availability ? availability.is_limited : false;
-                                                    const exceedsAvailable = selected && availability && selected.quantity_needed > availability.available_quantity;
+                                                    const exceedsAvailable =
+                                                        selected && availability && selected.quantity_needed > availability.available_quantity;
 
                                                     return (
                                                         <div key={equipment.id} className="space-y-1">
                                                             <div className="flex items-center justify-between gap-4">
-                                                                <div className="flex items-center space-x-3 flex-1">
+                                                                <div className="flex flex-1 items-center space-x-3">
                                                                     <Checkbox
                                                                         id={`equipment-${equipment.id}`}
                                                                         checked={!!selected}
                                                                         onCheckedChange={() => handleEquipmentToggle(equipment)}
                                                                     />
                                                                     <div className="flex-1">
-                                                                        <Label htmlFor={`equipment-${equipment.id}`} className="text-sm font-medium cursor-pointer">
+                                                                        <Label
+                                                                            htmlFor={`equipment-${equipment.id}`}
+                                                                            className="cursor-pointer text-sm font-medium"
+                                                                        >
                                                                             {equipment.name}
                                                                         </Label>
-                                                                        <Label className={cn("text-xs block", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
-                                                                            Available: {displayQty}{isLimited && ` (${availability?.total_quantity} total)`}
+                                                                        <Label
+                                                                            className={cn(
+                                                                                'block text-xs',
+                                                                                isLimited
+                                                                                    ? 'font-medium text-orange-600 dark:text-orange-400'
+                                                                                    : 'text-muted-foreground',
+                                                                            )}
+                                                                        >
+                                                                            Available: {displayQty}
+                                                                            {isLimited && ` (${availability?.total_quantity} total)`}
                                                                         </Label>
                                                                     </div>
                                                                 </div>
@@ -1040,28 +1282,50 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                             min="1"
                                                                             max={displayQty}
                                                                             value={selected.quantity_needed}
-                                                                            onChange={(e) => updateEquipmentQuantity(equipment.id, Math.min(Number(e.target.value), displayQty))}
-                                                                            className={cn("w-20 text-sm p-2", exceedsAvailable && "border-orange-400 bg-orange-50 dark:bg-orange-950/20")}
+                                                                            onChange={(e) =>
+                                                                                updateEquipmentQuantity(
+                                                                                    equipment.id,
+                                                                                    Math.min(Number(e.target.value), displayQty),
+                                                                                )
+                                                                            }
+                                                                            className={cn(
+                                                                                'w-20 p-2 text-sm',
+                                                                                exceedsAvailable &&
+                                                                                    'border-orange-400 bg-orange-50 dark:bg-orange-950/20',
+                                                                            )}
                                                                         />
                                                                     </div>
                                                                 )}
                                                             </div>
 
                                                             {exceedsAvailable && (
-                                                                <div className="ml-7 flex items-start gap-1.5 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-2 py-1">
-                                                                    <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
-                                                                    <span>Only <strong>{availability?.available_quantity}</strong> available for the selected time</span>
+                                                                <div className="ml-7 flex items-start gap-1.5 rounded border border-orange-200 bg-orange-50 px-2 py-1 text-xs text-orange-700 dark:border-orange-800 dark:bg-orange-900/20 dark:text-orange-400">
+                                                                    <AlertCircleIcon size={12} className="mt-0.5 shrink-0" />
+                                                                    <span>
+                                                                        Only <strong>{availability?.available_quantity}</strong> available for the
+                                                                        selected time
+                                                                    </span>
                                                                 </div>
                                                             )}
 
                                                             {selected && conflicts.length > 0 && (
                                                                 <div className="ml-7 space-y-1">
                                                                     {conflicts.map((c, i) => (
-                                                                        <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">
-                                                                            <AlertCircleIcon size={12} className="shrink-0 mt-0.5" />
+                                                                        <div
+                                                                            key={i}
+                                                                            className="flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400"
+                                                                        >
+                                                                            <AlertCircleIcon size={12} className="mt-0.5 shrink-0" />
                                                                             <span>
-                                                                                Also requested by <strong>{c.requester}</strong> ("{c.request_title}") —{' '}
-                                                                                <span className={c.status === 'Approved' ? 'text-red-600 font-semibold' : ''}>{c.status}</span>
+                                                                                Also requested by <strong>{c.requester}</strong> ("{c.request_title}")
+                                                                                —{' '}
+                                                                                <span
+                                                                                    className={
+                                                                                        c.status === 'Approved' ? 'font-semibold text-red-600' : ''
+                                                                                    }
+                                                                                >
+                                                                                    {c.status}
+                                                                                </span>
                                                                             </span>
                                                                         </div>
                                                                     ))}
@@ -1076,15 +1340,19 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
                                     {/* Optional extras — external equipment + borrow */}
                                     <div className="space-y-2">
-
                                         {/* External equipment */}
                                         <Collapsible open={isExternalOpen} onOpenChange={setIsExternalOpen}>
                                             <CollapsibleTrigger asChild>
-                                                <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                                                >
                                                     {isExternalOpen ? <Minus size={16} /> : <Plus size={16} />}
                                                     <span>Add external equipment</span>
                                                     {externalEquipment.length > 0 && (
-                                                        <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                                                        <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
                                                             {externalEquipment.length}
                                                         </span>
                                                     )}
@@ -1098,14 +1366,19 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     {externalEquipment.length > 0 && (
                                                         <div className="flex flex-wrap gap-2">
                                                             {externalEquipment.map((item, i) => (
-                                                                <div key={i} className="flex items-center gap-1 justify-between rounded-md border py-1 px-2 text-sm bg-muted/20 w-fit">
+                                                                <div
+                                                                    key={i}
+                                                                    className="flex w-fit items-center justify-between gap-1 rounded-md border bg-muted/20 px-2 py-1 text-sm"
+                                                                >
                                                                     <span>{item.name}</span>
                                                                     <Button
                                                                         type="button"
                                                                         variant="ghost"
                                                                         size="icon"
                                                                         className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                                                        onClick={() => setExternalEquipment(prev => prev.filter((_, idx) => idx !== i))}
+                                                                        onClick={() =>
+                                                                            setExternalEquipment((prev) => prev.filter((_, idx) => idx !== i))
+                                                                        }
                                                                     >
                                                                         <X size={14} />
                                                                     </Button>
@@ -1123,7 +1396,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                     e.preventDefault();
                                                                     const trimmed = externalEquipmentInput.trim();
                                                                     if (!trimmed) return;
-                                                                    setExternalEquipment(prev => [...prev, { name: trimmed }]);
+                                                                    setExternalEquipment((prev) => [...prev, { name: trimmed }]);
                                                                     setExternalEquipmentInput('');
                                                                 }
                                                             }}
@@ -1135,7 +1408,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                             onClick={() => {
                                                                 const trimmed = externalEquipmentInput.trim();
                                                                 if (!trimmed) return;
-                                                                setExternalEquipment(prev => [...prev, { name: trimmed }]);
+                                                                setExternalEquipment((prev) => [...prev, { name: trimmed }]);
                                                                 setExternalEquipmentInput('');
                                                             }}
                                                         >
@@ -1150,11 +1423,16 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         {selectedFacility && (
                                             <Collapsible open={isBorrowOpen} onOpenChange={setIsBorrowOpen}>
                                                 <CollapsibleTrigger asChild>
-                                                    <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+                                                    >
                                                         {isBorrowOpen ? <Minus size={16} /> : <Plus size={16} />}
                                                         <span>Borrow from another facility</span>
                                                         {selectedBorrowedEquipment.length > 0 && (
-                                                            <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
+                                                            <span className="ml-auto rounded-full bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
                                                                 {selectedBorrowedEquipment.length}
                                                             </span>
                                                         )}
@@ -1162,25 +1440,30 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 </CollapsibleTrigger>
                                                 <CollapsibleContent className="mt-2">
                                                     {allBorrowableEquipment.length === 0 ? (
-                                                        <p className="text-sm text-muted-foreground text-center py-4">No equipment available to borrow.</p>
+                                                        <p className="py-4 text-center text-sm text-muted-foreground">
+                                                            No equipment available to borrow.
+                                                        </p>
                                                     ) : (
-                                                        <div className="border rounded-md overflow-hidden">
+                                                        <div className="overflow-hidden rounded-md border">
                                                             {/* ── Search + Sort + Filter toolbar ── */}
-                                                            <div className="p-2 border-b bg-muted/20 space-y-2">
+                                                            <div className="space-y-2 border-b bg-muted/20 p-2">
                                                                 {/* Search bar */}
                                                                 <div className="relative">
-                                                                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                                                    <Search
+                                                                        size={14}
+                                                                        className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
+                                                                    />
                                                                     <Input
                                                                         placeholder="Search equipment..."
                                                                         value={borrowSearch}
                                                                         onChange={(e) => setBorrowSearch(e.target.value)}
-                                                                        className="pl-8 h-8 text-sm"
+                                                                        className="h-8 pl-8 text-sm"
                                                                     />
                                                                     {borrowSearch && (
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => setBorrowSearch('')}
-                                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                                            className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                                                                         >
                                                                             <X size={13} />
                                                                         </button>
@@ -1188,10 +1471,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                 </div>
 
                                                                 {/* Sort + Filter row */}
-                                                                <div className="flex gap-2 flex-col md:flex-row">
+                                                                <div className="flex flex-col gap-2 md:flex-row">
                                                                     {/* Sort */}
-                                                                    <Select value={borrowSort} onValueChange={(v) => setBorrowSort(v as typeof borrowSort)}>
-                                                                        <SelectTrigger className="h-8 text-sm flex-1 gap-1">
+                                                                    <Select
+                                                                        value={borrowSort}
+                                                                        onValueChange={(v) => setBorrowSort(v as typeof borrowSort)}
+                                                                    >
+                                                                        <SelectTrigger className="h-8 flex-1 gap-1 text-sm">
                                                                             <ArrowUpDown size={16} className="shrink-0 text-muted-foreground" />
                                                                             <SelectValue />
                                                                         </SelectTrigger>
@@ -1205,14 +1491,16 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
                                                                     {/* Filter by facility */}
                                                                     <Select value={borrowFacilityFilter} onValueChange={setBorrowFacilityFilter}>
-                                                                        <SelectTrigger className="h-8 text-sm flex-1 gap-1">
+                                                                        <SelectTrigger className="h-8 flex-1 gap-1 text-sm">
                                                                             <Box size={16} className="shrink-0 text-muted-foreground" />
-                                                                            <SelectValue className='truncate' />
+                                                                            <SelectValue className="truncate" />
                                                                         </SelectTrigger>
                                                                         <SelectContent>
                                                                             <SelectItem value="all">All Facilities</SelectItem>
-                                                                            {allSourceFacilities.map(f => (
-                                                                                <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                                                                            {allSourceFacilities.map((f) => (
+                                                                                <SelectItem key={f.id} value={f.id.toString()}>
+                                                                                    {f.name}
+                                                                                </SelectItem>
                                                                             ))}
                                                                         </SelectContent>
                                                                     </Select>
@@ -1223,114 +1511,195 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                             <ScrollArea className="h-64">
                                                                 <div className="divide-y">
                                                                     {filteredBorrowableEquipment.length === 0 ? (
-                                                                        <p className="text-sm text-muted-foreground text-center py-6">No equipment matches your search.</p>
-                                                                    ) : filteredBorrowableEquipment.map((equipment) => {
-                                                                        const isExpanded = borrowingEquipmentId === equipment.id;
-                                                                        const borrowed = selectedBorrowedEquipment.filter(e => e.equipment_id === equipment.id);
-                                                                        const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
-                                                                        const totalAvailable = equipment.sources.reduce((s, src) =>
-                                                                            s + (borrowableAvailability[src.facilityId]?.[equipment.id] ?? src.quantity), 0
-                                                                        );
-                                                                        const totalStock = equipment.sources.reduce((s, src) => s + src.quantity, 0);
-                                                                        const isAnyLimited = totalAvailable < totalStock;
+                                                                        <p className="py-6 text-center text-sm text-muted-foreground">
+                                                                            No equipment matches your search.
+                                                                        </p>
+                                                                    ) : (
+                                                                        filteredBorrowableEquipment.map((equipment) => {
+                                                                            const isExpanded = borrowingEquipmentId === equipment.id;
+                                                                            const borrowed = selectedBorrowedEquipment.filter(
+                                                                                (e) => e.equipment_id === equipment.id,
+                                                                            );
+                                                                            const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
+                                                                            const totalAvailable = equipment.sources.reduce(
+                                                                                (s, src) =>
+                                                                                    s +
+                                                                                    (borrowableAvailability[src.facilityId]?.[equipment.id] ??
+                                                                                        src.quantity),
+                                                                                0,
+                                                                            );
+                                                                            const totalStock = equipment.sources.reduce(
+                                                                                (s, src) => s + src.quantity,
+                                                                                0,
+                                                                            );
+                                                                            const isAnyLimited = totalAvailable < totalStock;
 
-                                                                        return (
-                                                                            <div key={equipment.id}>
-                                                                                {/* Equipment header row */}
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => setBorrowingEquipmentId(isExpanded ? null : equipment.id)}
-                                                                                    className={cn(
-                                                                                        "w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors text-left",
-                                                                                        isExpanded ? "bg-muted/40" : "hover:bg-muted/20"
-                                                                                    )}
-                                                                                >
-                                                                                    <span className="font-medium">{equipment.name}</span>
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        {totalBorrowed > 0 && (
-                                                                                            <span className="text-xs text-primary font-medium">{totalBorrowed} selected</span>
+                                                                            return (
+                                                                                <div key={equipment.id}>
+                                                                                    {/* Equipment header row */}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setBorrowingEquipmentId(isExpanded ? null : equipment.id)
+                                                                                        }
+                                                                                        className={cn(
+                                                                                            'flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors',
+                                                                                            isExpanded ? 'bg-muted/40' : 'hover:bg-muted/20',
                                                                                         )}
-                                                                                        <span className={cn(
-                                                                                            "text-xs tabular-nums",
-                                                                                            isAnyLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground"
-                                                                                        )}>
-                                                                                            {totalAvailable} avail.
-                                                                                        </span>
-                                                                                        <MotionChevron openCollapsible={isExpanded} />
-                                                                                    </div>
-                                                                                </button>
+                                                                                    >
+                                                                                        <span className="font-medium">{equipment.name}</span>
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            {totalBorrowed > 0 && (
+                                                                                                <span className="text-xs font-medium text-primary">
+                                                                                                    {totalBorrowed} selected
+                                                                                                </span>
+                                                                                            )}
+                                                                                            <span
+                                                                                                className={cn(
+                                                                                                    'text-xs tabular-nums',
+                                                                                                    isAnyLimited
+                                                                                                        ? 'font-medium text-orange-600 dark:text-orange-400'
+                                                                                                        : 'text-muted-foreground',
+                                                                                                )}
+                                                                                            >
+                                                                                                {totalAvailable} avail.
+                                                                                            </span>
+                                                                                            <MotionChevron openCollapsible={isExpanded} />
+                                                                                        </div>
+                                                                                    </button>
 
-                                                                                {/* Sources — shown when expanded */}
-                                                                                {isExpanded && (
-                                                                                    <div className="bg-muted/10 border-t divide-y px-3">
-                                                                                        {equipment.sources
-                                                                                            .filter(source =>
-                                                                                                borrowFacilityFilter === 'all' ||
-                                                                                                source.facilityId === Number(borrowFacilityFilter)
-                                                                                            )
-                                                                                            .map(source => {
-                                                                                                const item = borrowed.find(e => e.source_facility_id === source.facilityId);
-                                                                                                const available = borrowableAvailability[source.facilityId]?.[equipment.id] ?? source.quantity;
-                                                                                                const isLimited = available < source.quantity;
+                                                                                    {/* Sources — shown when expanded */}
+                                                                                    {isExpanded && (
+                                                                                        <div className="divide-y border-t bg-muted/10 px-3">
+                                                                                            {equipment.sources
+                                                                                                .filter(
+                                                                                                    (source) =>
+                                                                                                        borrowFacilityFilter === 'all' ||
+                                                                                                        source.facilityId ===
+                                                                                                            Number(borrowFacilityFilter),
+                                                                                                )
+                                                                                                .map((source) => {
+                                                                                                    const item = borrowed.find(
+                                                                                                        (e) =>
+                                                                                                            e.source_facility_id ===
+                                                                                                            source.facilityId,
+                                                                                                    );
+                                                                                                    const available =
+                                                                                                        borrowableAvailability[source.facilityId]?.[
+                                                                                                            equipment.id
+                                                                                                        ] ?? source.quantity;
+                                                                                                    const isLimited = available < source.quantity;
 
-                                                                                                return (
-                                                                                                    <div key={source.facilityId} className="flex items-center gap-3 py-2.5">
-                                                                                                        <Checkbox
-                                                                                                            id={`borrow-${equipment.id}-${source.facilityId}`}
-                                                                                                            checked={!!item}
-                                                                                                            onCheckedChange={() => {
-                                                                                                                if (item) {
-                                                                                                                    setSelectedBorrowedEquipment(prev =>
-                                                                                                                        prev.filter(e => !(e.equipment_id === equipment.id && e.source_facility_id === source.facilityId))
-                                                                                                                    );
-                                                                                                                } else {
-                                                                                                                    setSelectedBorrowedEquipment(prev => [...prev, {
-                                                                                                                        equipment_id: equipment.id,
-                                                                                                                        equipment_name: equipment.name,
-                                                                                                                        source_facility_id: source.facilityId,
-                                                                                                                        source_facility_name: source.facilityName,
-                                                                                                                        quantity_needed: 1,
-                                                                                                                        max_quantity: available,
-                                                                                                                    }]);
-                                                                                                                }
-                                                                                                            }}
-                                                                                                        />
-                                                                                                        <div className="flex-1 min-w-0">
-                                                                                                            <Label htmlFor={`borrow-${equipment.id}-${source.facilityId}`} className="text-sm font-medium cursor-pointer block truncate">
-                                                                                                                {source.facilityName}
-                                                                                                            </Label>
-                                                                                                            <span className={cn("text-xs", isLimited ? "text-orange-600 dark:text-orange-400 font-medium" : "text-muted-foreground")}>
-                                                                                                                {available} available{isLimited && ` of ${source.quantity}`}
-                                                                                                            </span>
-                                                                                                        </div>
-                                                                                                        {item && (
-                                                                                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                                                                                <Label className="text-xs text-muted-foreground">Qty</Label>
-                                                                                                                <Input
-                                                                                                                    type="number"
-                                                                                                                    min="1"
-                                                                                                                    max={available}
-                                                                                                                    value={item.quantity_needed}
-                                                                                                                    onChange={(e) => {
-                                                                                                                        const qty = Math.min(Number(e.target.value), available);
-                                                                                                                        setSelectedBorrowedEquipment(prev => prev.map(i =>
-                                                                                                                            i.equipment_id === equipment.id && i.source_facility_id === source.facilityId
-                                                                                                                                ? { ...i, quantity_needed: qty }
-                                                                                                                                : i
-                                                                                                                        ));
-                                                                                                                    }}
-                                                                                                                    className="w-16 h-7 text-sm px-2"
-                                                                                                                />
+                                                                                                    return (
+                                                                                                        <div
+                                                                                                            key={source.facilityId}
+                                                                                                            className="flex items-center gap-3 py-2.5"
+                                                                                                        >
+                                                                                                            <Checkbox
+                                                                                                                id={`borrow-${equipment.id}-${source.facilityId}`}
+                                                                                                                checked={!!item}
+                                                                                                                onCheckedChange={() => {
+                                                                                                                    if (item) {
+                                                                                                                        setSelectedBorrowedEquipment(
+                                                                                                                            (prev) =>
+                                                                                                                                prev.filter(
+                                                                                                                                    (e) =>
+                                                                                                                                        !(
+                                                                                                                                            e.equipment_id ===
+                                                                                                                                                equipment.id &&
+                                                                                                                                            e.source_facility_id ===
+                                                                                                                                                source.facilityId
+                                                                                                                                        ),
+                                                                                                                                ),
+                                                                                                                        );
+                                                                                                                    } else {
+                                                                                                                        setSelectedBorrowedEquipment(
+                                                                                                                            (prev) => [
+                                                                                                                                ...prev,
+                                                                                                                                {
+                                                                                                                                    equipment_id:
+                                                                                                                                        equipment.id,
+                                                                                                                                    equipment_name:
+                                                                                                                                        equipment.name,
+                                                                                                                                    source_facility_id:
+                                                                                                                                        source.facilityId,
+                                                                                                                                    source_facility_name:
+                                                                                                                                        source.facilityName,
+                                                                                                                                    quantity_needed: 1,
+                                                                                                                                    max_quantity:
+                                                                                                                                        available,
+                                                                                                                                },
+                                                                                                                            ],
+                                                                                                                        );
+                                                                                                                    }
+                                                                                                                }}
+                                                                                                            />
+                                                                                                            <div className="min-w-0 flex-1">
+                                                                                                                <Label
+                                                                                                                    htmlFor={`borrow-${equipment.id}-${source.facilityId}`}
+                                                                                                                    className="block cursor-pointer truncate text-sm font-medium"
+                                                                                                                >
+                                                                                                                    {source.facilityName}
+                                                                                                                </Label>
+                                                                                                                <span
+                                                                                                                    className={cn(
+                                                                                                                        'text-xs',
+                                                                                                                        isLimited
+                                                                                                                            ? 'font-medium text-orange-600 dark:text-orange-400'
+                                                                                                                            : 'text-muted-foreground',
+                                                                                                                    )}
+                                                                                                                >
+                                                                                                                    {available} available
+                                                                                                                    {isLimited &&
+                                                                                                                        ` of ${source.quantity}`}
+                                                                                                                </span>
                                                                                                             </div>
-                                                                                                        )}
-                                                                                                    </div>
-                                                                                                );
-                                                                                            })}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        );
-                                                                    })}
+                                                                                                            {item && (
+                                                                                                                <div className="flex shrink-0 items-center gap-1.5">
+                                                                                                                    <Label className="text-xs text-muted-foreground">
+                                                                                                                        Qty
+                                                                                                                    </Label>
+                                                                                                                    <Input
+                                                                                                                        type="number"
+                                                                                                                        min="1"
+                                                                                                                        max={available}
+                                                                                                                        value={item.quantity_needed}
+                                                                                                                        onChange={(e) => {
+                                                                                                                            const qty = Math.min(
+                                                                                                                                Number(
+                                                                                                                                    e.target.value,
+                                                                                                                                ),
+                                                                                                                                available,
+                                                                                                                            );
+                                                                                                                            setSelectedBorrowedEquipment(
+                                                                                                                                (prev) =>
+                                                                                                                                    prev.map((i) =>
+                                                                                                                                        i.equipment_id ===
+                                                                                                                                            equipment.id &&
+                                                                                                                                        i.source_facility_id ===
+                                                                                                                                            source.facilityId
+                                                                                                                                            ? {
+                                                                                                                                                  ...i,
+                                                                                                                                                  quantity_needed:
+                                                                                                                                                      qty,
+                                                                                                                                              }
+                                                                                                                                            : i,
+                                                                                                                                    ),
+                                                                                                                            );
+                                                                                                                        }}
+                                                                                                                        className="h-7 w-16 px-2 text-sm"
+                                                                                                                    />
+                                                                                                                </div>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    );
+                                                                                                })}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })
+                                                                    )}
                                                                 </div>
                                                             </ScrollArea>
                                                         </div>
@@ -1338,32 +1707,50 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
 
                                                     {/* Summary when nothing is expanded */}
                                                     {!borrowingEquipmentId && selectedBorrowedEquipment.length > 0 && (
-                                                        <div className="mt-3 border rounded-md px-3 py-2.5 bg-muted/10 space-y-2">
-                                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Selected to borrow</p>
+                                                        <div className="mt-3 space-y-2 rounded-md border bg-muted/10 px-3 py-2.5">
+                                                            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                                                Selected to borrow
+                                                            </p>
                                                             {Object.entries(
-                                                                selectedBorrowedEquipment.reduce((groups, eq) => ({
-                                                                    ...groups,
-                                                                    [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq],
-                                                                }), {} as Record<string, BorrowedEquipmentRequest[]>)
+                                                                selectedBorrowedEquipment.reduce(
+                                                                    (groups, eq) => ({
+                                                                        ...groups,
+                                                                        [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq],
+                                                                    }),
+                                                                    {} as Record<string, BorrowedEquipmentRequest[]>,
+                                                                ),
                                                             ).map(([name, items]) => (
                                                                 <div key={name}>
                                                                     <p className="text-xs font-medium">
                                                                         {name}
-                                                                        <span className="text-muted-foreground font-normal ml-1">
+                                                                        <span className="ml-1 font-normal text-muted-foreground">
                                                                             · {items.reduce((s, e) => s + e.quantity_needed, 0)} total
                                                                         </span>
                                                                     </p>
-                                                                    {items.map(eq => (
-                                                                        <div key={`${eq.equipment_id}-${eq.source_facility_id}`} className="flex items-center justify-between pl-3 py-0.5 text-xs text-muted-foreground">
-                                                                            <span>from {eq.source_facility_name} · {eq.quantity_needed}</span>
+                                                                    {items.map((eq) => (
+                                                                        <div
+                                                                            key={`${eq.equipment_id}-${eq.source_facility_id}`}
+                                                                            className="flex items-center justify-between py-0.5 pl-3 text-xs text-muted-foreground"
+                                                                        >
+                                                                            <span>
+                                                                                from {eq.source_facility_name} · {eq.quantity_needed}
+                                                                            </span>
                                                                             <Button
                                                                                 type="button"
                                                                                 variant="ghost"
                                                                                 size="icon"
                                                                                 className="h-5 w-5 text-destructive hover:text-destructive/70"
-                                                                                onClick={() => setSelectedBorrowedEquipment(prev =>
-                                                                                    prev.filter(e => !(e.equipment_id === eq.equipment_id && e.source_facility_id === eq.source_facility_id))
-                                                                                )}
+                                                                                onClick={() =>
+                                                                                    setSelectedBorrowedEquipment((prev) =>
+                                                                                        prev.filter(
+                                                                                            (e) =>
+                                                                                                !(
+                                                                                                    e.equipment_id === eq.equipment_id &&
+                                                                                                    e.source_facility_id === eq.source_facility_id
+                                                                                                ),
+                                                                                        ),
+                                                                                    )
+                                                                                }
                                                                             >
                                                                                 <X size={10} />
                                                                             </Button>
@@ -1378,60 +1765,64 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         )}
                                     </div>
 
-                                    <div className="flex flex-col gap-1 mt-12">
-                                        {data.facility_bookings.length === 0 && (
+                                    <div className="w-fullflex-col mt-12 flex gap-1">
+                                        {data.facility_bookings.length === 0 && editingIndex === null && (
                                             <p className="text-xs text-destructive">At least one facility booking is required.</p>
                                         )}
-                                        <Button
-                                            type="button"
-                                            variant="secondary"
-                                            onClick={addFacilityBooking}
-                                            disabled={!selectedFacility || !currentDate || !currentTimeStart || !currentTimeEnd}
-                                            className="w-full"
-                                        >
-                                            Add Facility Booking
-                                        </Button>
+                                        <div className="flex w-full grid-cols-3 gap-2 md:grid">
+                                            {editingIndex !== null && (
+                                                <Button type="button" variant="outline" onClick={cancelEditBooking} className="">
+                                                    Cancel Edit
+                                                </Button>
+                                            )}
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                onClick={addFacilityBooking}
+                                                disabled={!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd}
+                                                className={'w-full ' + (editingIndex !== null ? 'col-span-2' : 'col-span-full')}
+                                            >
+                                                {editingIndex !== null
+                                                    ? 'Save changes to facility booking'
+                                                    : selectedDates.length > 1
+                                                      ? `Add ${selectedDates.length} Facility Bookings`
+                                                      : 'Add Facility Booking'}
+                                            </Button>
+                                        </div>
                                     </div>
 
-                                    {(data.facility_bookings.length > 0) && (
-                                        <div className="flex flex-col gap-2 mt-4">
-                                            {/* Booked entries */}
-                                            {data.facility_bookings.map((booking, index) => (
-                                                <BookingCard key={index} booking={booking} index={index} onEdit={editBooking} onRemove={removeBooking} />
-                                            ))}
-                                        </div>
+                                    {data.facility_bookings.length > 0 && (
+                                        <BookingCardList
+                                            bookings={data.facility_bookings}
+                                            editingIndex={editingIndex}
+                                            onEdit={editBooking}
+                                            onRemove={removeBooking}
+                                            facilities={facilities}
+                                        />
                                     )}
-
                                 </div>
 
                                 {/* ── Right: sticky sidebar (desktop only) ── */}
-                                <Card className="hidden lg:block bg-background shadow-sm border">
+                                <Card className="hidden border bg-background shadow-sm lg:block">
                                     <CardContent className="sticky top-6">
                                         {/* ── Desktop: FacilityInfo manages its own facility + date ── */}
-                                        <FacilityInfo
-                                            facilities={facilities}
-                                            isForSidebar={true}
-                                        />
+                                        <FacilityInfo facilities={facilities} isForSidebar={true} />
                                     </CardContent>
                                 </Card>
-
                             </div>
                         </TabsContent>
                     </Tabs>
 
-                    <div className="sticky bottom-0 z-5 -mx-6 md:-mx-8 px-6 md:px-8 flex justify-end gap-4 py-4 bg-background/80 backdrop-blur-sm border-t border-border">
-                        <Button type="button" variant="outline" size="lg" className='text-md font-semibold' onClick={() => window.history.back()}>
+                    <div className="sticky bottom-0 z-5 -mx-6 flex justify-end gap-4 border-t border-border bg-background/80 px-6 py-4 backdrop-blur-sm md:-mx-8 md:px-8">
+                        <Button type="button" variant="outline" size="lg" className="text-md font-semibold" onClick={() => window.history.back()}>
                             Cancel
                         </Button>
-                        <Button type="submit" size="lg" className='text-md font-semibold' disabled={processing}>
-                            {processing
-                                ? (isEditing ? 'Saving...' : 'Submitting...')
-                                : (isEditing ? 'Save Changes' : 'Submit Request')}
+                        <Button type="submit" size="lg" className="text-md font-semibold" disabled={processing}>
+                            {processing ? (isEditing ? 'Saving...' : 'Submitting...') : isEditing ? 'Save Changes' : 'Submit Request'}
                         </Button>
                     </div>
                 </form>
-
             </div>
-        </DefaultLayout >
+        </DefaultLayout>
     );
 }

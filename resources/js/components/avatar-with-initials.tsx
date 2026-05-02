@@ -1,7 +1,7 @@
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
-import { cn } from "@/lib/utils"
-import getInitials from "@/lib/getInitials";
 import { type LucideIcon } from "lucide-react";
+import getInitials from "@/lib/getInitials";
+import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 
 function getBackgroundColor(name: string) {
     const colors = [

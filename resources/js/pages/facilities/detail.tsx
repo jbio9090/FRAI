@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { router } from "@inertiajs/react";
+import { Link } from "@inertiajs/react";
 import { User, Building, Pencil, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import FacilityCalendar from "@/components/FacilityCalendar";
-import DefaultLayout from "@/layout.tsx/default.";
-import { usePermission } from "@/hooks/use-permission";
 import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Table,
     TableBody,
@@ -15,15 +21,9 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { router } from "@inertiajs/react";
-import { Link } from "@inertiajs/react";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-} from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePermission } from "@/hooks/use-permission";
+import DefaultLayout from "@/layout.tsx/default.";
 
 interface Equipment {
     id: number;

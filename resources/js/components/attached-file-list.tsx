@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { X, FileText, ImageIcon, File } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { FileViewer } from "./file-viewer";
+import { X, FileText, ImageIcon, File } from 'lucide-react';
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { FileViewer } from './file-viewer';
 
 interface LocalAttachedFile {
     file: File;
@@ -24,10 +24,9 @@ interface AttachedFileListProps {
     files?: LocalAttachedFile[];
     serverFiles?: ServerAttachedFile[];
     onRemove?: (index: number) => void | null;
-    onRemoveServer?: (index: number) => void;  
 }
 
-export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRemoveServer }: AttachedFileListProps) {
+export function AttachedFileList({ files = [], serverFiles = [], onRemove }: AttachedFileListProps) {
     const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
     if (files.length === 0 && serverFiles.length === 0) return null;
@@ -41,8 +40,12 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
     function getMimeTypeFromPath(path: string): string {
         const ext = path.split('.').pop()?.toLowerCase();
         const map: Record<string, string> = {
-            png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-            gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf',
+            png: 'image/png',
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            gif: 'image/gif',
+            webp: 'image/webp',
+            pdf: 'application/pdf',
         };
         return map[ext ?? ''] ?? 'application/octet-stream';
     }
@@ -59,7 +62,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
 
     // Merge local + server files into a unified viewable list
     // Local files come first, server files after
-    const localViewable = files.map(f => ({
+    const localViewable = files.map((f) => ({
         name: f.file.name,
         url: f.preview ?? URL.createObjectURL(f.file),
         mime_type: f.file.type,
@@ -68,7 +71,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
         original_name: f.original_name,
     }));
 
-    const serverViewable = serverFiles.map(f => ({
+    const serverViewable = serverFiles.map((f) => ({
         name: getFilenameFromPath(f.path),
         url: `/storage/${f.path}`,
         mime_type: getMimeTypeFromPath(f.path),
@@ -86,7 +89,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
                 {files.map((attached, index) => (
                     <div
                         key={`local-${index}`}
-                        className="flex items-center gap-3 p-2 border rounded-md bg-muted/20 group hover:border-primary *:cursor-pointer"
+                        className="group flex items-center gap-3 rounded-md border bg-muted/20 p-2 *:cursor-pointer hover:border-primary"
                     >
                         <button
                             type="button"
@@ -98,10 +101,10 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
                                 <img
                                     src={attached.preview}
                                     alt={attached.file.name}
-                                    className="w-10 h-10 object-cover rounded-sm hover:opacity-80 transition-opacity"
+                                    className="h-10 w-10 rounded-sm object-cover transition-opacity hover:opacity-80"
                                 />
                             ) : (
-                                <div className="w-10 h-10 flex items-center justify-center bg-muted rounded-sm hover:bg-muted/70 transition-colors">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-muted transition-colors hover:bg-muted/70">
                                     {getFileIcon(attached.file.type)}
                                 </div>
                             )}
@@ -110,9 +113,9 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
                         <button
                             type="button"
                             onClick={() => setViewerIndex(index)}
-                            className="flex-1 min-w-0 text-left hover:underline focus:outline-none"
+                            className="min-w-0 flex-1 text-left hover:underline focus:outline-none"
                         >
-                            <p className="text-sm font-medium truncate">{attached.file.name}</p>
+                            <p className="truncate text-sm font-medium">{attached.file.name}</p>
                             <p className="text-xs text-muted-foreground">{formatFileSize(attached.file.size)}</p>
                         </button>
 
@@ -122,7 +125,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => onRemove(index)}
-                                className="text-muted-foreground hover:text-destructive flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="flex-shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
                             >
                                 <X size={14} />
                             </Button>
@@ -140,7 +143,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
                     return (
                         <div
                             key={`server-${index}`}
-                            className="flex items-center gap-3 p-2 border rounded-md bg-muted/20 group hover:border-primary *:cursor-pointer"
+                            className="group flex items-center gap-3 rounded-md border bg-muted/20 p-2 *:cursor-pointer hover:border-primary"
                         >
                             <button
                                 type="button"
@@ -149,13 +152,9 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
                                 title="Click to preview"
                             >
                                 {mime.startsWith('image/') ? (
-                                    <img
-                                        src={url}
-                                        alt={name}
-                                        className="w-10 h-10 object-cover rounded-sm hover:opacity-80 transition-opacity"
-                                    />
+                                    <img src={url} alt={name} className="h-10 w-10 rounded-sm object-cover transition-opacity hover:opacity-80" />
                                 ) : (
-                                    <div className="w-10 h-10 flex items-center justify-center bg-muted rounded-sm hover:bg-muted/70 transition-colors">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-muted transition-colors hover:bg-muted/70">
                                         {getFileIcon(mime)}
                                     </div>
                                 )}
@@ -164,22 +163,16 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
                             <button
                                 type="button"
                                 onClick={() => setViewerIndex(viewerIdx)}
-                                className="flex-1 min-w-0 text-left hover:underline focus:outline-none"
+                                className="min-w-0 flex-1 text-left hover:underline focus:outline-none"
                             >
-                                <p className="text-sm font-medium truncate">{name}</p>
+                                <p className="truncate text-sm font-medium">{name}</p>
                             </button>
                         </div>
                     );
                 })}
             </div>
 
-            {viewerIndex !== null && (
-                <FileViewer
-                    files={allViewable}
-                    initialIndex={viewerIndex}
-                    onClose={() => setViewerIndex(null)}
-                />
-            )}
+            {viewerIndex !== null && <FileViewer files={allViewable} initialIndex={viewerIndex} onClose={() => setViewerIndex(null)} />}
         </>
     );
 }

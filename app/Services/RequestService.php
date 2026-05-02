@@ -321,11 +321,10 @@ class RequestService
 
     private function syncBookingsAndEquipment(FacilityRequest $facilityRequest, array $bookings): void
     {
-        $equipmentMap = [];
-
         foreach ($bookings as $booking) {
             $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
 
+            // 1. Create the facility line-item
             $requestFacility = $facilityRequest->requestFacilities()->create([
                 'facility_id' => $booking['facility_id'],
                 'date_requested' => $dateOnly,
@@ -335,39 +334,32 @@ class RequestService
                 'has_outsiders' => $booking['has_outsiders'] ?? false,
             ]);
 
+            // 2. Attach external equipment
             foreach ($booking['external_equipment'] ?? [] as $externalItem) {
                 $requestFacility->externalEquipments()->create([
                     'name' => $externalItem['name'],
                 ]);
             }
 
+            // 3. Attach standard equipment directly to THIS facility booking
             foreach ($booking['equipment'] ?? [] as $equipment) {
-                $key = "own_{$equipment['equipment_id']}";
-                $equipmentMap[$key] = [
-                    'equipment_id' => $equipment['equipment_id'],
-                    'quantity_needed' => ($equipmentMap[$key]['quantity_needed'] ?? 0) + $equipment['quantity_needed'],
-                    'is_borrowed' => false,
+                $requestFacility->equipment()->attach($equipment['equipment_id'], [
+                    'request_id'         => $facilityRequest->id, // Maintain the original link for backward compatibility
+                    'quantity_needed'    => $equipment['quantity_needed'],
+                    'is_borrowed'        => false,
                     'source_facility_id' => null,
-                ];
+                ]);
             }
 
+            // 4. Attach borrowed equipment directly to THIS facility booking
             foreach ($booking['borrowed_equipment'] ?? [] as $equipment) {
-                $key = "borrow_{$equipment['equipment_id']}_{$equipment['source_facility_id']}";
-                $equipmentMap[$key] = [
-                    'equipment_id' => $equipment['equipment_id'],
-                    'quantity_needed' => ($equipmentMap[$key]['quantity_needed'] ?? 0) + $equipment['quantity_needed'],
-                    'is_borrowed' => true,
+                $requestFacility->equipment()->attach($equipment['equipment_id'], [
+                    'request_id'         => $facilityRequest->id,
+                    'quantity_needed'    => $equipment['quantity_needed'],
+                    'is_borrowed'        => true,
                     'source_facility_id' => $equipment['source_facility_id'],
-                ];
+                ]);
             }
-        }
-
-        foreach ($equipmentMap as $item) {
-            $facilityRequest->equipment()->attach($item['equipment_id'], [
-                'quantity_needed' => $item['quantity_needed'],
-                'is_borrowed' => $item['is_borrowed'],
-                'source_facility_id' => $item['source_facility_id'],
-            ]);
         }
     }
 
@@ -380,10 +372,10 @@ class RequestService
 
         $existingBookings = RequestFacility::whereIn('facility_id', $facilityIds)
             ->whereIn('date_requested', $dates)
-            ->whereHas('request', function ($query) use ($excludeRequestId, $statuses) {
-                $query->whereIn('status', $statuses)
-                    ->where('on_hold', false)
-                    ->when($excludeRequestId, fn ($q) => $q->where('id', '!=', $excludeRequestId));
+            ->whereIn('status', $statuses)
+            ->whereHas('request', function ($query) use ($excludeRequestId) {
+                $query->where('on_hold', false)
+                    ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId));
             })
             ->with(['facility', 'request'])
             ->get();
@@ -404,10 +396,14 @@ class RequestService
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $status = $existing->request->status;
                     $conflicts[] = [
-                        'request_id' => $existing->request_id,
+                        'request_id'          => $existing->request_id,
                         'request_facility_id' => $existing->id,
-                        'status' => $status,
-                        'message' => sprintf(
+                        'request_title'       => $existing->request->title,
+                        'date'                => $existing->date_requested,
+                        'time_start'          => $existing->time_start,
+                        'time_end'            => $existing->time_end,
+                        'status'              => $status,
+                        'message'             => sprintf(
                             'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing %s booking (%s - %s)',
                             $existing->facility->name,
                             Carbon::parse($requestedDate)->format('F j, Y'),
@@ -553,6 +549,13 @@ class RequestService
 
             $conflictingRequests = $this->getConflictingApprovedRequests($bookings, $request->id);
 
+            foreach ($request->requestFacilities as $rf) {
+                if ($rf->status !== RequestStatus::DENIED) { // Don't override already denied items
+                    $rf->update(['status' => RequestStatus::APPROVED]);
+                    // Push into conflict handler array to resolve all at once
+                }
+            }
+
             $request->update([
                 'status' => RequestStatus::APPROVED,
                 'on_hold' => false,
@@ -662,9 +665,10 @@ class RequestService
 
             $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
                 ->where('date_requested', $dateOnly)
+                ->whereIn('status', [RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])
                 ->whereHas('request', function ($query) use ($excludeRequestId) {
-                    $query->whereIn('status', [RequestStatus::APPROVED, RequestStatus::FOR_RESCHEDULE])
-                        ->where('id', '!=', $excludeRequestId);
+                    $query->where('on_hold', false)
+                        ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId));
                 })
                 ->with('request')
                 ->lockForUpdate()
@@ -835,6 +839,28 @@ class RequestService
                             'max_quantity' => $eq->pivot->quantity_needed,
                         ])->values();
 
+                    $dateOnly  = Carbon::parse($rf->date_requested)->format('Y-m-d');
+                    $timeStart = substr($rf->time_start, 0, 5);
+                    $timeEnd   = substr($rf->time_end, 0, 5);
+
+                    $scheduleConflicts = RequestFacility::where('facility_id', $rf->facility_id)
+                        ->where('date_requested', $dateOnly)
+                        ->where('id', '!=', $rf->id)
+                        ->whereIn('status', [RequestStatus::PENDING, RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])
+                        ->where('time_start', '<', $timeEnd)
+                        ->where('time_end', '>', $timeStart)
+                        ->whereHas('request', fn($q) => $q->where('on_hold', false)->where('id', '!=', $detail->id))
+                        ->with('request')
+                        ->get()
+                        ->map(fn($conflictRf) => [
+                            'request_id'    => $conflictRf->request_id,
+                            'request_title' => $conflictRf->request->title ?? '',
+                            'status'        => $conflictRf->request->status,
+                            'time_start'    => substr($conflictRf->time_start, 0, 5),
+                            'time_end'      => substr($conflictRf->time_end, 0, 5),
+                        ])
+                        ->values();
+
                     return [
                         'facility_id' => $rf->facility_id,
                         'facility_name' => $rf->facility->name ?? '',
@@ -845,8 +871,8 @@ class RequestService
                         'external_equipment' => $rf->externalEquipments->map(fn ($e) => ['name' => $e->name])->values(),
                         'equipment' => $ownEquipment,
                         'borrowed_equipment' => $borrowedEquipment,
-                        'conflicts' => [],
-                        'has_outsiders' => (bool) $rf->has_outsiders,
+                        'conflicts'          => $scheduleConflicts,
+                        'has_outsiders'      => (bool) $rf->has_outsiders,
                     ];
                 },
             )->values(),
@@ -976,6 +1002,59 @@ class RequestService
 
             $rf->setRelation('equipment', $ownEquipment);
             $rf->setRelation('borrowed_equipment', $borrowedEquipment);
+        }
+    }
+
+    public function approveFacility(int $requestFacilityId): RequestFacility
+    {
+        return DB::transaction(function () use ($requestFacilityId) {
+            $rf = RequestFacility::with('request')->lockForUpdate()->findOrFail($requestFacilityId);
+            $rf->update(['status' => RequestStatus::APPROVED]);
+            $this->handleFacilityLevelConflicts($rf);
+            $this->syncParentRequestStatus($rf->request);
+            return $rf;
+        });
+    }
+
+    private function syncParentRequestStatus(FacilityRequest $request): void
+    {
+        $facilities = $request->requestFacilities;
+        $total = $facilities->count();
+        $approved = $facilities->where('status', RequestStatus::APPROVED)->count();
+        $denied = $facilities->where('status', RequestStatus::DENIED)->count();
+
+        if ($approved === $total) {
+            $newStatus = RequestStatus::APPROVED;
+        } elseif ($denied === $total) {
+            $newStatus = RequestStatus::DENIED;
+        } elseif ($approved > 0) {
+            $newStatus = RequestStatus::PARTIALLY_APPROVED;
+        } else {
+            $newStatus = RequestStatus::PENDING;
+        }
+
+        $request->update(['status' => $newStatus]);
+    }
+
+    private function handleFacilityLevelConflicts(RequestFacility $approvedRf): void
+    {
+        $booking = [
+            [
+                'facility_id' => $approvedRf->facility_id,
+                'date'        => $approvedRf->date_requested,
+                'time_start'  => $approvedRf->time_start,
+                'time_end'    => $approvedRf->time_end,
+            ]
+        ];
+
+        $conflicts = $this->getConflictingApprovedRequests($booking, $approvedRf->request_id);
+
+        foreach ($conflicts as $conflictingRequest) {
+            $this->putOnHold(
+                $conflictingRequest,
+                $approvedRf->request,
+                'Conflict with approved facility: ' . $approvedRf->facility->name
+            );
         }
     }
 }

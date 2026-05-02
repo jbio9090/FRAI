@@ -1,7 +1,7 @@
 import moment from "moment";
-import { Request } from "@/types/request";
-import { PRIORITY_LABELS } from "@/types/request";
 import { formatTime } from "@/lib/utils";
+import type { Request } from "@/types/request";
+import { PRIORITY_LABELS } from "@/types/request";
 
 export function downloadRequestsCSV(requests: Request[], filename = "requests.csv") {
     const HEADERS = [

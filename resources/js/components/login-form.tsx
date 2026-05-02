@@ -1,4 +1,7 @@
 import { useForm } from '@inertiajs/react';
+import { motion, useMotionValue, useMotionTemplate } from "framer-motion"
+import { Eye, EyeOff } from "lucide-react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -7,9 +10,6 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { motion, useMotionValue, useMotionTemplate } from "framer-motion"
-import { useState } from "react"
-import { Eye, EyeOff } from "lucide-react"
 
 const MotionButton = motion(Button);
 

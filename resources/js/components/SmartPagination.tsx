@@ -1,5 +1,5 @@
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationEllipsis, PaginationPrevious } from "./ui/pagination";
 import { useState } from "react";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationEllipsis, PaginationPrevious } from "./ui/pagination";
 
 
 export default function SmartPagination({ currentPage, lastPage, onPageChange, className }: {

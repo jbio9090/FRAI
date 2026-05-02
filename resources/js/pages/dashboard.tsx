@@ -1,16 +1,16 @@
-import { Button } from '@/components/ui/button';
-import DefaultLayout from '@/layout.tsx/default.';
 import { Link, usePage } from '@inertiajs/react';
+import axios from "axios";
 import { ArrowUpRight, ArrowLeft, ArrowRight, ClipboardList, CirclePlus } from 'lucide-react';
+import { ListFilter } from 'lucide-react';
+import { ArrowDownUp } from 'lucide-react';
 import moment from 'moment';
-import FacilityCalendar from '@/components/FacilityCalendar';
-import { Request as FacilityRequest } from '@/types/request';
+import type { Request as FacilityRequest } from '@/types/request';
 import { useState, useEffect, useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ListFilter } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ActivityFeed, AuditLog } from '@/components/activity-feed';
+import type { AuditLog } from '@/components/activity-feed';
+import { ActivityFeed } from '@/components/activity-feed';
 import {
     AreaChart,
     Area,
@@ -22,8 +22,9 @@ import {
     Pie,
     PieChart,
 } from 'recharts';
+import type {
+    ChartConfig} from '@/components/ui/chart';
 import {
-    ChartConfig,
     ChartContainer,
     ChartLegend,
     ChartLegendContent,
@@ -32,23 +33,25 @@ import {
 } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AvatarWithInitials from '@/components/avatar-with-initials';
+import FacilityCalendar from '@/components/FacilityCalendar';
 import RequestCard from '@/components/request-card';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { usePermission } from '@/hooks/use-permission';
 import SmallRequestCard from '@/components/small-request-card';
+import type {
+    CarouselApi} from "@/components/ui/carousel";
 import {
     Carousel,
     CarouselContent,
     CarouselItem,
     CarouselNext,
-    CarouselPrevious,
-    CarouselApi,
+    CarouselPrevious
 } from "@/components/ui/carousel";
-import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowDownUp } from 'lucide-react';
-import axios from "axios";
 import SmartPagination from "@/components/SmartPagination";
+import { Button } from '@/components/ui/button';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import DefaultLayout from '@/layout.tsx/default.';
+import { cn } from '@/lib/utils';
 
 interface Event {
     start: Date;
