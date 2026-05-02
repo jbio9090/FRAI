@@ -3,8 +3,8 @@
 namespace Database\Factories;
 
 use App\Models\User;
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\RequestStatus;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Arr;
 
 class RequestFactory extends Factory
@@ -18,7 +18,6 @@ class RequestFactory extends Factory
             'title' => fake()->sentence(4),
             'description' => fake()->sentence(),
             'status' => $status,
-            'comment' => $status !== RequestStatus::PENDING ? fake()->sentence() : null,
             'recommended_action' => Arr::random(RequestStatus::cases()),
             'recommended_action_reason' => fake()->sentence(),
         ];
@@ -26,7 +25,7 @@ class RequestFactory extends Factory
 
     public function pending(): static
     {
-        return $this->state(['status' => RequestStatus::PENDING, 'comment' => null]);
+        return $this->state(['status' => RequestStatus::PENDING]);
     }
 
     public function approved(): static
