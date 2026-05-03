@@ -8,7 +8,7 @@ use App\Notifications\AdminAiRecommendationReady;
 use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
 use App\Notifications\Reschedule;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 

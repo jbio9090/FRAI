@@ -10,7 +10,7 @@ use App\Models\Request;
 use App\Models\RequestFacility;
 use App\Models\ExternalEquipment;
 use App\Models\Comment;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 use Illuminate\Support\Facades\DB;
 
 class RequestSeeder extends Seeder

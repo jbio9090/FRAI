@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Request as RequestModel;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 
 class RequestFacility extends Model
 {

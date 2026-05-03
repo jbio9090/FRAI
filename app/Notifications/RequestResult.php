@@ -8,7 +8,7 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
 use Illuminate\Support\Facades\Date;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 
 class RequestResult extends Notification implements ShouldQueue
 {

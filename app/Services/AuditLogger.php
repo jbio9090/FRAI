@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request as HttpRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Request as RequestFacade;
-use App\AuditEvent;
+use App\Enums\AuditEvent;
 use App\Models\RequestFile;
 use App\Models\User;
 

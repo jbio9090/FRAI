@@ -4,7 +4,7 @@ namespace App\Services\RAG;
 
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 use Illuminate\Support\Facades\DB;
 
 class AIRecommendationService

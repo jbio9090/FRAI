@@ -8,7 +8,7 @@ use App\Models\AuditLog;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\User;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 use App\Services\AuditLogger;
 use App\Services\NotificationService;
 use App\Services\RequestService;

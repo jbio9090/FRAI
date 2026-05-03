@@ -4,8 +4,8 @@ namespace App\Services;
 
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
-use App\PriorityLevel;
-use App\RequestStatus;
+use App\Enums\PriorityLevel;
+use App\Enums\RequestStatus;
 use App\Services\RAG\AIRecommendationService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;

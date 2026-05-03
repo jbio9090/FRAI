@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
-use App\RequestStatus; 
+use App\Enums\RequestStatus; 
 use App\Services\RAG\AIRecommendationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;

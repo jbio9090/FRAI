@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\RequestFacility;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 use Illuminate\Support\Collection;
 
 class FacilityService
