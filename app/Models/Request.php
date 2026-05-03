@@ -50,6 +50,7 @@ class Request extends Model
         'approved_by' => 'array',
         'pending_equipment_conflict_request_ids'  => 'array',
         'approved_equipment_conflict_request_ids' => 'array',
+        'recommended_action' => RequestStatus::class,
     ];
 
     /* =========================================

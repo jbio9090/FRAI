@@ -3,81 +3,115 @@
 namespace App\Services\RAG;
 
 use App\Models\Request as FacilityRequest;
+use App\Models\RequestFacility;
 use App\RequestStatus;
 use Illuminate\Support\Facades\DB;
-
 
 class AIRecommendationService
 {
     public function __construct(protected OllamaService $ollama) {}
 
+    /**
+     * Evaluate each RequestFacility in isolation and return a map of results.
+     *
+     * Returns:
+     *   [
+     *     <requestFacility.id> => ['status' => RequestStatus, 'reason' => string],
+     *     ...
+     *   ]
+     *
+     * If the LLM fails for a specific facility, the fallback result for that
+     * facility is inserted instead — the rest of the loop continues normally.
+     */
     public function recommend(FacilityRequest $request): array
     {
-        try {
-            $requestContext = $this->buildRequestContext($request);
-            $embedding      = $this->ollama->embed($requestContext);
-            if (empty($embedding)) {
-                return $this->fallback($request);
+        $request->loadMissing([
+            'requestFacilities.facility',
+            'requestFacilities.externalEquipments',
+            'equipment',
+        ]);
+
+        $results = [];
+
+        foreach ($request->requestFacilities as $rf) {
+            try {
+                $results[$rf->id] = $this->evaluateFacility($request, $rf);
+            } catch (\Throwable $e) {
+                \Log::warning("AIRecommendationService: failed for RequestFacility#{$rf->id}, using fallback. Error: " . $e->getMessage());
+                $results[$rf->id] = $this->fallbackForFacility($rf);
             }
+        }
 
-            $vectorLiteral = '[' . implode(',', $embedding) . ']';
+        return $results;
+    }
 
-            // Default raised from 3 → 10. With only 3 rules the model never
-            // saw most of the policy rules that were relevant. Set this higher
-            // in config('ollama-laravel.recommendation_rule_limit') if you have
-            // many rules and still see gaps.
-            $ruleLimit = (int) config('ollama-laravel.recommendation_rule_limit', 10);
+    /**
+     * Run the full RAG + LLM pipeline for one specific RequestFacility.
+     */
+    private function evaluateFacility(FacilityRequest $request, RequestFacility $rf): array
+    {
+        $facilityContext = $this->buildRequestContext($request, $rf);
+        $embedding       = $this->ollama->embed($facilityContext);
 
-            $relevantRules = DB::table('rule_embeddings')
-                ->join('rules', 'rules.id', '=', 'rule_embeddings.rule_id')
-                // Removed the ->where('rules.forPolicy', 0) filter that was
-                // silently excluding all FAQ/non-policy rules from retrieval.
-                // Both rule types are now eligible; the model decides relevance.
-                ->selectRaw('rule_embeddings.content, 1 - (rule_embeddings.embedding <=> ?) AS similarity', [$vectorLiteral])
-                ->orderByRaw('rule_embeddings.embedding <=> ?', [$vectorLiteral])
-                ->limit(max($ruleLimit, 1))
-                ->get();
+        if (empty($embedding)) {
+            \Log::warning("AIRecommendationService: embed returned empty for RequestFacility#{$rf->id}, using fallback.");
+            return $this->fallbackForFacility($rf);
+        }
 
-            if ($relevantRules->isEmpty()) {
-                return $this->fallback($request);
-            }
+        $vectorLiteral = '[' . implode(',', $embedding) . ']';
 
-            \Log::debug('Relevant rules retrieved', [
-                'rules' => $relevantRules->map(fn($r) => [
-                    'content'    => $r->content,
-                    'similarity' => $r->similarity,
-                ])->toArray(),
-            ]);
+        $ruleLimit = (int) config('ollama-laravel.recommendation_rule_limit', 10);
 
-            // Number every rule so the model can tick through them linearly.
-            // Small models (2B) lose track of bullet lists; an explicit
-            // numbered sequence with a "check each one" instruction helps.
-            $ruleLines = collect($relevantRules)
-                ->values()
-                ->map(fn($r, $i) => ($i + 1) . '. ' . $r->content)
-                ->join("\n");
+        $relevantRules = DB::table('rule_embeddings')
+            ->join('rules', 'rules.id', '=', 'rule_embeddings.rule_id')
+            ->selectRaw(
+                'rule_embeddings.content, 1 - (rule_embeddings.embedding <=> ?) AS similarity',
+                [$vectorLiteral]
+            )
+            ->orderByRaw('rule_embeddings.embedding <=> ?', [$vectorLiteral])
+            ->limit(max($ruleLimit, 1))
+            ->get();
 
-            $ruleCount     = collect($relevantRules)->count();
-            $validStatuses = implode(', ', array_column(
-                array_filter(RequestStatus::cases(), fn($case) => $case->name !== RequestStatus::PENDING->name),
-                'value'
-            ));
+        if ($relevantRules->isEmpty()) {
+            return $this->fallbackForFacility($rf);
+        }
 
-            $now     = now()->toDateTimeString();
-            $signals = $this->buildSignals($request);
+        \Log::debug("Relevant rules for RequestFacility#{$rf->id}", [
+            'rules' => $relevantRules->map(fn($r) => [
+                'content'    => $r->content,
+                'similarity' => $r->similarity,
+            ])->toArray(),
+        ]);
 
-            $prompt = <<<PROMPT
+        $ruleLines = collect($relevantRules)
+            ->values()
+            ->map(fn($r, $i) => ($i + 1) . '. ' . $r->content)
+            ->join("\n");
+
+        $ruleCount     = collect($relevantRules)->count();
+        $validStatuses = implode(', ', array_column(
+            array_filter(
+                RequestStatus::cases(),
+                fn($case) => $case->name !== RequestStatus::PENDING->name
+            ),
+            'value'
+        ));
+
+        $now     = now()->toDateTimeString();
+        $signals = $this->buildSignals($request, $rf);
+
+        $prompt = <<<PROMPT
 TODAY'S DATE AND TIME: {$now}
 
 ===RULES ({$ruleCount} total — you MUST apply every single one)===
 {$ruleLines}
 
 ===PRE-EVALUATED SIGNALS===
-These are computed facts. Trust them exactly as written; do not reinterpret them.
+These are computed facts about THIS specific facility booking. Trust them exactly as written; do not reinterpret them.
 {$signals}
 
 ===REQUEST DETAILS===
-{$requestContext}
+{$facilityContext}
 
 ===YOUR TASK===
 Go through EACH of the {$ruleCount} rules above one by one.
@@ -91,171 +125,122 @@ Respond using ONLY this JSON structure — no other text:
 {"status": "<valid status>", "reason": "<one sentence summarising the decisive rule or overall result>"}
 PROMPT;
 
-            $raw = $this->ollama->generate($prompt);
+        $raw = $this->ollama->generate($prompt);
 
-            return $this->parseResponse($raw);
-        } catch (\Throwable $e) {
-            \Log::warning('AIRecommendationService failed, using fallback: ' . $e->getMessage());
-            return $this->fallback($request);
-        }
+        return $this->parseResponse($raw);
     }
 
     /**
-     * Pre-compute deterministic facts about the request and format them
-     * as unambiguous signals for the LLM. This prevents the model from
-     * doing its own (unreliable) date math or numeric comparisons.
+     * Build pre-computed, unambiguous signals scoped to ONE RequestFacility.
+     *
+     * Only facts relevant to $rf are included so the LLM cannot confuse
+     * signals from a different booking in the same parent request.
      */
-    private function buildSignals(FacilityRequest $request): string
+    private function buildSignals(FacilityRequest $request, RequestFacility $rf): string
     {
-        $request->loadMissing([
-            'requestFacilities.facility',
-            'requestFacilities.externalEquipments',
-            'equipment',
-        ]);
-
         $lines = [];
 
-        // --- Temporal verdict (keep this — it's a policy decision, not just math) ---
-        $minDaysUntil = null;
+        // --- Temporal verdict ---
+        $daysUntil = now()->startOfDay()->diffInDays(
+            \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
+            false
+        );
 
-        foreach ($request->requestFacilities as $rf) {
-            $daysUntil = now()->startOfDay()->diffInDays(
-                \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
-                false
-            );
-
-            if ($minDaysUntil === null || $daysUntil < $minDaysUntil) {
-                $minDaysUntil = $daysUntil;
-            }
+        if ($daysUntil < 0) {
+            $lines[] = '- TEMPORAL: This facility date is in the PAST. This booking cannot be approved.';
+        } elseif ($daysUntil < 3) {
+            $lines[] = "- TEMPORAL: This facility date is only {$daysUntil} day(s) from today. The 3-day advance rule is VIOLATED. This booking must be DENIED.";
+        } else {
+            $lines[] = "- TEMPORAL: This facility date is {$daysUntil} days from today. The 3-day advance rule is NOT violated.";
         }
 
-        if ($minDaysUntil !== null) {
-            if ($minDaysUntil < 0) {
-                $lines[] = '- TEMPORAL: At least one facility date is in the PAST. This request cannot be approved.';
-            } elseif ($minDaysUntil < 3) {
-                $lines[] = "- TEMPORAL: Nearest facility date is only {$minDaysUntil} day(s) from today. The 3-day advance rule is VIOLATED. This request must be DENIED.";
-            } else {
-                $lines[] = "- TEMPORAL: Nearest facility date is {$minDaysUntil} days from today. The 3-day advance rule is NOT violated.";
-            }
-        }
+        // --- Conflict signals scoped to this RequestFacility ---
+        $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
+        $pendingConflictRfIds  = $request->pending_conflict_rf_ids  ?? [];
 
-        // --- Conflict signals (keep — boolean facts the model shouldn't infer) ---
-        $hasApprovedConflict = !empty($request->approved_conflict_rf_ids);
-        $hasPendingConflict  = !empty($request->pending_conflict_rf_ids);
+        // Approved conflicts: check if THIS rf.id appears in the conflict set,
+        // OR if this rf conflicts with any of the IDs in the list (depending on
+        // how conflict IDs are stored in your application). Adjust the logic
+        // below to match your actual conflict data shape.
+        $hasApprovedConflict = in_array($rf->id, $approvedConflictRfIds, true);
+        $hasPendingConflict  = in_array($rf->id, $pendingConflictRfIds,  true);
 
         $lines[] = $hasApprovedConflict
-            ? '- CONFLICT: There IS a schedule conflict with an already APPROVED booking. This request must be DENIED.'
-            : '- CONFLICT: No conflicts with approved bookings.';
+            ? '- CONFLICT: This booking has a schedule conflict with an already APPROVED booking. This booking must be DENIED.'
+            : '- CONFLICT: No conflicts with approved bookings for this facility slot.';
 
         $lines[] = $hasPendingConflict
-            ? '- CONFLICT: There is a schedule conflict with a PENDING booking (not yet approved). This alone does not require denial.'
-            : '- CONFLICT: No conflicts with pending bookings.';
+            ? '- CONFLICT: This booking has a schedule conflict with a PENDING booking (not yet approved). This alone does not require denial.'
+            : '- CONFLICT: No conflicts with pending bookings for this facility slot.';
 
-        // --- External equipment (keep — boolean fact) ---
-        $hasExternalEquipment = $request->requestFacilities
-            ->flatMap(fn($rf) => $rf->externalEquipments ?? collect())
-            ->isNotEmpty();
+        // --- External equipment scoped to this RequestFacility ---
+        $hasExternalEquipment = ($rf->externalEquipments ?? collect())->isNotEmpty();
 
         $lines[] = $hasExternalEquipment
-            ? '- EQUIPMENT: Request includes external (non-owned) equipment. Conditional approval is likely required.'
-            : '- EQUIPMENT: No external equipment involved.';
+            ? '- EQUIPMENT: This booking includes external (non-owned) equipment. Conditional approval is likely required.'
+            : '- EQUIPMENT: No external equipment attached to this specific booking.';
 
-        // --- Pre-approval (keep — boolean fact) ---
+        // --- Pre-approval (parent-level, still relevant context) ---
         if (!empty($request->approved_by)) {
             $approvers = implode(', ', $request->approved_by);
-            $lines[]   = "- PRE-APPROVAL: This request has been pre-approved by: {$approvers}.";
+            $lines[]   = "- PRE-APPROVAL: The parent request has been pre-approved by: {$approvers}.";
         }
 
         return implode("\n", $lines);
     }
 
-    private function fallback(FacilityRequest $request): array
+    /**
+     * Build a focused context string describing ONE facility booking only.
+     *
+     * The LLM sees the parent request metadata for narrative context, but the
+     * facility section contains exactly one entry so there is no ambiguity
+     * about which booking is being evaluated.
+     */
+    private function buildRequestContext(FacilityRequest $request, RequestFacility $rf): string
     {
-        $hasApprovedConflict = !empty($request->approved_conflict_rf_ids);
-        $hasPendingConflict  = !empty($request->pending_conflict_rf_ids);
-        $hasExternalEquipment = $request->requestFacilities
-            ->flatMap(fn($rf) => $rf->externalEquipments ?? collect())
-            ->isNotEmpty();
+        $daysUntil = now()->startOfDay()->diffInDays(
+            \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
+            false
+        );
 
-        if ($hasApprovedConflict) {
-            return [
-                'status' => RequestStatus::DENIED,
-                'reason' => 'Time conflict with approved events.',
-            ];
-        }
+        $urgency = $daysUntil < 0
+            ? 'PAST DATE'
+            : "({$daysUntil} days from today)";
 
-        if ($hasPendingConflict) {
-            return [
-                'status' => RequestStatus::APPROVED,
-                'reason' => 'Time conflict with pending requests.',
-            ];
-        }
+        $facilityLine = "{$rf->facility->name} on {$rf->date_requested} {$urgency} from {$rf->time_start} to {$rf->time_end}";
 
-        if ($hasExternalEquipment) {
-            return [
-                'status' => RequestStatus::CONDITIONALLY_APPROVED,
-                'reason' => 'Approve request along with the external equipment.',
-            ];
-        }
-
-        return [
-            'status' => RequestStatus::APPROVED,
-            'reason' => 'No conflicting schedule found for all requested facilities.',
-        ];
-    }
-
-    private function buildRequestContext(FacilityRequest $request): string
-    {
-        $request->loadMissing([
-            'requestFacilities.facility',
-            'requestFacilities.externalEquipments',
-            'equipment',
-        ]);
-
-        $facilities = $request->requestFacilities->map(function ($rf) {
-            $daysUntil = now()->startOfDay()->diffInDays(
-                \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
-                false
-            );
-            $urgency = $daysUntil < 0
-                ? "PAST DATE"
-                : "({$daysUntil} days from today)";
-
-            return "{$rf->facility->name} on {$rf->date_requested} {$urgency} from {$rf->time_start} to {$rf->time_end}";
-        })->join('; ');
-
+        // Parent-level equipment applies to all bookings in the request.
         $equipment = $request->equipment->map(
             fn($eq) =>
             "{$eq->name} x{$eq->pivot->quantity_needed}" . ($eq->pivot->is_borrowed ? ' (borrowed)' : '')
         )->join(', ');
 
-        $hasExternalEquipment = $request->requestFacilities
-            ->flatMap(fn($rf) => $rf->externalEquipments ?? collect())
-            ->isNotEmpty();
+        $hasExternalEquipment = ($rf->externalEquipments ?? collect())->isNotEmpty();
 
+        // Conflict details scoped to this RequestFacility.
         $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
-        $pendingConflictRfIds  = $request->pending_conflict_rf_ids ?? [];
+        $pendingConflictRfIds  = $request->pending_conflict_rf_ids  ?? [];
 
         $approvedConflictDetails = '';
         $pendingConflictDetails  = '';
 
-        if (!empty($approvedConflictRfIds)) {
+        if (in_array($rf->id, $approvedConflictRfIds, true)) {
             $approvedConflictDetails = \App\Models\RequestFacility::whereIn('id', $approvedConflictRfIds)
                 ->with(['facility', 'request.user'])
                 ->get()
                 ->map(
-                    fn($rf) =>
-                    "  - \"{$rf->request->title}\" by {$rf->request->user->name} at {$rf->facility->name} ({$rf->time_start}–{$rf->time_end})"
+                    fn($conflictRf) =>
+                    "  - \"{$conflictRf->request->title}\" by {$conflictRf->request->user->name} at {$conflictRf->facility->name} ({$conflictRf->time_start}–{$conflictRf->time_end})"
                 )->join("\n");
         }
 
-        if (!empty($pendingConflictRfIds)) {
+        if (in_array($rf->id, $pendingConflictRfIds, true)) {
             $pendingConflictDetails = \App\Models\RequestFacility::whereIn('id', $pendingConflictRfIds)
                 ->with(['facility', 'request.user'])
                 ->get()
                 ->map(
-                    fn($rf) =>
-                    "  - \"{$rf->request->title}\" by {$rf->request->user->name} at {$rf->facility->name} ({$rf->time_start}–{$rf->time_end})"
+                    fn($conflictRf) =>
+                    "  - \"{$conflictRf->request->title}\" by {$conflictRf->request->user->name} at {$conflictRf->facility->name} ({$conflictRf->time_start}–{$conflictRf->time_end})"
                 )->join("\n");
         }
 
@@ -263,25 +248,67 @@ PROMPT;
             "Title: {$request->title}",
             "Description: {$request->description}",
             "Priority Level: {$request->priority_level->name}",
-            $request->priority_reason        ? "Priority Reason: {$request->priority_reason}"          : null,
-            "Facilities Requested: {$facilities}",
-            $equipment                        ? "Equipment: {$equipment}"                                : null,
-            $hasExternalEquipment             ? "Has External (non-owned) Equipment: Yes"               : null,
-            $approvedConflictDetails          ? "Conflicts with APPROVED bookings:\n{$approvedConflictDetails}" : "Conflicts with approved bookings: None",
-            $pendingConflictDetails           ? "Conflicts with PENDING bookings:\n{$pendingConflictDetails}"   : "Conflicts with pending bookings: None",
-            $request->approved_by             ? "Pre-approved by: " . implode(', ', $request->approved_by)     : null,
+            $request->priority_reason   ? "Priority Reason: {$request->priority_reason}" : null,
+            "Facility Being Evaluated: {$facilityLine}",
+            $equipment                  ? "Equipment (parent request): {$equipment}"                            : null,
+            $hasExternalEquipment       ? "Has External (non-owned) Equipment for this booking: Yes"           : null,
+            $approvedConflictDetails    ? "Conflicts with APPROVED bookings:\n{$approvedConflictDetails}"      : "Conflicts with approved bookings: None",
+            $pendingConflictDetails     ? "Conflicts with PENDING bookings:\n{$pendingConflictDetails}"        : "Conflicts with pending bookings: None",
+            $request->approved_by       ? "Pre-approved by: " . implode(', ', $request->approved_by)          : null,
         ]));
+    }
+
+    /**
+     * Deterministic fallback scoped to one RequestFacility.
+     */
+    private function fallbackForFacility(RequestFacility $rf): array
+    {
+        // We need the parent request's conflict arrays. The RF may or may not
+        // have $rf->request loaded; load it if needed.
+        $rf->loadMissing('request');
+        $request = $rf->request;
+
+        $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
+        $pendingConflictRfIds  = $request->pending_conflict_rf_ids  ?? [];
+
+        $hasApprovedConflict  = in_array($rf->id, $approvedConflictRfIds, true);
+        $hasPendingConflict   = in_array($rf->id, $pendingConflictRfIds,  true);
+        $hasExternalEquipment = ($rf->externalEquipments ?? collect())->isNotEmpty();
+
+        if ($hasApprovedConflict) {
+            return [
+                'status' => RequestStatus::DENIED,
+                'reason' => 'Time conflict with an approved event at this facility.',
+            ];
+        }
+
+        if ($hasPendingConflict) {
+            return [
+                'status' => RequestStatus::APPROVED,
+                'reason' => 'Time conflict exists only with a pending request; no denial required.',
+            ];
+        }
+
+        if ($hasExternalEquipment) {
+            return [
+                'status' => RequestStatus::CONDITIONALLY_APPROVED,
+                'reason' => 'Booking includes external equipment that requires additional approval.',
+            ];
+        }
+
+        return [
+            'status' => RequestStatus::APPROVED,
+            'reason' => 'No conflicting schedule found for this facility slot.',
+        ];
     }
 
     private function parseResponse(string $raw): array
     {
         \Log::debug('Ollama raw response: ' . $raw);
 
-        // Strip markdown fences
         $clean = preg_replace('/```json|```/i', '', $raw);
         $clean = trim($clean);
 
-        // Try to extract a JSON object anywhere in the response
         if (preg_match('/\{.*?"status".*?"reason".*?\}/s', $clean, $matches)) {
             $clean = $matches[0];
         }

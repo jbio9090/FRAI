@@ -17,6 +17,8 @@ class RequestFacility extends Model
         'expected_capacity',
         'has_outsiders',
         'status',
+        'ai_recommended_status',
+        'ai_recommendation_reason',
     ];
 
     protected $casts = [
