@@ -2,7 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import { router } from '@inertiajs/react';
 import { Calendar, Clock, SendHorizontal, Pen, CheckCircle, XCircle, ClipboardCheck, MessageSquare, Sparkles, Download } from 'lucide-react';
 import moment from 'moment';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ActivityFeed } from '@/components/activity-feed';
 import { BookingCard } from '@/components/booking-card';
 import { cn } from '@/lib/utils';
@@ -65,7 +65,7 @@ function RecommendationBadge({ action }: { action: RecommendedAction }) {
     );
 }
 
-export default function RequestDetail({ request, auditLogs: auditLogsProp }: DetailProps) {
+export default function RequestDetail({ request: initialRequest, auditLogs: auditLogsProp }: DetailProps) {
     const auth = usePage().props.auth;
     const [comment, setComment] = useState('');
     const [isCommenting, setCommentInputState] = useState(false);
@@ -77,8 +77,44 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
     const [lastPage, setLastPage] = useState(auditLogsProp?.last_page ?? 1);
     const [totalLogs, setTotalLogs] = useState(auditLogsProp?.total ?? 0);
     const [logsLoading, setLogsLoading] = useState(false);
+    const [request, setRequest] = useState(initialRequest);
+    const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(!initialRequest.recommended_action);
 
-    if (!request || !auditLogsProp) {
+    useEffect(() => {
+        if (!isLoadingRecommendation) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(route('request.recommendation', [request.id]), {
+                    headers: { Accept: 'application/json' },
+                });
+
+                if (!res.ok) {
+                    console.error('Recommendation endpoint error:', res.status);
+                    return;
+                }
+
+                const data = await res.json();
+
+                if (data.recommended_action) {
+                    setRequest((prev) => ({
+                        ...prev,
+                        recommended_action: data.recommended_action,
+                        recommended_action_reason: data.recommended_action_reason,
+                        request_facilities: data.request_facilities ?? prev.request_facilities,
+                    }));
+                    setIsLoadingRecommendation(false);
+                    clearInterval(interval);
+                }
+            } catch (e) {
+                console.error('Polling error:', e);
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [request.id, isLoadingRecommendation]);
+
+    if (!initialRequest || !auditLogsProp) {
         return (
             <DefaultLayout>
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
@@ -298,6 +334,12 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                     {request.files?.length ?? 0}
                                 </span>
                             </TabsTrigger>
+
+                            {isAdmin && (
+                                <TabsTrigger value="recommendation" className="flex items-center gap-2">
+                                    <span>Recommendation</span>
+                                </TabsTrigger>
+                            )}
                         </TabsList>
                         <ScrollBar orientation="horizontal" className="h-0" />
                     </ScrollArea>
@@ -534,6 +576,92 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                             <p className="text-sm text-muted-foreground">No files attached.</p>
                         )}
                     </TabsContent>
+                    {/* Recommendation Tab */}
+                    {isAdmin && (
+                        <TabsContent value="recommendation" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
+                            {/* Overall verdict */}
+                            <div className="rounded-xl border border-dashed p-5">
+                                {isLoadingRecommendation ? (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="h-4 w-4 animate-pulse rounded bg-muted" />
+                                            <div className="h-3.5 w-32 animate-pulse rounded bg-muted" />
+                                        </div>
+                                        <div className="mx-auto h-8 w-48 animate-pulse rounded bg-muted" />
+                                        <div className="flex flex-col items-center gap-1.5 px-2">
+                                            <div className="h-3 w-full animate-pulse rounded bg-muted" />
+                                            <div className="h-3 w-5/6 animate-pulse rounded bg-muted" />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                            <Sparkles className="h-4 w-4" />
+                                            <span className="text-sm">Overall Recommendation</span>
+                                        </div>
+                                        <p
+                                            className={cn(
+                                                'text-center text-2xl font-bold',
+                                                request.recommended_action === 'Denied' && 'text-destructive',
+                                                request.recommended_action === 'Approved' && 'text-emerald-600 dark:text-emerald-400',
+                                                request.recommended_action === 'Conditionally Approved' && 'text-amber-600 dark:text-amber-400',
+                                                request.recommended_action === 'Partially Approved' && 'text-sky-600 dark:text-sky-400',
+                                                request.recommended_action === 'For Reschedule' && 'text-blue-600 dark:text-blue-400',
+                                            )}
+                                        >
+                                            {request.recommended_action ?? '—'}
+                                        </p>
+                                        {request.recommended_action_reason && (
+                                            <p className="px-2 text-center text-sm leading-relaxed text-muted-foreground">
+                                                {request.recommended_action_reason}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Per-facility breakdown */}
+                            {request.request_facilities?.length > 0 && (
+                                <div className="flex flex-col gap-2">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-Facility Breakdown</p>
+                                    <div className="flex grid-cols-2 flex-col gap-3 md:grid">
+                                        {request.request_facilities.map((rf) => {
+                                            const facility = request.facilities.find((f) => f.id === rf.facility_id);
+                                            const facilityName = facility?.name ?? `Facility #${rf.facility_id}`;
+                                            const rfStatus = rf.ai_recommended_status;
+                                            const rfReason = rf.ai_recommendation_reason;
+
+                                            return (
+                                                <div key={rf.id} className="rounded-lg border bg-muted/30 px-4 py-3">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex min-w-0 flex-col gap-0.5">
+                                                            <span className="truncate text-sm font-semibold">{facilityName}</span>
+                                                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                                <Calendar className="h-3 w-3" />
+                                                                {rf.date_requested}
+                                                                <Clock className="ml-1 h-3 w-3" />
+                                                                {rf.time_start} – {rf.time_end}
+                                                            </span>
+                                                        </div>
+                                                        {isLoadingRecommendation || !rfStatus ? (
+                                                            <div className="h-5 w-28 shrink-0 animate-pulse rounded-full bg-muted" />
+                                                        ) : (
+                                                            <StatusTag requestStatus={rfStatus} variant="small" />
+                                                        )}
+                                                    </div>
+                                                    {isLoadingRecommendation ? (
+                                                        <div className="mt-2 h-3 w-3/4 animate-pulse rounded bg-muted" />
+                                                    ) : rfReason ? (
+                                                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{rfReason}</p>
+                                                    ) : null}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </TabsContent>
+                    )}
                 </Tabs>
             </div>
         </DefaultLayout>

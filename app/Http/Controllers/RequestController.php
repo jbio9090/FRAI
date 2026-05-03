@@ -186,7 +186,7 @@ class RequestController extends Controller
 
         return Inertia::render('requests/detail', [
             'labeledBreadcrumb' => $requestModel->title,
-            'request' => Inertia::defer(fn() => $this->service->getDetail($request_id)),
+            'request' => $this->service->getDetail($request_id),
             'auditLogs' => Inertia::defer(fn() => AuditLog::query()
                 ->forSubject($requestModel)
                 ->with('user')

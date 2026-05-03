@@ -221,7 +221,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                 },
             },
         );
-    };
+    };  
 
     return (
         <DefaultLayout hasPadding={false}>
