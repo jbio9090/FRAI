@@ -290,7 +290,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             return totalB - totalA;
         });
 
-    const { data, setData, post, processing, errors, transform } = useForm({
+    const { data, setData, post, put, processing, errors, transform } = useForm({
         title: existingRequest?.title ?? '',
         description: existingRequest?.description ?? '',
         facility_bookings: existingRequest?.facility_bookings ?? ([] as FacilityBooking[]),
@@ -299,7 +299,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         approved_by: existingRequest?.approved_by ?? ([] as string[]),
         files: [] as File[],
         existing_file_ids: [] as number[],
-        _method: '',
     });
 
     useEffect(() => {
@@ -785,16 +784,19 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             ...d,
             facility_bookings: JSON.stringify(d.facility_bookings),
             existing_file_ids: existingFiles.map((f) => f.id),
-            _method: isEditing ? 'PUT' : '',
         }));
 
-        const url = isEditing ? route('requests.update', existingRequest!.id) : route('requests.store');
-
-        post(url, {
+        const options = {
             forceFormData: true,
             onSuccess: () => clearDraft(existingRequest?.id),
             onError: (errs) => console.log('validation errors:', errs),
-        });
+        };
+
+        if (isEditing) {
+            put(route('requests.update', existingRequest!.id), options);
+        } else {
+            post(route('requests.store'), options);
+        }
     }
 
     async function fetchEquipmentConflicts(equipmentIds: number[]) {
@@ -1048,8 +1050,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                         {selectedDates.length === 0
                                                             ? 'Pick a date'
                                                             : selectedDates.length === 1
-                                                              ? format(selectedDates[0], 'PPP')
-                                                              : `${selectedDates.length} dates selected`}
+                                                                ? format(selectedDates[0], 'PPP')
+                                                                : `${selectedDates.length} dates selected`}
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-auto p-0">
@@ -1291,7 +1293,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                             className={cn(
                                                                                 'w-20 p-2 text-sm',
                                                                                 exceedsAvailable &&
-                                                                                    'border-orange-400 bg-orange-50 dark:bg-orange-950/20',
+                                                                                'border-orange-400 bg-orange-50 dark:bg-orange-950/20',
                                                                             )}
                                                                         />
                                                                     </div>
@@ -1576,7 +1578,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                                                     (source) =>
                                                                                                         borrowFacilityFilter === 'all' ||
                                                                                                         source.facilityId ===
-                                                                                                            Number(borrowFacilityFilter),
+                                                                                                        Number(borrowFacilityFilter),
                                                                                                 )
                                                                                                 .map((source) => {
                                                                                                     const item = borrowed.find(
@@ -1586,7 +1588,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                                                     );
                                                                                                     const available =
                                                                                                         borrowableAvailability[source.facilityId]?.[
-                                                                                                            equipment.id
+                                                                                                        equipment.id
                                                                                                         ] ?? source.quantity;
                                                                                                     const isLimited = available < source.quantity;
 
@@ -1606,9 +1608,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                                                                                     (e) =>
                                                                                                                                         !(
                                                                                                                                             e.equipment_id ===
-                                                                                                                                                equipment.id &&
+                                                                                                                                            equipment.id &&
                                                                                                                                             e.source_facility_id ===
-                                                                                                                                                source.facilityId
+                                                                                                                                            source.facilityId
                                                                                                                                         ),
                                                                                                                                 ),
                                                                                                                         );
@@ -1676,13 +1678,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                                                                                                     prev.map((i) =>
                                                                                                                                         i.equipment_id ===
                                                                                                                                             equipment.id &&
-                                                                                                                                        i.source_facility_id ===
+                                                                                                                                            i.source_facility_id ===
                                                                                                                                             source.facilityId
                                                                                                                                             ? {
-                                                                                                                                                  ...i,
-                                                                                                                                                  quantity_needed:
-                                                                                                                                                      qty,
-                                                                                                                                              }
+                                                                                                                                                ...i,
+                                                                                                                                                quantity_needed:
+                                                                                                                                                    qty,
+                                                                                                                                            }
                                                                                                                                             : i,
                                                                                                                                     ),
                                                                                                                             );
@@ -1785,8 +1787,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 {editingIndex !== null
                                                     ? 'Save changes to facility booking'
                                                     : selectedDates.length > 1
-                                                      ? `Add ${selectedDates.length} Facility Bookings`
-                                                      : 'Add Facility Booking'}
+                                                        ? `Add ${selectedDates.length} Facility Bookings`
+                                                        : 'Add Facility Booking'}
                                             </Button>
                                         </div>
                                     </div>

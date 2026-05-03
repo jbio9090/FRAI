@@ -119,18 +119,17 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
                             </Select>
 
                             {/* Conflicts filter */}
-                            {hasConflicts && (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={filterConflicts ? 'destructive' : 'outline'}
-                                    className="h-8 gap-1.5 text-sm"
-                                    onClick={() => setFilterConflicts((v) => !v)}
-                                >
-                                    <AlertCircleIcon size={16} />
-                                    Conflicts only
-                                </Button>
-                            )}
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant={filterConflicts ? 'destructive' : 'outline'}
+                                className="h-8 gap-1.5 text-sm"
+                                onClick={() => setFilterConflicts((v) => !v)}
+                                disabled={hasConflicts}
+                            >
+                                <AlertCircleIcon size={16} />
+                                Conflicts only
+                            </Button>
                         </div>
                     </div>
                     {processed.length === 0 ? (
