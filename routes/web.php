@@ -51,11 +51,19 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/requests/{id}/recommendation', function ($id) {
-        $request = \App\Models\Request::findOrFail($id);
+        $request = \App\Models\Request::with('requestFacilities')->findOrFail($id);
 
         return response()->json([
             'recommended_action' => $request->getRawOriginal('recommended_action'),
             'recommended_action_reason' => $request->recommended_action_reason,
+            'request_status' => $request->getRawOriginal('status'),
+            'request_facilities' => $request->requestFacilities->map(fn ($rf) => [
+                'id' => $rf->id,
+                'facility_id' => $rf->facility_id,
+                'status' => $rf->getRawOriginal('status'),
+                'ai_recommended_status' => $rf->getRawOriginal('ai_recommended_status'),
+                'ai_recommendation_reason' => $rf->ai_recommendation_reason,
+            ]),
         ]);
     })->name('request.recommendation');
 

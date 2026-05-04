@@ -2,12 +2,10 @@ import { router, Link } from '@inertiajs/react';
 import {
     ArrowUpRight,
     Calendar,
-    Clock,
     MessageCircle,
     ThumbsUp,
     CheckLine,
     MessageCirclePlus,
-    User,
     MessageCircleOff,
     X,
     Check,
@@ -17,7 +15,6 @@ import {
     Landmark,
     CirclePause,
     IterationCw,
-    Sparkles,
     Paperclip,
 } from 'lucide-react';
 import moment from 'moment';
@@ -32,6 +29,7 @@ import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { PRIORITY_LABELS } from '@/types/request';
 import type { Request } from '@/types/request';
 import AnimatedText from './animated-text';
+import { RecommendationPanel } from './request/recommendation-panel';
 import { AttachedFileList } from './attached-file-list';
 import AvatarWithInitials from './avatar-with-initials';
 import { BookingCard } from './booking-card';
@@ -69,8 +67,13 @@ export default function RequestCard({
     const [request, setRequest] = useState(initialRequest);
     const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(!initialRequest.recommended_action);
 
+    const facilitiesNeedPolling = (req: Request) => req.request_facilities?.some((rf) => rf.status == null) ?? false;
+    const [isLoadingFacilityStatuses, setIsLoadingFacilityStatuses] = useState(() => facilitiesNeedPolling(initialRequest));
+
+    const isPollingActive = isLoadingRecommendation || isLoadingFacilityStatuses;
+
     useEffect(() => {
-        if (!isLoadingRecommendation) return;
+        if (!isPollingActive) return;
 
         const interval = setInterval(async () => {
             try {
@@ -85,15 +88,30 @@ export default function RequestCard({
 
                 const data = await res.json();
 
-                if (data.recommended_action) {
-                    setRequest((prev) => ({
+                setRequest((prev) => {
+                    const mergedFacilities = prev.request_facilities?.map((rf) => {
+                        const updated = data.request_facilities?.find((u: { id: number }) => u.id === rf.id);
+                        if (!updated) return rf;
+                        return {
+                            ...rf,
+                            status: updated.status ?? rf.status,
+                            ai_recommended_status: updated.ai_recommended_status ?? rf.ai_recommended_status,
+                            ai_recommendation_reason: updated.ai_recommendation_reason ?? rf.ai_recommendation_reason,
+                        };
+                    });
+
+                    return {
                         ...prev,
-                        recommended_action: data.recommended_action,
-                        recommended_action_reason: data.recommended_action_reason,
-                        request_facilities: data.request_facilities ?? prev.request_facilities,
-                    }));
-                    setIsLoadingRecommendation(false);
-                    clearInterval(interval);
+                        status: data.request_status ?? prev.status,
+                        recommended_action: data.recommended_action ?? prev.recommended_action,
+                        recommended_action_reason: data.recommended_action_reason ?? prev.recommended_action_reason,
+                        request_facilities: mergedFacilities ?? prev.request_facilities,
+                    };
+                });
+
+                if (data.recommended_action) setIsLoadingRecommendation(false);
+                if (!facilitiesNeedPolling({ ...request, request_facilities: data.request_facilities ?? request.request_facilities })) {
+                    setIsLoadingFacilityStatuses(false);
                 }
             } catch (e) {
                 console.error('Polling error:', e);
@@ -101,7 +119,7 @@ export default function RequestCard({
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [request.id, isLoadingRecommendation]);
+    }, [request.id, isPollingActive]);
 
     const toggleInput = () => {
         setCommentInputState((prev) => !prev);
@@ -212,7 +230,7 @@ export default function RequestCard({
                         </div>
                     </div>
 
-                    <Link href={route('requests.detail', request.id)} className="mr-0 ml-auto flex-0">
+                    <Link href={route('requests.detail', request.id)} className="mr-0 ml-auto h-fit flex-0">
                         <Button size="xs" variant="outline">
                             <ArrowUpRight />
                         </Button>
@@ -420,97 +438,11 @@ function RequestDetails({
                       value: 'recommend',
                       icon: <ThumbsUp size={16} />,
                       label: 'Recommendation',
-                      content: (() => {
-                          const actionColor: Record<string, string> = {
-                              Approved: 'text-emerald-600 dark:text-emerald-400',
-                              'Conditionally Approved': 'text-amber-600 dark:text-amber-400',
-                              Denied: 'text-destructive',
-                              'For Reschedule': 'text-blue-600 dark:text-blue-400',
-                              'Partially Approved': 'text-sky-600 dark:text-sky-400',
-                          };
-
-
-
-                          const verdictColor = actionColor[request.recommended_action ?? ''] ?? 'text-foreground';
-
-                          return (
-                              <div className="mt-4 flex flex-col gap-3">
-                                  {/* Overall verdict card */}
-                                  <div className="rounded-xl border border-dashed p-5">
-                                      {isLoadingRecommendation ? (
-                                          <div className="flex flex-col gap-2">
-                                              <div className="flex items-center gap-1.5">
-                                                  <div className="h-4 w-4 animate-pulse rounded bg-muted" />
-                                                  <div className="h-3.5 w-24 animate-pulse rounded bg-muted" />
-                                              </div>
-                                              <div className="mx-auto h-8 w-48 animate-pulse rounded bg-muted" />
-                                              <div className="flex flex-col items-center gap-1.5 px-2">
-                                                  <div className="h-3 w-full animate-pulse rounded bg-muted" />
-                                                  <div className="h-3 w-5/6 animate-pulse rounded bg-muted" />
-                                              </div>
-                                          </div>
-                                      ) : (
-                                          <motion.div
-                                              initial={{ opacity: 0, y: 6 }}
-                                              animate={{ opacity: 1, y: 0 }}
-                                              transition={{ duration: 0.35, ease: 'easeOut' }}
-                                              className="flex flex-col gap-2"
-                                          >
-                                              <div className="flex items-center gap-1.5 text-muted-foreground">
-                                                  <Sparkles size={15} />
-                                                  <span className="text-sm">Overall Recommendation</span>
-                                              </div>
-                                              <p className={cn('text-center text-2xl font-bold', verdictColor)}>{request.recommended_action}</p>
-                                              {request.recommended_action_reason && (
-                                                  <p className="px-2 text-center text-sm leading-relaxed text-muted-foreground">
-                                                      {request.recommended_action_reason}
-                                                  </p>
-                                              )}
-                                          </motion.div>
-                                      )}
-                                  </div>
-
-                                  {/* Per-facility breakdown */}
-                                  {request.request_facilities?.length > 0 && (
-                                      <div className="flex flex-col gap-2">
-                                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-Facility Breakdown</p>
-                                          <div className="flex flex-col gap-2">
-                                              {request.request_facilities.map((rf) => {
-                                                  const facility = request.facilities.find((f) => f.id === rf.facility_id);
-                                                  const facilityName = facility?.name ?? `Facility #${rf.facility_id}`;
-                                                  const rfStatus = rf.ai_recommended_status;
-                                                  const rfReason = rf.ai_recommendation_reason;
-
-                                                  return (
-                                                      <div key={rf.id} className="rounded-lg border bg-muted/30 px-4 py-3">
-                                                          <div className="flex items-start justify-between gap-3">
-                                                              <div className="flex min-w-0 flex-col gap-0.5">
-                                                                  <span className="truncate text-sm font-medium">{facilityName}</span>
-                                                                  <span className="text-xs text-muted-foreground">
-                                                                      {rf.date_requested} · {rf.time_start} – {rf.time_end}
-                                                                  </span>
-                                                              </div>
-                                                              {isLoadingRecommendation || !rfStatus ? (
-                                                                  <div className="h-5 w-24 shrink-0 animate-pulse rounded-full bg-muted" />
-                                                              ) : (
-                                                                  <StatusTag requestStatus={rfStatus} variant="small" />
-                                                              )}
-                                                          </div>
-                                                          {!isLoadingRecommendation && rfReason && (
-                                                              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{rfReason}</p>
-                                                          )}
-                                                          {isLoadingRecommendation && (
-                                                              <div className="mt-1.5 h-3 w-3/4 animate-pulse rounded bg-muted" />
-                                                          )}
-                                                      </div>
-                                                  );
-                                              })}
-                                          </div>
-                                      </div>
-                                  )}
-                              </div>
-                          );
-                      })(),
+                      content: (
+                          <div className="mt-4">
+                              <RecommendationPanel request={request} isLoading={isLoadingRecommendation} variant="card" />
+                          </div>
+                      ),
                   },
               ]
             : []),
