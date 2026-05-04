@@ -10,7 +10,7 @@ export default function StatusTag({ requestStatus, variant = 'default' }: Status
         let statusColor;
         switch (status) {
             case 'Approved':
-                statusColor = 'bg-primary/20 border-primary text-primary';
+                statusColor = 'bg-primary/20 border-primary text-primary dark:bg-blue-400/15 dark:border-blue-400 dark:text-blue-300';
                 break;
             case 'Pending':
                 statusColor = 'border-foreground bg-gray-100/20';
@@ -19,7 +19,7 @@ export default function StatusTag({ requestStatus, variant = 'default' }: Status
                 statusColor = 'bg-destructive/20 border-destructive text-destructive';
                 break;
             case 'Conditionally Approved':
-                statusColor = 'bg-primary/20 border-primary/70 text-primary/70';
+                statusColor = 'bg-primary/20 border-primary/70 text-primary dark:bg-blue-400/10 dark:border-blue-400/60 dark:text-blue-300';
                 break;
             case 'For Reschedule':
                 statusColor = 'bg-slate-500/20 border-slate-500 text-slate-600 dark:text-slate-400';

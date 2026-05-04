@@ -12,8 +12,8 @@ interface RecommendationPanelProps {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-    Approved: 'text-primary',
-    'Conditionally Approved': 'text-primary/70',
+    Approved: 'text-primary dark:text-blue-300',
+    'Conditionally Approved': 'text-primary/70 dark:text-blue-300/70',
     Denied: 'text-destructive',
     'For Reschedule': 'text-slate-600 dark:text-slate-400',
     'Partially Approved': 'text-slate-600 dark:text-slate-400',

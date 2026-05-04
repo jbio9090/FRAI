@@ -1767,7 +1767,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         )}
                                     </div>
 
-                                    <div className="w-fullflex-col mt-12 flex gap-1">
+                                    <div className="w-full flex-col mt-12 flex gap-1">
                                         {data.facility_bookings.length === 0 && editingIndex === null && (
                                             <p className="text-xs text-destructive">At least one facility booking is required.</p>
                                         )}
