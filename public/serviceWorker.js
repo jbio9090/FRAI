@@ -9,26 +9,53 @@ self.addEventListener('push', function (event) {
         data: data.data || {},
         actions: data.actions || [],
         tag: data.tag || 'default-tag',
-        requireInteraction: data.requireInteraction || false
+        requireInteraction: data.requireInteraction || false,
     };
 
-    event.waitUntil(
-        self.registration.showNotification(
-            data.title || 'Notification',
-            options
-        )
-    );
+    event.waitUntil(self.registration.showNotification(data.title || 'Notification', options));
 });
 
 self.addEventListener('notificationclick', function (event) {
+    // Close the notification immediately upon interaction
     event.notification.close();
 
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then(function (clientList) {
-                return clients.openWindow(event.notification.data.url || '/');
+    const action = event.action;
+    const data = event.notification.data || {};
+
+    // Handle the Dynamic Recommended Action Click
+    if (action === 'recommended_action' && data.recommended_action_url) {
+        event.waitUntil(
+            fetch(data.recommended_action_url, {
+                method: 'POST',
+                headers: { Accept: 'application/json' },
             })
-    );
+                .then((response) => {
+                    if (response.ok) {
+                        self.registration.showNotification('Success: Request processed based on recommendation.');
+                    }
+                })
+                .catch((error) => console.error('Recommended action failed', error)),
+        );
+    } else if (action === 'deny_action' && data.deny_url) {
+        event.waitUntil(
+            fetch(data.deny_url, {
+                method: 'POST',
+                headers: { Accept: 'application/json' },
+            })
+                .then((response) => {
+                    if (response.ok) {
+                        self.registration.showNotification('Request Denied');
+                    }
+                })
+                .catch((error) => console.error('Denial failed', error)),
+        );
+    } else {
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+                return clients.openWindow(data.url || '/');
+            }),
+        );
+    }
 });
 
 self.addEventListener('notificationclose', function (event) {

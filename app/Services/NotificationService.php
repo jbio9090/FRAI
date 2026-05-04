@@ -17,16 +17,20 @@ class NotificationService
     public function notifyAdmin(string $request_title, string $user_name, string $request_id)
     {
         try {
+            $facilityRequest = \App\Models\Request::find($request_id); // Get the request model[cite: 3]
+
             foreach (User::role('admin')->get() as $user) {
                 $user->notify(new NewPendingRequest(
                     $request_title,
                     $user_name,
-                    route('requests.detail', [$request_id])
+                    route('requests.detail', [$request_id]),
+                    $request_id,
+                    $user->id, // Pass current admin ID for the signed URL
+                    $facilityRequest->recommended_action // Pass the recommendation enum[cite: 3]
                 ));
             }
         } catch (\Exception $e) {
             Log::error('Push notification failed: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 

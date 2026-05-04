@@ -18,6 +18,10 @@ Route::get('/requests/{id}/email-action/{action}', [RequestController::class, 'h
     ->middleware('signed')
     ->name('requests.email-action');
 
+Route::post('/requests/{id}/push-action/{action}', [RequestController::class, 'handleSignedPushAction'])
+    ->name('requests.push_action')
+    ->middleware('signed');
+
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
 

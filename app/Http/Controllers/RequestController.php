@@ -396,7 +396,7 @@ class RequestController extends Controller
 
         return back()->with('success', 'Facility status updated successfully.');
     }
-    
+
     public function handleSignedEmailAction(Request $request, int $id, string $action)
     {
         abort_unless(in_array($action, ['approve', 'for_reschedule'], true), 404);
@@ -457,5 +457,48 @@ class RequestController extends Controller
             'requestTitle' => $facilityRequest->title,
             'detailUrl' => route('requests.detail', ['request_id' => $facilityRequest->id]),
         ]);
+    }
+
+    public function handleSignedPushAction(Request $request, int $id, string $action)
+    {
+        abort_unless(in_array($action, ['approve', 'reject'], true), 404);
+
+        $admin = User::find($request->integer('admin_id'));
+        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+
+        abort_unless(auth()->onceUsingId($admin->id), 403);
+
+        $facilityRequest = \App\Models\Request::findOrFail($id);
+
+        if ($facilityRequest->status !== \App\Enums\RequestStatus::PENDING) {
+            return response()->json(['message' => 'Request already processed'], 400);
+        }
+
+        if ($action === 'approve') {
+            $facilityRequest = $this->service->approve($id);
+
+            $facilityRequest->comments()->create([
+                'body' => 'Approved from Web Push notification.',
+                'user_id' => $admin->id,
+            ]);
+
+            $this->notification->notifyUser($facilityRequest);
+            return response()->json(['message' => 'Request Approved']);
+        }
+
+        $facilityRequest->update([
+            'status' => \App\Enums\RequestStatus::DENIED,
+            'processed_by' => $admin->id,
+            'processed_at' => now(),
+        ]);
+
+        $facilityRequest->comments()->create([
+            'body' => 'Rejected from Web Push notification.',
+            'user_id' => $admin->id,
+        ]);
+
+        $this->notification->notifyUser($facilityRequest->fresh());
+
+        return response()->json(['message' => 'Request Rejected']);
     }
 }

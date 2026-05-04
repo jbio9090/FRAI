@@ -32,7 +32,7 @@ class Reschedule extends Notification implements ShouldQueue
     {
         return (new WebPushMessage)
             ->title("This Request needs recheduling" . $this->request_title)
-            ->icon('/app-icon.png')
+            ->icon('/FRAI.png')
             ->body("Another event will be ongoing on $this->facility on selected $this->date $this->time")
             ->action('View your request', 'view_request')
             ->options(['TTL' => 1000])
