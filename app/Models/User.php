@@ -15,19 +15,19 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, HasRoles, Notifiable, HasPushSubscriptions, Notifiable;
+    use HasFactory, HasRoles, Notifiable, HasPushSubscriptions;
 
     /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
      */
-protected $fillable = [
+    protected $fillable = [
         'name',
         'email',
         'password',
         'profile',
-        'force_password_change', 
+        'force_password_change',
     ];
 
     /**

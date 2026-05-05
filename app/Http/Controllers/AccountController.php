@@ -37,7 +37,6 @@ class AccountController extends Controller
         $validated = $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8',
             'role'     => 'required|string|exists:roles,name',
             'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
@@ -47,12 +46,19 @@ class AccountController extends Controller
             $validated['profile'] = basename($path);
         }
 
-        $validated['password'] = Hash::make($validated['password']);
+        $tempPassword = Str::random(10);
+        $validated['password'] = Hash::make($tempPassword);
+        $validated['force_password_change'] = true;
 
         $user = User::create($validated);
         $user->assignRole($validated['role']);
 
-        return redirect()->route("accounts.index");
+        return redirect()->route("accounts.index")
+            ->with('temp_password_reset', [
+                'temp_password' => $tempPassword,
+                'target_user' => $user->name,
+                'context' => 'create',
+            ]);
     }
 
     public function update(Request $request, User $user): RedirectResponse
@@ -129,6 +135,10 @@ class AccountController extends Controller
 
         return redirect()
             ->route('accounts.index')
-            ->with('temp_password_reset', ['temp_password' => $tempPassword, 'target_user' => $user->name]);
+            ->with('temp_password_reset', [
+                'temp_password' => $tempPassword,
+                'target_user' => $user->name,
+                'context' => 'reset',
+            ]);
     }
 }
