@@ -55,6 +55,9 @@ class NewPendingRequest extends Notification implements ShouldQueue
             ['id' => $this->request_id, 'action' => 'reject', 'admin_id' => $this->admin_id]
         );
 
+        // NOTE: scheme must match when validating signed URLs. Configure APP_URL (or generate
+        // signed URLs with the correct scheme) so the route signature remains valid.
+
         return (new WebPushMessage)
             ->title($this->request_title)
             ->icon('/FRAI.png')

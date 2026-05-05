@@ -107,7 +107,6 @@ export function BookingCard({ booking, index, onEdit, onRemove, className, showA
             { preserveScroll: true },
         );
     };
-    console.log(booking);
 
     return (
         <div

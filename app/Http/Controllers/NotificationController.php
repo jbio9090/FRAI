@@ -74,4 +74,6 @@ class NotificationController extends Controller
 
         return redirect()->back()->with(['message' => 'Notification queued']);
     }
+
+    
 }
