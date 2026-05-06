@@ -214,7 +214,7 @@ class RequestController extends Controller
 
         $saved_request = $this->service->create($validated);
 
-        ProcessRequestRecommendation::dispatch($saved_request, $validated['facility_bookings']);
+        ProcessRequestRecommendation::dispatch($saved_request);
 
         $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
 
@@ -312,7 +312,7 @@ class RequestController extends Controller
 
         $updated = $this->service->update($validated, $request->id);
 
-        ProcessRequestRecommendation::dispatch($updated, $validated['facility_bookings']);
+        ProcessRequestRecommendation::dispatch($updated);
 
         return redirect()->route('requests.detail', $request->id);
     }
