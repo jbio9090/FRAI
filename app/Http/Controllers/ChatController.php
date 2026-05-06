@@ -3352,7 +3352,7 @@ class ChatController extends Controller
                 return $facilityRequest;
             });
 
-            ProcessRequestRecommendation::dispatch($facilityRequest, $validated['facility_bookings']);
+            ProcessRequestRecommendation::dispatch($facilityRequest);
 
             $this->clearSession();
 

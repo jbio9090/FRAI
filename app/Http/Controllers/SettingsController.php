@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Hash;
+use Inertia\Inertia;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
 
@@ -54,6 +54,24 @@ class SettingsController extends Controller
         }
 
         return back()->with('success', 'Profile picture removed.');
+    }
+
+    public function updateAdminEmailNotifications(Request $request)
+    {
+        $validated = $request->validate([
+            'subscribed' => ['required', 'boolean'],
+        ]);
+
+        $request->user()->forceFill([
+            'admin_email_notifications_enabled' => $validated['subscribed'],
+        ])->save();
+
+        return back()->with(
+            'success',
+            $validated['subscribed']
+                ? 'Email notifications enabled.'
+                : 'Email notifications disabled.'
+        );
     }
 
     public function changePassword(Request $request)
