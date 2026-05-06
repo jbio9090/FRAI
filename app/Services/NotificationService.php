@@ -40,6 +40,7 @@ class NotificationService
             $request->loadMissing(['user', 'files']);
 
             User::role('admin')
+                ->where('admin_email_notifications_enabled', true)
                 ->whereNotNull('email')
                 ->get()
                 ->filter(fn (User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))

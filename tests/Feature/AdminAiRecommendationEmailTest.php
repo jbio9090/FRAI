@@ -24,16 +24,28 @@ class AdminAiRecommendationEmailTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_ai_recommendation_email_is_sent_to_valid_admin_emails(): void
+    public function test_admin_ai_recommendation_email_is_sent_to_subscribed_valid_admin_emails(): void
     {
         Notification::fake();
         $this->setUpRoles();
 
-        $admin = User::factory()->create(['email' => 'admin@example.com']);
+        $admin = User::factory()->create([
+            'email' => 'admin@example.com',
+            'admin_email_notifications_enabled' => true,
+        ]);
         $admin->assignRole('admin');
 
-        $invalidAdmin = User::factory()->create(['email' => 'not-an-email']);
+        $invalidAdmin = User::factory()->create([
+            'email' => 'not-an-email',
+            'admin_email_notifications_enabled' => true,
+        ]);
         $invalidAdmin->assignRole('admin');
+
+        $unsubscribedAdmin = User::factory()->create([
+            'email' => 'unsubscribed@example.com',
+            'admin_email_notifications_enabled' => false,
+        ]);
+        $unsubscribedAdmin->assignRole('admin');
 
         $requester = User::factory()->create();
         $facilityRequest = FacilityRequest::factory()->create([
@@ -47,8 +59,6 @@ class AdminAiRecommendationEmailTest extends TestCase
 
         Notification::assertSentTo($admin, AdminAiRecommendationReady::class);
         Notification::assertNotSentTo($invalidAdmin, AdminAiRecommendationReady::class);
-<<<<<<< Updated upstream
-=======
         Notification::assertNotSentTo($unsubscribedAdmin, AdminAiRecommendationReady::class);
     }
 
@@ -213,7 +223,6 @@ class AdminAiRecommendationEmailTest extends TestCase
             ->assertForbidden();
 
         $this->assertFalse($user->fresh()->admin_email_notifications_enabled);
->>>>>>> Stashed changes
     }
 
     public function test_admin_ai_recommendation_email_contains_request_details_and_links(): void

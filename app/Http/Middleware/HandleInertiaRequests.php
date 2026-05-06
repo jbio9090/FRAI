@@ -44,6 +44,7 @@ class HandleInertiaRequests extends Middleware
                     'profile' => $request->user()->profile,
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+                    'admin_email_notifications_enabled' => $request->user()->admin_email_notifications_enabled,
                 ] : null,
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),

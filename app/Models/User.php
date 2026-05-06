@@ -48,6 +48,7 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'admin_email_notifications_enabled' => 'boolean',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];

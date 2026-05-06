@@ -29,13 +29,14 @@ import {
 } from "@/components/ui/select";
 import DefaultLayout from '@/layout.tsx/default.';
 
-interface PageProps {
+interface PageProps extends Record<string, unknown> {
     auth: {
         user: {
             id: number;
             name: string;
             profile: string;
-            roles: string;
+            roles: string[];
+            admin_email_notifications_enabled: boolean;
         };
     };
 }
@@ -45,6 +46,7 @@ export default function Settings() {
     const [theme, setTheme] = useState(localStorage.theme);
     const [preview, setPreview] = useState<string | null>(null);
     const [pwDialogOpen, setPwDialogOpen] = useState(false);
+    const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data, setData, post, processing, errors, reset } = useForm<{ profile: File | null }>({
@@ -118,6 +120,21 @@ export default function Settings() {
     };
 
     const hasCustomPicture = auth.user.profile !== 'default.png';
+    const isAdmin = auth.user.roles?.includes('admin') ?? false;
+
+    const handleAdminEmailNotificationToggle = () => {
+        router.post(
+            route('settings.admin-email-notifications'),
+            {
+                subscribed: !auth.user.admin_email_notifications_enabled,
+            },
+            {
+                preserveScroll: true,
+                onStart: () => setEmailNotificationProcessing(true),
+                onFinish: () => setEmailNotificationProcessing(false),
+            },
+        );
+    };
 
     return (
         <DefaultLayout>
@@ -142,7 +159,7 @@ export default function Settings() {
 
                     <div className="flex flex-col gap-0.5 min-w-0">
                         <span className="text-sm font-semibold leading-none truncate">{auth.user.name}</span>
-                        <span className="text-sm text-muted-foreground capitalize">{auth.user.roles}</span>
+                        <span className="text-sm text-muted-foreground capitalize">{auth.user.roles.join(', ')}</span>
                     </div>
 
                     <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -263,6 +280,25 @@ export default function Settings() {
                 </Dialog>
 
                 <PushNotifications />
+
+                {isAdmin && (
+                    <div className="flex justify-between items-center gap-4">
+                        <span className="text-sm font-semibold">Email Notifications</span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={handleAdminEmailNotificationToggle}
+                            disabled={emailNotificationProcessing}
+                        >
+                            {emailNotificationProcessing
+                                ? 'Saving...'
+                                : auth.user.admin_email_notifications_enabled
+                                    ? 'Unsubscribe'
+                                    : 'Subscribe'}
+                        </Button>
+                    </div>
+                )}
 
                 <div className="flex justify-between items-center">
                     <span className="text-sm font-semibold">Theme</span>
