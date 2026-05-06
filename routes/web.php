@@ -120,6 +120,7 @@ Route::middleware('auth')->group(function () {
         Route::middleware(['auth'])->group(function () {
             Route::post('/accounts/{user}/reset-password', [\App\Http\Controllers\AccountController::class, 'resetPassword'])->name('accounts.reset-password');
         });
+        Route::post('/accounts/batch', [AccountController::class, 'batchStore'])->name('accounts.batch-store');
     });
 
     Route::get('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');

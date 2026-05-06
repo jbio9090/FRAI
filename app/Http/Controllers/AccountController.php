@@ -10,15 +10,40 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
 
 class AccountController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with('roles')->get()->map(fn($user) => [
+        $perPage = (int) $request->input('per_page', 10);
+
+        $query = User::with('roles');
+
+        if ($search = $request->input('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ILIKE', "%{$search}%")
+                  ->orWhere('email', 'ILIKE', "%{$search}%");
+            });
+        }
+
+        if ($sort = $request->input('sort')) {
+            [$col, $dir] = explode('-', $sort) + [1 => 'asc'];
+            $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
+            if (in_array($col, ['name', 'email'])) {
+                $query->orderBy($col, $dir);
+            }
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        $users = $query->paginate($perPage)->appends($request->query());
+
+        // Transform collection items for the frontend
+        $users->getCollection()->transform(fn($user) => [
             'id'      => $user->id,
             'name'    => $user->name,
             'email'   => $user->email,
@@ -26,9 +51,9 @@ class AccountController extends Controller
             'profile' => $user->profile,
         ]);
 
-        return Inertia::render("accounts/index", [
-            "users" => $users,
-            "roles" => Role::pluck('name'),
+        return Inertia::render('accounts/index', [
+            'users' => $users,
+            'roles' => Role::pluck('name')->map(fn($role) => strtolower($role)),
         ]);
     }
 
@@ -59,6 +84,103 @@ class AccountController extends Controller
                 'target_user' => $user->name,
                 'context' => 'create',
             ]);
+    }
+
+    /**
+     * Create multiple accounts from a CSV-parsed payload.
+     *
+     * Expected request body:
+     *   accounts: [{ name, email, role }, ...]
+     *
+     * Returns flash data with:
+     *   batch_results.created  – successfully created accounts + temp passwords
+     *   batch_results.failed   – rows that failed validation or DB insert
+     */
+    public function batchStore(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'accounts'          => 'required|array|min:1|max:500',
+            'accounts.*.name'   => 'required|string|max:255',
+            'accounts.*.email'  => 'required|email|max:255',
+            'accounts.*.role'   => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                        $fail("The selected role {$value} is invalid.");
+                    }
+                },
+            ],
+        ]);
+
+        $created = [];
+        $failed  = [];
+
+        foreach ($request->accounts as $index => $account) {
+            $rowNumber = $index + 1;
+            $role = Role::where('name', 'ILIKE', $account['role'])->first();
+
+            $validator = Validator::make($account, [
+                'email' => 'unique:users,email',
+            ]);
+
+            if ($validator->fails()) {
+                $failed[] = [
+                    'row'    => $rowNumber,
+                    'name'   => $account['name'],
+                    'email'  => $account['email'],
+                    'reason' => 'Email already exists: ' . $account['email'],
+                ];
+                continue;
+            }
+
+            $alreadyCreated = collect($created)->pluck('email')->contains($account['email']);
+            if ($alreadyCreated) {
+                $failed[] = [
+                    'row'    => $rowNumber,
+                    'name'   => $account['name'],
+                    'email'  => $account['email'],
+                    'reason' => 'Duplicate email in CSV: ' . $account['email'],
+                ];
+                continue;
+            }
+
+            try {
+                $tempPassword = Str::random(10);
+
+                $user = DB::transaction(function () use ($account, $tempPassword, $role) {
+                    $user = User::create([
+                        'name'                  => $account['name'],
+                        'email'                 => $account['email'],
+                        'password'              => Hash::make($tempPassword),
+                        'force_password_change' => true,
+                    ]);
+
+                    if ($role) {
+                        $user->assignRole($role);
+                    }
+
+                    return $user;
+                });
+
+                $created[] = [
+                    'name'          => $user->name,
+                    'email'         => $user->email,
+                    'temp_password' => $tempPassword,
+                ];
+            } catch (\Throwable $e) {
+                $failed[] = [
+                    'row'    => $rowNumber,
+                    'name'   => $account['name'],
+                    'email'  => $account['email'],
+                    'reason' => 'Unexpected error: ' . $e->getMessage(),
+                ];
+            }
+        }
+
+        return redirect()
+            ->route('accounts.index')
+            ->with('batch_results', compact('created', 'failed'));
     }
 
     public function update(Request $request, User $user): RedirectResponse
