@@ -1,20 +1,18 @@
-import { useState, useRef, useEffect } from "react";
 import { usePage } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key } from "lucide-react";
-import DefaultLayout from "@/layout.tsx/default.";
+import { useState, useRef, useEffect } from "react";
+import AvatarWithInitials from "@/components/avatar-with-initials";
 import { Button } from "@/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { router } from "@inertiajs/react";
-import AvatarWithInitials from "@/components/avatar-with-initials";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
 import {
     Select,
     SelectContent,
@@ -23,13 +21,15 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@/components/ui/dialog";
-import { User } from "@/types";
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import DefaultLayout from "@/layout.tsx/default.";
+import type { User } from "@/types";
 
 interface Props {
     users: User[];
@@ -39,7 +39,6 @@ interface Props {
 interface UserForm {
     username: string;
     email: string;
-    password: string;
     role: string;
     profile: File | null;
     preview?: string;
@@ -60,11 +59,12 @@ interface PageProps {
         temp_password_reset?: {
             temp_password: string;
             target_user: string;
+            context: 'create' | 'reset';
         }
     };
 }
 
-const emptyForm: UserForm = { username: "", email: "", password: "", role: "", profile: null };
+const emptyForm: UserForm = { username: "", email: "", role: "", profile: null };
 
 export default function AccountsPage({ users, roles }: Props) {
     const [isAddOpen, setIsAddOpen] = useState(false);
@@ -128,7 +128,6 @@ export default function AccountsPage({ users, roles }: Props) {
         setEditForm({
             username: user.name,
             email: user.email,
-            password: "",
             role: user.role,
             profile: null,
             preview: undefined
@@ -143,7 +142,6 @@ export default function AccountsPage({ users, roles }: Props) {
             _method: 'put',
             name: editForm.username,
             email: editForm.email,
-            password: editForm.password || undefined,
             role: editForm.role,
             profile: editForm.profile,
         }, {
@@ -223,21 +221,6 @@ export default function AccountsPage({ users, roles }: Props) {
                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                 </div>
 
-                {/* ONLY show password field if NOT editing */}
-                {!isEdit && (
-                    <div className="flex flex-col gap-1.5">
-                        <Label>Password</Label>
-                        <Input
-                            type="password"
-                            placeholder="Enter password"
-                            value={form.password}
-                            className={errors.password ? "border-destructive" : ""}
-                            onChange={(e) => onChange({ ...form, password: e.target.value })}
-                        />
-                        {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
-                    </div>
-                )}
-
                 <div className="flex flex-col gap-1.5">
                     <Label>Role</Label>
                     <Select value={form.role} onValueChange={(v) => onChange({ ...form, role: v })}>
@@ -253,6 +236,12 @@ export default function AccountsPage({ users, roles }: Props) {
                         </SelectContent>
                     </Select>
                 </div>
+
+                {!isEdit && (
+                    <div className="flex flex-col gap-1.5 mb-3 mt-2">
+                        <p className="text-center text-sm text-muted-foreground">A random password will appear once the account has been created. Copy it and send to the user</p>
+                    </div>
+                )}
             </div>
         </>
     );
@@ -277,14 +266,23 @@ export default function AccountsPage({ users, roles }: Props) {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Key className="h-5 w-5 text-primary" />
-                            Temporary Password Generated
+                            {flash?.temp_password_reset?.context === 'create'
+                                ? "New Account Created"
+                                : "Password Reset Successful"}
                         </DialogTitle>
                     </DialogHeader>
 
                     <div className="flex flex-col gap-4 py-2">
                         <p className="text-sm text-muted-foreground leading-relaxed">
-                            The password for <strong className="text-foreground">{flash?.temp_password_reset?.target_user}</strong> has been
-                            reset. Copy this and share it securely — the user must change it on next login.
+                            {flash?.temp_password_reset?.context === 'create' ? (
+                                <>
+                                    The account for <strong className="text-foreground">{flash?.temp_password_reset?.target_user}</strong> has been successfully created. Copy the temporary password below and share it securely. The user must change it on their first login.
+                                </>
+                            ) : (
+                                <>
+                                    The password for <strong className="text-foreground">{flash?.temp_password_reset?.target_user}</strong> has been reset. Copy this and share it securely. The user must change it on their next login.
+                                </>
+                            )}
                         </p>
 
                         <div className="flex items-center space-x-2">

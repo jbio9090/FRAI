@@ -1,6 +1,6 @@
-import { User } from "@/types"
-import AvatarWithInitials from "./avatar-with-initials"
 import moment from "moment";
+import type { User } from "@/types"
+import AvatarWithInitials from "./avatar-with-initials"
 
 export default function Comment({ comment }: {
     comment: {

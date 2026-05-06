@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 
 export default function PushNotifications() {

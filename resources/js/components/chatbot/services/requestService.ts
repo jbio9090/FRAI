@@ -1,4 +1,4 @@
-import { CreateRequestPayload } from '../types';
+import type { CreateRequestPayload } from '../types';
 import { getCsrfToken } from '../utils/csrfToken';
 
 export async function createRequest(payload: CreateRequestPayload): Promise<{ request_id: string }> {

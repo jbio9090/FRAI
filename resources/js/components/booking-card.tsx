@@ -1,8 +1,11 @@
-import { format } from "date-fns";
-import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, ArrowLeftRight, MapPin } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { EquipmentConflict } from "@/types/equipment";
-import { Link } from "@inertiajs/react";
+import { router, Link } from '@inertiajs/react';
+import { format } from 'date-fns';
+import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, ArrowLeftRight, MapPin, MoreHorizontal } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { usePermission } from '@/hooks/use-permission';
+import type { EquipmentConflict } from '@/types/equipment';
+import StatusTag from './status-tag';
 
 interface BorrowedEquipmentRequest {
     equipment_id: number;
@@ -22,7 +25,7 @@ interface EquipmentRequest {
 }
 
 interface BookingSchedule {
-    request_id: number;
+    request_id?: number;
     request_title: string;
     status: string;
     time_start: string;
@@ -30,7 +33,7 @@ interface BookingSchedule {
 }
 
 interface FacilityBooking {
-    request_id: number;
+    request_id?: number;
     facility_id: number;
     facility_name: string;
     date: string;
@@ -41,9 +44,10 @@ interface FacilityBooking {
     conflicts: BookingSchedule[];
     external_equipment: { name: string }[];
     expected_capacity: number | null;
-    facility_capacity: number | null;
+    facility_capacity?: number | null;
     has_outsiders: boolean;
     equipment_conflicts: Record<number, EquipmentConflict[]>;
+    request_facility_status?: string;
 }
 
 interface BookingCardProps {
@@ -52,68 +56,93 @@ interface BookingCardProps {
     onEdit?: (index: number) => void;
     onRemove?: (index: number) => void;
     className?: string;
+    showActions?: boolean;
+    /** When true the card is the one currently being edited in the form above */
+    isEditing?: boolean;
 }
 
 function formatTime(time: string): string {
     return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
+        hour: 'numeric',
+        minute: '2-digit',
         hour12: true,
     });
 }
 
-function groupBorrowed(
-    borrowed: BorrowedEquipmentRequest[]
-): Record<string, BorrowedEquipmentRequest[]> {
+function groupBorrowed(borrowed: BorrowedEquipmentRequest[]): Record<string, BorrowedEquipmentRequest[]> {
     return borrowed.reduce(
         (groups, eq) => ({
             ...groups,
             [eq.equipment_name]: [...(groups[eq.equipment_name] ?? []), eq],
         }),
-        {} as Record<string, BorrowedEquipmentRequest[]>
+        {} as Record<string, BorrowedEquipmentRequest[]>,
     );
 }
 
-export function BookingCard({ booking, index, onEdit, onRemove, className }: BookingCardProps) {
+export function BookingCard({ booking, index, onEdit, onRemove, className, showActions = true, isEditing = false }: BookingCardProps) {
+    const { hasPermission } = usePermission();
+
     const hasOwnEquipment = booking.equipment.length > 0;
     const hasBorrowedEquipment = (booking.borrowed_equipment ?? []).length > 0;
     const hasExternalEquipment = (booking.external_equipment ?? []).length > 0;
     const hasAnyEquipment = hasOwnEquipment || hasBorrowedEquipment || hasExternalEquipment;
-    const hasConflicts =
-        booking.conflicts.length > 0 ||
-        Object.keys(booking.equipment_conflicts ?? {}).length > 0;
+    const hasConflicts = booking.conflicts.length > 0 || Object.keys(booking.equipment_conflicts ?? {}).length > 0;
 
     const isCapacityExceeded =
-        booking.expected_capacity != null &&
-        booking.facility_capacity != null &&
-        booking.expected_capacity > booking.facility_capacity;
+        booking.expected_capacity != null && booking.facility_capacity != null && booking.expected_capacity > booking.facility_capacity;
 
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
-    console.log(booking);
-    
+
+    const canMakeDecision = hasPermission('approve requests') && showActions;
+
+    const handleAction = (action: string) => {
+        router.post(
+            route('requests.facilities.updateStatus', {
+                request: booking.request_id,
+                facility: booking.facility_id,
+            }),
+            {
+                action,
+            },
+            { preserveScroll: true },
+        );
+    };
 
     return (
-        <div className={`group relative rounded-lg border border-border transition-shadow ${className ?? ""}`}>
+        <div
+            className={`group relative flex flex-col rounded-lg border transition-shadow ${
+                isEditing ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border bg-card'
+            } ${className ?? ''}`}
+        >
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 px-4 py-3.5 border-b bg-card">
+            <div className="flex items-start justify-between gap-3 border-b px-4 py-3.5">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <Link className="font-semibold tracking-tight text-lg text-foreground truncate hover:underline" href={route("facility.detail", [booking.facility_id])}>
+                        <Link
+                            className="truncate text-lg font-semibold tracking-tight text-foreground hover:underline"
+                            href={route('facility.detail', [booking.facility_id])}
+                        >
                             {booking.facility_name}
                         </Link>
-                        {booking.has_outsiders && (
-                            <span className="text-amber-600 dark:text-amber-400 bg-amber-100 rounded-full text-xs px-1 font-medium">
-                                Outsiders
+                        {isEditing && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                                <Pen size={9} />
+                                Editing
                             </span>
                         )}
+                        {booking.request_facility_status && <StatusTag requestStatus={booking.request_facility_status} variant="small" />}
+
+                        {booking.has_outsiders && (
+                            <span className="rounded-full bg-amber-100 px-1 text-xs font-medium text-amber-600 dark:text-amber-400">Outsiders</span>
+                        )}
                         {hasConflicts && (
-                            <span className="flex items-center gap-1 bg-destructive/10 text-destructive font-medium rounded-full text-xs px-1">
+                            <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-1 text-xs font-medium text-destructive">
                                 <AlertCircleIcon size={10} />
                                 Conflicts
                             </span>
                         )}
                         {isCapacityExceeded && (
-                            <span className="flex items-center gap-1 bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 font-medium rounded-full text-xs px-1">
+                            <span className="flex items-center gap-1 rounded-full bg-orange-100 px-1 text-xs font-medium text-orange-600 dark:bg-orange-950/40 dark:text-orange-400">
                                 <Users size={10} />
                                 Capacity Exceeded
                             </span>
@@ -122,11 +151,13 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                             <CalendarIcon size={11} />
-                            {format(booking.date, "PPP")}
+                            <span className="text-foreground">{format(booking.date, 'PPP')}</span>
                         </span>
                         <span className="flex items-center gap-1">
                             <Clock size={11} />
-                            {formatTime(booking.time_start)} – {formatTime(booking.time_end)}
+                            <span className="text-foreground">
+                                {formatTime(booking.time_start)} – {formatTime(booking.time_end)}
+                            </span>
                         </span>
                         {booking.expected_capacity && (
                             <span className="flex items-center gap-1">
@@ -138,7 +169,7 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
                 </div>
 
                 {(onEdit || onRemove) && (
-                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                         {onEdit && (
                             <Button
                                 type="button"
@@ -165,67 +196,106 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
                 )}
             </div>
 
-            {/* Conflicts */}
-            {hasConflicts && (
-                <div className="space-y-1.5 px-4 py-2">
-                    {booking.conflicts.map((conflict, i) => (
-                        <p key={i} className="text-sm text-destructive">
-                            Schedule conflict with{" "}
-                            <Link
-                                className="hover:underline font-bold"
-                                href={route("requests.detail", [conflict.request_id])}>
-                                <span>
-                                    "{conflict.request_title}"
-                                </span>
-                            </Link>
-                            {" "}({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
-                        </p>
-                    ))}
-                    {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
-                        conflicts.map((c, i) => {
-                            const eqName =
-                                booking.equipment.find((e) => e.equipment_id === Number(eqId))
-                                    ?.equipment_name ?? `Equipment #${eqId}`;
-                            return (
-                                <p key={`eq-${eqId}-${i}`} className="text-[12px] text-amber-600 dark:text-amber-400">
-                                    Equipment conflict ({eqName}) — also requested by "{c.request_title}" ({c.status})
-                                </p>
-                            );
-                        })
-                    )}
-                </div>
-            )}
+            {/* Content Body */}
+            <div className="flex-1 space-y-1.5 rounded-sm bg-background px-4">
+                {/* Conflicts */}
+                {hasConflicts && (
+                    <div className="my-2 mb-2 space-y-1.5">
+                        {booking.conflicts.map((conflict, i) => (
+                            <p key={i} className="text-sm text-destructive">
+                                Schedule conflict with{' '}
+                                {conflict.request_id ? (
+                                    <Link className="font-bold hover:underline" href={route('requests.detail', [conflict.request_id])}>
+                                        <span>"{conflict.request_title}"</span>
+                                    </Link>
+                                ) : (
+                                    <span className="font-bold">"{conflict.request_title}"</span>
+                                )}{' '}
+                                ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
+                            </p>
+                        ))}
+                        {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
+                            conflicts.map((c, i) => {
+                                const eqName = booking.equipment.find((e) => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
+                                return (
+                                    <p key={`eq-${eqId}-${i}`} className="text-[12px] text-amber-600 dark:text-amber-400">
+                                        Equipment conflict ({eqName}) — also requested by "{c.request_title}" ({c.status})
+                                    </p>
+                                );
+                            }),
+                        )}
+                    </div>
+                )}
 
-            {/* Equipment */}
-            {hasAnyEquipment && (
-                <div className="rounded-md space-y-2.5 px-4 py-3.5 bg-background">
-                    {hasOwnEquipment && (
-                        <EquipmentRow label="Facility">
-                            {booking.equipment.map((eq, i) => (
-                                <Chip key={i}>{eq.equipment_name} <strong>×{eq.quantity_needed}</strong></Chip>
-                            ))}
-                        </EquipmentRow>
-                    )}
-                    {hasBorrowedEquipment && (
-                        <EquipmentRow label="Borrowed">
-                            {Object.entries(borrowedGroups).map(([name, items]) => (
-                                <Chip key={name}>
-                                    {name} <strong>×{items.reduce((s, e) => s + e.quantity_needed, 0)}</strong>
-                                    <span className="text-muted-foreground/60 ml-1 flex items-center gap-0.5">
-                                        <MapPin size={10} />
-                                        {items.map((e) => e.source_facility_name).join(", ")}
-                                    </span>
-                                </Chip>
-                            ))}
-                        </EquipmentRow>
-                    )}
-                    {hasExternalEquipment && (
-                        <EquipmentRow label="External">
-                            {booking.external_equipment.map((eq, i) => (
-                                <Chip key={i} muted>{eq.name}</Chip>
-                            ))}
-                        </EquipmentRow>
-                    )}
+                {/* Equipment */}
+                {hasAnyEquipment && (
+                    <div className="my-2 space-y-2.5 rounded-md bg-background py-1">
+                        {hasOwnEquipment && (
+                            <EquipmentRow label="Facility">
+                                {booking.equipment.map((eq, i) => (
+                                    <Chip key={i}>
+                                        {eq.equipment_name} <strong>×{eq.quantity_needed}</strong>
+                                    </Chip>
+                                ))}
+                            </EquipmentRow>
+                        )}
+                        {hasBorrowedEquipment && (
+                            <EquipmentRow label="Borrowed">
+                                {Object.entries(borrowedGroups).map(([name, items]) => (
+                                    <Chip key={name}>
+                                        {name} <strong>×{items.reduce((s, e) => s + e.quantity_needed, 0)}</strong>
+                                        <span className="ml-1 flex items-center gap-0.5 text-muted-foreground/60">
+                                            <MapPin size={10} />
+                                            {items.map((e) => e.source_facility_name).join(', ')}
+                                        </span>
+                                    </Chip>
+                                ))}
+                            </EquipmentRow>
+                        )}
+                        {hasExternalEquipment && (
+                            <EquipmentRow label="External">
+                                {booking.external_equipment.map((eq, i) => (
+                                    <Chip key={i} muted>
+                                        {eq.name}
+                                    </Chip>
+                                ))}
+                            </EquipmentRow>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Individual Facility Decision Actions Footer */}
+            {canMakeDecision && (
+                <div className="flex items-center justify-between border-t border-border bg-background bg-muted/20 px-4 py-2.5">
+                    <span className="text-xs font-medium text-muted-foreground">Facility Decision</span>
+                    <div className="flex items-center gap-2">
+                        <Button onClick={() => handleAction('approve')} size="sm" className="h-7 px-3 text-xs">
+                            Approve
+                        </Button>
+                        <Button
+                            onClick={() => handleAction('reject')}
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-3 text-xs hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                            Deny
+                        </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                                    <MoreHorizontal size={14} />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuGroup className="text-sm *:cursor-pointer">
+                                    <DropdownMenuItem onClick={() => handleAction('conditionally_approve')}>Conditionally Approve</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleAction('for_reschedule')}>Mark for Reschedule</DropdownMenuItem>
+                                </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
             )}
         </div>
@@ -235,25 +305,21 @@ export function BookingCard({ booking, index, onEdit, onRemove, className }: Boo
 function EquipmentRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="flex flex-col gap-1">
-            {label && (
-                <span className="text-xs text-muted-foreground font-semibold">
-                    {label}
-                </span>
-            )}
+            {label && <span className="text-xs font-semibold text-muted-foreground">{label}</span>}
             <div className="flex items-start gap-3">
                 <div className="flex flex-wrap gap-1">{children}</div>
             </div>
         </div>
-
     );
 }
 
 function Chip({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
     return (
-        <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-sm border ${muted
-            ? "border-border/40 text-muted-foreground"
-            : "border-border/50 text-foreground/80"
-            }`}>
+        <span
+            className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-sm ${
+                muted ? 'border-border/40 text-muted-foreground' : 'border-border/50 text-foreground/80'
+            }`}
+        >
             {children}
         </span>
     );

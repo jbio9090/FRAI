@@ -15,7 +15,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, HasPushSubscriptions, HasRoles, Notifiable;
+    use HasFactory, HasRoles, Notifiable, HasPushSubscriptions;
 
     /**
      * The attributes that are mass assignable.
@@ -27,7 +27,6 @@ class User extends Authenticatable
         'email',
         'password',
         'profile',
-        'admin_email_notifications_enabled',
         'force_password_change',
     ];
 

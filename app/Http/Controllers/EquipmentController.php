@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Http\JsonResponse;
 use App\Models\Request as FacilityRequest;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 use Illuminate\Support\Carbon;
 
 class EquipmentController extends Controller

@@ -1,4 +1,4 @@
-import { FacilityEquipment } from "@/types/equipment";
+import type { FacilityEquipment } from '@/types/equipment';
 
 export interface Facility {
     id: number;

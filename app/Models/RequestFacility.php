@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Request as RequestModel;
+use App\Enums\RequestStatus;
 
 class RequestFacility extends Model
 {
@@ -15,6 +16,13 @@ class RequestFacility extends Model
         'time_end',
         'expected_capacity',
         'has_outsiders',
+        'status',
+        'ai_recommended_status',
+        'ai_recommendation_reason',
+    ];
+
+    protected $casts = [
+        'status' => RequestStatus::class,
     ];
 
     public function request()
@@ -30,5 +38,12 @@ class RequestFacility extends Model
     public function externalEquipments()
     {
         return $this->hasMany(ExternalEquipment::class);
+    }
+
+    public function equipment()
+    {
+        return $this->belongsToMany(Equipment::class, 'request_equipment', 'request_facility_id', 'equipment_id')
+            ->withPivot(['request_id', 'quantity_needed', 'is_borrowed', 'source_facility_id'])
+            ->withTimestamps();
     }
 }

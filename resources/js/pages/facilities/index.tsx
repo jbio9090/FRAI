@@ -1,19 +1,19 @@
-import { useState } from "react";
 import { router, usePage } from "@inertiajs/react";
 import { HousePlus, Trash2, Pencil, ChevronDown, Check } from "lucide-react";
-import {
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { ArrowDownUp, ArrowUp } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
     Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
-import { ArrowDownUp, ArrowUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import DefaultLayout from "@/layout.tsx/default.";
 
 interface Facility {

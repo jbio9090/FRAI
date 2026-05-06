@@ -7,7 +7,7 @@ use App\Models\RequestFile;
 use App\Models\User;
 use App\Notifications\AdminAiRecommendationReady;
 use App\Notifications\RequestResult;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;

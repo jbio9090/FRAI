@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use Inertia\Inertia;
+use Illuminate\Support\Facades\Hash;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 
 class SettingsController extends Controller
 {
@@ -27,8 +29,15 @@ class SettingsController extends Controller
             Storage::disk('public')->delete('profiles/'.$user->profile);
         }
 
-        $filename = $user->id.'_'.time().'.'.$request->file('profile')->extension();
-        $request->file('profile')->storeAs('profiles', $filename, 'public');
+        $filename = $user->id . '_' . time() . '.webp';
+
+        $manager = ImageManager::usingDriver(Driver::class);
+
+        $image = $manager->decode($request->file('profile')->getRealPath())
+            ->scale(width: 800, height: 800)
+            ->encodeUsingFileExtension('webp', quality:70);
+
+        Storage::disk('public')->put('profiles/' . $filename, $image);
 
         $user->update(['profile' => $filename]);
 
@@ -69,23 +78,5 @@ class SettingsController extends Controller
         Auth::logoutOtherDevices($request->password);
 
         return back()->with('success', 'Password changed successfully.');
-    }
-
-    public function updateAdminEmailNotifications(Request $request)
-    {
-        $validated = $request->validate([
-            'subscribed' => ['required', 'boolean'],
-        ]);
-
-        $request->user()->update([
-            'admin_email_notifications_enabled' => $validated['subscribed'],
-        ]);
-
-        return back()->with(
-            'success',
-            $validated['subscribed']
-                ? 'Email notifications subscribed.'
-                : 'Email notifications unsubscribed.'
-        );
     }
 }

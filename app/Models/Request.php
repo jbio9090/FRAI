@@ -6,8 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\Models\User;
-use App\PriorityLevel;
-use App\RequestStatus;
+use App\Enums\PriorityLevel;
+use App\Enums\RequestStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Request extends Model
@@ -50,6 +50,7 @@ class Request extends Model
         'approved_by' => 'array',
         'pending_equipment_conflict_request_ids'  => 'array',
         'approved_equipment_conflict_request_ids' => 'array',
+        'recommended_action' => RequestStatus::class,
     ];
 
     /* =========================================

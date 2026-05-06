@@ -8,6 +8,8 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\URL;
+use App\Enums\RequestStatus;
 
 class NewPendingRequest extends Notification implements ShouldQueue
 {
@@ -17,6 +19,9 @@ class NewPendingRequest extends Notification implements ShouldQueue
         protected string $request_title,
         protected string $user_name,
         protected string $url,
+        protected int $request_id,
+        protected int $admin_id,
+        protected ?RequestStatus $recommended_action = null
     ) {}
 
     public function via($notifiable)
@@ -26,22 +31,45 @@ class NewPendingRequest extends Notification implements ShouldQueue
 
     public function toWebPush($notifiable, $notification)
     {
+        $actionTitle = 'Approve';
+        $routeAction = 'approve';
+
+        if ($this->recommended_action) {
+            $actionTitle = $this->recommended_action->value;
+
+            $routeAction = match($this->recommended_action->name) {
+                'CONDITIONALLY_APPROVED' => 'conditionally_approve',
+                'FOR_RESCHEDULE' => 'for_reschedule',
+                'DENIED' => 'reject',
+                default => 'approve',
+            };
+        }
+
+        $recommendedUrl = URL::temporarySignedRoute(
+            'requests.push_action', now()->addHours(24),
+            ['id' => $this->request_id, 'action' => $routeAction, 'admin_id' => $this->admin_id]
+        );
+
+        $denyUrl = URL::temporarySignedRoute(
+            'requests.push_action', now()->addHours(24),
+            ['id' => $this->request_id, 'action' => 'reject', 'admin_id' => $this->admin_id]
+        );
+
+        // NOTE: scheme must match when validating signed URLs. Configure APP_URL (or generate
+        // signed URLs with the correct scheme) so the route signature remains valid.
+
         return (new WebPushMessage)
             ->title($this->request_title)
-            ->icon('/app-icon.png')
+            ->icon('/FRAI.png')
             ->body('Pending Request from ' . $this->user_name)
-            ->action('Approve', 'approve_request')
-            ->action('Deny', 'deny_request')
+            ->action($actionTitle, 'recommended_action') // Dynamic Action Button
+            ->action('Deny', 'deny_action')              // Secondary Action Button
             ->options(['TTL' => 1000])
-            ->data(["url" => $this->url])
+            ->data([
+                "url" => $this->url,
+                "recommended_action_url" => $recommendedUrl,
+                "deny_url" => $denyUrl
+            ])
             ->tag("pending-".$this->request_title . Date::now()->toString());
-        // ->vibrate();
-        // ->data(['id' => $notification->id])
-        // ->badge()
-        // ->dir()
-        // ->image()
-        // ->lang()
-        // ->renotify()
-        // ->requireInteraction()
     }
 }

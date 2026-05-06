@@ -8,7 +8,7 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
 use Illuminate\Support\Facades\Date;
-use App\RequestStatus;
+use App\Enums\RequestStatus;
 
 class RequestResult extends Notification implements ShouldQueue
 {
@@ -39,7 +39,7 @@ class RequestResult extends Notification implements ShouldQueue
 
         return (new WebPushMessage)
             ->title($this->request_title)
-            ->icon('/app-icon.png')
+            ->icon('/FRAI.png')
             ->body($status_message)
             ->action('View your request', 'view_request')
             ->options(['TTL' => 1000])

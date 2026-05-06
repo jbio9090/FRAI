@@ -1,4 +1,4 @@
-import { ChatRequest } from '../types';
+import type { ChatRequest } from '../types';
 import { getCsrfToken } from '../utils/csrfToken';
 
 function extractBookingPayloadFromText(content: string): string | null {

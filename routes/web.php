@@ -18,6 +18,10 @@ Route::get('/requests/{id}/email-action/{action}', [RequestController::class, 'h
     ->middleware('signed')
     ->name('requests.email-action');
 
+Route::get('/requests/{id}/push-action/{action}', [RequestController::class, 'handleSignedPushAction'])
+    ->name('requests.push_action')
+    ->middleware('signed');
+
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
 
@@ -45,14 +49,25 @@ Route::middleware('auth')->group(function () {
         Route::post('/requests/bulkAction', [RequestController::class, 'bulkAction'])->name('bulk.action');
         Route::post('/requests/{id}/hold', [RequestController::class, 'hold'])->name('requests.hold');
         Route::post('/requests/{id}/status', [RequestController::class, 'updateStatus'])->name('requests.updateStatus');
+
+        Route::post('/requests/{request}/facilities/{facility}/update-status', [RequestController::class, 'updateFacilityStatus'])
+            ->name('requests.facilities.updateStatus');
     });
 
     Route::get('/requests/{id}/recommendation', function ($id) {
-        $request = \App\Models\Request::findOrFail($id);
+        $request = \App\Models\Request::with('requestFacilities')->findOrFail($id);
 
         return response()->json([
             'recommended_action' => $request->getRawOriginal('recommended_action'),
             'recommended_action_reason' => $request->recommended_action_reason,
+            'request_status' => $request->getRawOriginal('status'),
+            'request_facilities' => $request->requestFacilities->map(fn ($rf) => [
+                'id' => $rf->id,
+                'facility_id' => $rf->facility_id,
+                'status' => $rf->getRawOriginal('status'),
+                'ai_recommended_status' => $rf->getRawOriginal('ai_recommended_status'),
+                'ai_recommendation_reason' => $rf->ai_recommendation_reason,
+            ]),
         ]);
     })->name('request.recommendation');
 

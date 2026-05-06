@@ -1,38 +1,28 @@
-import {
-    Calendar,
-    Clock,
-    SendHorizontal,
-    Pen,
-    CheckCircle,
-    XCircle,
-    ClipboardCheck,
-    MessageSquare,
-    Sparkles,
-    Download,
-} from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import DefaultLayout from '@/layout.tsx/default.';
-import { Request } from '@/types/request';
 import { Link, usePage } from '@inertiajs/react';
-import moment from 'moment';
-import AvatarWithInitials from '@/components/avatar-with-initials';
-import { Button } from '@/components/ui/button';
-import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { Textarea } from '@/components/ui/textarea';
-import Comment from '@/components/comment';
-import StatusTag from '@/components/status-tag';
+import { Calendar, Clock, SendHorizontal, Pen, CheckCircle, XCircle, ClipboardCheck, MessageSquare, Sparkles, Download } from 'lucide-react';
+import moment from 'moment';
+import { useState, useEffect } from 'react';
 import { ActivityFeed } from '@/components/activity-feed';
-import { usePermission } from '@/hooks/use-permission';
 import { BookingCard } from '@/components/booking-card';
+import { RecommendationPanel } from '@/components/request/recommendation-panel';
 import { cn } from '@/lib/utils';
 import AnimatedText from '@/components/animated-text';
 import { AttachedFileList } from '@/components/attached-file-list';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import SmartPagination from '@/components/SmartPagination';
+import AvatarWithInitials from '@/components/avatar-with-initials';
+import Comment from '@/components/comment';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
+import SmartPagination from '@/components/SmartPagination';
+import StatusTag from '@/components/status-tag';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { usePermission } from '@/hooks/use-permission';
+import DefaultLayout from '@/layout.tsx/default.';
+import type { Request } from '@/types/request';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -46,58 +36,118 @@ function RecommendationBadge({ action }: { action: RecommendedAction }) {
     const map: Record<string, { className: string; icon: React.ReactNode }> = {
         approved: {
             className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800',
-            icon: <CheckCircle className="w-3.5 h-3.5" />,
+            icon: <CheckCircle className="h-3.5 w-3.5" />,
         },
         'conditionally approved': {
             className: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800',
-            icon: <ClipboardCheck className="w-3.5 h-3.5" />,
+            icon: <ClipboardCheck className="h-3.5 w-3.5" />,
         },
         denied: {
             className: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
-            icon: <XCircle className="w-3.5 h-3.5" />,
+            icon: <XCircle className="h-3.5 w-3.5" />,
         },
         'for reschedule': {
             className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800',
-            icon: <Calendar className="w-3.5 h-3.5" />,
+            icon: <Calendar className="h-3.5 w-3.5" />,
         },
     };
 
     const key = action.toLowerCase();
     const style = map[key] ?? {
         className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800',
-        icon: <Sparkles className="w-3.5 h-3.5" />,
+        icon: <Sparkles className="h-3.5 w-3.5" />,
     };
 
     return (
-        <span className={cn(
-            'inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full border',
-            style.className
-        )}>
+        <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold', style.className)}>
             {style.icon}
             {action}
         </span>
     );
 }
 
-export default function RequestDetail({ request, auditLogs: auditLogsProp }: DetailProps) {
+export default function RequestDetail({ request: initialRequest, auditLogs: auditLogsProp }: DetailProps) {
     const auth = usePage().props.auth;
-    const [comment, setComment] = useState("");
+    const [comment, setComment] = useState('');
     const [isCommenting, setCommentInputState] = useState(false);
     const { hasRole } = usePermission();
-    const isAdmin = hasRole("admin");
+    const isAdmin = hasRole('admin');
 
     const [auditLogs, setAuditLogs] = useState(auditLogsProp?.data ?? []);
     const [currentPage, setCurrentPage] = useState(auditLogsProp?.current_page ?? 1);
     const [lastPage, setLastPage] = useState(auditLogsProp?.last_page ?? 1);
     const [totalLogs, setTotalLogs] = useState(auditLogsProp?.total ?? 0);
     const [logsLoading, setLogsLoading] = useState(false);
+    const [request, setRequest] = useState(initialRequest);
 
+    // True while we're still waiting for the AI recommendation to be generated.
+    const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(!initialRequest.recommended_action);
 
-    if (!request || !auditLogsProp) {
+    // True while any request_facility still has a null/pending status that we
+    // haven't received a definitive value for yet.
+    const facilitiesNeedPolling = (req: typeof initialRequest) => req.request_facilities?.some((rf) => rf.status == null) ?? false;
+    const [isLoadingFacilityStatuses, setIsLoadingFacilityStatuses] = useState(() => facilitiesNeedPolling(initialRequest));
+
+    const isPollingActive = isLoadingRecommendation || isLoadingFacilityStatuses;
+
+    useEffect(() => {
+        if (!isPollingActive) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(route('request.recommendation', [request.id]), {
+                    headers: { Accept: 'application/json' },
+                });
+
+                if (!res.ok) {
+                    console.error('Recommendation endpoint error:', res.status);
+                    return;
+                }
+
+                const data = await res.json();
+
+                setRequest((prev) => {
+                    // Merge updated facility statuses from the poll response into
+                    // the existing request_facilities array, preserving all other
+                    // fields (equipment, conflicts, etc.) that only the initial
+                    // server render knows about.
+                    const mergedFacilities = prev.request_facilities?.map((rf) => {
+                        const updated = data.request_facilities?.find((u: { id: number }) => u.id === rf.id);
+                        if (!updated) return rf;
+                        return {
+                            ...rf,
+                            status: updated.status ?? rf.status,
+                            ai_recommended_status: updated.ai_recommended_status ?? rf.ai_recommended_status,
+                            ai_recommendation_reason: updated.ai_recommendation_reason ?? rf.ai_recommendation_reason,
+                        };
+                    });
+
+                    return {
+                        ...prev,
+                        status: data.request_status ?? prev.status,
+                        recommended_action: data.recommended_action ?? prev.recommended_action,
+                        recommended_action_reason: data.recommended_action_reason ?? prev.recommended_action_reason,
+                        request_facilities: mergedFacilities ?? prev.request_facilities,
+                    };
+                });
+
+                if (data.recommended_action) setIsLoadingRecommendation(false);
+                if (!facilitiesNeedPolling({ ...request, request_facilities: data.request_facilities ?? request.request_facilities })) {
+                    setIsLoadingFacilityStatuses(false);
+                }
+            } catch (e) {
+                console.error('Polling error:', e);
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [request.id, isPollingActive]);
+
+    if (!initialRequest || !auditLogsProp) {
         return (
             <DefaultLayout>
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                    <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     Loading request...
                 </div>
             </DefaultLayout>
@@ -116,42 +166,50 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
         setLogsLoading(false);
     };
 
-    const canEdit = request.status === 'Pending'
-        && !request.on_hold
-        && request.user.id === auth.user.id;
+    const canEdit = request.status === 'Pending' && !request.on_hold && request.user.id === auth.user.id;
 
-    const canReschedule = request.status === 'For Reschedule'
-        && request.user.id === auth.user.id;
+    const canReschedule = request.status === 'For Reschedule' && request.user.id === auth.user.id;
 
     const handleAction = (action: string) => {
+        const inertiaOptions = {
+            preserveState: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                setComment('');
+                setCommentInputState(false);
+            },
+        };
+
         if (action === 'hold') {
-            router.post(route('requests.hold', request.id));
+            router.post(route('requests.hold', request.id), {}, inertiaOptions);
             return;
         }
 
         if (action === 'comment') {
-            if (comment.trim().length === 0) return;
-            router.post(route('requests.updateStatus', request.id), {
-                action: 'comment',
-                comment: comment.trim(),
-            }, {
-                onSuccess: () => {
-                    setComment("");
-                    setCommentInputState(false);
+            router.post(
+                route('requests.updateStatus', request.id),
+                {
+                    action: 'comment',
+                    comment: comment.trim(),
                 },
-            });
+                inertiaOptions,
+            );
             return;
         }
 
-        router.post(route('requests.updateStatus', request.id), {
-            action,
-            comment: comment.trim().length > 0 ? comment.trim() : null,
-        });
+        router.post(
+            route('requests.updateStatus', request.id),
+            {
+                action,
+                comment: comment.length > 0 ? comment : null,
+            },
+            inertiaOptions,
+        );
     };
 
     // Build the bookings array for PDF export
     const facilitiesForPDF = request.request_facilities.map((rf) => {
-        const facility = request.facilities.find(f => f.id === rf.facility_id);
+        const facility = request.facilities.find((f) => f.id === rf.facility_id);
         return {
             facility_name: facility?.name ?? 'Unknown Facility',
             date: rf.date_requested,
@@ -162,24 +220,24 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
         };
     });
 
-    const isPending = request.status === 'Pending' || request.status === 'For Reschedule';
+    console.log(request);
 
     return (
         <DefaultLayout hasPadding={false}>
-            <div className="flex flex-col w-full gap-4 *:text-sm">
-                <div className="flex flex-col gap-3 px-6 md:px-8 pt-6 md:pt-8">
+            <div className="flex w-full flex-col gap-4 *:text-sm">
+                <div className="flex flex-col gap-3 px-6 pt-6 md:px-8 md:pt-8">
                     <div className="flex items-center gap-2">
-                        <h1 className='font-bold text-2xl tracking-tight'>{request.title}</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">{request.title}</h1>
                         {canEdit && (
-                            <Link href={route("requests.edit", request.id)}>
-                                <Button variant={"ghost"} size={"icon-sm"}>
+                            <Link href={route('requests.edit', request.id)}>
+                                <Button variant={'ghost'} size={'icon-sm'}>
                                     <Pen className="h-4 w-4" />
                                 </Button>
                             </Link>
                         )}
                         {canReschedule && (
-                            <Link href={route("requests.edit", request.id)}>
-                                <Button variant={"outline"} size={"sm"} className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50">
+                            <Link href={route('requests.edit', request.id)}>
+                                <Button variant={'outline'} size={'sm'} className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50">
                                     <Calendar className="h-4 w-4" />
                                     Reschedule
                                 </Button>
@@ -190,24 +248,17 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     <StatusTag requestStatus={request.status} />
 
                     {isAdmin && (
-                        <div className="flex flex-col w-full max-w-2xl mt-2">
+                        <div className="mt-2 flex w-full max-w-2xl flex-col">
                             <div className="flex items-center">
-                                <div className="flex flex-col text-sm ">
-                                    <span className="font-semibold text-muted-foreground">
-                                        Recommendation
-                                    </span>
+                                <div className="flex flex-col text-sm">
+                                    <span className="font-semibold text-muted-foreground">Recommendation</span>
                                     {request.recommended_action ? (
                                         <>
-                                            <span className={cn(
-                                                'font-black text-lg',
-                                                request.recommended_action === 'Denied' && 'text-destructive'
-                                            )}>
+                                            <span className={cn('text-lg font-black', request.recommended_action === 'Denied' && 'text-destructive')}>
                                                 {request.recommended_action}
                                             </span>
                                             {request.recommended_action_reason && (
-                                                <p className="text-muted-foreground mt-0.5 max-w-sm">
-                                                    {request.recommended_action_reason}
-                                                </p>
+                                                <p className="mt-0.5 max-w-sm text-muted-foreground">{request.recommended_action_reason}</p>
                                             )}
                                         </>
                                     ) : (
@@ -215,19 +266,15 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                     )}
                                 </div>
 
-                                <div className="flex justify-end gap-2 ml-auto self-start">
-                                    <Button
-                                        size="sm"
-                                        className="hidden xs:block"
-                                        onClick={() => handleAction('approve')}
-                                    >
+                                <div className="ml-auto flex justify-end gap-2 self-start">
+                                    <Button size="sm" className="hidden xs:block" onClick={() => handleAction('approve')}>
                                         Approve
                                     </Button>
 
                                     <Button
                                         size="sm"
                                         variant="outline"
-                                        className="hidden xs:block hover:border-destructive hover:text-destructive hover:bg-destructive/5"
+                                        className="hidden hover:border-destructive hover:bg-destructive/5 hover:text-destructive xs:block"
                                         onClick={() => handleAction('reject')}
                                     >
                                         Deny
@@ -242,16 +289,10 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuGroup className="*:cursor-pointer">
-                                                <DropdownMenuItem
-                                                    onClick={() => handleAction('approve')}
-                                                    className="xs:hidden"
-                                                >
+                                                <DropdownMenuItem onClick={() => handleAction('approve')} className="xs:hidden">
                                                     <span>Approve</span>
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    onClick={() => handleAction('reject')}
-                                                    className="xs:hidden"
-                                                >
+                                                <DropdownMenuItem onClick={() => handleAction('reject')} className="xs:hidden">
                                                     <span>Deny</span>
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleAction('conditionally_approve')}>
@@ -260,12 +301,10 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                                 <DropdownMenuItem onClick={() => handleAction('for_reschedule')}>
                                                     Mark for Reschedule
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => setCommentInputState(p => !p)}>
+                                                <DropdownMenuItem onClick={() => setCommentInputState((p) => !p)}>
                                                     {isCommenting ? 'Cancel Note' : 'Add Note'}
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleAction('hold')}>
-                                                    Hold Request
-                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleAction('hold')}>Hold Request</DropdownMenuItem>
                                             </DropdownMenuGroup>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
@@ -273,21 +312,16 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                             </div>
 
                             {isCommenting && (
-                                <div className="flex flex-col gap-2 mt-3">
+                                <div className="mt-3 flex flex-col gap-2">
                                     <Textarea
                                         placeholder="Add an optional reason or note..."
                                         value={comment}
                                         onChange={(e) => setComment(e.target.value)}
                                         rows={2}
-                                        className="w-full bg-muted/30 text-sm resize-none"
+                                        className="w-full resize-none bg-muted/30 text-sm"
                                     />
                                     {comment.trim().length > 0 && (
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="self-start"
-                                            onClick={() => handleAction('comment')}
-                                        >
+                                        <Button size="sm" variant="outline" className="self-start" onClick={() => handleAction('comment')}>
                                             Post Note
                                         </Button>
                                     )}
@@ -299,107 +333,117 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
 
                 <Tabs defaultValue="overview" className="mt-4 w-full">
                     <ScrollArea className="w-full" type="scroll">
-                        <TabsList variant="line" className='border-b w-fit ml-6 md:ml-8'>
+                        <TabsList variant="line" className="ml-6 w-fit border-b md:ml-8">
                             <TabsTrigger value="overview">Overview</TabsTrigger>
 
                             <TabsTrigger value="facilities" className="flex items-center gap-2">
                                 <span>Facilities</span>
-                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
                                     {request.facilities.length}
                                 </span>
                             </TabsTrigger>
 
                             <TabsTrigger value="comments" className="flex items-center gap-2">
                                 <span>Comments</span>
-                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
                                     {request.comments.length}
                                 </span>
                             </TabsTrigger>
 
                             <TabsTrigger value="activity" className="flex items-center gap-2">
                                 <span>Activity</span>
-                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
                                     {totalLogs}
                                 </span>
                             </TabsTrigger>
 
                             <TabsTrigger value="files" className="flex items-center gap-2">
                                 <span>Files</span>
-                                <span className="flex items-center justify-center bg-secondary text-secondary-foreground h-5 min-w-[20px] px-1 rounded-full text-[10px] font-medium">
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
                                     {request.files?.length ?? 0}
                                 </span>
                             </TabsTrigger>
+
+                            {isAdmin && (
+                                <TabsTrigger value="recommendation" className="flex items-center gap-2">
+                                    <span>Recommendation</span>
+                                </TabsTrigger>
+                            )}
                         </TabsList>
                         <ScrollBar orientation="horizontal" className="h-0" />
                     </ScrollArea>
 
                     {/* Overview Tab */}
-                    <TabsContent value="overview" className="flex flex-col gap-6 mt-6 md:grid grid-cols-[8fr_6fr] px-6 md:px-8">
-                        <div className="flex flex-col md:grid grid-cols-2 gap-4">
-                            <div className="flex flex-col max-w-full">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Description</p>
-                                <p>{request.description ? request.description : "No Description Provided"}</p>
+                    <TabsContent value="overview" className="mt-6 flex grid-cols-[8fr_6fr] flex-col gap-6 px-6 md:grid md:px-8">
+                        <div className="flex grid-cols-2 flex-col gap-4 md:grid">
+                            <div className="flex max-w-full flex-col">
+                                <p className="mb-2 font-semibold text-muted-foreground">Description</p>
+                                <p>{request.description ? request.description : 'No Description Provided'}</p>
                             </div>
 
                             <div className="flex flex-wrap gap-12">
                                 <div className="flex flex-col">
-                                    <p className='font-semibold mb-2 text-muted-foreground'>Requested by</p>
-                                    <div className="flex gap-2 items-center">
-                                        <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size='sm' />
+                                    <p className="mb-2 font-semibold text-muted-foreground">Requested by</p>
+                                    <div className="flex items-center gap-2">
+                                        <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size="sm" />
                                         <p>{request.user.name}</p>
                                     </div>
                                 </div>
                                 <div className="flex flex-col">
-                                    <p className='font-semibold mb-2 text-muted-foreground'>Date Submitted</p>
-                                    <p>{moment(request.created_at).format("MMMM D, YYYY")}</p>
+                                    <p className="mb-2 font-semibold text-muted-foreground">Date Submitted</p>
+                                    <p>{moment(request.created_at).format('MMMM D, YYYY')}</p>
                                 </div>
                             </div>
 
                             <div className="flex flex-wrap gap-12">
                                 <div className="flex flex-col">
-                                    <p className='font-semibold mb-2 text-muted-foreground'>Processed by</p>
+                                    <p className="mb-2 font-semibold text-muted-foreground">Processed by</p>
                                     {request.processed_by ? (
-                                        <div className="flex gap-2 items-center">
-                                            <AvatarWithInitials avatarSrc={request.processed_by.profile} username={request.processed_by.name} size='sm' />
+                                        <div className="flex items-center gap-2">
+                                            <AvatarWithInitials
+                                                avatarSrc={request.processed_by.profile}
+                                                username={request.processed_by.name}
+                                                size="sm"
+                                            />
                                             <p>{request.processed_by.name}</p>
                                         </div>
-                                    ) : (<span>None</span>)}
+                                    ) : (
+                                        <span>None</span>
+                                    )}
                                 </div>
                                 <div className="flex flex-col">
-                                    <p className='font-semibold mb-2 text-muted-foreground'>Processed At</p>
-                                    {request.processed_at ? (
-                                        <p>{moment(request.processed_at).format("MMMM D, YYYY")}</p>
-                                    ) : (<span>None</span>)}
+                                    <p className="mb-2 font-semibold text-muted-foreground">Processed At</p>
+                                    {request.processed_at ? <p>{moment(request.processed_at).format('MMMM D, YYYY')}</p> : <span>None</span>}
                                 </div>
                             </div>
 
                             <div className="flex flex-col">
-                                <p className='font-semibold mb-2 text-muted-foreground'>Approved By</p>
+                                <p className="mb-2 font-semibold text-muted-foreground">Approved By</p>
                                 <div className="flex flex-wrap gap-2">
                                     {request.approved_by !== null ? (
                                         request.approved_by.map((approvedBy, index) => (
                                             <span key={index} className="text-sm font-bold">
                                                 {approvedBy}
-                                                {index < request.approved_by.length - 1 && ", "}
+                                                {index < request.approved_by.length - 1 && ', '}
                                             </span>
                                         ))
                                     ) : (
-                                        <span className='text-sm font-semibold'>None</span>
+                                        <span className="text-sm font-semibold">None</span>
                                     )}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex justify-between items-center mx-auto">
+                        <div className="mx-auto flex items-center justify-between">
                             <p className="text-sm text-muted-foreground">
-                                Export this request as a CSV file for reporting, sharing, or backup purposes.
-                                The downloaded file will include all relevant request details.
+                                Export this request as a CSV file for reporting, sharing, or backup purposes. The downloaded file will include all
+                                relevant request details.
                             </p>
                             <Button
                                 onClick={() => downloadSingleRequestCSV(request)}
                                 size="sm"
                                 variant="outline"
-                                className="mt-1 gap-2 relative isolate overflow-hidden border-primary text-primary bg-transparent hover:bg-transparent hover:text-primary-foreground before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:before:scale-x-100"
+                                className="relative isolate mt-1 gap-2 overflow-hidden border-primary bg-transparent text-primary before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:bg-transparent hover:text-primary-foreground hover:before:scale-x-100"
                             >
                                 <Download size={16} />
                                 <span>Export to CSV</span>
@@ -408,13 +452,13 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     </TabsContent>
 
                     {/* Facilities Tab */}
-                    <TabsContent value="facilities" className="flex flex-col gap-4 mt-6 px-6 md:px-8">
+                    <TabsContent value="facilities" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
                         {/* ── PDF Export button ── */}
                         <div className="flex justify-end">
                             <Button
                                 size="sm"
                                 variant="outline"
-                                className="gap-2 relative isolate overflow-hidden border-primary text-primary bg-transparent hover:bg-transparent hover:text-primary-foreground before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:before:scale-x-100"
+                                className="relative isolate gap-2 overflow-hidden border-primary bg-transparent text-primary before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:bg-transparent hover:text-primary-foreground hover:before:scale-x-100"
                                 onClick={() => downloadFacilitiesPDF(request.title, facilitiesForPDF)}
                             >
                                 <Download size={16} />
@@ -423,50 +467,54 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                         </div>
 
                         {/* ── Booking Cards grid ── */}
-                        <div className="lg:grid grid-cols-[1fr_1fr] gap-4 flex flex-col">
+                        <div className="flex grid-cols-[1fr_1fr] flex-col gap-4 lg:grid">
                             {request.request_facilities.map((rf, index) => {
-                                const facility = request.facilities.find(f => f.id === rf.facility_id);
+                                const facility = request.facilities.find((f) => f.id === rf.facility_id);
                                 if (!facility) return null;
 
-                                const ownEquipment = request.equipment
-                                    ?.filter(eq => !eq.pivot?.is_borrowed && eq.facilities?.some(f => f.id === rf.facility_id))
-                                    .map(eq => ({
-                                        equipment_id: eq.id,
-                                        equipment_name: eq.name,
-                                        quantity_needed: eq.pivot.quantity_needed,
-                                        max_quantity: eq.pivot.quantity_needed,
-                                    })) ?? [];
+                                const ownEquipment =
+                                    request.equipment
+                                        ?.filter((eq) => !eq.pivot?.is_borrowed && eq.facilities?.some((f) => f.id === rf.facility_id))
+                                        .map((eq) => ({
+                                            equipment_id: eq.id,
+                                            equipment_name: eq.name,
+                                            quantity_needed: eq.pivot.quantity_needed,
+                                            max_quantity: eq.pivot.quantity_needed,
+                                        })) ?? [];
 
-                                const borrowedEquipment = request.equipment
-                                    ?.filter(eq => eq.pivot?.is_borrowed)
-                                    .map(eq => ({
-                                        equipment_id: eq.id,
-                                        equipment_name: eq.name,
-                                        source_facility_id: eq.pivot.source_facility_id,
-                                        source_facility_name: eq.facilities?.find(f => f.id === eq.pivot.source_facility_id)?.name ?? '',
-                                        quantity_needed: eq.pivot.quantity_needed,
-                                        max_quantity: eq.pivot.quantity_needed,
-                                    })) ?? [];
+                                const borrowedEquipment =
+                                    request.equipment
+                                        ?.filter((eq) => eq.pivot?.is_borrowed)
+                                        .map((eq) => ({
+                                            equipment_id: eq.id,
+                                            equipment_name: eq.name,
+                                            source_facility_id: eq.pivot.source_facility_id,
+                                            source_facility_name: eq.facilities?.find((f) => f.id === eq.pivot.source_facility_id)?.name ?? '',
+                                            quantity_needed: eq.pivot.quantity_needed,
+                                            max_quantity: eq.pivot.quantity_needed,
+                                        })) ?? [];
 
-                                const approvedConflicts = request.approved_conflicts
-                                    ?.filter(c => c.facility_id === rf.facility_id)
-                                    .map(c => ({
-                                        request_id: c.request_id,
-                                        request_title: c.request.title,
-                                        status: c.request.status,
-                                        time_start: c.time_start,
-                                        time_end: c.time_end,
-                                    })) ?? [];
+                                const approvedConflicts =
+                                    request.approved_conflicts
+                                        ?.filter((c) => c.facility_id === rf.facility_id)
+                                        .map((c) => ({
+                                            request_id: c.request_id,
+                                            request_title: c.request.title,
+                                            status: c.request.status,
+                                            time_start: c.time_start,
+                                            time_end: c.time_end,
+                                        })) ?? [];
 
-                                const pendingConflicts = request.pending_conflicts
-                                    ?.filter(c => c.facility_id === rf.facility_id)
-                                    .map(c => ({
-                                        request_id: c.request_id,
-                                        request_title: c.request.title,
-                                        status: c.request.status,
-                                        time_start: c.time_start,
-                                        time_end: c.time_end,
-                                    })) ?? [];
+                                const pendingConflicts =
+                                    request.pending_conflicts
+                                        ?.filter((c) => c.facility_id === rf.facility_id)
+                                        .map((c) => ({
+                                            request_id: c.request_id,
+                                            request_title: c.request.title,
+                                            status: c.request.status,
+                                            time_start: c.time_start,
+                                            time_end: c.time_end,
+                                        })) ?? [];
 
                                 const booking = {
                                     facility_id: rf.facility_id,
@@ -478,17 +526,16 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                     has_outsiders: rf.has_outsiders ?? false,
                                     equipment: ownEquipment,
                                     borrowed_equipment: borrowedEquipment,
-                                    external_equipment: rf.external_equipments?.map(e => ({ name: e.name })) ?? [],
+                                    external_equipment: rf.external_equipments?.map((e) => ({ name: e.name })) ?? [],
                                     conflicts: [...approvedConflicts, ...pendingConflicts],
                                     equipment_conflicts: {},
+                                    facility_capacity: facility.capacity,
+                                    request_facility_status: rf.status ?? null,
+                                    request_id: rf.request_id,
                                 };
 
                                 return (
-                                    <BookingCard
-                                        key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
-                                        booking={booking}
-                                        index={index}
-                                    />
+                                    <BookingCard key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`} booking={booking} index={index} />
                                 );
                             })}
                         </div>
@@ -497,42 +544,36 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     {/* Comments Tab */}
                     <TabsContent
                         value="comments"
-                        className="mt-6 w-full relative flex flex-col items-start md:grid md:grid-cols-[3fr_4fr] gap-4 px-6 md:px-8"
+                        className="relative mt-6 flex w-full flex-col items-start gap-4 px-6 md:grid md:grid-cols-[3fr_4fr] md:px-8"
                     >
-                        <div className="order-1 md:order-2 w-full max-w-2xl h-full overflow-y-auto pr-2 pb-32 md:pb-0">
+                        <div className="order-1 h-full w-full max-w-2xl overflow-y-auto pr-2 pb-32 md:order-2 md:pb-0">
                             <div className="flex flex-col gap-3">
                                 {request.comments?.length > 0 ? (
-                                    request.comments.map((comment) => (
-                                        <Comment key={comment.id} comment={comment} />
-                                    ))
+                                    request.comments.map((comment) => <Comment key={comment.id} comment={comment} />)
                                 ) : (
-                                    <p className="text-muted-foreground text-sm">No comments yet.</p>
+                                    <p className="text-sm text-muted-foreground">No comments yet.</p>
                                 )}
                             </div>
                         </div>
 
-                        <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t p-4 md:sticky md:top-4 md:z-auto md:p-0 md:border-0">
-                            <div className="max-w-2xl mx-auto flex flex-col gap-3">
+                        <div className="fixed right-0 bottom-0 left-0 z-50 border-t bg-background p-4 md:sticky md:top-4 md:z-auto md:border-0 md:p-0">
+                            <div className="mx-auto flex max-w-2xl flex-col gap-3">
                                 <CommentForm requestId={request.id} />
                             </div>
                         </div>
                     </TabsContent>
 
                     {/* Activity Tab */}
-                    <TabsContent value="activity" className="flex flex-col gap-4 mt-6 px-6 md:px-8">
+                    <TabsContent value="activity" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
                         {logsLoading ? (
                             <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                                <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                 Loading activity...
                             </div>
                         ) : (
                             <>
                                 <ActivityFeed auditLogs={auditLogs} />
-                                <SmartPagination
-                                    currentPage={currentPage}
-                                    lastPage={lastPage}
-                                    onPageChange={fetchAuditLogs}
-                                />
+                                <SmartPagination currentPage={currentPage} lastPage={lastPage} onPageChange={fetchAuditLogs} />
                             </>
                         )}
                     </TabsContent>
@@ -541,14 +582,18 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                     <TabsContent value="files" className="mt-6 px-6 md:px-8">
                         {request.files && request.files.length > 0 ? (
                             <AttachedFileList
-                                serverFiles={request.files.map(f => ({
+                                serverFiles={request.files.map((f) => ({
                                     path: f.path,
                                     original_name: f.path.split('/').pop() ?? f.path,
                                     mime_type: (() => {
                                         const ext = f.path.split('.').pop()?.toLowerCase();
                                         const map: Record<string, string> = {
-                                            png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-                                            gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf',
+                                            png: 'image/png',
+                                            jpg: 'image/jpeg',
+                                            jpeg: 'image/jpeg',
+                                            gif: 'image/gif',
+                                            webp: 'image/webp',
+                                            pdf: 'application/pdf',
                                         };
                                         return map[ext ?? ''] ?? 'application/octet-stream';
                                     })(),
@@ -557,9 +602,15 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
                                 }))}
                             />
                         ) : (
-                            <p className="text-muted-foreground text-sm">No files attached.</p>
+                            <p className="text-sm text-muted-foreground">No files attached.</p>
                         )}
                     </TabsContent>
+                    {/* Recommendation Tab */}
+                    {isAdmin && (
+                        <TabsContent value="recommendation" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
+                            <RecommendationPanel request={request} isLoading={isLoadingRecommendation} variant="page" />
+                        </TabsContent>
+                    )}
                 </Tabs>
             </div>
         </DefaultLayout>
@@ -567,32 +618,24 @@ export default function RequestDetail({ request, auditLogs: auditLogsProp }: Det
 }
 
 function CommentForm({ requestId }: { requestId: number }) {
-    const [body, setBody] = useState("");
+    const [body, setBody] = useState('');
 
     const submit = () => {
-        router.post(route('requests.comment', requestId), { body }, {
-            onSuccess: () => setBody(""),
-            preserveScroll: true,
-        });
+        router.post(
+            route('requests.comment', requestId),
+            { body },
+            {
+                onSuccess: () => setBody(''),
+                preserveScroll: true,
+            },
+        );
     };
 
     return (
-        <div className="flex flex-col gap-3 w-full max-w-2xl">
+        <div className="flex w-full max-w-2xl flex-col gap-3">
             <p className="font-semibold text-muted-foreground">Add a comment</p>
-            <Textarea
-                rows={3}
-                className="w-full"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="Write a comment..."
-            />
-            <Button
-                size="sm"
-                variant="secondary"
-                className="self-start"
-                disabled={body.trim().length === 0}
-                onClick={submit}
-            >
+            <Textarea rows={3} className="w-full" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a comment..." />
+            <Button size="sm" variant="secondary" className="self-start" disabled={body.trim().length === 0} onClick={submit}>
                 <SendHorizontal size={16} />
                 <span>Send</span>
             </Button>
