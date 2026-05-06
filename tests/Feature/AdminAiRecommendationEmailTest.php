@@ -47,8 +47,6 @@ class AdminAiRecommendationEmailTest extends TestCase
 
         Notification::assertSentTo($admin, AdminAiRecommendationReady::class);
         Notification::assertNotSentTo($invalidAdmin, AdminAiRecommendationReady::class);
-<<<<<<< Updated upstream
-=======
         Notification::assertNotSentTo($unsubscribedAdmin, AdminAiRecommendationReady::class);
     }
 
@@ -213,7 +211,6 @@ class AdminAiRecommendationEmailTest extends TestCase
             ->assertForbidden();
 
         $this->assertFalse($user->fresh()->admin_email_notifications_enabled);
->>>>>>> Stashed changes
     }
 
     public function test_admin_ai_recommendation_email_contains_request_details_and_links(): void
