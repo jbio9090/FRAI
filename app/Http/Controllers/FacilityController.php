@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Building;
+use App\Models\Campus;
 use App\Models\Facility;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Services\FacilityService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\Rule;
 
 
 class FacilityController extends Controller
@@ -17,13 +20,17 @@ class FacilityController extends Controller
 
     public function index()
     {
-        return Inertia::render("facilities/index", ["facilities" => Facility::all()]);
+        return Inertia::render("facilities/index", [
+            "facilities" => Facility::with(['campus', 'buildingRecord'])->get(),
+            "campuses" => Campus::orderBy('name')->get(),
+            "buildings" => Building::with('campus')->orderBy('name')->get(),
+        ]);
     }
 
     public function detail(int $facility_id)
     {
         $facility = Facility::where("id", $facility_id)
-            ->with("facilityEquipments.equipment")
+            ->with(["facilityEquipments.equipment", "campus", "buildingRecord"])
             ->firstOrFail();
 
         $facilities = Facility::with("facilityEquipments")->get();
@@ -38,6 +45,8 @@ class FacilityController extends Controller
             "initialEvents" => $initialEvents,
             "labeledBreadcrumb" => $facility->name,
             "facilities" => $facilities,
+            "campuses" => Campus::orderBy('name')->get(),
+            "buildings" => Building::with('campus')->orderBy('name')->get(),
         ]);
     }
 
@@ -64,11 +73,17 @@ class FacilityController extends Controller
     public function update(Request $request, Facility $facility): RedirectResponse
     {
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'building' => 'required|string|max:255',
-            'capacity' => 'required|integer|min:1',
+            'name'        => 'required|string|max:255',
+            'campus_id'   => 'required|integer|exists:campuses,id',
+            'building_id' => [
+                'required',
+                'integer',
+                Rule::exists('buildings', 'id')->where(fn ($query) => $query->where('campus_id', $request->input('campus_id'))),
+            ],
+            'capacity'    => 'required|integer|min:1',
         ]);
 
+        $validated['building'] = Building::findOrFail($validated['building_id'])->name;
         $facility->update($validated);
 
         if (!empty($request->input("from"))) {
@@ -83,14 +98,48 @@ class FacilityController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'building' => 'required|string|max:255',
-            'capacity' => 'required|integer|min:1',
+            'name'        => 'required|string|max:255',
+            'campus_id'   => 'required|integer|exists:campuses,id',
+            'building_id' => [
+                'required',
+                'integer',
+                Rule::exists('buildings', 'id')->where(fn ($query) => $query->where('campus_id', $request->input('campus_id'))),
+            ],
+            'capacity'    => 'required|integer|min:1',
         ]);
 
+        $validated['building'] = Building::findOrFail($validated['building_id'])->name;
         Facility::create($validated);
 
         return redirect()->back()->with("success", "$validated[name] has been created");
+    }
+
+    public function storeBuilding(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'campus_id' => 'required|integer|exists:campuses,id',
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('buildings', 'name')->where(fn ($query) => $query->where('campus_id', $request->input('campus_id'))),
+            ],
+        ]);
+
+        Building::create($validated);
+
+        return redirect()->back()->with('success', "$validated[name] has been created");
+    }
+
+    public function storeCampus(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255|unique:campuses,name',
+        ]);
+
+        Campus::create($validated);
+
+        return redirect()->back()->with('success', "$validated[name] has been created");
     }
 
     public function destroy(Facility $facility): RedirectResponse

@@ -12,8 +12,20 @@ class Facility extends Model
     protected $fillable = [
         'name',
         'building',
+        'campus_id',
+        'building_id',
         'capacity',
     ];
+
+    public function campus()
+    {
+        return $this->belongsTo(Campus::class);
+    }
+
+    public function buildingRecord()
+    {
+        return $this->belongsTo(Building::class, 'building_id');
+    }
 
     public function equipment()
     {

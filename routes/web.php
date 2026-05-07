@@ -136,6 +136,8 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:manage facilities')->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
         Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
+        Route::post('/campuses', [FacilityController::class, 'storeCampus'])->name('campuses.store');
+        Route::post('/buildings', [FacilityController::class, 'storeBuilding'])->name('buildings.store');
         Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
     // chatbot

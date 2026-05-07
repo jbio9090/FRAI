@@ -6,5 +6,16 @@ export interface Facility {
     description?: string;
     capacity: number;
     building: string;
+    campus_id?: number | null;
+    building_id?: number | null;
+    campus?: {
+        id: number;
+        name: string;
+    } | null;
+    building_record?: {
+        id: number;
+        campus_id: number;
+        name: string;
+    } | null;
     equipments?: FacilityEquipment[];
 }

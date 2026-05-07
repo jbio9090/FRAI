@@ -1,7 +1,7 @@
 import { router } from "@inertiajs/react";
 import { Link } from "@inertiajs/react";
-import { User, Building, Pencil, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { User, Building as BuildingIcon, MapPinned, Pencil, ChevronDown } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import FacilityCalendar from "@/components/FacilityCalendar";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import {
     Table,
     TableBody,
@@ -43,7 +50,22 @@ interface Facility {
     name: string;
     building: string;
     capacity: number;
+    campus_id: number | null;
+    building_id: number | null;
+    campus?: Campus | null;
+    building_record?: Building | null;
     facility_equipments?: FacilityEquipment[];
+}
+
+interface Campus {
+    id: number;
+    name: string;
+}
+
+interface Building {
+    id: number;
+    campus_id: number;
+    name: string;
 }
 
 interface Event {
@@ -51,26 +73,39 @@ interface Event {
     end: Date;
     title: string;
     id: number;
+    request_id: string | number;
 }
 
 interface DetailProps {
     facility: Facility;
     initialEvents: Event[];
     facilities: Facility[];
+    campuses: Campus[];
+    buildings: Building[];
 }
 
-export default function FacilityDetail({ facility, initialEvents, facilities }: DetailProps) {
+const isFormValid = (name: string, campusId: string, buildingId: string, capacity: number) => (
+    name.trim() !== "" && campusId !== "" && buildingId !== "" && Number.isInteger(capacity) && capacity >= 1
+);
+
+export default function FacilityDetail({ facility, initialEvents, facilities, campuses, buildings }: DetailProps) {
     const { hasPermission } = usePermission();
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState(facility.name);
-    const [building, setBuilding] = useState(facility.building);
+    const [campusId, setCampusId] = useState(facility.campus_id ? String(facility.campus_id) : "");
+    const [buildingId, setBuildingId] = useState(facility.building_id ? String(facility.building_id) : "");
     const [capacity, setCapacity] = useState(facility.capacity);
+    const filteredBuildings = buildings.filter((building) => String(building.campus_id) === campusId);
+    const canSave = isFormValid(name, campusId, buildingId, capacity);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
+        if (!canSave) return;
+
         router.put(route("facility.update", facility.id), {
             name,
-            building,
+            campus_id: Number(campusId),
+            building_id: Number(buildingId),
             capacity,
         }, {
             onSuccess: () => setIsEditing(false),
@@ -116,8 +151,12 @@ export default function FacilityDetail({ facility, initialEvents, facilities }: 
 
                 {/* Meta */}
                 <div className="flex text-muted-foreground gap-1 mt-1 items-center">
-                    <Building size={16} />
-                    <span className="text-sm">{facility.building}</span>
+                    <MapPinned size={16} />
+                    <span className="text-sm">{facility.campus?.name ?? "Main"}</span>
+                </div>
+                <div className="flex text-muted-foreground gap-1 mt-1 items-center">
+                    <BuildingIcon size={16} />
+                    <span className="text-sm">{facility.building_record?.name ?? facility.building}</span>
                 </div>
                 <div className="flex text-muted-foreground items-center gap-1 mt-1">
                     <User size={16} />
@@ -131,8 +170,44 @@ export default function FacilityDetail({ facility, initialEvents, facilities }: 
                             <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
                         </div>
                         <div className="flex flex-col gap-1.5">
-                            <Label htmlFor="building">Building</Label>
-                            <Input id="building" value={building} onChange={(e) => setBuilding(e.target.value)} />
+                            <Label>Campus</Label>
+                            <Select
+                                value={campusId}
+                                onValueChange={(value) => {
+                                    setCampusId(value);
+                                    setBuildingId("");
+                                }}
+                            >
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select campus" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {campuses.map((campus) => (
+                                        <SelectItem key={campus.id} value={String(campus.id)}>
+                                            {campus.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label>Building</Label>
+                            <Select
+                                value={buildingId}
+                                onValueChange={setBuildingId}
+                                disabled={!campusId || filteredBuildings.length === 0}
+                            >
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder={campusId ? "Select building" : "Select campus first"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {filteredBuildings.map((building) => (
+                                        <SelectItem key={building.id} value={String(building.id)}>
+                                            {building.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <Label htmlFor="capacity">Capacity</Label>
@@ -144,7 +219,7 @@ export default function FacilityDetail({ facility, initialEvents, facilities }: 
                             />
                         </div>
                         <div className="flex gap-2">
-                            <Button type="submit">Save</Button>
+                            <Button type="submit" disabled={!canSave}>Save</Button>
                             <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
                                 Cancel
                             </Button>

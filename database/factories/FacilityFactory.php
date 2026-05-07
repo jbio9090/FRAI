@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\Building;
+use App\Models\Campus;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -16,9 +18,17 @@ class FacilityFactory extends Factory
      */
     public function definition(): array
     {
+        $campus = Campus::firstOrCreate(['name' => 'Main']);
+        $building = Building::firstOrCreate([
+            'campus_id' => $campus->id,
+            'name' => fake()->buildingNumber(),
+        ]);
+
         return [
             'name' => fake()->name(),
-            'building' => fake()->buildingNumber(),
+            'building' => $building->name,
+            'campus_id' => $campus->id,
+            'building_id' => $building->id,
             'capacity' => fake()->numberBetween(100, 500),
         ];
     }
