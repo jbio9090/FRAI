@@ -119,7 +119,7 @@ export default function AccountsPage({ users, roles }: Props) {
     const [sort, setSort] = useState('');
     const isMounted = useRef(false);
 
-    const { user } = usePermission();
+    const { user, hasRole } = usePermission();
     const isAdmin = (user?.roles ?? []).some(r => (r ?? '').toLowerCase() === 'admin');
     const isSuperAdmin = (user?.roles ?? []).some(r => (r ?? '').toLowerCase() === 'super admin' || (r ?? '').toLowerCase() === 'superadmin');
 
@@ -966,14 +966,15 @@ export default function AccountsPage({ users, roles }: Props) {
                                 <TableCell>{(user as any).email}</TableCell>
                                 <TableCell className="capitalize">{(user as any).role}</TableCell>
                                 <TableCell className="flex gap-1">
-                                    <Button
+
+                                    {hasRole("Super Admin") && (<Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => handleResetPassword(user)}
                                         title="Force Password Reset"
                                     >
                                         <Key className="h-4 w-4 text-muted-foreground" />
-                                    </Button>
+                                    </Button>)}
 
                                     <Button
                                         variant="ghost"
