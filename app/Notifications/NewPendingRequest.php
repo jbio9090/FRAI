@@ -64,7 +64,7 @@ class NewPendingRequest extends Notification implements ShouldQueue
             ->body('Pending Request from ' . $this->user_name)
             ->action($actionTitle, 'recommended_action') // Dynamic Action Button
             ->action('Deny', 'deny_action')              // Secondary Action Button
-            ->options(['TTL' => 1000])
+            ->options(['TTL' => 2419200])
             ->data([
                 "url" => $this->url,
                 "recommended_action_url" => $recommendedUrl,
