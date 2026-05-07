@@ -2,13 +2,13 @@
 
 namespace App\Notifications;
 
+use App\Enums\RequestStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
-use NotificationChannels\WebPush\WebPushMessage;
-use NotificationChannels\WebPush\WebPushChannel;
 use Illuminate\Support\Facades\Date;
-use App\Enums\RequestStatus;
+use NotificationChannels\WebPush\WebPushChannel;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class RequestResult extends Notification implements ShouldQueue
 {
@@ -22,29 +22,19 @@ class RequestResult extends Notification implements ShouldQueue
 
     public function via($notifiable)
     {
-        return [WebPushChannel::class];
+        return ['database', WebPushChannel::class];
     }
 
-    public function toWebPush($notifiable, $notification)
+    public function toWebPush($notifiable, $notification): WebPushMessage
     {
-        // Use a match expression to assign the correct message based on the Enum case
-        $status_message = match ($this->status) {
-            RequestStatus::PENDING => "Your request is currently pending review.",
-            RequestStatus::APPROVED => "Your request has been approved!",
-            RequestStatus::DENIED => "Your request has been denied.",
-            RequestStatus::CONDITIONALLY_APPROVED => "Your request has been conditionally approved.",
-            RequestStatus::ON_HOLD => "Your request has been placed on hold.",
-            RequestStatus::FOR_RESCHEDULE => "Your request needs to be rescheduled.",
-        };
-
         return (new WebPushMessage)
             ->title($this->request_title)
             ->icon('/FRAI.png')
-            ->body($status_message)
+            ->body($this->statusMessage())
             ->action('View your request', 'view_request')
             ->options(['TTL' => 1000])
-            ->data(["url" => $this->url])
-            ->tag("{$this->status->value}-" . $this->request_title . Date::now()->toString());
+            ->data(['url' => $this->url])
+            ->tag("{$this->status->value}-".$this->request_title.Date::now()->toString());
         // ->vibrate();
         // ->data(['id' => $notification->id])
         // ->badge()
@@ -53,5 +43,34 @@ class RequestResult extends Notification implements ShouldQueue
         // ->lang()
         // ->renotify()
         // ->requireInteraction()
+    }
+
+    public function toDatabase($notifiable): array
+    {
+        return [
+            'title' => $this->request_title,
+            'body' => $this->statusMessage(),
+            'url' => $this->url,
+            'category' => 'request_result',
+            'status' => $this->status->value,
+        ];
+    }
+
+    public function toArray($notifiable): array
+    {
+        return $this->toDatabase($notifiable);
+    }
+
+    private function statusMessage(): string
+    {
+        return match ($this->status) {
+            RequestStatus::PENDING => 'Your request is currently pending review.',
+            RequestStatus::APPROVED => 'Your request has been approved!',
+            RequestStatus::DENIED => 'Your request has been denied.',
+            RequestStatus::CONDITIONALLY_APPROVED => 'Your request has been conditionally approved.',
+            RequestStatus::ON_HOLD => 'Your request has been placed on hold.',
+            RequestStatus::FOR_RESCHEDULE => 'Your request needs to be rescheduled.',
+            RequestStatus::PARTIALLY_APPROVED => 'Your request has been partially approved.',
+        };
     }
 }

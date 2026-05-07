@@ -1,6 +1,6 @@
-import { Link, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import axios from "axios";
-import { ArrowUpRight, ArrowLeft, ArrowRight, ClipboardList, CirclePlus } from 'lucide-react';
+import { ArrowUpRight, ArrowLeft, ArrowRight, Bell, ClipboardList, CirclePlus, MailOpen } from 'lucide-react';
 import { ListFilter } from 'lucide-react';
 import { ArrowDownUp } from 'lucide-react';
 import moment from 'moment';
@@ -67,6 +67,17 @@ type ChartRow = {
     total: number;
 };
 
+type InboxNotification = {
+    id: string;
+    title: string;
+    body: string;
+    url: string;
+    category?: string | null;
+    status?: string | null;
+    created_at: string | null;
+    read_at: string | null;
+};
+
 const chartConfig = {
     total: {
         label: 'Total Events',
@@ -101,6 +112,7 @@ export default function Dashboard({
     buildings,
     auditLogs: auditLogsProp,
     chartData,
+    notifications: notificationsProp,
 }: {
     pending: { data: FacilityRequest[] };
     approved: FacilityRequest[];
@@ -109,6 +121,7 @@ export default function Dashboard({
     buildings: string[];
     auditLogs: { data: AuditLog[]; current_page: number; last_page: number };
     chartData: ChartRow[];
+    notifications: InboxNotification[];
 }) {
     const [selectedBuildings, setSelectedBuildings] = useState<string[]>(buildings);
     const [range, setRange] = useState<'day' | 'week' | 'month' | '3months'>('week');
@@ -120,6 +133,10 @@ export default function Dashboard({
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp.data ?? []);
     const [currentPage, setCurrentPage] = useState(auditLogsProp.current_page ?? 1);
     const [lastPage, setLastPage] = useState(auditLogsProp.last_page ?? 1);
+    const [activeTab, setActiveTab] = useState('overview');
+    const [notifications, setNotifications] = useState<InboxNotification[]>(notificationsProp ?? []);
+    const [unreadCount, setUnreadCount] = useState(Number(auth.user.notification_unread_count ?? 0));
+    const [markingNotificationsRead, setMarkingNotificationsRead] = useState(false);
 
     const fetchAuditLogs = async (page = 1, selectedRange = range) => {
         setLogsLoading(true);
@@ -129,6 +146,32 @@ export default function Dashboard({
         setCurrentPage(json.current_page);
         setLastPage(json.last_page);
         setLogsLoading(false);
+    };
+
+    const markInboxRead = async () => {
+        if (unreadCount === 0 || markingNotificationsRead) return;
+
+        setMarkingNotificationsRead(true);
+        try {
+            await axios.post('/dashboard/notifications/mark-read');
+            const readAt = new Date().toISOString();
+            setNotifications(prev => prev.map(notification => ({
+                ...notification,
+                read_at: notification.read_at ?? readAt,
+            })));
+            setUnreadCount(0);
+            router.reload({ only: ['auth'] });
+        } finally {
+            setMarkingNotificationsRead(false);
+        }
+    };
+
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+
+        if (value === 'inbox') {
+            void markInboxRead();
+        }
     };
 
     const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
@@ -287,11 +330,19 @@ export default function Dashboard({
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex flex-col p-6 md:p-8">
-                <Tabs defaultValue="overview">
+                <Tabs value={activeTab} onValueChange={handleTabChange}>
                     <TabsList variant="line">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Schedule</TabsTrigger>
                         <TabsTrigger value="activity">Activity</TabsTrigger>
+                        <TabsTrigger value="inbox">
+                            <span className="relative">
+                                Inbox
+                                {unreadCount > 0 && (
+                                    <span className="absolute -right-2 -top-1 size-2 rounded-full bg-red-500" />
+                                )}
+                            </span>
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-4 flex flex-col gap-10">
@@ -875,6 +926,76 @@ export default function Dashboard({
                                 </div>
                             )}
 
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="inbox">
+                        <div className="mt-6 flex flex-col gap-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex flex-col gap-0.5">
+                                    <h2 className="font-bold text-xl tracking-tight">Notification Inbox</h2>
+                                    <p className="text-sm text-muted-foreground">
+                                        Recent request notifications sent to your account.
+                                    </p>
+                                </div>
+                                {markingNotificationsRead && (
+                                    <span className="text-xs text-muted-foreground">Marking as seen...</span>
+                                )}
+                            </div>
+
+                            {notifications.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-14 text-center">
+                                    <div className="flex size-11 items-center justify-center rounded-full bg-muted">
+                                        <MailOpen className="h-5 w-5 text-muted-foreground" />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <p className="text-sm font-semibold">No notifications yet</p>
+                                        <p className="text-sm text-muted-foreground">New request updates will appear here.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    {notifications.map(notification => {
+                                        const isUnread = !notification.read_at;
+
+                                        return (
+                                            <Link
+                                                key={notification.id}
+                                                href={notification.url}
+                                                className={cn(
+                                                    "group flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/60",
+                                                    isUnread && "border-primary/40 bg-primary/5"
+                                                )}
+                                            >
+                                                <div className={cn(
+                                                    "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full",
+                                                    isUnread ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                                                )}>
+                                                    <Bell className="h-4 w-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-sm font-semibold">{notification.title}</p>
+                                                            <p className="mt-1 text-sm text-muted-foreground">{notification.body}</p>
+                                                        </div>
+                                                        <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+                                                    </div>
+                                                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                                                        {isUnread && <span className="size-2 rounded-full bg-red-500" />}
+                                                        <span>
+                                                            {notification.created_at
+                                                                ? moment(notification.created_at).fromNow()
+                                                                : 'Recently'}
+                                                        </span>
+                                                        {notification.status && <span>- {notification.status}</span>}
+                                                    </div>
+                                                </div>
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </TabsContent>
                 </Tabs>

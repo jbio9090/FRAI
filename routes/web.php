@@ -29,6 +29,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/calendar', [DashboardController::class, 'calendarEvents'])->name('dashboard.calendar');
     Route::get('/dashboard/chart-data', [DashboardController::class, 'chartData'])->name('dashboard.chart-data');
     Route::get('/dashboard/audit-logs', [DashboardController::class, 'auditLogs']);
+    Route::post('/dashboard/notifications/mark-read', [DashboardController::class, 'markNotificationsRead'])
+        ->name('dashboard.notifications.mark-read');
 
     Route::get('/requests/create', [RequestController::class, 'createPage'])->name('request.create');
 

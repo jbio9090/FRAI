@@ -45,6 +45,11 @@ class HandleInertiaRequests extends Middleware
                     'admin_email_notifications_enabled' => $request->user()->admin_email_notifications_enabled,
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
+<<<<<<< Updated upstream
+=======
+                    'admin_email_notifications_enabled' => $request->user()->admin_email_notifications_enabled,
+                    'notification_unread_count' => $request->user()->unreadNotifications()->count(),
+>>>>>>> Stashed changes
                 ] : null,
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),
