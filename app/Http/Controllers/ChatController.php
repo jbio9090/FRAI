@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Http\File as HttpFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
@@ -2923,7 +2924,10 @@ class ChatController extends Controller
 
             if ($facilityId !== null) {
                 $request->validate([
-                    'facility_id' => 'integer|exists:facilities,id',
+                    'facility_id' => [
+                        'integer',
+                        Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+                    ],
                 ]);
             }
 
@@ -2946,7 +2950,11 @@ class ChatController extends Controller
                 ]);
 
                 $request->validate([
-                    'facility_id' => 'required|integer|exists:facilities,id',
+                    'facility_id' => [
+                        'required',
+                        'integer',
+                        Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+                    ],
                     'date' => 'required|date_format:Y-m-d',
                     'time_start' => 'required|regex:/^\d{2}:\d{2}$/',
                     'time_end' => 'required|regex:/^\d{2}:\d{2}$/',
@@ -3185,7 +3193,10 @@ class ChatController extends Controller
                 'priority_reason'                                 => 'nullable|string|max:512',
                 'participant_count'                               => 'nullable|integer|min:1',
                 'facility_bookings'                               => 'required|array|min:1',
-                'facility_bookings.*.facility_id'                 => 'required|exists:facilities,id',
+                'facility_bookings.*.facility_id'                 => [
+                    'required',
+                    Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+                ],
                 'facility_bookings.*.date'                        => 'required|date',
                 'facility_bookings.*.time_start'                  => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
                 'facility_bookings.*.time_end'                    => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
@@ -3193,7 +3204,11 @@ class ChatController extends Controller
                 'facility_bookings.*.equipment'                   => 'sometimes|nullable|array',
                 'facility_bookings.*.equipment.*.equipment_id'    => 'required|exists:equipments,id',
                 'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
-                'facility_bookings.*.equipment.*.source_facility_id' => 'sometimes|nullable|exists:facilities,id',
+                'facility_bookings.*.equipment.*.source_facility_id' => [
+                    'sometimes',
+                    'nullable',
+                    Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+                ],
                 'facility_bookings.*.equipment.*.is_borrowed'     => 'sometimes|boolean',
                 'files'                                           => 'nullable|array',
                 'files.*'                                         => 'nullable|string',

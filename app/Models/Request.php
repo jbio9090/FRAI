@@ -59,7 +59,7 @@ class Request extends Model
 
     public function facility()
     {
-        return $this->belongsTo(Facility::class);
+        return $this->belongsTo(Facility::class)->withTrashed();
     }
 
     public function user()
@@ -80,6 +80,7 @@ class Request extends Model
     public function facilities()
     {
         return $this->belongsToMany(Facility::class, 'request_facilities')
+            ->withTrashed()
             ->withPivot('date_requested', 'time_start', 'time_end')
             ->withTimestamps();
     }

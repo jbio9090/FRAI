@@ -137,7 +137,11 @@ Route::middleware('auth')->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
         Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
         Route::post('/campuses', [FacilityController::class, 'storeCampus'])->name('campuses.store');
+        Route::put('/campuses/{campus}', [FacilityController::class, 'updateCampus'])->name('campuses.update');
+        Route::delete('/campuses/{campus}', [FacilityController::class, 'destroyCampus'])->name('campuses.destroy');
         Route::post('/buildings', [FacilityController::class, 'storeBuilding'])->name('buildings.store');
+        Route::put('/buildings/{building}', [FacilityController::class, 'updateBuilding'])->name('buildings.update');
+        Route::delete('/buildings/{building}', [FacilityController::class, 'destroyBuilding'])->name('buildings.destroy');
         Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
     // chatbot

@@ -1,33 +1,28 @@
 import { router, usePage } from "@inertiajs/react";
-import { ArrowDownUp, ArrowUp, Check, ChevronDown, HousePlus, Map, MapPinned, Pencil, Trash2 } from "lucide-react";
+import { Archive, ArrowDownUp, ArrowUp, Check, ChevronDown, HousePlus, Map, MapPinned, Pencil } from "lucide-react";
 import { useMemo, useState, type FormEvent, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
-import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-    Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import DefaultLayout from "@/layout.tsx/default.";
 
 interface Campus {
     id: number;
     name: string;
+    deleted_at?: string | null;
 }
 
 interface Building {
     id: number;
     campus_id: number;
     name: string;
-    campus?: Campus;
+    campus?: Campus | null;
+    deleted_at?: string | null;
 }
 
 interface Facility {
@@ -39,12 +34,16 @@ interface Facility {
     building_id: number | null;
     campus?: Campus | null;
     building_record?: Building | null;
+    deleted_at?: string | null;
 }
 
 interface FacilityProps {
     facilities: Facility[];
     campuses: Campus[];
     buildings: Building[];
+    activeCampuses: Campus[];
+    activeBuildings: Building[];
+    showArchived: boolean;
 }
 
 interface FacilityForm {
@@ -97,13 +96,7 @@ const SORT_OPTIONS: { label: string; value: SortValue | "" }[] = [
     { label: "Capacity (High)", value: "capacity-desc" },
 ];
 
-interface FacilityFormFieldsProps {
-    form: FacilityForm;
-    campuses: Campus[];
-    buildings: Building[];
-    onChange: (f: FacilityForm) => void;
-    errors: Partial<Record<keyof FacilityForm, string>>;
-}
+const isArchived = (item: { deleted_at?: string | null }) => Boolean(item.deleted_at);
 
 const isFacilityFormValid = (form: FacilityForm) => {
     const capacity = Number(form.capacity);
@@ -118,6 +111,22 @@ const getFacilitySortValue = (facility: Facility, sortKey: SortKey) => {
     if (sortKey === "campus") return facility.campus?.name ?? "";
     return facility[sortKey];
 };
+
+function StatusText({ archived }: { archived: boolean }) {
+    return (
+        <span className={archived ? "text-sm text-muted-foreground" : "text-sm text-foreground"}>
+            {archived ? "Archived" : "Active"}
+        </span>
+    );
+}
+
+interface FacilityFormFieldsProps {
+    form: FacilityForm;
+    campuses: Campus[];
+    buildings: Building[];
+    onChange: (f: FacilityForm) => void;
+    errors: Partial<Record<keyof FacilityForm, string>>;
+}
 
 const FacilityFormFields = ({ form, campuses, buildings, onChange, errors }: FacilityFormFieldsProps) => {
     const filteredBuildings = buildings.filter((building) => String(building.campus_id) === form.campus_id);
@@ -177,7 +186,7 @@ const FacilityFormFields = ({ form, campuses, buildings, onChange, errors }: Fac
                 </Select>
                 {errors.building_id && <p className="text-sm text-destructive">{errors.building_id}</p>}
                 {form.campus_id && filteredBuildings.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No buildings have been added for this campus yet.</p>
+                    <p className="text-sm text-muted-foreground">No active buildings have been added for this campus.</p>
                 )}
             </div>
 
@@ -197,7 +206,46 @@ const FacilityFormFields = ({ form, campuses, buildings, onChange, errors }: Fac
     );
 };
 
-export default function Facilities({ facilities, campuses, buildings }: FacilityProps) {
+interface BuildingFormFieldsProps {
+    form: BuildingForm;
+    campuses: Campus[];
+    onChange: (form: BuildingForm) => void;
+    errors: Partial<Record<keyof BuildingForm, string>>;
+}
+
+const BuildingFormFields = ({ form, campuses, onChange, errors }: BuildingFormFieldsProps) => (
+    <>
+        <div className="flex flex-col gap-1.5">
+            <Label>Campus</Label>
+            <Select value={form.campus_id} onValueChange={(campusId) => onChange({ ...form, campus_id: campusId })}>
+                <SelectTrigger className={errors.campus_id ? "w-full border-destructive focus-visible:ring-destructive" : "w-full"}>
+                    <SelectValue placeholder="Select campus" />
+                </SelectTrigger>
+                <SelectContent>
+                    {campuses.map((campus) => (
+                        <SelectItem key={campus.id} value={String(campus.id)}>
+                            {campus.name}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {errors.campus_id && <p className="text-sm text-destructive">{errors.campus_id}</p>}
+        </div>
+        <div className="flex flex-col gap-1.5">
+            <Label>Building</Label>
+            <Input
+                type="text"
+                placeholder="Enter building name"
+                value={form.name}
+                className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
+                onChange={(e) => onChange({ ...form, name: e.target.value })}
+            />
+            {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+        </div>
+    </>
+);
+
+export default function Facilities({ facilities, campuses, buildings, activeCampuses, activeBuildings, showArchived }: FacilityProps) {
     const { auth, errors } = usePage<PageProps>().props;
     const isAdmin = auth.user?.roles?.includes("admin") ?? false;
 
@@ -206,8 +254,12 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
     const [addForm, setAddForm] = useState<FacilityForm>(emptyFacilityForm);
     const [isAddBuildingOpen, setIsAddBuildingOpen] = useState(false);
     const [buildingForm, setBuildingForm] = useState<BuildingForm>(emptyBuildingForm);
+    const [editingBuilding, setEditingBuilding] = useState<Building | null>(null);
+    const [editBuildingForm, setEditBuildingForm] = useState<BuildingForm>(emptyBuildingForm);
     const [isAddCampusOpen, setIsAddCampusOpen] = useState(false);
     const [campusForm, setCampusForm] = useState<CampusForm>(emptyCampusForm);
+    const [editingCampus, setEditingCampus] = useState<Campus | null>(null);
+    const [editCampusForm, setEditCampusForm] = useState<CampusForm>(emptyCampusForm);
     const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
     const [editForm, setEditForm] = useState<FacilityForm>(emptyFacilityForm);
 
@@ -234,7 +286,16 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
     const canAddFacility = isFacilityFormValid(addForm);
     const canEditFacility = isFacilityFormValid(editForm);
     const canAddBuilding = buildingForm.name.trim() !== "" && buildingForm.campus_id !== "";
+    const canEditBuilding = editBuildingForm.name.trim() !== "" && editBuildingForm.campus_id !== "";
     const canAddCampus = campusForm.name.trim() !== "";
+    const canEditCampus = editCampusForm.name.trim() !== "";
+
+    const toggleArchived = (checked: boolean) => {
+        router.get(route("facilities"), checked ? { show_archived: 1 } : {}, {
+            preserveScroll: true,
+            preserveState: false,
+        });
+    };
 
     const handleAdd = (e: FormEvent) => {
         e.preventDefault();
@@ -265,6 +326,19 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
         });
     };
 
+    const handleEditBuilding = (e: FormEvent) => {
+        e.preventDefault();
+        if (!editingBuilding || !canEditBuilding) return;
+
+        router.put(route("buildings.update", editingBuilding.id), {
+            name: editBuildingForm.name,
+            campus_id: Number(editBuildingForm.campus_id),
+        }, {
+            preserveScroll: true,
+            onSuccess: () => { setEditingBuilding(null); setEditBuildingForm(emptyBuildingForm); },
+        });
+    };
+
     const handleAddCampus = (e: FormEvent) => {
         e.preventDefault();
         if (!canAddCampus) return;
@@ -275,6 +349,18 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
             preserveScroll: true,
             onSuccess: () => { setIsAddCampusOpen(false); setCampusForm(emptyCampusForm); },
             onError: () => setIsAddCampusOpen(true),
+        });
+    };
+
+    const handleEditCampus = (e: FormEvent) => {
+        e.preventDefault();
+        if (!editingCampus || !canEditCampus) return;
+
+        router.put(route("campuses.update", editingCampus.id), {
+            name: editCampusForm.name,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => { setEditingCampus(null); setEditCampusForm(emptyCampusForm); },
         });
     };
 
@@ -305,9 +391,30 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
         });
     };
 
-    const handleDelete = (e: MouseEvent, id: number) => {
+    const openEditBuildingDialog = (building: Building) => {
+        setEditingBuilding(building);
+        setEditBuildingForm({
+            name: building.name,
+            campus_id: String(building.campus_id),
+        });
+    };
+
+    const openEditCampusDialog = (campus: Campus) => {
+        setEditingCampus(campus);
+        setEditCampusForm({ name: campus.name });
+    };
+
+    const handleArchiveFacility = (e: MouseEvent, id: number) => {
         e.stopPropagation();
         router.delete(route("facility.destroy", id), { preserveScroll: true });
+    };
+
+    const handleArchiveBuilding = (building: Building) => {
+        router.delete(route("buildings.destroy", building.id), { preserveScroll: true });
+    };
+
+    const handleArchiveCampus = (campus: Campus) => {
+        router.delete(route("campuses.destroy", campus.id), { preserveScroll: true });
     };
 
     return (
@@ -368,6 +475,11 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
                         </div>
                     </PopoverContent>
                 </Popover>
+
+                <div className="ml-auto flex items-center gap-2">
+                    <Label htmlFor="show-archived" className="text-sm">Show archived</Label>
+                    <Switch id="show-archived" checked={showArchived} onCheckedChange={toggleArchived} />
+                </div>
             </div>
 
             <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) setAddForm(emptyFacilityForm); }}>
@@ -376,7 +488,7 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
                         <DialogTitle className="flex items-center gap-2"><HousePlus />Add Facility</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAdd} className="flex flex-col gap-4 mb-8">
-                        <FacilityFormFields form={addForm} campuses={campuses} buildings={buildings} onChange={setAddForm} errors={errors} />
+                        <FacilityFormFields form={addForm} campuses={activeCampuses} buildings={activeBuildings} onChange={setAddForm} errors={errors} />
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={!canAddFacility}>Save Facility</Button>
@@ -416,33 +528,7 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
                         <DialogTitle className="flex items-center gap-2"><MapPinned />Add Building</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAddBuilding} className="flex flex-col gap-4 mb-8">
-                        <div className="flex flex-col gap-1.5">
-                            <Label>Campus</Label>
-                            <Select value={buildingForm.campus_id} onValueChange={(campusId) => setBuildingForm({ ...buildingForm, campus_id: campusId })}>
-                                <SelectTrigger className={errors.campus_id ? "w-full border-destructive focus-visible:ring-destructive" : "w-full"}>
-                                    <SelectValue placeholder="Select campus" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {campuses.map((campus) => (
-                                        <SelectItem key={campus.id} value={String(campus.id)}>
-                                            {campus.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {errors.campus_id && <p className="text-sm text-destructive">{errors.campus_id}</p>}
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                            <Label>Building</Label>
-                            <Input
-                                type="text"
-                                placeholder="Enter building name"
-                                value={buildingForm.name}
-                                className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
-                                onChange={(e) => setBuildingForm({ ...buildingForm, name: e.target.value })}
-                            />
-                            {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
-                        </div>
+                        <BuildingFormFields form={buildingForm} campuses={activeCampuses} onChange={setBuildingForm} errors={errors} />
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsAddBuildingOpen(false)}>Cancel</Button>
                             <Button type="submit" disabled={!canAddBuilding}>Save Building</Button>
@@ -457,7 +543,7 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
                         <DialogTitle className="flex items-center gap-2"><Pencil />Edit Facility</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleEdit} className="flex flex-col gap-4 mb-8">
-                        <FacilityFormFields form={editForm} campuses={campuses} buildings={buildings} onChange={setEditForm} errors={errors} />
+                        <FacilityFormFields form={editForm} campuses={activeCampuses} buildings={activeBuildings} onChange={setEditForm} errors={errors} />
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setEditingFacility(null)}>Cancel</Button>
                             <Button type="submit" disabled={!canEditFacility}>Save Changes</Button>
@@ -466,51 +552,201 @@ export default function Facilities({ facilities, campuses, buildings }: Facility
                 </DialogContent>
             </Dialog>
 
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="font-bold">Name</TableHead>
-                        <TableHead className="font-bold">Campus</TableHead>
-                        <TableHead className="font-bold">Building</TableHead>
-                        <TableHead className="font-bold">Capacity</TableHead>
-                        {isAdmin && <TableHead />}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {sortedFacilities.length ? (
-                        sortedFacilities.map((facility) => (
-                            <TableRow
-                                key={facility.id}
-                                className="cursor-pointer"
-                                onClick={() => router.visit(route("facility.detail", [facility.id]))}
-                            >
-                                <TableCell>{facility.name}</TableCell>
-                                <TableCell>{facility.campus?.name ?? "Main"}</TableCell>
-                                <TableCell>{facility.building_record?.name ?? facility.building}</TableCell>
-                                <TableCell>{facility.capacity}</TableCell>
-                                {isAdmin && (
-                                    <TableCell className="text-right">
-                                        <div className="flex items-center justify-end gap-1">
-                                            <Button variant="ghost" size="icon" onClick={(e) => openEditDialog(e, facility)}>
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" onClick={(e) => handleDelete(e, facility.id)}>
-                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
-                                        </div>
-                                    </TableCell>
-                                )}
-                            </TableRow>
-                        ))
-                    ) : (
+            <Dialog open={!!editingBuilding} onOpenChange={(open) => { if (!open) { setEditingBuilding(null); setEditBuildingForm(emptyBuildingForm); } }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><Pencil />Edit Building</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleEditBuilding} className="flex flex-col gap-4 mb-8">
+                        <BuildingFormFields form={editBuildingForm} campuses={activeCampuses} onChange={setEditBuildingForm} errors={errors} />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditingBuilding(null)}>Cancel</Button>
+                            <Button type="submit" disabled={!canEditBuilding}>Save Changes</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!editingCampus} onOpenChange={(open) => { if (!open) { setEditingCampus(null); setEditCampusForm(emptyCampusForm); } }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><Pencil />Edit Campus</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleEditCampus} className="flex flex-col gap-4 mb-8">
+                        <div className="flex flex-col gap-1.5">
+                            <Label>Campus</Label>
+                            <Input
+                                type="text"
+                                placeholder="Enter campus name"
+                                value={editCampusForm.name}
+                                className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
+                                onChange={(e) => setEditCampusForm({ name: e.target.value })}
+                            />
+                            {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditingCampus(null)}>Cancel</Button>
+                            <Button type="submit" disabled={!canEditCampus}>Save Changes</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <div className="mt-6">
+                <Table>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell colSpan={isAdmin ? 5 : 4} className="h-24 text-center text-muted-foreground">
-                                No facilities found.
-                            </TableCell>
+                            <TableHead className="font-bold">Name</TableHead>
+                            <TableHead className="font-bold">Campus</TableHead>
+                            <TableHead className="font-bold">Building</TableHead>
+                            <TableHead className="font-bold">Capacity</TableHead>
+                            <TableHead className="font-bold">Status</TableHead>
+                            {isAdmin && <TableHead />}
                         </TableRow>
-                    )}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {sortedFacilities.length ? (
+                            sortedFacilities.map((facility) => {
+                                const archived = isArchived(facility);
+
+                                return (
+                                    <TableRow
+                                        key={facility.id}
+                                        className="cursor-pointer"
+                                        onClick={() => router.visit(route("facility.detail", [facility.id]))}
+                                    >
+                                        <TableCell>{facility.name}</TableCell>
+                                        <TableCell>{facility.campus?.name ?? "Main"}</TableCell>
+                                        <TableCell>{facility.building_record?.name ?? facility.building}</TableCell>
+                                        <TableCell>{facility.capacity}</TableCell>
+                                        <TableCell><StatusText archived={archived} /></TableCell>
+                                        {isAdmin && (
+                                            <TableCell className="text-right">
+                                                {!archived && (
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <Button variant="ghost" size="icon" onClick={(e) => openEditDialog(e, facility)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" onClick={(e) => handleArchiveFacility(e, facility.id)}>
+                                                            <Archive className="h-4 w-4 text-destructive" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                        )}
+                                    </TableRow>
+                                );
+                            })
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={isAdmin ? 6 : 5} className="h-24 text-center text-muted-foreground">
+                                    No facilities found.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+
+            <div className="mt-8 grid gap-8 lg:grid-cols-2">
+                <section>
+                    <h2 className="mb-3 text-sm font-semibold">Buildings</h2>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="font-bold">Name</TableHead>
+                                <TableHead className="font-bold">Campus</TableHead>
+                                <TableHead className="font-bold">Status</TableHead>
+                                {isAdmin && <TableHead />}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {buildings.length ? (
+                                buildings.map((building) => {
+                                    const archived = isArchived(building);
+
+                                    return (
+                                        <TableRow key={building.id}>
+                                            <TableCell className="max-w-48 whitespace-normal break-words leading-snug">{building.name}</TableCell>
+                                            <TableCell className="max-w-48 whitespace-normal break-words leading-snug">
+                                                {building.campus?.name ?? `Campus #${building.campus_id}`}
+                                            </TableCell>
+                                            <TableCell><StatusText archived={archived} /></TableCell>
+                                            {isAdmin && (
+                                                <TableCell className="whitespace-nowrap text-right">
+                                                    {!archived && (
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <Button variant="ghost" size="icon" onClick={() => openEditBuildingDialog(building)}>
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" onClick={() => handleArchiveBuilding(building)}>
+                                                                <Archive className="h-4 w-4 text-destructive" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                    );
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={isAdmin ? 4 : 3} className="h-20 text-center text-muted-foreground">
+                                        No buildings found.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </section>
+
+                <section>
+                    <h2 className="mb-3 text-sm font-semibold">Campuses</h2>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="font-bold">Name</TableHead>
+                                <TableHead className="font-bold">Status</TableHead>
+                                {isAdmin && <TableHead />}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {campuses.length ? (
+                                campuses.map((campus) => {
+                                    const archived = isArchived(campus);
+
+                                    return (
+                                        <TableRow key={campus.id}>
+                                            <TableCell className="max-w-64 whitespace-normal break-words leading-snug">{campus.name}</TableCell>
+                                            <TableCell><StatusText archived={archived} /></TableCell>
+                                            {isAdmin && (
+                                                <TableCell className="whitespace-nowrap text-right">
+                                                    {!archived && (
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <Button variant="ghost" size="icon" onClick={() => openEditCampusDialog(campus)}>
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" onClick={() => handleArchiveCampus(campus)}>
+                                                                <Archive className="h-4 w-4 text-destructive" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                    );
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={isAdmin ? 3 : 2} className="h-20 text-center text-muted-foreground">
+                                        No campuses found.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </section>
+            </div>
         </DefaultLayout>
     );
 }
