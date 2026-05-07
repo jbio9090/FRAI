@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import {
     LayoutGrid,
     FileClock,
@@ -33,12 +33,15 @@ import {
     SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { usePermission } from '@/hooks/use-permission';
+import type { SharedData } from '@/types';
 import logo from '@/svg/FRAI.svg';
 
 const iconRailItem = 'group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { hasPermission } = usePermission();
+    const { auth } = usePage<SharedData>().props;
+    const hasUnreadNotifications = Number(auth.user?.notification_unread_count ?? 0) > 0;
     const [isChatbotModalOpen, setIsChatbotModalOpen] = React.useState(false);
 
     const data = {
@@ -136,7 +139,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenuItem key={item.title} className={`px-2 ${iconRailItem}`}>
                             <SidebarMenuButton asChild isActive={checkRoute(item.url)} tooltip={item.title}>
                                 <Link href={route(item.url)}>
-                                    <item.icon className="h-4 w-4 shrink-0" />
+                                    <span className="relative flex shrink-0">
+                                        <item.icon className="h-4 w-4" />
+                                        {item.url === 'dashboard' && hasUnreadNotifications && (
+                                            <span className="absolute -right-1 -top-1 size-2 rounded-full bg-red-500" />
+                                        )}
+                                    </span>
                                     <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                                 </Link>
                             </SidebarMenuButton>

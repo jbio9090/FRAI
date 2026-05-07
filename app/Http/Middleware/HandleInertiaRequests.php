@@ -45,17 +45,17 @@ class HandleInertiaRequests extends Middleware
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
                     'admin_email_notifications_enabled' => $request->user()->admin_email_notifications_enabled,
+                    'notification_unread_count' => $request->user()->unreadNotifications()->count(),
                 ] : null,
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),
-            'flash' => fn() => [
-                'success'            => session('success'),
-                'error'              => session('error'),
+            'flash' => fn () => [
+                'success' => session('success'),
+                'error' => session('error'),
                 'temp_password_reset' => session('temp_password_reset'),
             ],
         ]);
     }
-
 
     private function getBreadcrumbs(Request $request): array
     {
@@ -66,7 +66,7 @@ class HandleInertiaRequests extends Middleware
 
         // Filter out numeric IDs
         $breadcrumbs = array_filter($segments, function ($segment) {
-            return !is_numeric($segment);
+            return ! is_numeric($segment);
         });
 
         return array_values($breadcrumbs);

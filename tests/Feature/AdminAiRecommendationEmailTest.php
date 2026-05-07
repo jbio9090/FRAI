@@ -2,14 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Enums\RequestStatus;
+use App\Jobs\ProcessRequestRecommendation;
+use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFile;
 use App\Models\User;
-use App\Models\Facility;
-use App\Jobs\ProcessRequestRecommendation;
 use App\Notifications\AdminAiRecommendationReady;
+use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
-use App\Enums\RequestStatus;
 use App\Services\NotificationService;
 use App\Services\RAG\AIRecommendationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -191,6 +192,7 @@ class AdminAiRecommendationEmailTest extends TestCase
         $this->assertSame(RequestStatus::APPROVED, $facilityRequest->fresh()->recommended_action);
         $this->assertSame('Chatbot path recommendation.', $facilityRequest->fresh()->recommended_action_reason);
         Notification::assertSentTo($admin, AdminAiRecommendationReady::class);
+        Notification::assertSentTo($admin, NewPendingRequest::class);
     }
 
     public function test_admin_can_toggle_email_notification_subscription(): void

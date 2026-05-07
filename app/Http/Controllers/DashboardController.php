@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AuditEvent;
+use App\Enums\RequestStatus;
 use App\Models\AuditLog;
 use App\Models\Facility;
-use App\Enums\RequestStatus;
 use App\Services\FacilityService;
 use App\Services\RequestService;
-use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
@@ -20,42 +19,65 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         $start = now()->startOfMonth()->format('Y-m-d');
-        $end   = now()->endOfMonth()->format('Y-m-d');
+        $end = now()->endOfMonth()->format('Y-m-d');
 
         $chartData = AuditLog::query()
-            ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id))
-            ->selectRaw("DATE(created_at) as date, COUNT(*) as total")
+            ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id))
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
             ->orderBy('date')
             ->get()
-            ->map(fn($row) => [
-                'date'  => $row->date,
-                'total' => (int) $row->total, 
+            ->map(fn ($row) => [
+                'date' => $row->date,
+                'total' => (int) $row->total,
             ])
             ->values();
 
-        return Inertia::render("dashboard", [
-            'labeledBreadcrumb' => "Dashboard",
+        return Inertia::render('dashboard', [
+            'labeledBreadcrumb' => 'Dashboard',
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
-            'buildings'     => Facility::distinct()->pluck('building')->filter()->values(),
+            'buildings' => Facility::distinct()->pluck('building')->filter()->values(),
             // Filter recent logs list
             'auditLogs' => AuditLog::with('user')
-                ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id))
+                ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id))
                 ->where('created_at', '>=', now()->subDays(6)->startOfDay())
                 ->latest()
                 ->paginate(10),
-            'chartData'     => $chartData,
+            'chartData' => $chartData,
             'pending' => $this->requestService->get([RequestStatus::PENDING]),
+            'notifications' => $user->notifications()
+                ->latest()
+                ->limit(20)
+                ->get()
+                ->map(fn ($notification) => [
+                    'id' => $notification->id,
+                    'title' => $notification->data['title'] ?? 'Notification',
+                    'body' => $notification->data['body'] ?? '',
+                    'url' => $notification->data['url'] ?? route('dashboard'),
+                    'category' => $notification->data['category'] ?? null,
+                    'status' => $notification->data['status'] ?? null,
+                    'created_at' => $notification->created_at?->toISOString(),
+                    'read_at' => $notification->read_at?->toISOString(),
+                ]),
+        ]);
+    }
+
+    public function markNotificationsRead()
+    {
+        Auth::user()?->unreadNotifications()->update(['read_at' => now()]);
+
+        return response()->json([
+            'unread_count' => 0,
         ]);
     }
 
     public function calendarEvents(Request $request)
     {
         $start = $request->input('start');
-        $end   = $request->input('end');
+        $end = $request->input('end');
 
-        if (!$start || !$end) {
+        if (! $start || ! $end) {
             return response()->json([]);
         }
 
@@ -70,19 +92,20 @@ class DashboardController extends Controller
         $range = $request->input('range', 'week');
 
         $query = AuditLog::query()
-            ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id));
+            ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id));
 
         if ($range === 'day' || $range === 'today') {
             $logs = $query
-                ->selectRaw("EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*) as total")
+                ->selectRaw('EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*) as total')
                 ->whereBetween('created_at', [now()->utc()->startOfDay(), now()->utc()->endOfDay()])
                 ->groupBy('hour')
                 ->pluck('total', 'hour');
 
             $data = collect(range(0, 23))->map(function ($hour) use ($logs) {
                 $formattedHour = str_pad($hour, 2, '0', STR_PAD_LEFT);
+
                 return [
-                    'date'  => $formattedHour . ':00',
+                    'date' => $formattedHour.':00',
                     'total' => (int) ($logs[$hour] ?? 0),
                 ];
             })->values();
@@ -91,18 +114,18 @@ class DashboardController extends Controller
         }
 
         [$start, $end] = match ($range) {
-            'month'   => [now()->utc()->startOfMonth()->startOfDay(), now()->utc()->endOfMonth()->endOfDay()],
+            'month' => [now()->utc()->startOfMonth()->startOfDay(), now()->utc()->endOfMonth()->endOfDay()],
             '3months' => [now()->utc()->subMonths(3)->startOfDay(), now()->utc()->endOfDay()],
-            default   => [now()->utc()->subDays(6)->startOfDay(), now()->utc()->endOfDay()],
+            default => [now()->utc()->subDays(6)->startOfDay(), now()->utc()->endOfDay()],
         };
 
         return response()->json(
-            $query->selectRaw("DATE(created_at) as date, COUNT(*) as total")
+            $query->selectRaw('DATE(created_at) as date, COUNT(*) as total')
                 ->whereBetween('created_at', [$start, $end])
                 ->groupBy('date')
                 ->orderBy('date')
                 ->get()
-                ->map(fn($row) => ['date' => $row->date, 'total' => (int) $row->total])
+                ->map(fn ($row) => ['date' => $row->date, 'total' => (int) $row->total])
                 ->values()
         );
     }
@@ -113,15 +136,15 @@ class DashboardController extends Controller
         $range = $request->input('range', 'week');
 
         [$start, $end] = match ($range) {
-            'day'     => [now()->startOfDay(), now()->endOfDay()],
-            'month'   => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
+            'day' => [now()->startOfDay(), now()->endOfDay()],
+            'month' => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
             '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
-            default   => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
+            default => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
         };
 
         return response()->json(
             AuditLog::with('user')
-                ->when(!$user->hasRole('admin'), fn($q) => $q->where('user_id', $user->id))
+                ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id))
                 ->whereBetween('created_at', [$start, $end])
                 ->latest()
                 ->paginate(10)

@@ -2,13 +2,13 @@
 
 namespace App\Notifications;
 
+use App\Enums\RequestStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
-use NotificationChannels\WebPush\WebPushMessage;
-use NotificationChannels\WebPush\WebPushChannel;
 use Illuminate\Support\Facades\Date;
-use App\Enums\RequestStatus;
+use NotificationChannels\WebPush\WebPushChannel;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class Reschedule extends Notification implements ShouldQueue
 {
@@ -25,19 +25,19 @@ class Reschedule extends Notification implements ShouldQueue
 
     public function via($notifiable)
     {
-        return [WebPushChannel::class];
+        return ['database', WebPushChannel::class];
     }
 
-    public function toWebPush($notifiable, $notification)
+    public function toWebPush($notifiable, $notification): WebPushMessage
     {
         return (new WebPushMessage)
-            ->title("This Request needs recheduling" . $this->request_title)
+            ->title($this->title())
             ->icon('/FRAI.png')
-            ->body("Another event will be ongoing on $this->facility on selected $this->date $this->time")
+            ->body($this->body())
             ->action('View your request', 'view_request')
             ->options(['TTL' => 1000])
-            ->data(["url" => $this->url])
-            ->tag("{$this->status->value}-" . $this->request_title . Date::now()->toString());
+            ->data(['url' => $this->url])
+            ->tag("{$this->status->value}-".$this->request_title.Date::now()->toString());
         // ->vibrate();
         // ->data(['id' => $notification->id])
         // ->badge()
@@ -46,5 +46,31 @@ class Reschedule extends Notification implements ShouldQueue
         // ->lang()
         // ->renotify()
         // ->requireInteraction()
+    }
+
+    public function toDatabase($notifiable): array
+    {
+        return [
+            'title' => $this->title(),
+            'body' => $this->body(),
+            'url' => $this->url,
+            'category' => 'reschedule',
+            'status' => $this->status->value,
+        ];
+    }
+
+    public function toArray($notifiable): array
+    {
+        return $this->toDatabase($notifiable);
+    }
+
+    private function title(): string
+    {
+        return 'This request needs rescheduling: '.$this->request_title;
+    }
+
+    private function body(): string
+    {
+        return "Another event will be ongoing on $this->facility on selected $this->date $this->time";
     }
 }

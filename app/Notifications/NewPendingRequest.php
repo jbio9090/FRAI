@@ -2,14 +2,14 @@
 
 namespace App\Notifications;
 
+use App\Enums\RequestStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
-use NotificationChannels\WebPush\WebPushMessage;
-use NotificationChannels\WebPush\WebPushChannel;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\URL;
-use App\Enums\RequestStatus;
+use NotificationChannels\WebPush\WebPushChannel;
+use NotificationChannels\WebPush\WebPushMessage;
 
 class NewPendingRequest extends Notification implements ShouldQueue
 {
@@ -26,10 +26,10 @@ class NewPendingRequest extends Notification implements ShouldQueue
 
     public function via($notifiable)
     {
-        return [WebPushChannel::class];
+        return ['database', WebPushChannel::class];
     }
 
-    public function toWebPush($notifiable, $notification)
+    public function toWebPush($notifiable, $notification): WebPushMessage
     {
         $actionTitle = 'Approve';
         $routeAction = 'approve';
@@ -37,7 +37,7 @@ class NewPendingRequest extends Notification implements ShouldQueue
         if ($this->recommended_action) {
             $actionTitle = $this->recommended_action->value;
 
-            $routeAction = match($this->recommended_action->name) {
+            $routeAction = match ($this->recommended_action->name) {
                 'CONDITIONALLY_APPROVED' => 'conditionally_approve',
                 'FOR_RESCHEDULE' => 'for_reschedule',
                 'DENIED' => 'reject',
@@ -61,15 +61,32 @@ class NewPendingRequest extends Notification implements ShouldQueue
         return (new WebPushMessage)
             ->title($this->request_title)
             ->icon('/FRAI.png')
-            ->body('Pending Request from ' . $this->user_name)
+            ->body('Pending Request from '.$this->user_name)
             ->action($actionTitle, 'recommended_action') // Dynamic Action Button
             ->action('Deny', 'deny_action')              // Secondary Action Button
             ->options(['TTL' => 2419200])
             ->data([
-                "url" => $this->url,
-                "recommended_action_url" => $recommendedUrl,
-                "deny_url" => $denyUrl
+                'url' => $this->url,
+                'recommended_action_url' => $recommendedUrl,
+                'deny_url' => $denyUrl,
             ])
-            ->tag("pending-".$this->request_title . Date::now()->toString());
+            ->tag('pending-'.$this->request_title.Date::now()->toString());
+    }
+
+    public function toDatabase($notifiable): array
+    {
+        return [
+            'title' => $this->request_title,
+            'body' => 'Pending Request from '.$this->user_name,
+            'url' => $this->url,
+            'request_id' => $this->request_id,
+            'category' => 'new_pending_request',
+            'status' => RequestStatus::PENDING->value,
+        ];
+    }
+
+    public function toArray($notifiable): array
+    {
+        return $this->toDatabase($notifiable);
     }
 }

@@ -2,34 +2,33 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Http\File as HttpFile;
-use Illuminate\Support\Carbon;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
+use App\Enums\RequestStatus;
+use App\Jobs\ProcessRequestRecommendation;
+use App\Models\Equipment;
+use App\Models\Facility;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
-use App\Models\Facility;
-use App\Models\Equipment;
-use App\Enums\RequestStatus;
-use App\Enums\PriorityLevel;
 use App\Services\ChatbotLogService;
 use App\Services\OllamaModelResolver;
 use App\Services\RAG\FaqMatchingService;
-use App\Jobs\ProcessRequestRecommendation;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatController extends Controller
 {
     private string $ollamaUrl;
+
     private string $model;
 
     private const SESSION_TTL_MINUTES = 15;
@@ -38,10 +37,9 @@ class ChatController extends Controller
         protected ChatbotLogService $chatbotLogService,
         protected FaqMatchingService $faqMatchingService,
         protected OllamaModelResolver $ollamaModelResolver
-    )
-    {
+    ) {
         $this->ollamaUrl = config('ollama-laravel.url');
-        $this->model     = config('ollama-laravel.model', 'qwen2.5:3b');
+        $this->model = config('ollama-laravel.model', 'qwen2.5:3b');
     }
 
     private function chatModel(): string
@@ -51,12 +49,12 @@ class ChatController extends Controller
 
     private function sessionCacheKey(): string
     {
-        return 'chat_session_' . Auth::id();
+        return 'chat_session_'.Auth::id();
     }
 
     private function faqStateCacheKey(): string
     {
-        return 'chat_faq_state_' . Auth::id();
+        return 'chat_faq_state_'.Auth::id();
     }
 
     private function saveSession(array $userMessages): void
@@ -76,6 +74,7 @@ class ChatController extends Controller
     public function getSession(): JsonResponse
     {
         $messages = $this->loadSession();
+
         return response()->json(['messages' => $messages]);
     }
 
@@ -88,12 +87,14 @@ class ChatController extends Controller
     public function newSession(): JsonResponse
     {
         $this->clearSession();
+
         return response()->json(['message' => 'Session cleared.']);
     }
 
     private function getFaqState(): array
     {
         $state = Cache::get($this->faqStateCacheKey(), []);
+
         return is_array($state) ? $state : [];
     }
 
@@ -121,12 +122,14 @@ class ChatController extends Controller
             $candidate = trim($value);
             if ($candidate !== '' && ctype_digit($candidate)) {
                 $parsed = (int) $candidate;
+
                 return $parsed > 0 ? $parsed : null;
             }
         }
 
         if (is_numeric($value)) {
             $parsed = (int) $value;
+
             return $parsed > 0 ? $parsed : null;
         }
 
@@ -137,8 +140,8 @@ class ChatController extends Controller
     {
         $errors = [];
         $facilityIds = collect($facilityBookings)
-            ->map(fn($booking) => isset($booking['facility_id']) ? (int) $booking['facility_id'] : 0)
-            ->filter(fn($id) => $id > 0)
+            ->map(fn ($booking) => isset($booking['facility_id']) ? (int) $booking['facility_id'] : 0)
+            ->filter(fn ($id) => $id > 0)
             ->unique()
             ->values()
             ->all();
@@ -156,14 +159,14 @@ class ChatController extends Controller
             }
 
             $facility = $facilities->get($facilityId);
-            if (!$facility) {
+            if (! $facility) {
                 continue;
             }
 
             $bookingParticipantCount = $this->normalizePositiveIntValue($booking['expected_capacity'] ?? null)
                 ?? $this->normalizePositiveIntValue($globalParticipantCount);
 
-            if (!$bookingParticipantCount) {
+            if (! $bookingParticipantCount) {
                 continue;
             }
 
@@ -200,10 +203,10 @@ class ChatController extends Controller
         }
 
         if (
-            !$facility &&
+            ! $facility &&
             preg_match('/\b([a-z]{2,6})\s*([0-9]+[a-z])\b/i', $message, $codeMatches)
         ) {
-            $requestedCode = strtolower($codeMatches[1] . $codeMatches[2]);
+            $requestedCode = strtolower($codeMatches[1].$codeMatches[2]);
             $facility = $facilities->first(function ($f) use ($requestedCode) {
                 $facilityCompactName = (string) Str::of(Str::lower((string) $f->name))
                     ->replaceMatches('/[^a-z0-9]+/', '');
@@ -212,13 +215,13 @@ class ChatController extends Controller
             });
         }
 
-        if (!$facility) {
+        if (! $facility) {
             $normalizedMessage = Str::lower($message);
             $messageSlug = (string) Str::of($normalizedMessage)
                 ->replaceMatches('/[^a-z0-9]+/', ' ')
                 ->squish();
             $facility = $facilities
-                ->sortByDesc(fn($f) => strlen((string) $f->name))
+                ->sortByDesc(fn ($f) => strlen((string) $f->name))
                 ->first(function ($f) use ($normalizedMessage, $messageSlug) {
                     $facilityName = Str::lower((string) $f->name);
                     $facilityBaseName = trim((string) preg_replace('/\s*\(.*?\)\s*/', ' ', $facilityName));
@@ -247,7 +250,7 @@ class ChatController extends Controller
             }
         }
 
-        if (!$date && preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*|\s+)\d{4}\b/i', $message, $matches)) {
+        if (! $date && preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:,\s*|\s+)\d{4}\b/i', $message, $matches)) {
             try {
                 $date = Carbon::parse($matches[0])->format('Y-m-d');
             } catch (\Exception $e) {
@@ -255,7 +258,7 @@ class ChatController extends Controller
             }
         }
 
-        if (!$date && preg_match('/\b(today|tomorrow)\b/i', $message, $matches)) {
+        if (! $date && preg_match('/\b(today|tomorrow)\b/i', $message, $matches)) {
             $keyword = strtolower($matches[1]);
             $date = $keyword === 'tomorrow'
                 ? Carbon::tomorrow()->format('Y-m-d')
@@ -267,7 +270,7 @@ class ChatController extends Controller
 
     private function normalizeDateValue(mixed $value): mixed
     {
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return $value;
         }
 
@@ -285,7 +288,7 @@ class ChatController extends Controller
 
     private function normalizeTimeValue(mixed $value): mixed
     {
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return $value;
         }
 
@@ -313,17 +316,18 @@ class ChatController extends Controller
     private function toMinuteOfDay(string $time): ?int
     {
         $normalized = $this->normalizeTimeValue($time);
-        if (!is_string($normalized) || !preg_match('/^\d{2}:\d{2}$/', $normalized)) {
+        if (! is_string($normalized) || ! preg_match('/^\d{2}:\d{2}$/', $normalized)) {
             return null;
         }
 
         [$hour, $minute] = array_map('intval', explode(':', $normalized));
+
         return ($hour * 60) + $minute;
     }
 
     private function extractTimeRangeFromMessage(?string $message): array
     {
-        if (!$message) {
+        if (! $message) {
             return ['time_start' => null, 'time_end' => null];
         }
 
@@ -335,7 +339,7 @@ class ChatController extends Controller
         ];
 
         foreach ($patterns as $pattern) {
-            if (!preg_match($pattern, $message, $matches)) {
+            if (! preg_match($pattern, $message, $matches)) {
                 continue;
             }
 
@@ -392,7 +396,7 @@ class ChatController extends Controller
             return (int) $facilityValue;
         }
 
-        if (!is_string($facilityValue) || trim($facilityValue) === '') {
+        if (! is_string($facilityValue) || trim($facilityValue) === '') {
             return $facilityValue;
         }
 
@@ -422,7 +426,7 @@ class ChatController extends Controller
             return (int) $equipmentValue;
         }
 
-        if (!is_string($equipmentValue) || trim($equipmentValue) === '') {
+        if (! is_string($equipmentValue) || trim($equipmentValue) === '') {
             return $equipmentValue;
         }
 
@@ -436,7 +440,7 @@ class ChatController extends Controller
             ->orderByRaw('LENGTH(name) DESC');
 
         if ($facilityId) {
-            $query->whereHas('facilities', fn($q) => $q->where('facilities.id', $facilityId));
+            $query->whereHas('facilities', fn ($q) => $q->where('facilities.id', $facilityId));
         }
 
         $equipment = $query
@@ -461,7 +465,7 @@ class ChatController extends Controller
         int $quantityNeeded
     ): ?int {
         $candidates = $equipment->facilities
-            ->filter(fn($facility) => (int) $facility->id !== $selectedFacilityId)
+            ->filter(fn ($facility) => (int) $facility->id !== $selectedFacilityId)
             ->map(function ($facility) use ($equipment, $date, $timeStart, $timeEnd) {
                 $slotAvailability = $equipment->slotAvailabilityInFacility(
                     (int) $facility->id,
@@ -475,7 +479,7 @@ class ChatController extends Controller
                     'remaining' => (int) ($slotAvailability['remaining_quantity'] ?? 0),
                 ];
             })
-            ->filter(fn($candidate) => $candidate['remaining'] > 0)
+            ->filter(fn ($candidate) => $candidate['remaining'] > 0)
             ->values()
             ->all();
 
@@ -506,7 +510,7 @@ class ChatController extends Controller
 
         foreach ($facilityBookings as $bookingIndex => &$booking) {
             $facilityId = (int) ($booking['facility_id'] ?? 0);
-            if ($facilityId <= 0 || empty($booking['equipment']) || !is_array($booking['equipment'])) {
+            if ($facilityId <= 0 || empty($booking['equipment']) || ! is_array($booking['equipment'])) {
                 continue;
             }
 
@@ -522,7 +526,7 @@ class ChatController extends Controller
                 }
 
                 $equipment = Equipment::with('facilities:id')->find($equipmentId);
-                if (!$equipment) {
+                if (! $equipment) {
                     continue;
                 }
 
@@ -533,7 +537,7 @@ class ChatController extends Controller
                         : 0);
 
                 $isAssignedToSelectedFacility = $equipment->facilities->contains('id', $facilityId);
-                if ((!$sourceFacilityId || $sourceFacilityId === $facilityId) && !$isAssignedToSelectedFacility) {
+                if ((! $sourceFacilityId || $sourceFacilityId === $facilityId) && ! $isAssignedToSelectedFacility) {
                     $resolvedSourceFacilityId = $this->resolveBorrowSourceFacilityId(
                         $equipment,
                         $facilityId,
@@ -557,11 +561,12 @@ class ChatController extends Controller
                 $isBorrowed = $sourceFacilityId > 0 && $sourceFacilityId !== $facilityId;
                 $validationFacilityId = $isBorrowed ? $sourceFacilityId : $facilityId;
 
-                if (!$equipment->facilities->contains('id', $validationFacilityId)) {
+                if (! $equipment->facilities->contains('id', $validationFacilityId)) {
                     $errors["facility_bookings.{$bookingIndex}.equipment.{$equipmentIndex}.equipment_id"][] =
                         $isBorrowed
                             ? "{$equipment->name} is not assigned to the source facility (ID {$validationFacilityId}) for borrowing."
                             : "{$equipment->name} is not assigned to the selected facility.";
+
                     continue;
                 }
 
@@ -590,7 +595,7 @@ class ChatController extends Controller
                 $facilityId = isset($booking['facility_id']) ? (int) $booking['facility_id'] : 0;
                 $equipmentRows = $booking['equipment'] ?? [];
 
-                if ($facilityId <= 0 || !is_array($equipmentRows)) {
+                if ($facilityId <= 0 || ! is_array($equipmentRows)) {
                     return [];
                 }
 
@@ -619,7 +624,7 @@ class ChatController extends Controller
                     ->values()
                     ->all();
             })
-            ->unique(fn($pair) => "{$pair['facility_id']}:{$pair['equipment_id']}")
+            ->unique(fn ($pair) => "{$pair['facility_id']}:{$pair['equipment_id']}")
             ->values();
 
         foreach ($pairs as $pair) {
@@ -637,11 +642,11 @@ class ChatController extends Controller
 
         foreach ($equipmentSelections as $equipmentKey => $equipmentValue) {
             if (is_array($equipmentValue)) {
-                if (!isset($equipmentValue['equipment_id']) && isset($equipmentValue['id'])) {
+                if (! isset($equipmentValue['equipment_id']) && isset($equipmentValue['id'])) {
                     $equipmentValue['equipment_id'] = $equipmentValue['id'];
                 }
 
-                if (!isset($equipmentValue['quantity_needed']) && isset($equipmentValue['quantity'])) {
+                if (! isset($equipmentValue['quantity_needed']) && isset($equipmentValue['quantity'])) {
                     $equipmentValue['quantity_needed'] = $equipmentValue['quantity'];
                 }
 
@@ -662,7 +667,7 @@ class ChatController extends Controller
                 }
 
                 $isBorrowed = false;
-                if ($sourceFacilityId && (!$facilityId || $sourceFacilityId !== $facilityId)) {
+                if ($sourceFacilityId && (! $facilityId || $sourceFacilityId !== $facilityId)) {
                     $isBorrowed = true;
                 } elseif (array_key_exists('is_borrowed', $equipmentValue)) {
                     $parsedBorrowed = filter_var($equipmentValue['is_borrowed'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
@@ -675,7 +680,7 @@ class ChatController extends Controller
                         'quantity_needed' => $quantityNeeded,
                     ];
 
-                    if ($isBorrowed && $sourceFacilityId && (!$facilityId || $sourceFacilityId !== $facilityId)) {
+                    if ($isBorrowed && $sourceFacilityId && (! $facilityId || $sourceFacilityId !== $facilityId)) {
                         $normalizedItem['is_borrowed'] = true;
                         $normalizedItem['source_facility_id'] = $sourceFacilityId;
                     }
@@ -686,7 +691,7 @@ class ChatController extends Controller
                 continue;
             }
 
-            if (!is_numeric($equipmentKey) || !is_numeric($equipmentValue)) {
+            if (! is_numeric($equipmentKey) || ! is_numeric($equipmentValue)) {
                 continue;
             }
 
@@ -696,7 +701,7 @@ class ChatController extends Controller
             }
 
             $resolvedEquipmentId = $this->resolveEquipmentIdFromValue((int) $equipmentKey, $facilityId);
-            if (!is_numeric($resolvedEquipmentId)) {
+            if (! is_numeric($resolvedEquipmentId)) {
                 continue;
             }
 
@@ -715,7 +720,7 @@ class ChatController extends Controller
         $meta = [];
 
         foreach (array_merge($base, $extra) as $selection) {
-            if (!is_array($selection)) {
+            if (! is_array($selection)) {
                 continue;
             }
 
@@ -734,7 +739,7 @@ class ChatController extends Controller
                 continue;
             }
 
-            $bucketKey = $equipmentId . ':' . (($isBorrowed && $sourceFacilityId > 0) ? $sourceFacilityId : 0);
+            $bucketKey = $equipmentId.':'.(($isBorrowed && $sourceFacilityId > 0) ? $sourceFacilityId : 0);
             $totals[$bucketKey] = ($totals[$bucketKey] ?? 0) + $quantityNeeded;
             $meta[$bucketKey] = [
                 'equipment_id' => $equipmentId,
@@ -777,23 +782,23 @@ class ChatController extends Controller
             unset($normalized['participant_count']);
         }
 
-        if (!empty($normalized['facility_bookings']) && is_array($normalized['facility_bookings'])) {
+        if (! empty($normalized['facility_bookings']) && is_array($normalized['facility_bookings'])) {
             $normalizedBookings = [];
 
             foreach ($normalized['facility_bookings'] as $booking) {
-                if (!is_array($booking)) {
+                if (! is_array($booking)) {
                     continue;
                 }
 
-                if (!isset($booking['time_start']) && isset($booking['start_time'])) {
+                if (! isset($booking['time_start']) && isset($booking['start_time'])) {
                     $booking['time_start'] = $booking['start_time'];
                 }
 
-                if (!isset($booking['time_end']) && isset($booking['end_time'])) {
+                if (! isset($booking['time_end']) && isset($booking['end_time'])) {
                     $booking['time_end'] = $booking['end_time'];
                 }
 
-                if (!isset($booking['expected_capacity']) && isset($booking['participant_count'])) {
+                if (! isset($booking['expected_capacity']) && isset($booking['participant_count'])) {
                     $booking['expected_capacity'] = $booking['participant_count'];
                 }
 
@@ -824,15 +829,15 @@ class ChatController extends Controller
                 $facilityId = isset($booking['facility_id']) && is_numeric($booking['facility_id'])
                     ? (int) $booking['facility_id']
                     : null;
-                $normalizedOwnEquipment = !empty($booking['equipment']) && is_array($booking['equipment'])
+                $normalizedOwnEquipment = ! empty($booking['equipment']) && is_array($booking['equipment'])
                     ? $this->normalizeEquipmentSelections($booking['equipment'], $facilityId)
                     : [];
-                $normalizedBorrowedEquipment = !empty($booking['borrowed_equipment']) && is_array($booking['borrowed_equipment'])
+                $normalizedBorrowedEquipment = ! empty($booking['borrowed_equipment']) && is_array($booking['borrowed_equipment'])
                     ? $this->normalizeEquipmentSelections($booking['borrowed_equipment'], $facilityId)
                     : [];
                 $normalizedEquipment = $this->mergeNormalizedEquipment($normalizedOwnEquipment, $normalizedBorrowedEquipment);
 
-                if (!empty($normalizedEquipment)) {
+                if (! empty($normalizedEquipment)) {
                     $booking['equipment'] = $normalizedEquipment;
                 } else {
                     unset($booking['equipment']);
@@ -842,15 +847,16 @@ class ChatController extends Controller
                 if ($facilityId && $facilityId > 0) {
                     $booking['facility_id'] = $facilityId;
                     $normalizedBookings[] = $booking;
+
                     continue;
                 }
 
-                if (!empty($normalizedEquipment)) {
+                if (! empty($normalizedEquipment)) {
                     $orphanEquipmentSelections = array_merge($orphanEquipmentSelections, $normalizedEquipment);
                 }
             }
 
-            if (!empty($normalizedBookings) && !empty($orphanEquipmentSelections)) {
+            if (! empty($normalizedBookings) && ! empty($orphanEquipmentSelections)) {
                 $firstFacilityId = (int) ($normalizedBookings[0]['facility_id'] ?? 0);
                 $resolvedOrphans = $this->normalizeEquipmentSelections($orphanEquipmentSelections, $firstFacilityId > 0 ? $firstFacilityId : null);
                 $normalizedBookings[0]['equipment'] = $this->mergeNormalizedEquipment(
@@ -859,12 +865,12 @@ class ChatController extends Controller
                 );
             }
 
-            if (!empty($normalizedBookings)) {
+            if (! empty($normalizedBookings)) {
                 $normalized['facility_bookings'] = array_values($normalizedBookings);
             }
         }
 
-        if (!empty($normalized['equipment']) && is_array($normalized['equipment']) && !empty($normalized['facility_bookings'][0])) {
+        if (! empty($normalized['equipment']) && is_array($normalized['equipment']) && ! empty($normalized['facility_bookings'][0])) {
             $firstFacilityId = isset($normalized['facility_bookings'][0]['facility_id']) && is_numeric($normalized['facility_bookings'][0]['facility_id'])
                 ? (int) $normalized['facility_bookings'][0]['facility_id']
                 : null;
@@ -882,7 +888,7 @@ class ChatController extends Controller
             unset($normalized['equipment']);
         }
 
-        if (!empty($normalized['borrowed_equipment']) && is_array($normalized['borrowed_equipment']) && !empty($normalized['facility_bookings'][0])) {
+        if (! empty($normalized['borrowed_equipment']) && is_array($normalized['borrowed_equipment']) && ! empty($normalized['facility_bookings'][0])) {
             $firstFacilityId = isset($normalized['facility_bookings'][0]['facility_id']) && is_numeric($normalized['facility_bookings'][0]['facility_id'])
                 ? (int) $normalized['facility_bookings'][0]['facility_id']
                 : null;
@@ -905,7 +911,7 @@ class ChatController extends Controller
 
     private function isAvailabilityIntent(?string $message): bool
     {
-        if (!$message) {
+        if (! $message) {
             return false;
         }
 
@@ -919,7 +925,7 @@ class ChatController extends Controller
             $normalized
         );
 
-        if (!$hasAvailabilityKeyword) {
+        if (! $hasAvailabilityKeyword) {
             return false;
         }
 
@@ -938,7 +944,7 @@ class ChatController extends Controller
             $normalized
         );
 
-        if ($isLikelyMetaDiscussion && !$hasBookingEntity) {
+        if ($isLikelyMetaDiscussion && ! $hasBookingEntity) {
             return false;
         }
 
@@ -947,7 +953,7 @@ class ChatController extends Controller
 
     private function shouldRunDeterministicAvailabilityCheck(?string $latestUserMessage, array $resolved, $facilities): bool
     {
-        if (!$latestUserMessage || !$this->isAvailabilityIntent($latestUserMessage)) {
+        if (! $latestUserMessage || ! $this->isAvailabilityIntent($latestUserMessage)) {
             return false;
         }
 
@@ -959,10 +965,10 @@ class ChatController extends Controller
         $latestRange = $this->extractTimeRangeFromMessage($latestUserMessage);
 
         $messageHasDirectBookingDetails =
-            !empty($latestParsed['facility']) ||
-            !empty($latestParsed['date']) ||
-            !empty($latestRange['time_start']) ||
-            !empty($latestRange['time_end']);
+            ! empty($latestParsed['facility']) ||
+            ! empty($latestParsed['date']) ||
+            ! empty($latestRange['time_start']) ||
+            ! empty($latestRange['time_end']);
 
         $messageHasReferentialFollowUp = (bool) preg_match(
             '/\b(it|that|same (room|facility|slot|time|date)|same schedule|same booking)\b/i',
@@ -993,20 +999,20 @@ class ChatController extends Controller
 
             $parsed = $this->extractFacilityAndDateFromMessage($content, $facilities);
 
-            if (!$facility && !empty($parsed['facility'])) {
+            if (! $facility && ! empty($parsed['facility'])) {
                 $facility = $parsed['facility'];
             }
 
-            if (!$date && !empty($parsed['date'])) {
+            if (! $date && ! empty($parsed['date'])) {
                 $date = $parsed['date'];
             }
 
-            if (!$timeStart || !$timeEnd) {
+            if (! $timeStart || ! $timeEnd) {
                 $timeRange = $this->extractTimeRangeFromMessage($content);
-                if (!$timeStart && !empty($timeRange['time_start'])) {
+                if (! $timeStart && ! empty($timeRange['time_start'])) {
                     $timeStart = $timeRange['time_start'];
                 }
-                if (!$timeEnd && !empty($timeRange['time_end'])) {
+                if (! $timeEnd && ! empty($timeRange['time_end'])) {
                     $timeEnd = $timeRange['time_end'];
                 }
             }
@@ -1041,7 +1047,7 @@ class ChatController extends Controller
     private function buildAvailabilityResponse($facility, string $date, $allRequests, ?string $requestedStart = null, ?string $requestedEnd = null): string
     {
         $approvedBookings = $allRequests
-            ->filter(fn($r) => $r->status->value === 'Approved')
+            ->filter(fn ($r) => $r->status->value === 'Approved')
             ->flatMap(function ($r) use ($facility) {
                 return $r->requestFacilities
                     ->where('facility_id', $facility->id)
@@ -1079,7 +1085,7 @@ class ChatController extends Controller
             }
 
             $conflicts = $approvedBookings
-                ->filter(fn($booking) => $this->hasTimeOverlap(
+                ->filter(fn ($booking) => $this->hasTimeOverlap(
                     $date,
                     $normalizedRequestedStart,
                     $normalizedRequestedEnd,
@@ -1165,7 +1171,7 @@ class ChatController extends Controller
     private function tryFaqSemanticMatch(?string $latestUserMessage, bool $faqMode): ?array
     {
         $match = $this->faqMatchingService->match($latestUserMessage);
-        if (!$match) {
+        if (! $match) {
             return null;
         }
 
@@ -1229,13 +1235,13 @@ class ChatController extends Controller
             [
                 'role' => 'system',
                 'content' => "You classify user intent for FAQ suggestion confirmation.\n"
-                    . "Given a user's reply to a suggested FAQ question, return ONLY strict JSON with one key:\n"
-                    . "{\"intent\":\"confirm_suggestion\"|\"reject_suggestion\"|\"other\"}\n"
-                    . "Rules:\n"
-                    . "- confirm_suggestion: user agrees to use suggested FAQ (e.g., yes, yeah, that's it, that one, go with that).\n"
-                    . "- reject_suggestion: user rejects suggestion (e.g., no, not that, different one, wrong).\n"
-                    . "- other: unclear or unrelated.\n"
-                    . "Output JSON only. No extra text.",
+                    ."Given a user's reply to a suggested FAQ question, return ONLY strict JSON with one key:\n"
+                    ."{\"intent\":\"confirm_suggestion\"|\"reject_suggestion\"|\"other\"}\n"
+                    ."Rules:\n"
+                    ."- confirm_suggestion: user agrees to use suggested FAQ (e.g., yes, yeah, that's it, that one, go with that).\n"
+                    ."- reject_suggestion: user rejects suggestion (e.g., no, not that, different one, wrong).\n"
+                    ."- other: unclear or unrelated.\n"
+                    .'Output JSON only. No extra text.',
             ],
             [
                 'role' => 'user',
@@ -1245,7 +1251,7 @@ class ChatController extends Controller
 
         try {
             $client = new Client(['timeout' => 60]);
-            $response = $client->post($this->ollamaUrl . '/api/chat', [
+            $response = $client->post($this->ollamaUrl.'/api/chat', [
                 'json' => [
                     'model' => $this->chatModel(),
                     'messages' => $messages,
@@ -1258,11 +1264,13 @@ class ChatController extends Controller
             $parsed = json_decode($raw, true);
 
             $intent = is_array($parsed) ? trim((string) ($parsed['intent'] ?? '')) : '';
+
             return in_array($intent, ['confirm_suggestion', 'reject_suggestion', 'other'], true)
                 ? $intent
                 : 'other';
         } catch (\Throwable $exception) {
-            \Log::warning('FAQ suggestion intent classifier failed: ' . $exception->getMessage());
+            \Log::warning('FAQ suggestion intent classifier failed: '.$exception->getMessage());
+
             return 'other';
         }
     }
@@ -1282,6 +1290,7 @@ class ChatController extends Controller
 
             if (preg_match('/Did you mean:\s*"([^"]+)"/i', $content, $matches)) {
                 $suggestedQuestion = trim((string) ($matches[1] ?? ''));
+
                 return $suggestedQuestion !== '' ? $suggestedQuestion : null;
             }
         }
@@ -1291,12 +1300,12 @@ class ChatController extends Controller
 
     private function resolveFaqFromSuggestionConfirmation(array $messages, ?string $latestUserMessage, bool $faqMode): ?array
     {
-        if (!$faqMode) {
+        if (! $faqMode) {
             return null;
         }
 
         $suggestedQuestion = $this->extractLatestFaqSuggestedQuestion($messages);
-        if (!$suggestedQuestion) {
+        if (! $suggestedQuestion) {
             return null;
         }
 
@@ -1304,7 +1313,7 @@ class ChatController extends Controller
         $classifierIntent = null;
         $confirmed = $this->isFaqSuggestionConfirmation($latestUserMessage);
 
-        if (!$confirmed) {
+        if (! $confirmed) {
             if ($this->isFaqSuggestionRejection($latestUserMessage)) {
                 return null;
             }
@@ -1314,12 +1323,12 @@ class ChatController extends Controller
             $confirmed = $classifierIntent === 'confirm_suggestion';
         }
 
-        if (!$confirmed) {
+        if (! $confirmed) {
             return null;
         }
 
         $match = $this->faqMatchingService->findByQuestion($suggestedQuestion);
-        if (!$match) {
+        if (! $match) {
             return null;
         }
 
@@ -1356,7 +1365,7 @@ class ChatController extends Controller
     {
         $conversation = array_values(array_filter($messages, function ($message) {
             $role = $message['role'] ?? null;
-            if (!in_array($role, ['user', 'assistant'], true)) {
+            if (! in_array($role, ['user', 'assistant'], true)) {
                 return false;
             }
 
@@ -1379,10 +1388,10 @@ class ChatController extends Controller
             $answer = trim((string) ($faq['answer'] ?? ''));
             $similarity = isset($faq['similarity']) ? round((float) $faq['similarity'], 4) : null;
 
-            $lines[] = "FAQ #" . ($index + 1)
-                . " (rule_id={$ruleId}" . ($similarity !== null ? ", similarity={$similarity}" : '') . ")\n"
-                . "Question: {$question}\n"
-                . "Answer: {$answer}";
+            $lines[] = 'FAQ #'.($index + 1)
+                ." (rule_id={$ruleId}".($similarity !== null ? ", similarity={$similarity}" : '').")\n"
+                ."Question: {$question}\n"
+                ."Answer: {$answer}";
         }
 
         return implode("\n\n", $lines);
@@ -1424,7 +1433,7 @@ class ChatController extends Controller
             'similarity' => isset($primaryMatch['similarity']) ? (float) $primaryMatch['similarity'] : 1.0,
         ];
 
-        $rest = array_values(array_filter($retrievedFaqs, fn(array $faq) => (int) ($faq['rule_id'] ?? 0) !== $primaryRuleId));
+        $rest = array_values(array_filter($retrievedFaqs, fn (array $faq) => (int) ($faq['rule_id'] ?? 0) !== $primaryRuleId));
         array_unshift($rest, $primary);
 
         return array_slice($rest, 0, 5);
@@ -1454,12 +1463,12 @@ class ChatController extends Controller
             [[
                 'role' => 'system',
                 'content' => "You are the assistant in FAQ mode.\n"
-                    . "You must answer conversationally using ONLY the FAQ snippets below as source-of-truth.\n"
-                    . "Do not invent facts, steps, approvals, IDs, or requirements not present in snippets.\n"
-                    . "If user asks outside FAQ knowledge, politely state FAQ mode is limited to FAQ content and suggest exiting FAQ mode for booking/availability help.\n"
-                    . "Do not cite FAQ IDs unless user explicitly asks for source.\n"
-                    . "Keep the answer natural and concise.\n\n"
-                    . "FAQ SNIPPETS:\n{$knowledgeBlock}{$primaryHint}",
+                    ."You must answer conversationally using ONLY the FAQ snippets below as source-of-truth.\n"
+                    ."Do not invent facts, steps, approvals, IDs, or requirements not present in snippets.\n"
+                    ."If user asks outside FAQ knowledge, politely state FAQ mode is limited to FAQ content and suggest exiting FAQ mode for booking/availability help.\n"
+                    ."Do not cite FAQ IDs unless user explicitly asks for source.\n"
+                    ."Keep the answer natural and concise.\n\n"
+                    ."FAQ SNIPPETS:\n{$knowledgeBlock}{$primaryHint}",
             ]],
             $faqConversationMessages
         );
@@ -1476,7 +1485,7 @@ class ChatController extends Controller
 
         try {
             $client = new Client(['timeout' => 120]);
-            $response = $client->post($this->ollamaUrl . '/api/chat', [
+            $response = $client->post($this->ollamaUrl.'/api/chat', [
                 'json' => [
                     'model' => $this->chatModel(),
                     'messages' => $llmMessages,
@@ -1486,9 +1495,11 @@ class ChatController extends Controller
 
             $data = json_decode($response->getBody(), true);
             $content = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+
             return $content !== '' ? $content : null;
         } catch (\Throwable $exception) {
-            \Log::warning('FAQ conversational response failed: ' . $exception->getMessage());
+            \Log::warning('FAQ conversational response failed: '.$exception->getMessage());
+
             return null;
         }
     }
@@ -1501,13 +1512,13 @@ class ChatController extends Controller
     ): string {
         $nearQuestion = trim((string) ($nearMatch['question'] ?? ''));
         $faqTitles = array_slice(array_map(
-            fn(array $faq) => trim((string) ($faq['question'] ?? '')),
+            fn (array $faq) => trim((string) ($faq['question'] ?? '')),
             $retrievedFaqs
         ), 0, 5);
-        $faqTitles = array_values(array_filter($faqTitles, fn(string $title) => $title !== ''));
+        $faqTitles = array_values(array_filter($faqTitles, fn (string $title) => $title !== ''));
 
         $fallback = $nearQuestion !== ''
-            ? 'Are you asking about "' . $nearQuestion . '"?'
+            ? 'Are you asking about "'.$nearQuestion.'"?'
             : 'Could you clarify which FAQ topic you want help with?';
 
         $conversation = $this->getFaqConversationMessages($messages, 10);
@@ -1515,21 +1526,21 @@ class ChatController extends Controller
             [[
                 'role' => 'system',
                 'content' => "You are in FAQ mode. Ask ONE concise clarifying question only.\n"
-                    . "Do not answer yet.\n"
-                    . "Use the candidate FAQ titles to narrow intent.\n"
-                    . "Keep tone natural and helpful.\n"
-                    . "Write as the assistant addressing the user directly.\n"
-                    . "Do NOT write from the user's perspective (avoid lines like 'How can I...').\n"
-                    . "Prefer phrasing like: 'Are you asking ...?'\n"
-                    . "Use at most two short sentences.\n"
-                    . "Output plain text only.",
+                    ."Do not answer yet.\n"
+                    ."Use the candidate FAQ titles to narrow intent.\n"
+                    ."Keep tone natural and helpful.\n"
+                    ."Write as the assistant addressing the user directly.\n"
+                    ."Do NOT write from the user's perspective (avoid lines like 'How can I...').\n"
+                    ."Prefer phrasing like: 'Are you asking ...?'\n"
+                    ."Use at most two short sentences.\n"
+                    .'Output plain text only.',
             ]],
             $conversation,
             [[
                 'role' => 'user',
-                'content' => "User message: " . trim((string) $latestUserMessage) . "\n"
-                    . "Candidate FAQ titles:\n- " . (!empty($faqTitles) ? implode("\n- ", $faqTitles) : '(none)')
-                    . ($nearQuestion !== '' ? "\nClosest title: {$nearQuestion}" : ''),
+                'content' => 'User message: '.trim((string) $latestUserMessage)."\n"
+                    ."Candidate FAQ titles:\n- ".(! empty($faqTitles) ? implode("\n- ", $faqTitles) : '(none)')
+                    .($nearQuestion !== '' ? "\nClosest title: {$nearQuestion}" : ''),
             ]]
         );
 
@@ -1537,7 +1548,7 @@ class ChatController extends Controller
 
         try {
             $client = new Client(['timeout' => 60]);
-            $response = $client->post($this->ollamaUrl . '/api/chat', [
+            $response = $client->post($this->ollamaUrl.'/api/chat', [
                 'json' => [
                     'model' => $this->chatModel(),
                     'messages' => $llmMessages,
@@ -1548,7 +1559,7 @@ class ChatController extends Controller
             $data = json_decode($response->getBody(), true);
             $content = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
         } catch (\Throwable $exception) {
-            \Log::warning('FAQ clarification response generation failed: ' . $exception->getMessage());
+            \Log::warning('FAQ clarification response generation failed: '.$exception->getMessage());
         }
 
         if ($content === null || $content === '') {
@@ -1566,9 +1577,9 @@ class ChatController extends Controller
             $hasDidYouMean = preg_match('/did you mean/i', $content) === 1;
             $mentionsNearQuestion = Str::contains(Str::lower($content), Str::lower($nearQuestion));
 
-            if (!$hasDidYouMean && !$mentionsNearQuestion) {
+            if (! $hasDidYouMean && ! $mentionsNearQuestion) {
                 $content = rtrim($content, " \t\n\r\0\x0B.?");
-                $content .= '? Or did you mean: "' . $nearQuestion . '"?';
+                $content .= '? Or did you mean: "'.$nearQuestion.'"?';
             }
         }
 
@@ -1588,7 +1599,8 @@ class ChatController extends Controller
         }
 
         $normalizedMessage = Str::lower(trim((string) $latestUserMessage));
-        return 'msg:' . substr(md5($normalizedMessage), 0, 12);
+
+        return 'msg:'.substr(md5($normalizedMessage), 0, 12);
     }
 
     private function handleFaqModeConversation(array $messages, ?string $latestUserMessage): array
@@ -1694,7 +1706,7 @@ class ChatController extends Controller
         $clarifierAlreadyAsked = (bool) ($faqState['clarifier_asked'] ?? false)
             && ((string) ($faqState['anchor_key'] ?? '') === $anchorKey);
 
-        if (!$clarifierAlreadyAsked) {
+        if (! $clarifierAlreadyAsked) {
             $content = $this->generateFaqClarifyingResponse($messages, $latestUserMessage, $retrievedFaqs, $nearMatch);
             $this->saveFaqState([
                 'clarifier_asked' => true,
@@ -1721,9 +1733,9 @@ class ChatController extends Controller
                     'faq_paraphrased' => false,
                     'faq_no_match' => false,
                     'faq_clarifier_asked' => true,
-                    'faq_near_match_question' => !empty($nearMatch['question']) ? Str::limit((string) $nearMatch['question'], 250) : null,
+                    'faq_near_match_question' => ! empty($nearMatch['question']) ? Str::limit((string) $nearMatch['question'], 250) : null,
                     'faq_near_match_similarity' => isset($nearMatch['similarity']) ? round((float) $nearMatch['similarity'], 4) : null,
-                    'faq_near_match_type' => !empty($nearMatch['match_type']) ? (string) $nearMatch['match_type'] : null,
+                    'faq_near_match_type' => ! empty($nearMatch['match_type']) ? (string) $nearMatch['match_type'] : null,
                     'faq_retrieval_rule_ids' => $retrievalMeta['rule_ids'],
                     'faq_retrieval_similarities' => $retrievalMeta['similarities'],
                     'response_source' => 'faq_conversational_rag',
@@ -1792,7 +1804,7 @@ class ChatController extends Controller
         $length = strlen($text);
         for ($offset = 0; $offset < $length; $offset += $chunkSize) {
             $token = substr($text, $offset, $chunkSize);
-            echo "data: " . json_encode(['token' => $token]) . "\n\n";
+            echo 'data: '.json_encode(['token' => $token])."\n\n";
             ob_flush();
             flush();
 
@@ -1804,7 +1816,7 @@ class ChatController extends Controller
 
     private function storeAssistantReply(array $incomingMessages, string $content): void
     {
-        $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
+        $userAndAssistantMessages = array_filter($incomingMessages, fn ($m) => in_array($m['role'], ['user', 'assistant']));
         $userAndAssistantMessages[] = [
             'role' => 'assistant',
             'content' => $content,
@@ -1861,7 +1873,7 @@ class ChatController extends Controller
             'facility_count_loaded' => $allFacilities->count(),
             'equipment_count_loaded' => $equipmentCount,
             'request_count_loaded' => $allRequests->count(),
-            'approved_request_count' => $allRequests->filter(fn($request) => $request->status->value === 'Approved')->count(),
+            'approved_request_count' => $allRequests->filter(fn ($request) => $request->status->value === 'Approved')->count(),
             ...$this->extractSelectedContext($latestUserMessage, $allFacilities),
         ], $extra);
     }
@@ -1900,7 +1912,7 @@ class ChatController extends Controller
 
     private function extractStructuredPayload(?string $assistantMessage): ?array
     {
-        if (!$assistantMessage) {
+        if (! $assistantMessage) {
             return null;
         }
 
@@ -1923,6 +1935,7 @@ class ChatController extends Controller
                     $start = $i;
                 }
                 $depth++;
+
                 continue;
             }
 
@@ -1953,18 +1966,18 @@ class ChatController extends Controller
         try {
             set_time_limit(300);
 
-            $sessionMessages  = $this->loadSession();
+            $sessionMessages = $this->loadSession();
             $incomingMessages = $request->input('messages', []);
             $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
             $sessionId = $request->session()->getId();
             $faqMode = $request->boolean('faq_mode');
-            if (!$faqMode) {
+            if (! $faqMode) {
                 $this->clearFaqState();
             }
 
-            $sessionMessages = array_filter($sessionMessages, function($msg) {
+            $sessionMessages = array_filter($sessionMessages, function ($msg) {
                 $content = $msg['content'] ?? '';
-                $isStaleContext = 
+                $isStaleContext =
                     strpos($content, 'APPROVED BOOKINGS TABLE') !== false ||
                     strpos($content, 'CURRENT FACILITY REQUESTS') !== false ||
                     strpos($content, 'Available Facilities') !== false ||
@@ -1973,16 +1986,16 @@ class ChatController extends Controller
                     strpos($content, 'DETERMINISTIC AVAILABILITY CHECK') !== false ||
                     strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
                     strpos($content, 'When the user asks whether a facility is available') !== false;
-                
-                return $msg['role'] !== 'system' || !$isStaleContext;
+
+                return $msg['role'] !== 'system' || ! $isStaleContext;
             });
 
             $messages = array_merge($sessionMessages, $incomingMessages);
 
             $participantCount = $request->input('participant_count');
-            $bookingContext   = $request->input('booking_context');
-            $allRequests      = collect();
-            $allFacilities    = collect();
+            $bookingContext = $request->input('booking_context');
+            $allRequests = collect();
+            $allFacilities = collect();
             $rules = [];
             $rulesInjected = false;
             $approvedBookingContextInjected = false;
@@ -2000,7 +2013,7 @@ class ChatController extends Controller
 
                 // Keep request data for deterministic backend checks and logging only.
             } catch (\Exception $e) {
-                \Log::warning('Failed to fetch requests for chat: ' . $e->getMessage());
+                \Log::warning('Failed to fetch requests for chat: '.$e->getMessage());
             }
 
             try {
@@ -2009,21 +2022,21 @@ class ChatController extends Controller
                     return "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})";
                 })->toArray();
 
-                if (!empty($facilities)) {
+                if (! empty($facilities)) {
                     array_unshift($messages, [
-                        'role'    => 'system',
-                        'content' => "Available Facilities:\n- " . implode("\n- ", $facilities),
+                        'role' => 'system',
+                        'content' => "Available Facilities:\n- ".implode("\n- ", $facilities),
                     ]);
                 }
 
                 $equipmentRows = $this->getEquipmentContextRows(50);
-                $equipment = array_map(fn($row) => $row['line'], $equipmentRows);
+                $equipment = array_map(fn ($row) => $row['line'], $equipmentRows);
                 $equipmentCount = count($equipmentRows);
 
-                if (!empty($equipment)) {
+                if (! empty($equipment)) {
                     array_unshift($messages, [
-                        'role'    => 'system',
-                        'content' => "Available Equipment:\n- " . implode("\n- ", $equipment),
+                        'role' => 'system',
+                        'content' => "Available Equipment:\n- ".implode("\n- ", $equipment),
                     ]);
                 }
                 if ($latestUserMessage) {
@@ -2070,7 +2083,7 @@ class ChatController extends Controller
                     $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
                     $shouldRunAvailability = $this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities);
 
-                    if (!$faqMode && $shouldRunAvailability) {
+                    if (! $faqMode && $shouldRunAvailability) {
                         $availabilityResult = $this->buildAvailabilityCheckResult(
                             $resolved['facility'],
                             $resolved['date'],
@@ -2111,7 +2124,7 @@ class ChatController extends Controller
                         ]);
                     }
 
-                    if (!$faqMode) {
+                    if (! $faqMode) {
                         $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, false);
                         if ($faqResult) {
                             $content = (string) $faqResult['content'];
@@ -2151,12 +2164,12 @@ class ChatController extends Controller
                 }
 
                 array_unshift($messages, [
-                    'role'    => 'system',
+                    'role' => 'system',
                     'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission.",
                 ]);
 
                 array_unshift($messages, [
-                    'role'    => 'system',
+                    'role' => 'system',
                     'content' => "AI ROLE BOUNDARY (STRICT):\nYou are an assistant and rationale layer only.\n- Never compute or decide final operational truth for availability, conflicts, participant-capacity limits, or equipment slot limits.\n- Never refuse or approve requests based on your own calculations.\n- Deterministic backend checks and submission validation are the source of truth.\n- When backend deterministic output is available, explain it clearly and suggest next valid actions.",
                 ]);
 
@@ -2165,33 +2178,33 @@ class ChatController extends Controller
                     'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nEQUIPMENT POLICY:\n- During chat, never refuse equipment quantities based on availability math.\n- Do not say \"cannot fulfill\" due to stock/remaining quantity while collecting details.\n- If the user requests equipment, capture the requested equipment ID and quantity and continue.\n- Backend submission validation is the only source of truth for slot-aware equipment limits.\n- If submission fails, relay the backend validation message (including available quantity) and ask for an updated quantity.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
                 ]);
             } catch (\Exception $e) {
-                \Log::warning('Failed to fetch facilities/equipment for chat: ' . $e->getMessage());
+                \Log::warning('Failed to fetch facilities/equipment for chat: '.$e->getMessage());
             }
 
             try {
                 $limitRules = max(1, min(200, (int) $request->input('rules_limit', 50)));
                 $rules = RuleModel::policy()->orderBy('priority')->orderBy('id')->limit($limitRules)->get(['id', 'rule'])
-                    ->map(fn($r) => trim($r->rule))->filter()->toArray();
+                    ->map(fn ($r) => trim($r->rule))->filter()->toArray();
                 $rules = $this->applyBookingPolicyToRules($rules);
 
-                $rulesListText = !empty($rules) ? implode("\n- ", $rules) : '';
-                $rulesSummary  = "Please be aware of the following facility booking guidelines. If a request is directly relevant to these guidelines and would clearly violate one, politely explain the issue and guide toward a valid solution. If a guideline is vague, unrelated to the booking process, or would unnecessarily block a valid facility reservation, use your judgment to allow the request.";
-                $rulesSummary .= !empty($rulesListText) ? "\nGuidelines:\n- " . $rulesListText : "\n(There are currently no configured guidelines.)";
+                $rulesListText = ! empty($rules) ? implode("\n- ", $rules) : '';
+                $rulesSummary = 'Please be aware of the following facility booking guidelines. If a request is directly relevant to these guidelines and would clearly violate one, politely explain the issue and guide toward a valid solution. If a guideline is vague, unrelated to the booking process, or would unnecessarily block a valid facility reservation, use your judgment to allow the request.';
+                $rulesSummary .= ! empty($rulesListText) ? "\nGuidelines:\n- ".$rulesListText : "\n(There are currently no configured guidelines.)";
 
                 array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
                 $rulesInjected = true;
             } catch (\Exception $e) {
-                \Log::warning('Failed to fetch Rules for chat: ' . $e->getMessage());
+                \Log::warning('Failed to fetch Rules for chat: '.$e->getMessage());
                 array_unshift($messages, [
-                    'role'    => 'system',
+                    'role' => 'system',
                     'content' => 'Please be aware of facility booking guidelines stored in the system. If a request directly violates a relevant guideline, explain the issue politely and guide toward a valid solution. Do not unnecessarily block valid facility reservations.',
                 ]);
             }
 
-            if (!empty($bookingContext)) {
+            if (! empty($bookingContext)) {
                 array_unshift($messages, [
-                    'role'    => 'system',
-                    'content' => "BOOKING FLOW CONTEXT (HIGHEST PRIORITY):\n" . $bookingContext . "\n\nIMPORTANT: The user is currently in the middle of a structured booking process. Do NOT restart the process. Only assist based on the collected data and current step.",
+                    'role' => 'system',
+                    'content' => "BOOKING FLOW CONTEXT (HIGHEST PRIORITY):\n".$bookingContext."\n\nIMPORTANT: The user is currently in the middle of a structured booking process. Do NOT restart the process. Only assist based on the collected data and current step.",
                 ]);
             }
 
@@ -2199,76 +2212,78 @@ class ChatController extends Controller
                 return response()->json(['error' => 'No messages provided'], 400);
             }
 
-            $client   = new Client(['timeout' => 580]);
-            $response = $client->post($this->ollamaUrl . '/api/chat', [
+            $client = new Client(['timeout' => 580]);
+            $response = $client->post($this->ollamaUrl.'/api/chat', [
                 'json' => [
-                    'model'    => $this->chatModel(),
+                    'model' => $this->chatModel(),
                     'messages' => $messages,
-                    'stream'   => false,
+                    'stream' => false,
                 ],
             ]);
 
             $data = json_decode($response->getBody(), true);
 
-            $userAndAssistantMessages = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
+            $userAndAssistantMessages = array_filter($incomingMessages, fn ($m) => in_array($m['role'], ['user', 'assistant']));
             if (isset($data['message']['content'])) {
                 $userAndAssistantMessages[] = [
-                    'role'    => 'assistant',
+                    'role' => 'assistant',
                     'content' => $data['message']['content'],
                 ];
             }
             $this->saveSession(array_values($userAndAssistantMessages));
 
             // Rule validation
-            if (!empty($rules)) {
+            if (! empty($rules)) {
                 try {
                     $assistantText = $data['message']['content'] ?? $data['response'] ?? (is_string($data) ? $data : '');
 
                     $validatorMessages = [
                         [
-                            'role'    => 'system',
+                            'role' => 'system',
                             'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules. Important distinctions:\n\n- VIOLATIONS (hard constraints): Explicit prohibitions like 'do not mention X', 'never do Y', 'forbidden topic', 'cannot discuss Z'\n- NOT VIOLATIONS (soft guidelines): Style preferences like 'be brief', 'be concise', 'use simple language', 'be friendly'\n\nPolicy override for this system:\n- Missing request description/additional information is NOT a violation. Description is optional.\n\nOnly flag something as a violation if it DIRECTLY contradicts a strict prohibition. Return ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). Example: {\"violations\": [0,2]} or {\"violations\": []}. No extra text.",
                         ],
                         [
-                            'role'    => 'user',
-                            'content' => "Rules:\n- " . implode("\n- ", $rules) . "\n\nAssistant Response:\n" . $assistantText,
+                            'role' => 'user',
+                            'content' => "Rules:\n- ".implode("\n- ", $rules)."\n\nAssistant Response:\n".$assistantText,
                         ],
                     ];
 
                     try {
-                        $validatorResp = $client->post($this->ollamaUrl . '/api/chat', [
+                        $validatorResp = $client->post($this->ollamaUrl.'/api/chat', [
                             'json' => ['model' => $this->chatModel(), 'messages' => $validatorMessages, 'stream' => false],
                         ]);
 
                         if ($validatorResp->getStatusCode() >= 400) {
-                            \Log::warning('Validator API returned error status: ' . $validatorResp->getStatusCode());
+                            \Log::warning('Validator API returned error status: '.$validatorResp->getStatusCode());
+
                             return response()->json($data);
                         }
 
                         $validatorData = json_decode($validatorResp->getBody(), true);
-                        $jsonText      = $validatorData['message']['content'] ?? $validatorData['response'] ?? (is_string($validatorData) ? $validatorData : '');
-                        $parsed        = @json_decode($jsonText, true);
+                        $jsonText = $validatorData['message']['content'] ?? $validatorData['response'] ?? (is_string($validatorData) ? $validatorData : '');
+                        $parsed = @json_decode($jsonText, true);
 
-                        if (is_array($parsed) && !empty($parsed['violations'])) {
+                        if (is_array($parsed) && ! empty($parsed['violations'])) {
                             $violationDetails = [];
                             foreach ($parsed['violations'] as $ruleIndex) {
                                 if (isset($rules[$ruleIndex])) {
-                                    $violationDetails[] = 'Rule #' . ($ruleIndex + 1) . ': ' . $rules[$ruleIndex];
+                                    $violationDetails[] = 'Rule #'.($ruleIndex + 1).': '.$rules[$ruleIndex];
                                 }
                             }
                             $data = [
                                 'message' => [
-                                    'content' => "I cannot comply with that request because it would violate the following rules:\n\n" . implode("\n\n", $violationDetails),
-                                    'role'    => 'assistant',
+                                    'content' => "I cannot comply with that request because it would violate the following rules:\n\n".implode("\n\n", $violationDetails),
+                                    'role' => 'assistant',
                                 ],
                             ];
                         }
                     } catch (RequestException $ve) {
-                        \Log::warning('Validator API request failed: ' . $ve->getMessage());
+                        \Log::warning('Validator API request failed: '.$ve->getMessage());
+
                         return response()->json($data);
                     }
                 } catch (\Exception $e) {
-                    \Log::warning('Rule validation failed: ' . $e->getMessage());
+                    \Log::warning('Rule validation failed: '.$e->getMessage());
                 }
             }
 
@@ -2311,27 +2326,29 @@ class ChatController extends Controller
             return response()->json($data);
 
         } catch (RequestException $e) {
-            \Log::error('Chat error: ' . $e->getMessage());
+            \Log::error('Chat error: '.$e->getMessage());
             $this->chatbotLogService->logError(
                 $latestUserMessage ?? null,
                 $e->getMessage(),
                 [],
                 $request->session()->getId(),
             );
+
             return response()->json([
-                'error'   => 'Failed to connect to Ollama',
+                'error' => 'Failed to connect to Ollama',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         } catch (\Exception $e) {
-            \Log::error('Chat error: ' . $e->getMessage());
+            \Log::error('Chat error: '.$e->getMessage());
             $this->chatbotLogService->logError(
                 $latestUserMessage ?? null,
                 $e->getMessage(),
                 [],
                 $request->session()->getId(),
             );
+
             return response()->json([
-                'error'   => 'Failed to process chat request',
+                'error' => 'Failed to process chat request',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         }
@@ -2340,29 +2357,29 @@ class ChatController extends Controller
     public function stream(Request $request): StreamedResponse
     {
         // Collect all the same context as chat()
-            $messages         = $request->input('messages', []);
-            $participantCount = $request->input('participant_count');
-            $bookingContext   = $request->input('booking_context');
-            $allRequests      = collect();
-            $allFacilities    = collect();
-            $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
-            $sessionId = $request->session()->getId();
-            $faqMode = $request->boolean('faq_mode');
-            if (!$faqMode) {
-                $this->clearFaqState();
-            }
-            $rulesInjected = false;
-            $approvedBookingContextInjected = false;
-            $deterministicAvailabilityInjected = false;
-            $equipmentCount = 0;
-            $facilityFilterApplied = false;
+        $messages = $request->input('messages', []);
+        $participantCount = $request->input('participant_count');
+        $bookingContext = $request->input('booking_context');
+        $allRequests = collect();
+        $allFacilities = collect();
+        $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
+        $sessionId = $request->session()->getId();
+        $faqMode = $request->boolean('faq_mode');
+        if (! $faqMode) {
+            $this->clearFaqState();
+        }
+        $rulesInjected = false;
+        $approvedBookingContextInjected = false;
+        $deterministicAvailabilityInjected = false;
+        $equipmentCount = 0;
+        $facilityFilterApplied = false;
 
         // Load session history and merge
         $sessionMessages = $this->loadSession();
-        
-        $sessionMessages = array_filter($sessionMessages, function($msg) {
+
+        $sessionMessages = array_filter($sessionMessages, function ($msg) {
             $content = $msg['content'] ?? '';
-            $isStaleContext = 
+            $isStaleContext =
                 strpos($content, 'APPROVED BOOKINGS TABLE') !== false ||
                 strpos($content, 'CURRENT FACILITY REQUESTS') !== false ||
                 strpos($content, 'Available Facilities') !== false ||
@@ -2371,13 +2388,13 @@ class ChatController extends Controller
                 strpos($content, 'DETERMINISTIC AVAILABILITY CHECK') !== false ||
                 strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
                 strpos($content, 'When the user asks whether a facility is available') !== false;
-            
-            return $msg['role'] !== 'system' || !$isStaleContext;
+
+            return $msg['role'] !== 'system' || ! $isStaleContext;
         });
-        
+
         $messages = array_merge($sessionMessages, $messages);
 
-        // Inject DB context 
+        // Inject DB context
         try {
             $allRequests = RequestModel::with(['user', 'requestFacilities', 'facilities'])
                 ->whereIn('status', ['Pending', 'Approved'])
@@ -2385,23 +2402,23 @@ class ChatController extends Controller
 
             // Keep request data for deterministic backend checks and logging only.
         } catch (\Exception $e) {
-            \Log::warning('Stream: Failed to fetch requests: ' . $e->getMessage());
+            \Log::warning('Stream: Failed to fetch requests: '.$e->getMessage());
         }
 
         try {
-            $allFacilities       = Facility::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'building', 'capacity']);
-            $facilities = $allFacilities->map(fn($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
+            $allFacilities = Facility::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'building', 'capacity']);
+            $facilities = $allFacilities->map(fn ($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
 
-            if (!empty($facilities)) {
-                array_unshift($messages, ['role' => 'system', 'content' => "Available Facilities:\n- " . implode("\n- ", $facilities)]);
+            if (! empty($facilities)) {
+                array_unshift($messages, ['role' => 'system', 'content' => "Available Facilities:\n- ".implode("\n- ", $facilities)]);
             }
 
             $equipmentRows = $this->getEquipmentContextRows(50);
-            $equipment = array_map(fn($row) => $row['line'], $equipmentRows);
+            $equipment = array_map(fn ($row) => $row['line'], $equipmentRows);
             $equipmentCount = count($equipmentRows);
 
-            if (!empty($equipment)) {
-                array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- " . implode("\n- ", $equipment)]);
+            if (! empty($equipment)) {
+                array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- ".implode("\n- ", $equipment)]);
             }
             if ($latestUserMessage) {
                 if ($faqMode) {
@@ -2440,24 +2457,24 @@ class ChatController extends Controller
 
                     return response()->stream(function () use ($content, $deterministic) {
                         $this->streamTextTokens($content);
-                        echo "data: " . json_encode(['deterministic' => $deterministic]) . "\n\n";
+                        echo 'data: '.json_encode(['deterministic' => $deterministic])."\n\n";
                         ob_flush();
                         flush();
-                        echo "data: " . json_encode(['done' => true]) . "\n\n";
+                        echo 'data: '.json_encode(['done' => true])."\n\n";
                         ob_flush();
                         flush();
                     }, 200, [
-                        'Content-Type'      => 'text/event-stream',
-                        'Cache-Control'     => 'no-cache',
+                        'Content-Type' => 'text/event-stream',
+                        'Cache-Control' => 'no-cache',
                         'X-Accel-Buffering' => 'no',
-                        'Connection'        => 'keep-alive',
+                        'Connection' => 'keep-alive',
                     ]);
                 }
 
                 $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
                 $shouldRunAvailability = $this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities);
 
-                if (!$faqMode && $shouldRunAvailability) {
+                if (! $faqMode && $shouldRunAvailability) {
                     $availabilityResult = $this->buildAvailabilityCheckResult(
                         $resolved['facility'],
                         $resolved['date'],
@@ -2491,24 +2508,24 @@ class ChatController extends Controller
                     );
 
                     return response()->stream(function () use ($content, $availabilityResult) {
-                        echo "data: " . json_encode(['token' => $content]) . "\n\n";
+                        echo 'data: '.json_encode(['token' => $content])."\n\n";
                         ob_flush();
                         flush();
-                        echo "data: " . json_encode(['deterministic' => $availabilityResult['deterministic']]) . "\n\n";
+                        echo 'data: '.json_encode(['deterministic' => $availabilityResult['deterministic']])."\n\n";
                         ob_flush();
                         flush();
-                        echo "data: " . json_encode(['done' => true]) . "\n\n";
+                        echo 'data: '.json_encode(['done' => true])."\n\n";
                         ob_flush();
                         flush();
                     }, 200, [
-                        'Content-Type'      => 'text/event-stream',
-                        'Cache-Control'     => 'no-cache',
+                        'Content-Type' => 'text/event-stream',
+                        'Cache-Control' => 'no-cache',
                         'X-Accel-Buffering' => 'no',
-                        'Connection'        => 'keep-alive',
+                        'Connection' => 'keep-alive',
                     ]);
                 }
 
-                if (!$faqMode) {
+                if (! $faqMode) {
                     $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, false);
                     if ($faqResult) {
                         $content = (string) $faqResult['content'];
@@ -2538,17 +2555,17 @@ class ChatController extends Controller
 
                         return response()->stream(function () use ($content, $faqResult) {
                             $this->streamTextTokens($content);
-                            echo "data: " . json_encode(['deterministic' => $faqResult['deterministic']]) . "\n\n";
+                            echo 'data: '.json_encode(['deterministic' => $faqResult['deterministic']])."\n\n";
                             ob_flush();
                             flush();
-                            echo "data: " . json_encode(['done' => true]) . "\n\n";
+                            echo 'data: '.json_encode(['done' => true])."\n\n";
                             ob_flush();
                             flush();
                         }, 200, [
-                            'Content-Type'      => 'text/event-stream',
-                            'Cache-Control'     => 'no-cache',
+                            'Content-Type' => 'text/event-stream',
+                            'Cache-Control' => 'no-cache',
                             'X-Accel-Buffering' => 'no',
-                            'Connection'        => 'keep-alive',
+                            'Connection' => 'keep-alive',
                         ]);
                     }
                 }
@@ -2559,28 +2576,28 @@ class ChatController extends Controller
             array_unshift($messages, ['role' => 'system', 'content' => "AI ROLE BOUNDARY (STRICT):\nYou are an assistant and rationale layer only.\n- Never compute or decide final operational truth for availability, conflicts, participant-capacity limits, or equipment slot limits.\n- Never refuse or approve requests based on your own calculations.\n- Deterministic backend checks and submission validation are the source of truth.\n- When backend deterministic output is available, explain it clearly and suggest next valid actions."]);
             // Updated flow: ask for event type and map to priority level, no separate priority reason
             // Updated order: Description moved after Event Type, and Additional Message retained at end.
-                // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
-                array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nEQUIPMENT POLICY:\n- During chat, never refuse equipment quantities based on availability math.\n- Do not say \"cannot fulfill\" due to stock/remaining quantity while collecting details.\n- If the user requests equipment, capture the requested equipment ID and quantity and continue.\n- Backend submission validation is the only source of truth for slot-aware equipment limits.\n- If submission fails, relay the backend validation message (including available quantity) and ask for an updated quantity.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
+            // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
+            array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nEQUIPMENT POLICY:\n- During chat, never refuse equipment quantities based on availability math.\n- Do not say \"cannot fulfill\" due to stock/remaining quantity while collecting details.\n- If the user requests equipment, capture the requested equipment ID and quantity and continue.\n- Backend submission validation is the only source of truth for slot-aware equipment limits.\n- If submission fails, relay the backend validation message (including available quantity) and ask for an updated quantity.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max 10MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
         } catch (\Exception $e) {
-            \Log::warning('Stream: Failed to fetch facilities/equipment: ' . $e->getMessage());
+            \Log::warning('Stream: Failed to fetch facilities/equipment: '.$e->getMessage());
         }
 
         $rules = [];
         try {
             $rules = RuleModel::policy()->orderBy('priority')->orderBy('id')->limit(50)->get(['id', 'rule'])
-                ->map(fn($r) => trim($r->rule))->filter()->toArray();
+                ->map(fn ($r) => trim($r->rule))->filter()->toArray();
             $rules = $this->applyBookingPolicyToRules($rules);
 
-            $rulesSummary = "You MUST follow the following rules exactly. If a user request would violate any rule, you MUST refuse and reply with a short explanation stating which rule would be violated. Do NOT provide prohibited content.";
-            $rulesSummary .= !empty($rules) ? "\nRules:\n- " . implode("\n- ", $rules) : "\n(There are currently no configured rules.)";
+            $rulesSummary = 'You MUST follow the following rules exactly. If a user request would violate any rule, you MUST refuse and reply with a short explanation stating which rule would be violated. Do NOT provide prohibited content.';
+            $rulesSummary .= ! empty($rules) ? "\nRules:\n- ".implode("\n- ", $rules) : "\n(There are currently no configured rules.)";
             array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
             $rulesInjected = true;
         } catch (\Exception $e) {
-            \Log::warning('Stream: Failed to fetch rules: ' . $e->getMessage());
+            \Log::warning('Stream: Failed to fetch rules: '.$e->getMessage());
         }
 
-        if (!empty($bookingContext)) {
-            array_unshift($messages, ['role' => 'system', 'content' => "BOOKING FLOW CONTEXT (HIGHEST PRIORITY):\n" . $bookingContext . "\n\nIMPORTANT: The user is currently in the middle of a structured booking process. Do NOT restart the process."]);
+        if (! empty($bookingContext)) {
+            array_unshift($messages, ['role' => 'system', 'content' => "BOOKING FLOW CONTEXT (HIGHEST PRIORITY):\n".$bookingContext."\n\nIMPORTANT: The user is currently in the middle of a structured booking process. Do NOT restart the process."]);
         }
 
         // Capture incoming user messages to save to session ltr
@@ -2609,13 +2626,13 @@ class ChatController extends Controller
             $generatedPayload = null;
 
             try {
-                $response = $client->post($this->ollamaUrl . '/api/chat', [
+                $response = $client->post($this->ollamaUrl.'/api/chat', [
                     'json' => [
-                        'model'    => $this->chatModel(),
+                        'model' => $this->chatModel(),
                         'messages' => $messages,
-                        'stream'   => true,
+                        'stream' => true,
                     ],
-                    'stream' => true, 
+                    'stream' => true,
                 ]);
 
                 $body = $response->getBody();
@@ -2623,31 +2640,38 @@ class ChatController extends Controller
                 $isCapturingJson = false;
                 $jsonBuffer = '';
 
-                while (!$body->eof()) {
+                while (! $body->eof()) {
                     $line = '';
 
-                    while (!$body->eof()) {
+                    while (! $body->eof()) {
                         $char = $body->read(1);
-                        if ($char === "\n") break;
+                        if ($char === "\n") {
+                            break;
+                        }
                         $line .= $char;
                     }
 
                     $line = trim($line);
-                    if (empty($line)) continue;
+                    if (empty($line)) {
+                        continue;
+                    }
 
                     $chunk = @json_decode($line, true);
-                    if (!is_array($chunk)) continue;
+                    if (! is_array($chunk)) {
+                        continue;
+                    }
 
                     $token = $chunk['message']['content'] ?? '';
-                    $done  = $chunk['done'] ?? false;
+                    $done = $chunk['done'] ?? false;
 
                     if ($token !== '') {
                         $fullContent .= $token;
 
                         // Detect start of JSON
-                        if (!$isCapturingJson && preg_match('/^\s*\{/', $token)) {
+                        if (! $isCapturingJson && preg_match('/^\s*\{/', $token)) {
                             $isCapturingJson = true;
                             $jsonBuffer = $token;
+
                             // Don't send JSON tokens to UI
                             continue;
                         }
@@ -2655,42 +2679,44 @@ class ChatController extends Controller
                         // Continue capturing JSON
                         if ($isCapturingJson) {
                             $jsonBuffer .= $token;
-                            
+
                             // Try to parse complete JSON
                             try {
                                 $parsed = json_decode($jsonBuffer, true);
                                 if ($parsed !== null && is_array($parsed) && isset($parsed['facility_bookings'])) {
                                     // Valid JSON found - send as booking_payload
                                     $generatedPayload = $parsed;
-                                    echo "data: " . json_encode(['booking_payload' => $jsonBuffer]) . "\n\n";
+                                    echo 'data: '.json_encode(['booking_payload' => $jsonBuffer])."\n\n";
                                     ob_flush();
                                     flush();
-                                    
+
                                     $isCapturingJson = false;
                                     $jsonBuffer = '';
                                 }
                             } catch (\Exception $e) {
                                 // Not valid JSON yet, keep accumulating
                             }
-                            
+
                             // Don't send JSON tokens to UI
                             continue;
                         }
 
                         // Regular token (not JSON)
-                        echo "data: " . json_encode(['token' => $token]) . "\n\n";
+                        echo 'data: '.json_encode(['token' => $token])."\n\n";
                         ob_flush();
                         flush();
                     }
 
-                    if ($done) break;
+                    if ($done) {
+                        break;
+                    }
                 }
 
                 if ($isCapturingJson && $jsonBuffer !== '') {
                     $parsed = json_decode($jsonBuffer, true);
                     if (is_array($parsed) && isset($parsed['facility_bookings'])) {
                         $generatedPayload = $parsed;
-                        echo "data: " . json_encode(['booking_payload' => $jsonBuffer]) . "\n\n";
+                        echo 'data: '.json_encode(['booking_payload' => $jsonBuffer])."\n\n";
                         ob_flush();
                         flush();
                     }
@@ -2699,53 +2725,53 @@ class ChatController extends Controller
                 }
 
                 // Rule validation on full content
-                if (!empty($rules)) {
+                if (! empty($rules)) {
                     try {
                         $validatorMessages = [
                             ['role' => 'system', 'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules.\n\n- VIOLATIONS: Explicit prohibitions like 'do not mention X', 'never do Y'\n- NOT VIOLATIONS: Style preferences like 'be brief', 'be friendly'\n\nPolicy override for this system:\n- Missing request description/additional information is NOT a violation. Description is optional.\n\nReturn ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). No extra text."],
-                            ['role' => 'user',   'content' => "Rules:\n- " . implode("\n- ", $rules) . "\n\nAssistant Response:\n" . $fullContent],
+                            ['role' => 'user',   'content' => "Rules:\n- ".implode("\n- ", $rules)."\n\nAssistant Response:\n".$fullContent],
                         ];
 
-                        $validatorResp = $client->post($this->ollamaUrl . '/api/chat', [
+                        $validatorResp = $client->post($this->ollamaUrl.'/api/chat', [
                             'json' => ['model' => $this->chatModel(), 'messages' => $validatorMessages, 'stream' => false],
                         ]);
 
                         $validatorData = json_decode($validatorResp->getBody(), true);
-                        $jsonText      = $validatorData['message']['content'] ?? '';
-                        $parsed        = @json_decode($jsonText, true);
+                        $jsonText = $validatorData['message']['content'] ?? '';
+                        $parsed = @json_decode($jsonText, true);
 
-                        if (!empty($parsed['violations'])) {
+                        if (! empty($parsed['violations'])) {
                             $violationDetails = [];
                             foreach ($parsed['violations'] as $idx) {
                                 if (isset($rules[$idx])) {
-                                    $violationDetails[] = 'Rule #' . ($idx + 1) . ': ' . $rules[$idx];
+                                    $violationDetails[] = 'Rule #'.($idx + 1).': '.$rules[$idx];
                                 }
                             }
-                            $violationMessage = "I cannot comply with that request because it would violate the following rules:\n\n" . implode("\n\n", $violationDetails);
+                            $violationMessage = "I cannot comply with that request because it would violate the following rules:\n\n".implode("\n\n", $violationDetails);
 
                             // Override the streamed content with the violation message
-                            echo "data: " . json_encode(['violation' => $violationMessage]) . "\n\n";
+                            echo 'data: '.json_encode(['violation' => $violationMessage])."\n\n";
                             ob_flush();
                             flush();
 
                             $fullContent = $violationMessage;
                         }
                     } catch (\Exception $e) {
-                        \Log::warning('Stream: Rule validation failed: ' . $e->getMessage());
+                        \Log::warning('Stream: Rule validation failed: '.$e->getMessage());
                     }
                 }
 
-                if (!is_array($generatedPayload)) {
+                if (! is_array($generatedPayload)) {
                     $generatedPayload = $this->extractStructuredPayload($fullContent);
                     if (is_array($generatedPayload)) {
-                        echo "data: " . json_encode(['booking_payload' => json_encode($generatedPayload)]) . "\n\n";
+                        echo 'data: '.json_encode(['booking_payload' => json_encode($generatedPayload)])."\n\n";
                         ob_flush();
                         flush();
                     }
                 }
 
                 // Save session
-                $userAndAssistant = array_filter($incomingMessages, fn($m) => in_array($m['role'], ['user', 'assistant']));
+                $userAndAssistant = array_filter($incomingMessages, fn ($m) => in_array($m['role'], ['user', 'assistant']));
                 $userAndAssistant[] = ['role' => 'assistant', 'content' => $fullContent];
                 $this->saveSession(array_values($userAndAssistant));
 
@@ -2768,48 +2794,49 @@ class ChatController extends Controller
                     );
                 }
 
-                echo "data: " . json_encode(['done' => true]) . "\n\n";
+                echo 'data: '.json_encode(['done' => true])."\n\n";
                 ob_flush();
                 flush();
 
             } catch (\Exception $e) {
-                \Log::error('Stream error: ' . $e->getMessage());
+                \Log::error('Stream error: '.$e->getMessage());
                 $this->chatbotLogService->logError(
                     $latestUserMessage,
                     $e->getMessage(),
                     $logContext,
                     $sessionId
                 );
-                echo "data: " . json_encode(['error' => 'Stream failed']) . "\n\n";
+                echo 'data: '.json_encode(['error' => 'Stream failed'])."\n\n";
                 ob_flush();
                 flush();
             }
         }, 200, [
-            'Content-Type'      => 'text/event-stream',
-            'Cache-Control'     => 'no-cache',
-            'X-Accel-Buffering' => 'no', 
-            'Connection'        => 'keep-alive',
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+            'Connection' => 'keep-alive',
         ]);
     }
 
     public function testCsrf(): JsonResponse
     {
         try {
-            $client   = new Client(['timeout' => 10]);
-            $response = $client->get($this->ollamaUrl . '/api/tags');
-            $data     = json_decode($response->getBody(), true);
+            $client = new Client(['timeout' => 10]);
+            $response = $client->get($this->ollamaUrl.'/api/tags');
+            $data = json_decode($response->getBody(), true);
 
             return response()->json([
-                'message'   => 'Connected to Ollama',
+                'message' => 'Connected to Ollama',
                 'configured_model' => $this->model,
                 'resolved_model' => $this->chatModel(),
-                'models'    => $data['models'] ?? [],
+                'models' => $data['models'] ?? [],
                 'timestamp' => now(),
             ]);
         } catch (\Exception $e) {
-            \Log::error('Ollama connection test failed: ' . $e->getMessage());
+            \Log::error('Ollama connection test failed: '.$e->getMessage());
+
             return response()->json([
-                'error'   => 'Cannot connect to Ollama at ' . $this->ollamaUrl,
+                'error' => 'Cannot connect to Ollama at '.$this->ollamaUrl,
                 'message' => config('app.debug') ? $e->getMessage() : 'Connection failed',
             ], 500);
         }
@@ -2818,9 +2845,9 @@ class ChatController extends Controller
     public function models(): JsonResponse
     {
         try {
-            $client   = new Client(['timeout' => 10]);
-            $response = $client->get($this->ollamaUrl . '/api/tags');
-            $data     = json_decode($response->getBody(), true);
+            $client = new Client(['timeout' => 10]);
+            $response = $client->get($this->ollamaUrl.'/api/tags');
+            $data = json_decode($response->getBody(), true);
 
             return response()->json([
                 'configured_model' => $this->model,
@@ -2828,9 +2855,10 @@ class ChatController extends Controller
                 'models' => $data['models'] ?? [],
             ]);
         } catch (\Exception $e) {
-            \Log::error('Models fetch error: ' . $e->getMessage());
+            \Log::error('Models fetch error: '.$e->getMessage());
+
             return response()->json([
-                'error'   => 'Failed to fetch models',
+                'error' => 'Failed to fetch models',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         }
@@ -2844,18 +2872,19 @@ class ChatController extends Controller
             $rows = RequestModel::orderBy('created_at', 'desc')
                 ->limit($limit)
                 ->get(['id', 'user_id', 'status', 'created_at'])
-                ->map(fn($r) => [
-                    'id'         => $r->id,
-                    'user_id'    => $r->user_id,
-                    'status'     => $r->status,
+                ->map(fn ($r) => [
+                    'id' => $r->id,
+                    'user_id' => $r->user_id,
+                    'status' => $r->status,
                     'created_at' => $r->created_at->toDateTimeString(),
                 ]);
 
             return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
-            \Log::error('Latest requests error: ' . $e->getMessage());
+            \Log::error('Latest requests error: '.$e->getMessage());
+
             return response()->json([
-                'error'   => 'Failed to fetch latest requests',
+                'error' => 'Failed to fetch latest requests',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         }
@@ -2869,13 +2898,14 @@ class ChatController extends Controller
             $rows = RuleModel::policy()->orderBy('priority')->orderBy('id')
                 ->limit($limit)
                 ->get(['id', 'rule'])
-                ->map(fn($r) => ['id' => $r->id, 'rule' => trim($r->rule)]);
+                ->map(fn ($r) => ['id' => $r->id, 'rule' => trim($r->rule)]);
 
             return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
-            \Log::error('Rules list error: ' . $e->getMessage());
+            \Log::error('Rules list error: '.$e->getMessage());
+
             return response()->json([
-                'error'   => 'Failed to fetch rules',
+                'error' => 'Failed to fetch rules',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         }
@@ -2889,18 +2919,19 @@ class ChatController extends Controller
             $rows = Facility::orderBy('id', 'asc')
                 ->limit($limit)
                 ->get(['id', 'name', 'building', 'capacity'])
-                ->map(fn($f) => [
-                    'id'       => $f->id,
-                    'name'     => $f->name,
+                ->map(fn ($f) => [
+                    'id' => $f->id,
+                    'name' => $f->name,
                     'building' => $f->building,
                     'capacity' => $f->capacity,
                 ]);
 
             return response()->json(['data' => $rows]);
         } catch (\Exception $e) {
-            \Log::error('Facilities list error: ' . $e->getMessage());
+            \Log::error('Facilities list error: '.$e->getMessage());
+
             return response()->json([
-                'error'   => 'Failed to fetch facilities',
+                'error' => 'Failed to fetch facilities',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         }
@@ -2916,7 +2947,7 @@ class ChatController extends Controller
             $timeStartValue = $request->input('time_start');
             $timeEndValue = $request->input('time_end');
 
-            if (!in_array($sourceMode, ['own', 'borrow'], true)) {
+            if (! in_array($sourceMode, ['own', 'borrow'], true)) {
                 throw ValidationException::withMessages([
                     'source' => ['Source must be either "own" or "borrow".'],
                 ]);
@@ -2974,9 +3005,9 @@ class ChatController extends Controller
             if ($isSlotAwareRequest && $facilityId) {
                 if ($sourceMode === 'borrow') {
                     $rows = Equipment::query()
-                        ->whereHas('facilities', fn($q) => $q->where('facilities.id', '!=', $facilityId))
+                        ->whereHas('facilities', fn ($q) => $q->where('facilities.id', '!=', $facilityId))
                         ->with([
-                            'facilities' => fn($q) => $q
+                            'facilities' => fn ($q) => $q
                                 ->where('facilities.id', '!=', $facilityId)
                                 ->select('facilities.id', 'facilities.name'),
                         ])
@@ -3004,14 +3035,14 @@ class ChatController extends Controller
                                 ];
                             })->values();
                         })
-                        ->filter(fn($row) => (int) ($row['remaining_quantity'] ?? 0) > 0)
+                        ->filter(fn ($row) => (int) ($row['remaining_quantity'] ?? 0) > 0)
                         ->take($limit)
                         ->values();
                 } else {
                     $rows = Equipment::query()
-                        ->whereHas('facilities', fn($q) => $q->where('facilities.id', $facilityId))
+                        ->whereHas('facilities', fn ($q) => $q->where('facilities.id', $facilityId))
                         ->with([
-                            'facilities' => fn($q) => $q
+                            'facilities' => fn ($q) => $q
                                 ->where('facilities.id', $facilityId)
                                 ->select('facilities.id', 'facilities.name'),
                         ])
@@ -3055,7 +3086,7 @@ class ChatController extends Controller
 
                         return $rowFacilityId === $facilityId;
                     })
-                    ->map(fn($row) => [
+                    ->map(fn ($row) => [
                         'id' => (int) $row['id'],
                         'name' => $row['name'],
                         'facility_id' => $row['facility_id'],
@@ -3076,9 +3107,10 @@ class ChatController extends Controller
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
-            \Log::error('Equipment list error: ' . $e->getMessage());
+            \Log::error('Equipment list error: '.$e->getMessage());
+
             return response()->json([
-                'error'   => 'Failed to fetch equipment',
+                'error' => 'Failed to fetch equipment',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         }
@@ -3098,11 +3130,12 @@ class ChatController extends Controller
             $tempDir = "chat-uploads/{$userId}/{$sessionId}";
 
             try {
-                if (!Storage::disk('public')->exists($tempDir)) {
+                if (! Storage::disk('public')->exists($tempDir)) {
                     Storage::disk('public')->makeDirectory($tempDir, 0755, true);
                 }
             } catch (\Exception $dirErr) {
-                \Log::error("Failed to create temp directory: " . $dirErr->getMessage());
+                \Log::error('Failed to create temp directory: '.$dirErr->getMessage());
+
                 return response()->json([
                     'success' => false,
                     'error' => 'Failed to create upload directory',
@@ -3113,12 +3146,13 @@ class ChatController extends Controller
                 try {
                     $fileId = Str::uuid();
                     $extension = $file->getClientOriginalExtension();
-                    $filename = $fileId . '.' . $extension;
-                    
+                    $filename = $fileId.'.'.$extension;
+
                     $path = Storage::disk('public')->putFileAs($tempDir, $file, $filename);
-                    
-                    if (!$path) {
+
+                    if (! $path) {
                         \Log::warning("File storage returned false for: {$filename}");
+
                         continue;
                     }
 
@@ -3130,7 +3164,8 @@ class ChatController extends Controller
                         'url' => Storage::disk('public')->url($path),
                     ];
                 } catch (\Exception $fileErr) {
-                    \Log::error("Failed to upload file: " . $fileErr->getMessage());
+                    \Log::error('Failed to upload file: '.$fileErr->getMessage());
+
                     continue;
                 }
             }
@@ -3149,7 +3184,7 @@ class ChatController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             $errorMessages = [];
-            
+
             if ($e->has('files.*')) {
                 foreach ($request->file('files') as $index => $file) {
                     $errors = $e->errors();
@@ -3164,11 +3199,12 @@ class ChatController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'File validation failed',
-                'messages' => !empty($errorMessages) ? $errorMessages : $e->errors(),
+                'messages' => ! empty($errorMessages) ? $errorMessages : $e->errors(),
             ], 422);
 
         } catch (\Exception $e) {
-            \Log::error('File upload error: ' . $e->getMessage() . ' ' . $e->getTraceAsString());
+            \Log::error('File upload error: '.$e->getMessage().' '.$e->getTraceAsString());
+
             return response()->json([
                 'success' => false,
                 'error' => 'File upload failed',
@@ -3187,37 +3223,37 @@ class ChatController extends Controller
             $request->replace($normalizedInput);
 
             $validated = $request->validate([
-                'title'                                           => 'required|string|max:255',
-                'description'                                     => 'nullable|string',
-                'priority_level'                                  => 'nullable|integer|in:0,1,2,3',
-                'priority_reason'                                 => 'nullable|string|max:512',
-                'participant_count'                               => 'nullable|integer|min:1',
-                'facility_bookings'                               => 'required|array|min:1',
-                'facility_bookings.*.facility_id'                 => [
+                'title' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'priority_level' => 'nullable|integer|in:0,1,2,3',
+                'priority_reason' => 'nullable|string|max:512',
+                'participant_count' => 'nullable|integer|min:1',
+                'facility_bookings' => 'required|array|min:1',
+                'facility_bookings.*.facility_id' => [
                     'required',
                     Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
                 ],
-                'facility_bookings.*.date'                        => 'required|date',
-                'facility_bookings.*.time_start'                  => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
-                'facility_bookings.*.time_end'                    => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
-                'facility_bookings.*.expected_capacity'           => 'nullable|integer|min:1',
-                'facility_bookings.*.equipment'                   => 'sometimes|nullable|array',
-                'facility_bookings.*.equipment.*.equipment_id'    => 'required|exists:equipments,id',
+                'facility_bookings.*.date' => 'required|date',
+                'facility_bookings.*.time_start' => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
+                'facility_bookings.*.time_end' => 'required|regex:/^\d{1,2}:\d{2}(:\d{2})?$/',
+                'facility_bookings.*.expected_capacity' => 'nullable|integer|min:1',
+                'facility_bookings.*.equipment' => 'sometimes|nullable|array',
+                'facility_bookings.*.equipment.*.equipment_id' => 'required|exists:equipments,id',
                 'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
                 'facility_bookings.*.equipment.*.source_facility_id' => [
                     'sometimes',
                     'nullable',
                     Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
                 ],
-                'facility_bookings.*.equipment.*.is_borrowed'     => 'sometimes|boolean',
-                'files'                                           => 'nullable|array',
-                'files.*'                                         => 'nullable|string',
+                'facility_bookings.*.equipment.*.is_borrowed' => 'sometimes|boolean',
+                'files' => 'nullable|array',
+                'files.*' => 'nullable|string',
             ]);
 
             $bookingsForValidation = $validated['facility_bookings'];
             $equipmentSelectionErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
             $validated['facility_bookings'] = $bookingsForValidation;
-            if (!empty($equipmentSelectionErrors)) {
+            if (! empty($equipmentSelectionErrors)) {
                 throw ValidationException::withMessages($equipmentSelectionErrors);
             }
 
@@ -3225,11 +3261,11 @@ class ChatController extends Controller
                 $validated['facility_bookings'],
                 isset($validated['participant_count']) ? (int) $validated['participant_count'] : null
             );
-            if (!empty($capacityErrors)) {
+            if (! empty($capacityErrors)) {
                 throw ValidationException::withMessages($capacityErrors);
             }
 
-            $priorityLevel  = (int) ($validated['priority_level'] ?? 0);
+            $priorityLevel = (int) ($validated['priority_level'] ?? 0);
             $priorityReason = $validated['priority_reason'] ?? null;
             $userId = Auth::id();
             $tempDir = "chat-uploads/{$userId}/{$sessionId}";
@@ -3245,7 +3281,7 @@ class ChatController extends Controller
             ) {
                 $bookingsForValidation = $validated['facility_bookings'];
                 $preLockEquipmentErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
-                if (!empty($preLockEquipmentErrors)) {
+                if (! empty($preLockEquipmentErrors)) {
                     throw ValidationException::withMessages($preLockEquipmentErrors);
                 }
 
@@ -3253,32 +3289,32 @@ class ChatController extends Controller
                 $this->lockFacilityEquipmentRows($bookingsForValidation);
 
                 $lockedEquipmentErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
-                if (!empty($lockedEquipmentErrors)) {
+                if (! empty($lockedEquipmentErrors)) {
                     throw ValidationException::withMessages($lockedEquipmentErrors);
                 }
 
                 $facilityRequest = RequestModel::create([
-                    'user_id'         => Auth::id(),
-                    'title'           => $validated['title'],
-                    'description'     => $validated['description'] ?? null,
-                    'status'          => RequestStatus::PENDING,
-                    'priority_level'  => $priorityLevel,
+                    'user_id' => Auth::id(),
+                    'title' => $validated['title'],
+                    'description' => $validated['description'] ?? null,
+                    'status' => RequestStatus::PENDING,
+                    'priority_level' => $priorityLevel,
                     'priority_reason' => $priorityReason,
                 ]);
 
                 foreach ($bookingsForValidation as $booking) {
                     $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
                     $facilityRequest->requestFacilities()->create([
-                        'facility_id'    => $booking['facility_id'],
+                        'facility_id' => $booking['facility_id'],
                         'date_requested' => $dateOnly,
-                        'time_start'     => $booking['time_start'],
-                        'time_end'       => $booking['time_end'],
+                        'time_start' => $booking['time_start'],
+                        'time_end' => $booking['time_end'],
                         'expected_capacity' => isset($booking['expected_capacity'])
                             ? (int) $booking['expected_capacity']
                             : (isset($validated['participant_count']) ? (int) $validated['participant_count'] : null),
                     ]);
 
-                    if (!empty($booking['equipment'])) {
+                    if (! empty($booking['equipment'])) {
                         foreach ($booking['equipment'] as $equipment) {
                             $sourceFacilityId = isset($equipment['source_facility_id']) && is_numeric($equipment['source_facility_id'])
                                 ? (int) $equipment['source_facility_id']
@@ -3294,7 +3330,7 @@ class ChatController extends Controller
                     }
                 }
 
-                if (!empty($validated['files'])) {
+                if (! empty($validated['files'])) {
                     foreach ($validated['files'] as $fileId) {
                         try {
                             $tempFiles = Storage::disk('public')->files($tempDir);
@@ -3315,17 +3351,17 @@ class ChatController extends Controller
                                 Storage::disk('public')->put($permanentPath, $content);
 
                                 $facilityRequest->files()->create([
-                                    'path'          => $permanentPath,
+                                    'path' => $permanentPath,
                                     'original_name' => $originalName,
-                                    'mime_type'     => Storage::disk('public')->mimeType($tempFilePath),
-                                    'size'          => Storage::disk('public')->size($tempFilePath),
+                                    'mime_type' => Storage::disk('public')->mimeType($tempFilePath),
+                                    'size' => Storage::disk('public')->size($tempFilePath),
                                 ]);
 
                                 Storage::disk('public')->delete($tempFilePath);
                                 $fileCount++;
                             }
                         } catch (\Exception $e) {
-                            \Log::warning("Failed to process file {$fileId}: " . $e->getMessage());
+                            \Log::warning("Failed to process file {$fileId}: ".$e->getMessage());
                         }
                     }
 
@@ -3335,23 +3371,23 @@ class ChatController extends Controller
                             Storage::disk('public')->deleteDirectory($tempDir);
                         }
                     } catch (\Exception $e) {
-                        \Log::warning("Failed to clean temp directory: " . $e->getMessage());
+                        \Log::warning('Failed to clean temp directory: '.$e->getMessage());
                     }
                 }
 
                 if ($priorityLevel > 0) {
                     try {
-                        $bookingsForConflict = array_map(fn($booking) => [
+                        $bookingsForConflict = array_map(fn ($booking) => [
                             'facility_id' => $booking['facility_id'],
-                            'date'        => $booking['date'],
-                            'time_start'  => $booking['time_start'],
-                            'time_end'    => $booking['time_end'],
+                            'date' => $booking['date'],
+                            'time_start' => $booking['time_start'],
+                            'time_end' => $booking['time_end'],
                         ], $validated['facility_bookings']);
 
-                        $requestService      = app(\App\Services\RequestService::class);
+                        $requestService = app(\App\Services\RequestService::class);
                         $notificationService = app(\App\Services\NotificationService::class);
-                        $conflicting         = $requestService->findConflictingLowerPriorityRequests($bookingsForConflict, $priorityLevel);
-                        $holdReason          = $priorityReason ?? 'Higher-priority event submitted for the same time slot.';
+                        $conflicting = $requestService->findConflictingLowerPriorityRequests($bookingsForConflict, $priorityLevel);
+                        $holdReason = $priorityReason ?? 'Higher-priority event submitted for the same time slot.';
 
                         foreach ($conflicting as $conflictingRequest) {
                             $requestService->putOnHold($conflictingRequest, $facilityRequest, $holdReason);
@@ -3360,7 +3396,7 @@ class ChatController extends Controller
                             \Log::info("AI: Request #{$conflictingRequest->id} put on hold by high-priority request #{$facilityRequest->id}");
                         }
                     } catch (\Throwable $e) {
-                        \Log::warning('AI createRequestApi: priority override failed: ' . $e->getMessage());
+                        \Log::warning('AI createRequestApi: priority override failed: '.$e->getMessage());
                     }
                 }
 
@@ -3368,6 +3404,9 @@ class ChatController extends Controller
             });
 
             ProcessRequestRecommendation::dispatch($facilityRequest);
+
+            app(\App\Services\NotificationService::class)
+                ->notifyAdmin($facilityRequest->title, Auth::user()->name, $facilityRequest->id);
 
             $this->clearSession();
 
@@ -3393,16 +3432,16 @@ class ChatController extends Controller
             );
 
             return response()->json([
-                'success'        => true,
-                'message'        => 'Request created successfully' . ($heldCount > 0 ? " ({$heldCount} conflicting request(s) put on hold)" : ''),
-                'request_id'     => $facilityRequest->id,
+                'success' => true,
+                'message' => 'Request created successfully'.($heldCount > 0 ? " ({$heldCount} conflicting request(s) put on hold)" : ''),
+                'request_id' => $facilityRequest->id,
                 'priority_level' => $priorityLevel,
-                'held_count'     => $heldCount,
+                'held_count' => $heldCount,
                 'files_attached' => $fileCount,
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::warning('Validation error in createRequestApi: ' . json_encode($e->errors()));
+            \Log::warning('Validation error in createRequestApi: '.json_encode($e->errors()));
             $failedPayload = is_array($request->all()) ? $request->all() : [];
             $this->chatbotLogService->logValidationFailure(
                 $failedPayload,
@@ -3416,9 +3455,10 @@ class ChatController extends Controller
                 ],
                 $sessionId
             );
+
             return response()->json(['error' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            \Log::error('Request creation error: ' . $e->getMessage());
+            \Log::error('Request creation error: '.$e->getMessage());
             $this->chatbotLogService->logError(
                 $latestUserMessage,
                 $e->getMessage(),
@@ -3430,8 +3470,9 @@ class ChatController extends Controller
                 'request_creation',
                 is_array($request->all()) ? $request->all() : null,
             );
+
             return response()->json([
-                'error'   => 'Failed to create request',
+                'error' => 'Failed to create request',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         }
