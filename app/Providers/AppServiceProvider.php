@@ -97,15 +97,39 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(NotificationFailed::class, function (NotificationFailed $event): void {
             $report = $event->report;
             $response = $report->getResponse();
+            $subscription = $event->subscription;
+            $isExpired = $report->isSubscriptionExpired();
 
             Log::warning('WebPush notification rejected by push service.', [
-                'subscription_id' => $event->subscription->getKey(),
+                'subscription_id' => $subscription->getKey(),
                 'endpoint' => str($report->getEndpoint())->limit(80)->toString(),
                 'status' => $response?->getStatusCode(),
                 'reason' => $report->getReason(),
-                'expired' => $report->isSubscriptionExpired(),
+                'expired' => $isExpired,
                 'response' => $report->getResponseContent(),
             ]);
+
+            if (! $isExpired) {
+                return;
+            }
+
+            try {
+                $subscriptionId = $subscription->getKey();
+                $endpoint = str($subscription->endpoint ?? $report->getEndpoint())->limit(80)->toString();
+
+                $subscription->delete();
+
+                Log::info('Deleted expired WebPush subscription.', [
+                    'subscription_id' => $subscriptionId,
+                    'endpoint' => $endpoint,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Failed to delete expired WebPush subscription.', [
+                    'subscription_id' => $subscription->getKey(),
+                    'endpoint' => str($report->getEndpoint())->limit(80)->toString(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
         });
     }
 }
