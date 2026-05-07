@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Equipment;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class FacilityFormRequest extends FormRequest
@@ -21,7 +22,10 @@ class FacilityFormRequest extends FormRequest
             'priority_level'                                               => 'nullable|integer|in:0,1,2,3',
             'priority_reason'                                              => 'nullable|string|max:512',
             'facility_bookings'                                            => 'required|array|min:1',
-            'facility_bookings.*.facility_id'                             => 'required|exists:facilities,id',
+            'facility_bookings.*.facility_id'                             => [
+                'required',
+                Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+            ],
             'facility_bookings.*.date'                                     => 'required|date',
             'facility_bookings.*.time_start'                              => 'required',
             'facility_bookings.*.time_end'                                => 'required',
@@ -32,7 +36,10 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.external_equipment.*.name'               => 'required|string|max:255',
             'facility_bookings.*.borrowed_equipment'                      => 'array',
             'facility_bookings.*.borrowed_equipment.*.equipment_id'       => 'required|exists:equipments,id',
-            'facility_bookings.*.borrowed_equipment.*.source_facility_id' => 'required|exists:facilities,id',
+            'facility_bookings.*.borrowed_equipment.*.source_facility_id' => [
+                'required',
+                Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+            ],
             'facility_bookings.*.borrowed_equipment.*.quantity_needed'    => 'required|integer|min:1',
             'facility_bookings.*.expected_capacity'                       => 'nullable|integer|min:1',
             'facility_bookings.*.has_outsiders'                       => 'nullable|boolean',

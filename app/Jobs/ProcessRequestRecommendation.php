@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Enums\RequestStatus; 
+use App\Services\NotificationService;
 use App\Services\RAG\AIRecommendationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,7 +20,7 @@ class ProcessRequestRecommendation implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries         = 2;
-    public int $timeout       = 80;
+    public int $timeout       = 300;
     public int $maxExceptions = 2;
     public bool $failOnTimeout = true;
 
@@ -32,7 +33,7 @@ class ProcessRequestRecommendation implements ShouldQueue
         return [5, 15];
     }
 
-    public function handle(AIRecommendationService $aiService): void
+    public function handle(AIRecommendationService $aiService, NotificationService $notification): void
     {
         $this->request->loadMissing([
             'requestFacilities.facility',
@@ -62,13 +63,18 @@ class ProcessRequestRecommendation implements ShouldQueue
             }
 
             $rollupStatus = $this->deriveRollupStatus($recommendations);
+            $rollupReason = $this->deriveRollupReason($recommendations);
 
             $this->request->update([
-                'recommended_action' => $rollupStatus, 
+                'recommended_action' => $rollupStatus,
+                'recommended_action_reason' => $rollupReason,
             ]);
 
             Log::info("ProcessRequestRecommendation: Request#{$this->request->id} rolled up to → {$rollupStatus->value}");
         });
+
+        $this->request->refresh();
+        $notification->notifyAdminsAfterAiRecommendation($this->request);
     }
 
     private function deriveRollupStatus(array $recommendations): RequestStatus
@@ -94,5 +100,15 @@ class ProcessRequestRecommendation implements ShouldQueue
         }
 
         return RequestStatus::PENDING;
+    }
+
+    private function deriveRollupReason(array $recommendations): string
+    {
+        return collect($recommendations)
+            ->pluck('reason')
+            ->filter()
+            ->unique()
+            ->values()
+            ->join(' ');
     }
 }

@@ -13,6 +13,16 @@ class FacilitySeeder extends Seeder
      */
     public function run(): void
     {
+        $now = now();
+
+        foreach (['Main', 'Annes', 'SIPAG'] as $campusName) {
+            DB::table('campuses')->updateOrInsert(
+                ['name' => $campusName],
+                ['created_at' => $now, 'updated_at' => $now]
+            );
+        }
+
+        $mainCampusId = DB::table('campuses')->where('name', 'Main')->value('id');
 
         // Create Facilities
         $facilities = [
@@ -82,6 +92,19 @@ class FacilitySeeder extends Seeder
         ];
 
         foreach ($facilities as $facility) {
+            DB::table('buildings')->updateOrInsert(
+                ['campus_id' => $mainCampusId, 'name' => $facility['building']],
+                ['created_at' => $now, 'updated_at' => $now]
+            );
+
+            $buildingId = DB::table('buildings')
+                ->where('campus_id', $mainCampusId)
+                ->where('name', $facility['building'])
+                ->value('id');
+
+            $facility['campus_id'] = $mainCampusId;
+            $facility['building_id'] = $buildingId;
+
             DB::table('facilities')->insert($facility);
         }
     }

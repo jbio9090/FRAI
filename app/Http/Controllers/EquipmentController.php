@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use App\Models\Request as FacilityRequest;
 use App\Enums\RequestStatus;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 
 class EquipmentController extends Controller
 {
@@ -58,7 +59,10 @@ class EquipmentController extends Controller
     {
         $validated = $request->validate([
             'assignments'                => 'array',
-            'assignments.*.facility_id'  => 'required|exists:facilities,id',
+            'assignments.*.facility_id'  => [
+                'required',
+                Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+            ],
             'assignments.*.quantity'     => 'required|integer|min:1',
         ]);
 
@@ -120,7 +124,11 @@ class EquipmentController extends Controller
     public function getAvailability(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'facility_id' => 'required|integer|exists:facilities,id',
+            'facility_id' => [
+                'required',
+                'integer',
+                Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
+            ],
             'date'        => 'required|date',
             'time_start'  => 'required|string',
             'time_end'    => 'required|string',

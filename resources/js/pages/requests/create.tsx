@@ -142,6 +142,47 @@ interface AttachedFile {
 }
 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+const MIN_SCHEDULE_ADVANCE_DAYS = 5;
+const WARNING_ADVANCE_DAYS = 6;
+const MIN_BOOKING_TIME = '07:00';
+const MAX_BOOKING_TIME = '20:00';
+const BOOKING_TIME_STEP_MINUTES = 30;
+
+function getTodayStart(): Date {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+}
+
+function addCalendarDays(date: Date, days: number): Date {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    next.setHours(0, 0, 0, 0);
+    return next;
+}
+
+function isTimeWithinBookingHours(time: string): boolean {
+    if (!time) return false;
+    return time >= MIN_BOOKING_TIME && time <= MAX_BOOKING_TIME;
+}
+
+function timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+}
+
+function minutesToTime(totalMinutes: number): string {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+const BOOKING_TIME_OPTIONS = Array.from(
+    {
+        length: Math.floor((timeToMinutes(MAX_BOOKING_TIME) - timeToMinutes(MIN_BOOKING_TIME)) / BOOKING_TIME_STEP_MINUTES) + 1,
+    },
+    (_, index) => minutesToTime(timeToMinutes(MIN_BOOKING_TIME) + index * BOOKING_TIME_STEP_MINUTES),
+);
 
 function getDraftKey(existingId?: number) {
     return existingId ? `request_draft_edit_${existingId}` : 'request_draft_create';
@@ -201,6 +242,8 @@ const approversList = [
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
+    const minSelectableDate = addCalendarDays(getTodayStart(), MIN_SCHEDULE_ADVANCE_DAYS);
+    const warningCutoffDate = addCalendarDays(getTodayStart(), WARNING_ADVANCE_DAYS);
 
     function draftDiffersFromExisting(draft: DraftData, existing: ExistingRequest): boolean {
         if (draft.title !== existing.title) return true;
@@ -253,6 +296,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [borrowSearch, setBorrowSearch] = useState('');
     const [borrowSort, setBorrowSort] = useState<'name-asc' | 'name-desc' | 'qty-asc' | 'qty-desc'>('name-asc');
     const [borrowFacilityFilter, setBorrowFacilityFilter] = useState<string>('all');
+    const hasNearMinimumScheduleDate = selectedDates.some((date) => date >= minSelectableDate && date <= warningCutoffDate);
+    const canSaveFacilityBooking =
+        !!selectedFacility &&
+        selectedDates.length > 0 &&
+        selectedDates.every((date) => addCalendarDays(date, 0) >= minSelectableDate) &&
+        isTimeWithinBookingHours(currentTimeStart) &&
+        isTimeWithinBookingHours(currentTimeEnd);
 
     const handleCheckboxChange = (name: string) => {
         setData('approved_by', data.approved_by.includes(name) ? data.approved_by.filter((item) => item !== name) : [...data.approved_by, name]);
@@ -608,13 +658,13 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         });
     }
 
-    function handleTimeStartChange(e: React.ChangeEvent<HTMLInputElement>) {
-        const newStartTime = e.target.value;
+    function handleTimeStartChange(newStartTime: string) {
+        if (newStartTime && !isTimeWithinBookingHours(newStartTime)) return;
         setCurrentTimeStart(newStartTime);
     }
 
-    function handleTimeEndChange(e: React.ChangeEvent<HTMLInputElement>) {
-        const newEndTime = e.target.value;
+    function handleTimeEndChange(newEndTime: string) {
+        if (newEndTime && !isTimeWithinBookingHours(newEndTime)) return;
         setCurrentTimeEnd(newEndTime);
     }
 
@@ -641,7 +691,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     }
 
     function addFacilityBooking() {
-        if (!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd) return;
+        if (!canSaveFacilityBooking) return;
         const facility = facilities.find((f) => f.id === selectedFacility);
         if (!facility) return;
 
@@ -1060,40 +1110,58 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                         selected={selectedDates}
                                                         onSelect={handleDateChange}
                                                         initialFocus
-                                                        disabled={(date) => date <= new Date(new Date().setHours(0, 0, 0, 0))}
+                                                        disabled={(date) => addCalendarDays(date, 0) < minSelectableDate}
                                                     />
                                                 </PopoverContent>
                                             </Popover>
+                                            {hasNearMinimumScheduleDate && (
+                                                <Alert className="border-amber-500 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-400">
+                                                    <AlertCircleIcon className="text-amber-600 dark:text-amber-500" />
+                                                    <AlertTitle className="font-semibold text-amber-800 dark:text-amber-300">
+                                                        Short Notice Schedule
+                                                    </AlertTitle>
+                                                    <AlertDescription>
+                                                        This selected date is close to the minimum lead time. Please make sure all requirements
+                                                        can be prepared before submitting.
+                                                    </AlertDescription>
+                                                </Alert>
+                                            )}
                                         </div>
 
                                         <div className="space-y-2">
                                             <Label htmlFor="time_start">
                                                 Start Time <span className="text-destructive">*</span>
                                             </Label>
-                                            <Input
-                                                id="time_start"
-                                                type="time"
-                                                value={currentTimeStart}
-                                                onChange={handleTimeStartChange}
-                                                min="7:00"
-                                                max="20:00"
-                                                className="text-sm"
-                                            />
+                                            <Select value={currentTimeStart} onValueChange={handleTimeStartChange}>
+                                                <SelectTrigger id="time_start" className="w-full text-sm">
+                                                    <SelectValue placeholder="Select start time" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {BOOKING_TIME_OPTIONS.map((time) => (
+                                                        <SelectItem key={time} value={time}>
+                                                            {formatTime(time)}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
 
                                         <div className="space-y-2">
                                             <Label htmlFor="time_end">
                                                 End Time <span className="text-destructive">*</span>
                                             </Label>
-                                            <Input
-                                                id="time_end"
-                                                type="time"
-                                                value={currentTimeEnd}
-                                                onChange={handleTimeEndChange}
-                                                min="7:00"
-                                                max="20:00"
-                                                className="text-sm"
-                                            />
+                                            <Select value={currentTimeEnd} onValueChange={handleTimeEndChange}>
+                                                <SelectTrigger id="time_end" className="w-full text-sm">
+                                                    <SelectValue placeholder="Select end time" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {BOOKING_TIME_OPTIONS.map((time) => (
+                                                        <SelectItem key={time} value={time}>
+                                                            {formatTime(time)}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                     </div>
 
@@ -1781,7 +1849,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 type="button"
                                                 variant="secondary"
                                                 onClick={addFacilityBooking}
-                                                disabled={!selectedFacility || selectedDates.length === 0 || !currentTimeStart || !currentTimeEnd}
+                                                disabled={!canSaveFacilityBooking}
                                                 className={'w-full ' + (editingIndex !== null ? 'col-span-2' : 'col-span-full')}
                                             >
                                                 {editingIndex !== null

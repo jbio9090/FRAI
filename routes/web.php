@@ -125,6 +125,7 @@ Route::middleware('auth')->group(function () {
         Route::middleware(['auth'])->group(function () {
             Route::post('/accounts/{user}/reset-password', [\App\Http\Controllers\AccountController::class, 'resetPassword'])->name('accounts.reset-password');
         });
+        Route::post('/accounts/batch', [AccountController::class, 'batchStore'])->name('accounts.batch-store');
     });
 
     Route::get('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');
@@ -137,6 +138,12 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:manage facilities')->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
         Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
+        Route::post('/campuses', [FacilityController::class, 'storeCampus'])->name('campuses.store');
+        Route::put('/campuses/{campus}', [FacilityController::class, 'updateCampus'])->name('campuses.update');
+        Route::delete('/campuses/{campus}', [FacilityController::class, 'destroyCampus'])->name('campuses.destroy');
+        Route::post('/buildings', [FacilityController::class, 'storeBuilding'])->name('buildings.store');
+        Route::put('/buildings/{building}', [FacilityController::class, 'updateBuilding'])->name('buildings.update');
+        Route::delete('/buildings/{building}', [FacilityController::class, 'destroyBuilding'])->name('buildings.destroy');
         Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
     // chatbot

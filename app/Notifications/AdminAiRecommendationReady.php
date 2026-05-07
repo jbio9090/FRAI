@@ -29,7 +29,7 @@ class AdminAiRecommendationReady extends Notification implements ShouldQueue
 
     public function toMail($notifiable): MailMessage
     {
-        $request = FacilityRequest::with(['user', 'files'])->findOrFail($this->requestId);
+        $request = FacilityRequest::with(['user', 'files', 'requestFacilities.facility'])->findOrFail($this->requestId);
 
         Log::info('Preparing admin AI recommendation email.', [
             'request_id' => $request->id,
