@@ -35,7 +35,7 @@ class RequestService
         $user = Auth::user();
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
 
-        $query = $user->hasRole('admin')
+        $query = $user->hasRole(['admin', 'Super Admin'])
             ? FacilityRequest::with([
                 'user',
                 'processedBy',

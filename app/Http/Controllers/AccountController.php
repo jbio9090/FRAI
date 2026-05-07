@@ -66,6 +66,18 @@ class AccountController extends Controller
             'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
+        $actor = $request->user();
+
+        // Resolve canonical role name (case-insensitive)
+        $role = Role::where('name', 'ILIKE', $validated['role'])->first();
+        if (! $role) {
+            return back()->withErrors(['role' => 'Selected role is invalid.'])->withInput();
+        }
+
+        if ($msg = $this->canAssignRole($actor, $role->name)) {
+            return back()->withErrors(['role' => $msg])->withInput();
+        }
+
         if ($request->hasFile('profile')) {
             $path = $request->file('profile')->store('profiles', 'public');
             $validated['profile'] = basename($path);
@@ -76,7 +88,7 @@ class AccountController extends Controller
         $validated['force_password_change'] = true;
 
         $user = User::create($validated);
-        $user->assignRole($validated['role']);
+        $user->assignRole($role->name);
 
         return redirect()->route("accounts.index")
             ->with('temp_password_reset', [
@@ -116,6 +128,8 @@ class AccountController extends Controller
         $created = [];
         $failed  = [];
 
+        $actor = $request->user();
+
         foreach ($request->accounts as $index => $account) {
             $rowNumber = $index + 1;
             $role = Role::where('name', 'ILIKE', $account['role'])->first();
@@ -145,6 +159,17 @@ class AccountController extends Controller
                 continue;
             }
 
+            // role permission check (per-row)
+            if ($msg = $this->canAssignRole($actor, $role->name)) {
+                $failed[] = [
+                    'row'    => $rowNumber,
+                    'name'   => $account['name'],
+                    'email'  => $account['email'],
+                    'reason' => $msg,
+                ];
+                continue;
+            }
+
             try {
                 $tempPassword = Str::random(10);
 
@@ -157,7 +182,7 @@ class AccountController extends Controller
                     ]);
 
                     if ($role) {
-                        $user->assignRole($role);
+                        $user->assignRole($role->name);
                     }
 
                     return $user;
@@ -193,6 +218,17 @@ class AccountController extends Controller
             'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
+        $actor = $request->user();
+
+        $role = Role::where('name', 'ILIKE', $validated['role'])->first();
+        if (! $role) {
+            return back()->withErrors(['role' => 'Selected role is invalid.'])->withInput();
+        }
+
+        if ($msg = $this->canAssignRole($actor, $role->name)) {
+            return back()->withErrors(['role' => $msg])->withInput();
+        }
+
         if ($request->hasFile('profile')) {
 
             if ($user->profile && $user->profile !== 'default.png') {
@@ -213,9 +249,38 @@ class AccountController extends Controller
         }
 
         $user->update($updateData);
-        $user->syncRoles([$validated['role']]);
+        $user->syncRoles([$role->name]);
 
         return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Check whether an actor may assign a role.
+     *
+     * Returns null when allowed, otherwise returns error message string.
+     */
+    private function canAssignRole(User $actor, string $roleName): ?string
+    {
+        $normalized = strtolower($roleName);
+
+        // Disallow assigning Super Admin through the UI
+        if ($normalized === 'super admin') {
+            return 'Assigning the Super Admin role is not allowed through the account management interface.';
+        }
+
+        if ($actor->hasRole(['admin', 'Super Admin'])) {
+            if ($normalized !== 'department head') {
+                return 'Admins may only create Department Head accounts.';
+            }
+        } elseif ($actor->hasRole('Super Admin')) {
+            if (! in_array($normalized, ['admin', 'department head'], true)) {
+                return 'Super Admins may only create admin and Department Head accounts.';
+            }
+        } else {
+            return 'You are not authorized to assign roles.';
+        }
+
+        return null;
     }
 
     public function destroy(User $user): RedirectResponse

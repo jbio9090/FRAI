@@ -84,7 +84,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const isInitialLoad = !hasLoadedOnce.current;
 
     const { hasRole } = usePermission();
-    const isAdmin = hasRole('admin');
+    const isAdmin = hasRole(['admin', 'Super Admin']);
 
     const statusOptions = [
         { label: 'Pending', value: 'pending' },

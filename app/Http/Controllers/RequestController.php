@@ -402,7 +402,7 @@ class RequestController extends Controller
         abort_unless(in_array($action, ['approve', 'for_reschedule'], true), 404);
 
         $admin = User::find($request->integer('admin_id'));
-        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+        abort_unless($admin && $admin->hasRole(['admin', 'Super Admin']) && $admin->can('approve requests'), 403);
         abort_unless(auth()->onceUsingId($admin->id), 403);
 
         $facilityRequest = FacilityRequest::findOrFail($id);
@@ -465,7 +465,7 @@ class RequestController extends Controller
         abort_unless(in_array($action, ['approve', 'reject', 'conditionally_approve', 'for_reschedule'], true), 404);
 
         $admin = User::find($request->integer('admin_id'));
-        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+        abort_unless($admin && $admin->hasRole(['admin', 'Super Admin']) && $admin->can('approve requests'), 403);
 
         
         abort_unless(auth()->onceUsingId($admin->id), 403);

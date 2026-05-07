@@ -2,9 +2,10 @@ import { usePage } from "@inertiajs/react";
 import { router } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Loader2, Search, ArrowDownUp } from "lucide-react";
 import SmartPagination from '@/components/SmartPagination';
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import AvatarWithInitials from "@/components/avatar-with-initials";
 import { Button } from "@/components/ui/button";
+import { usePermission } from '@/hooks/use-permission';
 import {
     Dialog,
     DialogContent,
@@ -118,6 +119,21 @@ export default function AccountsPage({ users, roles }: Props) {
     const [sort, setSort] = useState('');
     const isMounted = useRef(false);
 
+    const { user } = usePermission();
+    const isAdmin = (user?.roles ?? []).some(r => (r ?? '').toLowerCase() === 'admin');
+    const isSuperAdmin = (user?.roles ?? []).some(r => (r ?? '').toLowerCase() === 'super admin' || (r ?? '').toLowerCase() === 'superadmin');
+
+    // Roles available when creating new accounts (remove Super Admin always)
+    const addRoleOptions = useMemo(() => {
+        let available = roles.filter(r => r !== 'super admin');
+        if (isAdmin) return available.filter(r => r === 'department head');
+        if (isSuperAdmin) return available.filter(r => ['admin', 'department head'].includes(r));
+        return available;
+    }, [roles, isAdmin, isSuperAdmin]);
+
+    // Roles available when editing: disallow Super Admin
+    const editRoleOptions = roles.filter(r => r !== 'super admin');
+
     useEffect(() => {
         if (!isMounted.current) {
             isMounted.current = true;
@@ -196,7 +212,7 @@ export default function AccountsPage({ users, roles }: Props) {
         setEditForm({
             username: user.name,
             email: user.email,
-            role: user.role,
+            role: (user.role ?? '').toString().toLowerCase(),
             profile: null,
             preview: undefined
         });
@@ -261,18 +277,18 @@ export default function AccountsPage({ users, roles }: Props) {
         const email = row['email']?.trim() ?? '';
         const role = row['role']?.trim() ?? '';
         const roleFromCsv = row['role']?.trim().toLowerCase() ?? '';
-        const isValidRole = roles.includes(roleFromCsv);
+        const isValidRole = addRoleOptions.includes(roleFromCsv);
 
-        if (!roleFromCsv || !isValidRole) 
+        if (!roleFromCsv || !isValidRole)
             return {
                 name, email, role,
                 status: 'error',
-                error: `Invalid role. Valid options: ${roles.join(', ')}`
+                error: `Invalid role. Valid options: ${addRoleOptions.join(', ')}`
             };
         if (!name) return { name, email, role, status: 'error', error: `Row ${index + 1}: Name is required` };
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
             return { name, email, role, status: 'error', error: `Row ${index + 1}: Invalid email address` };
-        if (!role || !roles.map(r => r.toLowerCase()).includes(role.toLowerCase()))
+        if (!role || !addRoleOptions.map(r => r.toLowerCase()).includes(role.toLowerCase()))
             return { name, email, role, status: 'error', error: `Row ${index + 1}: Role "${role}" is not valid` };
 
         // If the email already exists in the system, mark as a warning
@@ -445,7 +461,7 @@ export default function AccountsPage({ users, roles }: Props) {
                             <SelectValue placeholder="Select role" />
                         </SelectTrigger>
                         <SelectContent>
-                            {roles.map((r) => (
+                            {(isEdit ? editRoleOptions : addRoleOptions).map((r) => (
                                 <SelectItem key={r} value={r}>
                                     {r[0].toUpperCase() + r.slice(1)}
                                 </SelectItem>
