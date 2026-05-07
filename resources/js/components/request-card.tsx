@@ -378,6 +378,7 @@ function RequestDetails({
                             const booking = {
                                 request_id: rf.request_id,
                                 facility_id: rf.facility_id,
+                                request_facility_id: rf.id,
                                 facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
                                 date: rf.date_requested,
                                 time_start: rf.time_start,

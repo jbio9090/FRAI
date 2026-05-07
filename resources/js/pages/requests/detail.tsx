@@ -532,6 +532,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                     facility_capacity: facility.capacity,
                                     request_facility_status: rf.status ?? null,
                                     request_id: rf.request_id,
+                                    request_facility_id: rf.id,
                                 };
 
                                 return (

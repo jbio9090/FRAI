@@ -35,6 +35,7 @@ interface BookingSchedule {
 interface FacilityBooking {
     request_id?: number;
     facility_id: number;
+    request_facility_id?: number;
     facility_name: string;
     date: string;
     time_start: string;
@@ -96,10 +97,11 @@ export function BookingCard({ booking, index, onEdit, onRemove, className, showA
     const canMakeDecision = hasPermission('approve requests') && showActions;
 
     const handleAction = (action: string) => {
+        const facilityParam = booking.request_facility_id ?? booking.facility_id;
         router.post(
             route('requests.facilities.updateStatus', {
                 request: booking.request_id,
-                facility: booking.facility_id,
+                facility: facilityParam,
             }),
             {
                 action,
