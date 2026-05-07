@@ -30,6 +30,31 @@ export type AuditLog = {
 
 type EventKind = "comment" | "tag" | "system";
 
+const eventLabels: Record<string, string> = {
+    "auth.login": "Login",
+    "auth.login_failed": "Failed Login",
+    "auth.logout": "Logout",
+    "auth.password_reset_initiated": "Password Reset by Admin",
+    "auth.password_self_updated": "Password Updated",
+    "request.created": "Request Created",
+    "request.updated": "Request Updated",
+    "request.approved": "Request Approved",
+    "request.denied": "Request Denied",
+    "request.conditionally_approved": "Conditionally Approved",
+    "request.held": "Request Held",
+    "request.comment_added": "Comment Added",
+    "request.marked_for_reschedule": "Marked for Reschedule",
+    "request.file_uploaded": "File Uploaded",
+    "request.file_removed": "File Removed",
+};
+
+function formatEventLabel(event: string): string {
+    return eventLabels[event] ?? event
+        .replace(/^[^.]+\./, "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
 function getEventKind(event: string): EventKind {
     const e = event.toLowerCase();
     if (e.includes("comment")) return "comment";
@@ -349,7 +374,7 @@ function SystemEntry({ log }: { log: AuditLog }) {
                         </span>
                     ) : (
                         <span className="text-sm text-muted-foreground">
-                            {log.event.replace(/_/g, " ").replace(/\./g, " ")}
+                            {formatEventLabel(log.event)}
                         </span>
                     )}
                     <span className="text-xs text-muted-foreground ml-auto shrink-0">

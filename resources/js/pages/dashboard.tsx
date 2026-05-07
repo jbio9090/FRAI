@@ -78,6 +78,8 @@ const eventLabels: Record<string, string> = {
     'auth.login': 'Login',
     'auth.login_failed': 'Failed Login',
     'auth.logout': 'Logout',
+    'auth.password_reset_initiated': 'Password Reset by Admin',
+    'auth.password_self_updated': 'Password Updated',
     'request.created': 'Request Created',
     'request.updated': 'Request Updated',
     'request.approved': 'Request Approved',
@@ -89,6 +91,13 @@ const eventLabels: Record<string, string> = {
     'request.file_uploaded': 'File Uploaded',
     'request.file_removed': 'File Removed',
 };
+
+function formatEventLabel(event: string): string {
+    return eventLabels[event] ?? event
+        .replace(/^[^.]+\./, '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, letter => letter.toUpperCase());
+}
 
 const CHART_COLORS = [
     'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
@@ -247,7 +256,7 @@ export default function Dashboard({
             .sort((a, b) => b[1] - a[1])
             .map(([event, count], i) => ({
                 event,
-                label: eventLabels[event] ?? event,
+                label: formatEventLabel(event),
                 count,
                 fill: CHART_COLORS[i % CHART_COLORS.length],
             }));
@@ -836,7 +845,7 @@ export default function Dashboard({
                                                             </button>
                                                         )}
                                                     </div>
-                                                    {[{ label: 'All event types', value: 'all' }, ...Object.entries(eventLabels).map(([value, label]) => ({ value, label }))].map(opt => (
+                                                    {[{ label: 'All event types', value: 'all' }, ...Object.keys(eventLabels).map((value) => ({ value, label: formatEventLabel(value) }))].map(opt => (
                                                         <label
                                                             key={opt.value}
                                                             className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
