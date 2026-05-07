@@ -6,7 +6,7 @@ export default function WelcomeMessage() {
                     Welcome to AI Chat
                 </h2>
                 <p className="text-sm text-gray-600 sm:text-base dark:text-gray-300">
-                    Connected to the configured AI model via Ollama.
+                    Connected to the configured AI model.
                     <br />
                     Start a conversation by typing a message below, or use the guided quick actions.
                 </p>

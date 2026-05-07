@@ -4,7 +4,7 @@
 
 # Local Development Setup Guide - Laravel Herd
 
-**FRAI** is an AI-powered Facility Request System that leverages large language models and vector search for intelligent, context-aware functionality.
+**FRAI** is an AI-powered Facility Request System that uses OpenRouter-hosted language models for intelligent, context-aware functionality.
 
 ---
 
@@ -15,16 +15,6 @@ Since you are using the free version of Herd, you must ensure PostgreSQL is inst
 1.  Ensure **PostgreSQL** is installed (via Homebrew, Postgres.app, or direct installer).
 2.  Open your preferred database management tool (e.g., **pgAdmin**, **TablePlus**, or **DBeaver**).
 3.  Create a new database for the project (e.g., `frai_db`).
-
-### Enable pgvector
-To support vector embeddings, you must manually enable the `pgvector` extension on your specific database:
-1.  Open a **SQL Query** window in your database tool.
-2.  Select your project database.
-3.  Run the following command:
-    ```sql
-    CREATE EXTENSION IF NOT EXISTS vector;
-    ```
-    *Note: If this fails, ensure the pgvector binary is installed on your system.*
 
 ### Update `.env`
 Update your project's `.env` file with your local PostgreSQL credentials:
@@ -40,29 +30,29 @@ DB_PASSWORD=your_password
 
 ---
 
-## 2. Ollama & Models
-Ollama provides the local LLM and embedding capabilities.
+## 2. OpenRouter & Models
+OpenRouter provides the hosted LLM used by the chatbot and AI recommendations.
 
-1.  **Install Ollama:** Download from [ollama.com](https://ollama.com).
-2.  **Download LLM:**
-    *or whatever model you want
-    ```bash
-    ollama pull qwen2.5:3b
-    ```
-3.  **Download Embedding Model:**
-    ```bash
-    ollama pull nomic-embed-text
-    ```
+1.  Create an OpenRouter API key from your OpenRouter account.
+2.  Choose the model slug you want to use, for example `openai/gpt-4o-mini` or another OpenRouter-supported chat model.
 
 ---
 
 ## 3. Application Configuration
-Configure the application to communicate with your local Ollama instance:
+Configure the application to communicate with OpenRouter:
 
 ```env
-OLLAMA_MODEL=qwen2.5:3b
-OLLAMA_EMBED_MODEL=nomic-embed-text
-OLLAMA_URL=http://localhost:11434
+OPENROUTER_API_KEY=your_openrouter_key
+OPENROUTER_MODEL=your/model-name
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+
+AI_GENERATE_TIMEOUT=60
+AI_GENERATE_TEMPERATURE=0.1
+AI_GENERATE_MAX_TOKENS=512
+AI_RECOMMENDATION_RULE_LIMIT=10
+AI_FAQ_TOP_K=5
+AI_FAQ_LEXICAL_THRESHOLD=0.5
+AI_FAQ_NEAR_MATCH_RATIO_MIN=0.8
 ```
 
 ---
@@ -83,23 +73,14 @@ Run these commands in your terminal to prepare the application:
     ```
     php artisan queue:work
     ```
-4. **Run Ollama**
-    ```
-    ollama serve
-    ```
-5.  **Index Application Rules:**
-    *you only need to do this once or when you change models
-    Process your project data into the vector database by running:
-    ```bash
-    php artisan app:index-rules
-    ```
+4.  **Check AI Configuration:**
+    Visit `/chat/test` while signed in to confirm the configured OpenRouter model is visible to the app.
 
 ---
 
 ## Troubleshooting
 * **Database Connection:** Ensure the PostgreSQL service is active on your system. If you use a non-standard port (not 5432), update the `DB_PORT` in your `.env`.
-* **Vector Errors:** If `app:index-rules` throws a "type 'vector' does not exist" error, double-check that you ran the `CREATE EXTENSION` query on the **correct** database.
-* **Ollama Status:** Ensure the Ollama app is running in your menu bar/system tray, or the models won't be reachable.
+* **AI Configuration:** Ensure `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` are set in `.env`, then run `php artisan config:clear` if config was cached.
 
 # Local Development Setup Guide - Docker
 

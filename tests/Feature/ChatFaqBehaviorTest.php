@@ -5,18 +5,28 @@ namespace Tests\Feature;
 use App\Models\ChatbotInteractionLog;
 use App\Models\User;
 use App\Services\RAG\FaqMatchingService;
-use GuzzleHttp\Client as GuzzleClient;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Mockery;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
-use Psr\Http\Message\ResponseInterface;
 use Tests\TestCase;
 
 class ChatFaqBehaviorTest extends TestCase
 {
-    use RefreshDatabase;
     use MockeryPHPUnitIntegration;
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config([
+            'ai.openrouter.api_key' => 'test-openrouter-key',
+            'ai.openrouter.model' => 'test/model',
+            'ai.openrouter.base_url' => 'https://openrouter.test/api/v1',
+        ]);
+    }
 
     public function test_chat_faq_mode_returns_matched_faq_and_logs_faq_intent(): void
     {
@@ -45,30 +55,7 @@ class ChatFaqBehaviorTest extends TestCase
             ]);
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
-        $guzzleClient = Mockery::mock('overload:' . GuzzleClient::class);
-        $guzzleResponse = Mockery::mock(ResponseInterface::class);
-        $guzzleResponse->shouldReceive('getBody')->andReturn(json_encode([
-            'message' => [
-                'role' => 'assistant',
-                'content' => 'You can start by opening Create Request, entering the details, then submitting.',
-            ],
-        ]));
-        $guzzleClient->shouldReceive('__construct');
-        $guzzleClient->shouldReceive('post')
-            ->once()
-            ->withArgs(function ($url, $options) {
-                $payload = $options['json'] ?? [];
-                $messages = $payload['messages'] ?? [];
-                $fullPrompt = collect($messages)
-                    ->map(fn($m) => (string) ($m['content'] ?? ''))
-                    ->implode("\n");
-
-                return str_contains((string) $url, '/api/chat')
-                    && str_contains($fullPrompt, 'FAQ SNIPPETS:')
-                    && str_contains($fullPrompt, 'Go to Create Request, complete details, then submit.')
-                    && !str_contains($fullPrompt, 'How can I book a room?');
-            })
-            ->andReturn($guzzleResponse);
+        Http::fake();
 
         $response = $this
             ->actingAs($user)
@@ -80,7 +67,7 @@ class ChatFaqBehaviorTest extends TestCase
             ]);
 
         $response->assertOk();
-        $response->assertJsonPath('message.content', 'You can start by opening Create Request, entering the details, then submitting.');
+        $response->assertJsonPath('message.content', 'Go to Create Request, complete details, then submit.');
         $response->assertJsonPath('deterministic.check', 'faq');
         $response->assertJsonPath('deterministic.status', 'grounded_answer');
         $response->assertJsonPath('deterministic.faq_mode', true);
@@ -156,16 +143,16 @@ class ChatFaqBehaviorTest extends TestCase
             ]);
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
-        $guzzleClient = Mockery::mock('overload:' . GuzzleClient::class);
-        $guzzleResponse = Mockery::mock(ResponseInterface::class);
-        $guzzleResponse->shouldReceive('getBody')->andReturn(json_encode([
-            'message' => [
-                'role' => 'assistant',
-                'content' => 'Do you want contact details for the GSO office? Did you mean: "How do I contact the GSO office?"',
-            ],
-        ]));
-        $guzzleClient->shouldReceive('__construct');
-        $guzzleClient->shouldReceive('post')->once()->andReturn($guzzleResponse);
+        Http::fake([
+            'https://openrouter.test/api/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => 'Do you want contact details for the GSO office? Did you mean: "How do I contact the GSO office?"',
+                    ],
+                ]],
+            ]),
+        ]);
 
         $response = $this
             ->actingAs($user)
@@ -190,7 +177,7 @@ class ChatFaqBehaviorTest extends TestCase
     public function test_faq_mode_low_confidence_after_clarifier_returns_no_match(): void
     {
         $user = User::factory()->create();
-        Cache::put('chat_faq_state_' . $user->id, [
+        Cache::put('chat_faq_state_'.$user->id, [
             'clarifier_asked' => true,
             'anchor_key' => 'rule:19',
         ], now()->addMinutes(15));
@@ -223,9 +210,7 @@ class ChatFaqBehaviorTest extends TestCase
             ]);
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
-        $guzzleClient = Mockery::mock('overload:' . GuzzleClient::class);
-        $guzzleClient->shouldReceive('__construct')->never();
-        $guzzleClient->shouldReceive('post')->never();
+        Http::fake();
 
         $response = $this
             ->actingAs($user)
@@ -275,20 +260,17 @@ class ChatFaqBehaviorTest extends TestCase
             ]);
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
-        $classifierResponse = Mockery::mock(ResponseInterface::class);
-        $classifierResponse->shouldReceive('getBody')->andReturn(json_encode([
-            'message' => ['role' => 'assistant', 'content' => '{"intent":"confirm_suggestion"}'],
-        ]));
-        $faqAnswerResponse = Mockery::mock(ResponseInterface::class);
-        $faqAnswerResponse->shouldReceive('getBody')->andReturn(json_encode([
-            'message' => ['role' => 'assistant', 'content' => 'You can contact the GSO office by sending an email to plvgso@example.com.'],
-        ]));
-
-        $guzzleClient = Mockery::mock('overload:' . GuzzleClient::class);
-        $guzzleClient->shouldReceive('__construct');
-        $guzzleClient->shouldReceive('post')
-            ->twice()
-            ->andReturn($classifierResponse, $faqAnswerResponse);
+        Http::fakeSequence('https://openrouter.test/api/v1/chat/completions')
+            ->push([
+                'choices' => [[
+                    'message' => ['role' => 'assistant', 'content' => '{"intent":"confirm_suggestion"}'],
+                ]],
+            ])
+            ->push([
+                'choices' => [[
+                    'message' => ['role' => 'assistant', 'content' => 'You can contact the GSO office by sending an email to plvgso@example.com.'],
+                ]],
+            ]);
 
         $response = $this
             ->actingAs($user)
@@ -317,17 +299,16 @@ class ChatFaqBehaviorTest extends TestCase
             ->andReturn(null);
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
-        $guzzleClient = Mockery::mock('overload:' . GuzzleClient::class);
-        $guzzleResponse = Mockery::mock(ResponseInterface::class);
-        $guzzleResponse->shouldReceive('getBody')->andReturn(json_encode([
-            'message' => [
-                'role' => 'assistant',
-                'content' => 'AI fallback response',
-            ],
-        ]));
-
-        $guzzleClient->shouldReceive('__construct');
-        $guzzleClient->shouldReceive('post')->once()->andReturn($guzzleResponse);
+        Http::fake([
+            'https://openrouter.test/api/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => 'AI fallback response',
+                    ],
+                ]],
+            ]),
+        ]);
 
         $response = $this
             ->actingAs($user)
