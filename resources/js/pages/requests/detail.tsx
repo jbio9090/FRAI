@@ -80,6 +80,22 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     const [logsLoading, setLogsLoading] = useState(false);
     const [request, setRequest] = useState(initialRequest);
 
+    useEffect(() => {
+        // Sync local activity state when the deferred prop resolves or changes
+        if (!auditLogsProp) return;
+
+        try {
+            if (Array.isArray(auditLogsProp.data)) {
+                setAuditLogs(auditLogsProp.data);
+                setCurrentPage(auditLogsProp.current_page ?? 1);
+                setLastPage(auditLogsProp.last_page ?? 1);
+                setTotalLogs(auditLogsProp.total ?? 0);
+            }
+        } catch (e) {
+            // ignore malformed/deferred shapes until resolved
+        }
+    }, [auditLogsProp]);
+
     // True while we're still waiting for the AI recommendation to be generated.
     const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(!initialRequest.recommended_action);
 
