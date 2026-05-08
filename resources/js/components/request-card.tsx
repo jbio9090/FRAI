@@ -16,16 +16,15 @@ import {
     CirclePause,
     IterationCw,
     Paperclip,
-    ChevronLeft,
-    ChevronRight,
 } from 'lucide-react';
 import moment from 'moment';
 import { motion } from 'motion/react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, type CarouselApi } from '@/components/ui/carousel';
 import { usePermission } from '@/hooks/use-permission';
 import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
 import { PRIORITY_LABELS } from '@/types/request';
@@ -349,6 +348,24 @@ function RequestDetails({
 }) {
     const isPending: boolean = request.status === 'Pending';
     const [activeTab, setActiveTab] = useState('facilities');
+    const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
+    const [canScrollPrev, setCanScrollPrev] = useState(false);
+    const [canScrollNext, setCanScrollNext] = useState(false);
+
+    useEffect(() => {
+        if (!carouselApi) return;
+        const update = () => {
+            setCanScrollPrev(carouselApi.canScrollPrev());
+            setCanScrollNext(carouselApi.canScrollNext());
+        };
+        update();
+        carouselApi.on('scroll', update);
+        carouselApi.on('reInit', update);
+        return () => {
+            carouselApi.off('scroll', update);
+            carouselApi.off('reInit', update);
+        };
+    }, [carouselApi]);
 
     const { hasPermission } = usePermission();
     const tabs = [
@@ -457,71 +474,36 @@ function RequestDetails({
             : []),
     ];
 
-    const tabsContainerRef = useRef<HTMLDivElement | null>(null);
-    const [canScrollLeft, setCanScrollLeft] = useState(false);
-    const [canScrollRight, setCanScrollRight] = useState(false);
-
-    const scrollTabs = (offset: number) => {
-        tabsContainerRef.current?.scrollBy({ left: offset, behavior: 'smooth' });
-    };
-
-    useEffect(() => {
-        const el = tabsContainerRef.current;
-        if (!el) return;
-        const update = () => {
-            setCanScrollLeft(el.scrollLeft > 0);
-            setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-        };
-        update();
-        el.addEventListener('scroll', update, { passive: true });
-        window.addEventListener('resize', update);
-        return () => {
-            el.removeEventListener('scroll', update);
-            window.removeEventListener('resize', update);
-        };
-    }, [request.facilities.length, tabs.length]);
     return (
         <>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="hidden w-full xs:block">
-                <div className="relative">
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="ghost"
-                            size="xs"
-                            onClick={() => scrollTabs(-240)}
-                            className={cn('min-w-[36px]', !canScrollLeft && 'invisible')}
-                            aria-label="Scroll tabs left"
-                        >
-                            <ChevronLeft />
-                        </Button>
-
-                        <div ref={tabsContainerRef} className="flex-1 overflow-x-auto">
-                            <TabsList className="flex gap-2 whitespace-nowrap border-b" variant="line">
-                                {tabs.map((tab) => (
-                                    <TabsTrigger key={tab.value} value={tab.value}>
-                                        {tab.icon}
-                                        <span>{tab.label}</span>
-                                        {tab.badge !== undefined && (
-                                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
-                                                {tab.badge}
-                                            </span>
-                                        )}
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
-                        </div>
-
-                        <Button
-                            variant="ghost"
-                            size="xs"
-                            onClick={() => scrollTabs(240)}
-                            className={cn('min-w-[36px]', !canScrollRight && 'invisible')}
-                            aria-label="Scroll tabs right"
-                        >
-                            <ChevronRight />
-                        </Button>
-                    </div>
-                </div>
+                <Carousel opts={{ align: 'start', dragFree: true }} setApi={setCarouselApi} className={cn('w-full', (canScrollPrev || canScrollNext) && 'px-8')}>
+                    <CarouselContent className="-ml-1 border-b">
+                        {tabs.map((tab) => (
+                            <CarouselItem key={tab.value} className="basis-auto pl-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setActiveTab(tab.value)}
+                                    className={cn(
+                                        'flex items-center gap-1.5 rounded-none border-b-2 border-transparent pb-2 font-medium text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground',
+                                        activeTab === tab.value && 'border-primary text-foreground',
+                                    )}
+                                >
+                                    {tab.icon}
+                                    <span>{tab.label}</span>
+                                    {tab.badge !== undefined && (
+                                        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
+                                            {tab.badge}
+                                        </span>
+                                    )}
+                                </Button>
+                            </CarouselItem>
+                        ))}
+                    </CarouselContent>
+                    <CarouselPrevious className={cn('left-0', !canScrollPrev && 'hidden')} />
+                    <CarouselNext className={cn('right-0', !canScrollNext && 'hidden')} />
+                </Carousel>
 
                 {tabs.map((tab) => (
                     <TabsContent key={tab.value} value={tab.value}>
