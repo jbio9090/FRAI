@@ -32,7 +32,7 @@ class NotificationService
                 ));
             }
         } catch (\Exception $e) {
-            Log::error('Push notification failed: '.$e->getMessage());
+            Log::error('Push notification failed: ' . $e->getMessage());
         }
     }
 
@@ -45,11 +45,11 @@ class NotificationService
                 ->where('admin_email_notifications_enabled', true)
                 ->whereNotNull('email')
                 ->get()
-                ->filter(fn (User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))
-                ->each(fn (User $user) => $user->notify(new AdminAiRecommendationReady($request)));
+                ->filter(fn(User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))
+                ->each(fn(User $user) => $user->notify(new AdminAiRecommendationReady($request)));
         } catch (\Exception $e) {
-            Log::error('Admin AI recommendation email notification failed: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
+            Log::error('Admin AI recommendation email notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
 
@@ -63,8 +63,8 @@ class NotificationService
                 route('requests.detail', ['request_id' => $request->id])
             ));
         } catch (\Exception $e) {
-            Log::error('Push notification failed: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
+            Log::error('Push notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
 
@@ -76,7 +76,7 @@ class NotificationService
             $facilityNames = $request->facilities->pluck('name')->join(', ');
             $dates = $request->requestFacilities->pluck('date_requested')->join(', ');
             $times = $request->requestFacilities
-                ->map(fn ($rf) => Carbon::parse($rf->time_start)->format('g:i A').' - '.Carbon::parse($rf->time_end)->format('g:i A'))
+                ->map(fn($rf) => Carbon::parse($rf->time_start)->format('g:i A') . ' - ' . Carbon::parse($rf->time_end)->format('g:i A'))
                 ->join(', ');
 
             $user->notify(new Reschedule(
@@ -88,8 +88,8 @@ class NotificationService
                 $times,
             ));
         } catch (\Exception $e) {
-            Log::error('Push notification failed: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
+            Log::error('Push notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
 
@@ -105,8 +105,8 @@ class NotificationService
                 route('requests.detail', ['request_id' => $targetRequest->id]),
             ));
         } catch (\Exception $e) {
-            Log::error('On-hold notification failed: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
+            Log::error('On-hold notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
 
@@ -116,15 +116,25 @@ class NotificationService
             $user = User::findOrFail($request->user_id);
 
             $facilityName = $rf->facility?->name ?? '';
-            $date = $rf->date_requested ? Carbon::parse($rf->date_requested)->format('F j, Y') : null;
-            $timeStart = $rf->time_start ? Carbon::parse($rf->time_start)->format('g:i A') : null;
-            $timeEnd = $rf->time_end ? Carbon::parse($rf->time_end)->format('g:i A') : null;
+            $date = $rf->date_requested
+                ? Carbon::parse($rf->date_requested)->format('F j, Y')
+                : null;
+
+            $timeStart = $rf->time_start
+                ? Carbon::parse($rf->time_start)->format('g:i A')
+                : null;
+
+            $timeEnd = $rf->time_end
+                ? Carbon::parse($rf->time_end)->format('g:i A')
+                : null;
 
             Log::info('Dispatching facility-level notification', [
                 'request_id' => $request->id,
                 'rf_id' => $rf->id,
                 'user_id' => $user->id,
-                'status' => $rf->status instanceof \BackedEnum ? $rf->status->value : $rf->status,
+                'status' => $rf->status instanceof \BackedEnum
+                    ? $rf->status->value
+                    : $rf->status,
             ]);
 
             $user->notify(new RequestFacilityDecision(
@@ -136,15 +146,9 @@ class NotificationService
                 $timeStart,
                 $timeEnd
             ));
-
-            Log::info('Facility-level notification queued', [
-                'request_id' => $request->id,
-                'rf_id' => $rf->id,
-                'user_id' => $user->id,
-            ]);
         } catch (\Exception $e) {
-            Log::error('Facility-level push notification failed: '.$e->getMessage());
-            Log::error('Stack trace: '.$e->getTraceAsString());
+            Log::error('Facility-level notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }
 }

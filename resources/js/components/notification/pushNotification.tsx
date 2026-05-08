@@ -17,9 +17,39 @@ export default function PushNotifications() {
         }
     }, []);
 
+    const getOrRegisterServiceWorker = async () => {
+        if (!('serviceWorker' in navigator)) return null;
+
+        try {
+            // Prefer the camelCase file the app currently uses
+            let registration = await navigator.serviceWorker.getRegistration('/serviceWorker.js');
+
+            if (!registration) {
+                try {
+                    registration = await navigator.serviceWorker.register('/serviceWorker.js', { scope: '/' });
+                    console.log('Service worker registered from component: /serviceWorker.js');
+                } catch (err) {
+                    console.warn('Registering /serviceWorker.js failed, trying /service-worker.js', err);
+                    // fallback to kebab-case if present
+                    registration = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+                }
+            }
+
+            return registration;
+        } catch (err) {
+            console.error('Service worker registration/get failed:', err);
+            return null;
+        }
+    };
+
     const checkSubscription = async () => {
         try {
-            const registration = await navigator.serviceWorker.ready;
+            const registration = await getOrRegisterServiceWorker();
+            if (!registration) {
+                setError('Service worker not available');
+                return;
+            }
+
             const sub = await registration.pushManager.getSubscription();
             setSubscription(sub);
         } catch (err) {
@@ -46,20 +76,32 @@ export default function PushNotifications() {
         setError(null);
 
         try {
-            const registration = await navigator.serviceWorker.ready;
+            const registration = await getOrRegisterServiceWorker();
+            if (!registration) {
+                setError('Service worker not available');
+                setLoading(false);
+                return;
+            }
+
             const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-            const subscription = await registration.pushManager.subscribe({
+            if (!vapidPublicKey) {
+                setError('VAPID public key is not configured');
+                setLoading(false);
+                return;
+            }
+
+            const newSubscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
             });
 
             await router.post('/push/subscribe', {
-                subscription: subscription.toJSON()
+                subscription: newSubscription.toJSON()
             }, {
                 preserveState: true,
                 preserveScroll: true,
                 onSuccess: () => {
-                    setSubscription(subscription);
+                    setSubscription(newSubscription);
                 },
                 onError: (errors) => {
                     setError('Failed to save subscription');
