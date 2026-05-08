@@ -16,10 +16,12 @@ import {
     CirclePause,
     IterationCw,
     Paperclip,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import moment from 'moment';
 import { motion } from 'motion/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
@@ -425,55 +427,102 @@ function RequestDetails({
         },
         ...(files?.length > 0
             ? [
-                  {
-                      value: 'attachments',
-                      icon: <Paperclip size={16} />,
-                      label: 'Attachments',
-                      badge: files.length,
-                      content: (
-                          <ScrollArea className="mt-4 h-96">
-                              <AttachedFileList serverFiles={files} />
-                              <ScrollBar />
-                          </ScrollArea>
-                      ),
-                  },
-              ]
+                {
+                    value: 'attachments',
+                    icon: <Paperclip size={16} />,
+                    label: 'Attachments',
+                    badge: files.length,
+                    content: (
+                        <ScrollArea className="mt-4 h-96">
+                            <AttachedFileList serverFiles={files} />
+                            <ScrollBar />
+                        </ScrollArea>
+                    ),
+                },
+            ]
             : []),
         ...(hasPermission('approve requests')
             ? [
-                  {
-                      value: 'recommend',
-                      icon: <ThumbsUp size={16} />,
-                      label: 'Recommendation',
-                      content: (
-                          <div className="mt-4">
-                              <RecommendationPanel request={request} isLoading={isLoadingRecommendation} variant="card" />
-                          </div>
-                      ),
-                  },
-              ]
+                {
+                    value: 'recommend',
+                    icon: <ThumbsUp size={16} />,
+                    label: 'Recommendation',
+                    content: (
+                        <div className="mt-4">
+                            <RecommendationPanel request={request} isLoading={isLoadingRecommendation} variant="card" />
+                        </div>
+                    ),
+                },
+            ]
             : []),
     ];
 
+    const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(false);
+
+    const scrollTabs = (offset: number) => {
+        tabsContainerRef.current?.scrollBy({ left: offset, behavior: 'smooth' });
+    };
+
+    useEffect(() => {
+        const el = tabsContainerRef.current;
+        if (!el) return;
+        const update = () => {
+            setCanScrollLeft(el.scrollLeft > 0);
+            setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+        };
+        update();
+        el.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+        return () => {
+            el.removeEventListener('scroll', update);
+            window.removeEventListener('resize', update);
+        };
+    }, [request.facilities.length, tabs.length]);
     return (
         <>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="hidden w-full xs:block">
-                <ScrollArea className="w-full" type="scroll">
-                    <TabsList className="w-max min-w-full border-b" variant="line">
-                        {tabs.map((tab) => (
-                            <TabsTrigger key={tab.value} value={tab.value}>
-                                {tab.icon}
-                                <span>{tab.label}</span>
-                                {tab.badge !== undefined && (
-                                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
-                                        {tab.badge}
-                                    </span>
-                                )}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                    <ScrollBar orientation="horizontal" className="translate-y-2" />
-                </ScrollArea>
+                <div className="relative">
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => scrollTabs(-240)}
+                            className={cn('min-w-[36px]', !canScrollLeft && 'invisible')}
+                            aria-label="Scroll tabs left"
+                        >
+                            <ChevronLeft />
+                        </Button>
+
+                        <div ref={tabsContainerRef} className="flex-1 overflow-x-auto">
+                            <TabsList className="flex gap-2 whitespace-nowrap border-b" variant="line">
+                                {tabs.map((tab) => (
+                                    <TabsTrigger key={tab.value} value={tab.value}>
+                                        {tab.icon}
+                                        <span>{tab.label}</span>
+                                        {tab.badge !== undefined && (
+                                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
+                                                {tab.badge}
+                                            </span>
+                                        )}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                        </div>
+
+                        <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => scrollTabs(240)}
+                            className={cn('min-w-[36px]', !canScrollRight && 'invisible')}
+                            aria-label="Scroll tabs right"
+                        >
+                            <ChevronRight />
+                        </Button>
+                    </div>
+                </div>
+
                 {tabs.map((tab) => (
                     <TabsContent key={tab.value} value={tab.value}>
                         {tab.content}

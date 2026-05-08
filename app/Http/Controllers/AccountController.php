@@ -62,7 +62,15 @@ class AccountController extends Controller
         $validated = $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
-            'role'     => 'required|string|exists:roles,name',
+            'role'     => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                        $fail("The selected role {$value} is invalid.");
+                    }
+                },
+            ],
             'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
@@ -214,11 +222,23 @@ class AccountController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:8',
-            'role'     => 'required|string|exists:roles,name',
+            'role'     => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                        $fail("The selected role {$value} is invalid.");
+                    }
+                },
+            ],
             'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
         $actor = $request->user();
+
+        if ($msg = $this->canEditUser($actor, $user)) {
+            return back()->withErrors(['error' => $msg])->withInput();
+        }
 
         $role = Role::where('name', 'ILIKE', $validated['role'])->first();
         if (! $role) {
@@ -268,19 +288,51 @@ class AccountController extends Controller
             return 'Assigning the Super Admin role is not allowed through the account management interface.';
         }
 
-        if ($actor->hasRole(['admin', 'Super Admin'])) {
-            if ($normalized !== 'department head') {
-                return 'Admins may only create Department Head accounts.';
-            }
-        } elseif ($actor->hasRole('Super Admin')) {
+        // Super Admins may create 'admin' and 'department head' accounts.
+        if ($actor->hasRole('Super Admin')) {
             if (! in_array($normalized, ['admin', 'department head'], true)) {
                 return 'Super Admins may only create admin and Department Head accounts.';
+            }
+        } elseif ($actor->hasRole('admin')) {
+            // Regular admins may only create 'department head' accounts.
+            if ($normalized !== 'department head') {
+                return 'Admins may only create Department Head accounts.';
             }
         } else {
             return 'You are not authorized to assign roles.';
         }
 
         return null;
+    }
+
+    /**
+     * Check whether an actor may edit a target user.
+     *
+     * Returns null when allowed, otherwise returns an error message string.
+     */
+    private function canEditUser(User $actor, User $target): ?string
+    {
+        // Allow self-edit
+        if ($actor->id === $target->id) {
+            return null;
+        }
+
+        // Super Admins may edit everyone
+        if ($actor->hasRole('Super Admin')) {
+            return null;
+        }
+
+        // Admins may only edit users who are Admin or Department Head
+        if ($actor->hasRole('admin')) {
+            $targetRoles = $target->roles->pluck('name')->map(fn($r) => strtolower($r))->toArray();
+            $allowed = ['admin', 'department head'];
+            if (count(array_intersect($targetRoles, $allowed)) === 0) {
+                return 'Admins may only edit users with role Admin or Department Head.';
+            }
+            return null;
+        }
+
+        return 'You are not authorized to edit accounts.';
     }
 
     public function destroy(User $user): RedirectResponse
