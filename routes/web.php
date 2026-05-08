@@ -93,7 +93,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::post('/settings/change-password', [SettingsController::class, 'changePassword'])->name('settings.change-password');
     Route::post('/settings/admin-email-notifications', [SettingsController::class, 'updateAdminEmailNotifications'])
-        ->middleware(['role:admin', 'permission:approve requests'])
+        ->middleware(['role:admin|Super Admin', 'permission:approve requests'])
         ->name('settings.admin-email-notifications');
 
     Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');

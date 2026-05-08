@@ -214,6 +214,20 @@ class AdminAiRecommendationEmailTest extends TestCase
         $this->assertFalse($admin->fresh()->admin_email_notifications_enabled);
     }
 
+    public function test_super_admin_can_toggle_email_notification_subscription(): void
+    {
+        $this->setUpRoles();
+
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole('Super Admin');
+
+        $this->actingAs($superAdmin)
+            ->post(route('settings.admin-email-notifications'), ['subscribed' => true])
+            ->assertRedirect();
+
+        $this->assertTrue($superAdmin->fresh()->admin_email_notifications_enabled);
+    }
+
     public function test_non_admin_cannot_toggle_email_notification_subscription(): void
     {
         $this->setUpRoles();
@@ -392,6 +406,7 @@ class AdminAiRecommendationEmailTest extends TestCase
     {
         Permission::findOrCreate('approve requests');
         Role::findOrCreate('admin')->givePermissionTo('approve requests');
+        Role::findOrCreate('Super Admin')->givePermissionTo('approve requests');
     }
 
     private function adminUser(): User
