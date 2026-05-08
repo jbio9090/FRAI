@@ -67,7 +67,15 @@ class RequestService
         };
 
         if (! empty($statuses)) {
-            $query->whereIn('requests.status', $statuses);
+            // Accept arrays or Collections of BackedEnum instances or raw values
+            $statusArray = is_array($statuses) ? $statuses : (is_iterable($statuses) ? (array) $statuses : [$statuses]);
+            $statusValues = array_map(fn($s) => $s instanceof \BackedEnum ? $s->value : $s, $statusArray);
+
+            // Match requests whose parent status matches OR any child request facility has the status
+            $query->where(function ($q) use ($statusValues) {
+                $q->whereIn('requests.status', $statusValues)
+                  ->orWhereHas('requestFacilities', fn ($q2) => $q2->whereIn('status', $statusValues));
+            });
         }
 
         if ($search) {
