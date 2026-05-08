@@ -376,8 +376,11 @@ class RequestController extends Controller
 
         // Approve uses the service which handles conflicts + parent sync
         if ($validated['action'] === 'approve') {
-            $this->service->approveFacility($rf->id);
+            $approvedRf = $this->service->approveFacility($rf->id);
             $facilityRequest = FacilityRequest::findOrFail($requestId);
+
+            // Notify the request owner about the facility-level decision
+            $this->notification->notifyUserFacilityDecision($facilityRequest, $approvedRf);
         } else {
             $rf->update(['status' => $statusMap[$validated['action']]]);
 

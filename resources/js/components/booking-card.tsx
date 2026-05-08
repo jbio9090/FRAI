@@ -100,13 +100,13 @@ export function BookingCard({ booking, index, onEdit, onRemove, onRefresh, class
     const handleAction = (action: string) => {
         const facilityParam = booking.request_facility_id ?? booking.facility_id;
         const inertiaOptions = {
-            preserveScroll: true,
             onSuccess: () => {
                 try {
                     if (typeof onRefresh === 'function') onRefresh();
                 } catch (e) {
                     /* swallow errors from parent callback */
                 }
+                router.reload();
             },
         };
 

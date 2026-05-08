@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\Request;
+use App\Models\RequestFacility;
 use App\Models\User;
 use App\Notifications\AdminAiRecommendationReady;
 use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
 use App\Notifications\Reschedule;
+use App\Notifications\RequestFacilityDecision;
 use App\Enums\RequestStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -104,6 +106,44 @@ class NotificationService
             ));
         } catch (\Exception $e) {
             Log::error('On-hold notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
+        }
+    }
+
+    public function notifyUserFacilityDecision(Request $request, RequestFacility $rf)
+    {
+        try {
+            $user = User::findOrFail($request->user_id);
+
+            $facilityName = $rf->facility?->name ?? '';
+            $date = $rf->date_requested ? Carbon::parse($rf->date_requested)->format('F j, Y') : null;
+            $timeStart = $rf->time_start ? Carbon::parse($rf->time_start)->format('g:i A') : null;
+            $timeEnd = $rf->time_end ? Carbon::parse($rf->time_end)->format('g:i A') : null;
+
+            Log::info('Dispatching facility-level notification', [
+                'request_id' => $request->id,
+                'rf_id' => $rf->id,
+                'user_id' => $user->id,
+                'status' => $rf->status instanceof \BackedEnum ? $rf->status->value : $rf->status,
+            ]);
+
+            $user->notify(new RequestFacilityDecision(
+                $request->title,
+                $facilityName,
+                $rf->status,
+                route('requests.detail', ['request_id' => $request->id]),
+                $date,
+                $timeStart,
+                $timeEnd
+            ));
+
+            Log::info('Facility-level notification queued', [
+                'request_id' => $request->id,
+                'rf_id' => $rf->id,
+                'user_id' => $user->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Facility-level push notification failed: '.$e->getMessage());
             Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
