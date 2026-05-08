@@ -28,6 +28,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import DefaultLayout from '@/layout.tsx/default.';
+import { usePermission } from '@/hooks/use-permission';
 
 interface PageProps extends Record<string, unknown> {
     auth: {
@@ -48,6 +49,7 @@ export default function Settings() {
     const [pwDialogOpen, setPwDialogOpen] = useState(false);
     const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { hasRole } = usePermission();
 
     const { data, setData, post, processing, errors, reset } = useForm<{ profile: File | null }>({
         profile: null,
@@ -120,7 +122,7 @@ export default function Settings() {
     };
 
     const hasCustomPicture = auth.user.profile !== 'default.png';
-    const isAdmin = auth.user.roles?.includes('admin') || auth.user.roles?.includes('Super Admin');
+    const isAdmin = hasRole('admin') || hasRole('Super Admin');
 
     const handleAdminEmailNotificationToggle = () => {
         router.post(
