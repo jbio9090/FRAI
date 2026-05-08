@@ -71,7 +71,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     const [comment, setComment] = useState('');
     const [isCommenting, setCommentInputState] = useState(false);
     const { hasRole } = usePermission();
-    const isAdmin = hasRole(['admin', 'Super Admin']);
+    const isAdmin = hasRole('admin') || hasRole('Super Admin');
 
     const [auditLogs, setAuditLogs] = useState(auditLogsProp?.data ?? []);
     const [currentPage, setCurrentPage] = useState(auditLogsProp?.current_page ?? 1);
