@@ -236,8 +236,6 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
         };
     });
 
-    console.log(request);
-
     return (
         <DefaultLayout hasPadding={false}>
             <div className="flex w-full flex-col gap-4 *:text-sm">
