@@ -120,7 +120,7 @@ export default function Settings() {
     };
 
     const hasCustomPicture = auth.user.profile !== 'default.png';
-    const isAdmin = auth.user.roles?.includes('admin') ?? false;
+    const isAdmin = auth.user.roles?.includes('admin') || auth.user.roles?.includes('Super Admin');
 
     const handleAdminEmailNotificationToggle = () => {
         router.post(
