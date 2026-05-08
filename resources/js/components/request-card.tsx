@@ -73,6 +73,13 @@ export default function RequestCard({
     const isPollingActive = isLoadingRecommendation || isLoadingFacilityStatuses;
 
     useEffect(() => {
+        // Sync internal state when parent props update (e.g., after an Inertia reload)
+        setRequest(initialRequest);
+        setIsLoadingRecommendation(!initialRequest.recommended_action);
+        setIsLoadingFacilityStatuses(facilitiesNeedPolling(initialRequest));
+    }, [initialRequest]);
+
+    useEffect(() => {
         if (!isPollingActive) return;
 
         const interval = setInterval(async () => {
@@ -132,11 +139,10 @@ export default function RequestCard({
 
     const handleAction = (action: string) => {
         const inertiaOptions = {
-            preserveState: true,
-            preserveScroll: true,
             onSuccess: () => {
                 setComment('');
                 setCommentInputState(false);
+                router.reload();
             },
         };
 
@@ -378,6 +384,7 @@ function RequestDetails({
                             const booking = {
                                 request_id: rf.request_id,
                                 facility_id: rf.facility_id,
+                                request_facility_id: rf.id,
                                 facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
                                 date: rf.date_requested,
                                 time_start: rf.time_start,

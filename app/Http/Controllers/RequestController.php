@@ -7,6 +7,7 @@ use App\Jobs\ProcessRequestRecommendation;
 use App\Models\AuditLog;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
+use App\Models\RequestFacility;
 use App\Models\User;
 use App\Enums\RequestStatus;
 use App\Services\AuditLogger;
@@ -365,27 +366,42 @@ class RequestController extends Controller
             'for_reschedule'        => RequestStatus::FOR_RESCHEDULE,
         ];
 
-        $facilityRequest = FacilityRequest::findOrFail($requestId);
+        // $facilityId here is actually the request_facility id (the booking row id).
+        $rf = RequestFacility::findOrFail($facilityId);
 
-        $facilityRequest->requestFacilities()
-            ->where('facility_id', $facilityId)
-            ->update(['status' => $statusMap[$validated['action']]]);
+        // Ensure the request_facility belongs to the supplied request id
+        if ($rf->request_id != $requestId) {
+            abort(403);
+        }
 
-        $allFacilityStatuses = $facilityRequest->requestFacilities()->pluck('status');
-        $uniqueStatuses = $allFacilityStatuses->unique();
-        $totalFacilities = $allFacilityStatuses->count();
+        // Approve uses the service which handles conflicts + parent sync
+        if ($validated['action'] === 'approve') {
+            $approvedRf = $this->service->approveFacility($rf->id);
+            $facilityRequest = FacilityRequest::findOrFail($requestId);
 
-        if ($uniqueStatuses->count() === 1) {
-            $facilityRequest->update([
-                'status' => $uniqueStatuses->first()
-            ]);
+            // Notify the request owner about the facility-level decision
+            $this->notification->notifyUserFacilityDecision($facilityRequest, $approvedRf);
         } else {
-            $hasApproved = $allFacilityStatuses->contains(fn($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
+            $rf->update(['status' => $statusMap[$validated['action']]]);
 
-            if ($hasApproved && $totalFacilities >= 2) {
+            $facilityRequest = FacilityRequest::findOrFail($requestId);
+
+            $allFacilityStatuses = $facilityRequest->requestFacilities()->pluck('status');
+            $uniqueStatuses = $allFacilityStatuses->unique();
+            $totalFacilities = $allFacilityStatuses->count();
+
+            if ($uniqueStatuses->count() === 1) {
                 $facilityRequest->update([
-                    'status' => RequestStatus::PARTIALLY_APPROVED
+                    'status' => $uniqueStatuses->first()
                 ]);
+            } else {
+                $hasApproved = $allFacilityStatuses->contains(fn($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
+
+                if ($hasApproved && $totalFacilities >= 2) {
+                    $facilityRequest->update([
+                        'status' => RequestStatus::PARTIALLY_APPROVED
+                    ]);
+                }
             }
         }
 
@@ -402,7 +418,7 @@ class RequestController extends Controller
         abort_unless(in_array($action, ['approve', 'for_reschedule'], true), 404);
 
         $admin = User::find($request->integer('admin_id'));
-        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+        abort_unless($admin && $admin->hasRole(['admin', 'Super Admin']) && $admin->can('approve requests'), 403);
         abort_unless(auth()->onceUsingId($admin->id), 403);
 
         $facilityRequest = FacilityRequest::findOrFail($id);
@@ -465,7 +481,7 @@ class RequestController extends Controller
         abort_unless(in_array($action, ['approve', 'reject', 'conditionally_approve', 'for_reschedule'], true), 404);
 
         $admin = User::find($request->integer('admin_id'));
-        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+        abort_unless($admin && $admin->hasRole(['admin', 'Super Admin']) && $admin->can('approve requests'), 403);
 
         
         abort_unless(auth()->onceUsingId($admin->id), 403);

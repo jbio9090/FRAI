@@ -35,6 +35,7 @@ interface BookingSchedule {
 interface FacilityBooking {
     request_id?: number;
     facility_id: number;
+    request_facility_id?: number;
     facility_name: string;
     date: string;
     time_start: string;
@@ -55,6 +56,7 @@ interface BookingCardProps {
     index: number;
     onEdit?: (index: number) => void;
     onRemove?: (index: number) => void;
+    onRefresh?: () => void;
     className?: string;
     showActions?: boolean;
     /** When true the card is the one currently being edited in the form above */
@@ -79,7 +81,7 @@ function groupBorrowed(borrowed: BorrowedEquipmentRequest[]): Record<string, Bor
     );
 }
 
-export function BookingCard({ booking, index, onEdit, onRemove, className, showActions = true, isEditing = false }: BookingCardProps) {
+export function BookingCard({ booking, index, onEdit, onRemove, onRefresh, className, showActions = true, isEditing = false }: BookingCardProps) {
     const { hasPermission } = usePermission();
 
     const hasOwnEquipment = booking.equipment.length > 0;
@@ -96,15 +98,27 @@ export function BookingCard({ booking, index, onEdit, onRemove, className, showA
     const canMakeDecision = hasPermission('approve requests') && showActions;
 
     const handleAction = (action: string) => {
+        const facilityParam = booking.request_facility_id ?? booking.facility_id;
+        const inertiaOptions = {
+            onSuccess: () => {
+                try {
+                    if (typeof onRefresh === 'function') onRefresh();
+                } catch (e) {
+                    /* swallow errors from parent callback */
+                }
+                router.reload();
+            },
+        };
+
         router.post(
             route('requests.facilities.updateStatus', {
                 request: booking.request_id,
-                facility: booking.facility_id,
+                facility: facilityParam,
             }),
             {
                 action,
             },
-            { preserveScroll: true },
+            inertiaOptions,
         );
     };
 

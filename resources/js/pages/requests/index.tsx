@@ -84,7 +84,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const isInitialLoad = !hasLoadedOnce.current;
 
     const { hasRole } = usePermission();
-    const isAdmin = hasRole('admin');
+    const isAdmin = hasRole(['admin', 'Super Admin']);
 
     const statusOptions = [
         { label: 'Pending', value: 'pending' },
@@ -218,6 +218,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                     setSelectState(false);
                     setBulkComment('');
                     setIsBulkCommentOpen(false);
+                    router.reload();
                 },
             },
         );
@@ -226,7 +227,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     return (
         <DefaultLayout hasPadding={false}>
             <div className="mx-auto w-full max-w-7xl">
-                <h1 className="mb-6 px-4 pt-4 text-xl font-bold md:px-8 md:pt-8 pb-2">{page_title} Requests</h1>
+                <h1 className="mb-6 px-4 pt-4 text-xl font-bold md:px-8 md:pt-8 pb-2">Requests</h1>
 
                 <div className="mt-4 flex w-full flex-col flex-wrap justify-center gap-4 px-4 md:px-8">
                     <div className="flex gap-2">

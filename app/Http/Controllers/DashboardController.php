@@ -22,7 +22,7 @@ class DashboardController extends Controller
         $end = now()->endOfMonth()->format('Y-m-d');
 
         $chartData = AuditLog::query()
-            ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id))
+            ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
             ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
@@ -40,7 +40,7 @@ class DashboardController extends Controller
             'buildings' => Facility::distinct()->pluck('building')->filter()->values(),
             // Filter recent logs list
             'auditLogs' => AuditLog::with('user')
-                ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id))
+                ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
                 ->where('created_at', '>=', now()->subDays(6)->startOfDay())
                 ->latest()
                 ->paginate(10),
@@ -92,7 +92,7 @@ class DashboardController extends Controller
         $range = $request->input('range', 'week');
 
         $query = AuditLog::query()
-            ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id));
+            ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id));
 
         if ($range === 'day' || $range === 'today') {
             $logs = $query
@@ -144,7 +144,7 @@ class DashboardController extends Controller
 
         return response()->json(
             AuditLog::with('user')
-                ->when(! $user->hasRole('admin'), fn ($q) => $q->where('user_id', $user->id))
+                ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
                 ->whereBetween('created_at', [$start, $end])
                 ->latest()
                 ->paginate(10)

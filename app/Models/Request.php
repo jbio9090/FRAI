@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+use App\Models\RequestFacility;
+use App\Models\Facility;
+use App\Models\User;
 use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 
 class Request extends Model
 {
@@ -28,8 +32,8 @@ class Request extends Model
         'on_hold',
         'priority_reason',
         'held_by_request_id',
-        'processed_by',
-        'processed_at',
+        "processed_by",
+        "processed_at",
         'pending_conflict_rf_ids',
         'approved_conflict_rf_ids',
         'approved_by',
@@ -38,14 +42,14 @@ class Request extends Model
     ];
 
     protected $casts = [
-        'status' => RequestStatus::class,
-        'on_hold' => 'boolean',
+        'status'         => RequestStatus::class,
+        'on_hold'        => 'boolean',
         'priority_level' => PriorityLevel::class,
-        'processed_at' => 'datetime',
+        'processed_at'   => 'datetime',
         'pending_conflict_rf_ids' => 'array',
         'approved_conflict_rf_ids' => 'array',
         'approved_by' => 'array',
-        'pending_equipment_conflict_request_ids' => 'array',
+        'pending_equipment_conflict_request_ids'  => 'array',
         'approved_equipment_conflict_request_ids' => 'array',
         'recommended_action' => RequestStatus::class,
     ];
@@ -85,7 +89,7 @@ class Request extends Model
     public function equipment()
     {
         return $this->belongsToMany(Equipment::class, 'request_equipment')
-            ->withPivot('quantity_needed', 'is_borrowed', 'source_facility_id')
+            ->withPivot('quantity_needed')
             ->withTimestamps();
     }
 
@@ -131,6 +135,19 @@ class Request extends Model
                     });
             })
             ->whereIn('status', ['Pending', 'Approved']);
+    }
+
+    protected static function booted()
+    {
+        static::updated(function (Request $request) {
+            // If the parent request was changed to APPROVED, ensure child request facilities are approved too
+            if ($request->wasChanged('status') && $request->status === RequestStatus::APPROVED) {
+                // Update any child facility rows that are not explicitly denied
+                $request->requestFacilities()->where('status', '!=', RequestStatus::DENIED)->update([
+                    'status' => RequestStatus::APPROVED,
+                ]);
+            }
+        });
     }
 
     /* =========================================

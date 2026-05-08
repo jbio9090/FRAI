@@ -71,7 +71,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     const [comment, setComment] = useState('');
     const [isCommenting, setCommentInputState] = useState(false);
     const { hasRole } = usePermission();
-    const isAdmin = hasRole('admin');
+    const isAdmin = hasRole(['admin', 'Super Admin']);
 
     const [auditLogs, setAuditLogs] = useState(auditLogsProp?.data ?? []);
     const [currentPage, setCurrentPage] = useState(auditLogsProp?.current_page ?? 1);
@@ -79,6 +79,22 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     const [totalLogs, setTotalLogs] = useState(auditLogsProp?.total ?? 0);
     const [logsLoading, setLogsLoading] = useState(false);
     const [request, setRequest] = useState(initialRequest);
+
+    useEffect(() => {
+        // Sync local activity state when the deferred prop resolves or changes
+        if (!auditLogsProp) return;
+
+        try {
+            if (Array.isArray(auditLogsProp.data)) {
+                setAuditLogs(auditLogsProp.data);
+                setCurrentPage(auditLogsProp.current_page ?? 1);
+                setLastPage(auditLogsProp.last_page ?? 1);
+                setTotalLogs(auditLogsProp.total ?? 0);
+            }
+        } catch (e) {
+            // ignore malformed/deferred shapes until resolved
+        }
+    }, [auditLogsProp]);
 
     // True while we're still waiting for the AI recommendation to be generated.
     const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(!initialRequest.recommended_action);
@@ -89,55 +105,55 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     const [isLoadingFacilityStatuses, setIsLoadingFacilityStatuses] = useState(() => facilitiesNeedPolling(initialRequest));
 
     const isPollingActive = isLoadingRecommendation || isLoadingFacilityStatuses;
+    const refreshRequest = async () => {
+        if (!request) return;
+        try {
+            const res = await fetch(route('request.recommendation', [request.id]), {
+                headers: { Accept: 'application/json' },
+            });
+
+            if (!res.ok) {
+                console.error('Recommendation endpoint error:', res.status);
+                return;
+            }
+
+            const data = await res.json();
+
+            setRequest((prev) => {
+                const mergedFacilities = prev.request_facilities?.map((rf) => {
+                    const updated = data.request_facilities?.find((u: { id: number }) => u.id === rf.id);
+                    if (!updated) return rf;
+                    return {
+                        ...rf,
+                        status: updated.status ?? rf.status,
+                        ai_recommended_status: updated.ai_recommended_status ?? rf.ai_recommended_status,
+                        ai_recommendation_reason: updated.ai_recommendation_reason ?? rf.ai_recommendation_reason,
+                    };
+                });
+
+                return {
+                    ...prev,
+                    status: data.request_status ?? prev.status,
+                    recommended_action: data.recommended_action ?? prev.recommended_action,
+                    recommended_action_reason: data.recommended_action_reason ?? prev.recommended_action_reason,
+                    request_facilities: mergedFacilities ?? prev.request_facilities,
+                };
+            });
+
+            if (data.recommended_action) setIsLoadingRecommendation(false);
+            if (!facilitiesNeedPolling({ ...request, request_facilities: data.request_facilities ?? request.request_facilities })) {
+                setIsLoadingFacilityStatuses(false);
+            }
+        } catch (e) {
+            console.error('Polling error:', e);
+        }
+    };
 
     useEffect(() => {
         if (!isPollingActive) return;
 
-        const interval = setInterval(async () => {
-            try {
-                const res = await fetch(route('request.recommendation', [request.id]), {
-                    headers: { Accept: 'application/json' },
-                });
-
-                if (!res.ok) {
-                    console.error('Recommendation endpoint error:', res.status);
-                    return;
-                }
-
-                const data = await res.json();
-
-                setRequest((prev) => {
-                    // Merge updated facility statuses from the poll response into
-                    // the existing request_facilities array, preserving all other
-                    // fields (equipment, conflicts, etc.) that only the initial
-                    // server render knows about.
-                    const mergedFacilities = prev.request_facilities?.map((rf) => {
-                        const updated = data.request_facilities?.find((u: { id: number }) => u.id === rf.id);
-                        if (!updated) return rf;
-                        return {
-                            ...rf,
-                            status: updated.status ?? rf.status,
-                            ai_recommended_status: updated.ai_recommended_status ?? rf.ai_recommended_status,
-                            ai_recommendation_reason: updated.ai_recommendation_reason ?? rf.ai_recommendation_reason,
-                        };
-                    });
-
-                    return {
-                        ...prev,
-                        status: data.request_status ?? prev.status,
-                        recommended_action: data.recommended_action ?? prev.recommended_action,
-                        recommended_action_reason: data.recommended_action_reason ?? prev.recommended_action_reason,
-                        request_facilities: mergedFacilities ?? prev.request_facilities,
-                    };
-                });
-
-                if (data.recommended_action) setIsLoadingRecommendation(false);
-                if (!facilitiesNeedPolling({ ...request, request_facilities: data.request_facilities ?? request.request_facilities })) {
-                    setIsLoadingFacilityStatuses(false);
-                }
-            } catch (e) {
-                console.error('Polling error:', e);
-            }
+        const interval = setInterval(() => {
+            void refreshRequest();
         }, 5000);
 
         return () => clearInterval(interval);
@@ -532,10 +548,17 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                     facility_capacity: facility.capacity,
                                     request_facility_status: rf.status ?? null,
                                     request_id: rf.request_id,
+                                    request_facility_id: rf.id,
                                 };
 
                                 return (
-                                    <BookingCard key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`} booking={booking} index={index} />
+                                    <BookingCard
+                                        key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
+                                        booking={booking}
+                                        index={index}
+                                        onRefresh={refreshRequest}
+                                        className="mt-4"
+                                    />
                                 );
                             })}
                         </div>
