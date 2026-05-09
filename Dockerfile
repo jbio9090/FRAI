@@ -1,21 +1,22 @@
 # ==========================================
-# Stage 1: Build Frontend Assets (Vite + React)
+# Stage 1: Build Laravel Application
 # ==========================================
-FROM node:22-alpine AS frontend
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-# Compiles Tailwind, React, and Inertia down to static files in public/build
-RUN npm run build 
+FROM composer:2.7 AS builder
 
-# ==========================================
-# Stage 2: Install PHP Dependencies
-# ==========================================
-FROM composer:2.7 AS vendor
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    nodejs \
+    npm \
+    git \
+    unzip \
+    libpq-dev
+
 WORKDIR /app
-COPY composer.json composer.lock ./
-# Install only production dependencies
+
+# Copy everything first
+COPY . .
+
+# Install PHP dependencies
 RUN composer install \
     --no-dev \
     --no-interaction \
@@ -23,31 +24,37 @@ RUN composer install \
     --optimize-autoloader \
     --ignore-platform-reqs \
     --no-scripts
-COPY . .
+
+# Run Laravel package discovery
 RUN php artisan package:discover --ansi
 
+# Install frontend dependencies
+RUN npm ci
+
+# Build Vite assets
+RUN npm run build
+
 # ==========================================
-# Stage 3: Final Production Image (Tiny & Fast)
+# Stage 2: Production Runtime Image
 # ==========================================
-# Updated to PHP 8.4
 FROM php:8.4-fpm-alpine
 
-# Install Postgres PDO driver required for pgvector/pgsql
-RUN apk add --no-cache postgresql-dev \
+# Install PostgreSQL extension
+RUN apk add --no-cache \
+    postgresql-dev \
+    libpq \
     && docker-php-ext-install pdo_pgsql
 
 WORKDIR /var/www/html
 
-# Copy the PHP application and vendor directory from Stage 2
-COPY --from=vendor /app /var/www/html
+# Copy built application
+COPY --from=builder /app /var/www/html
 
-# Copy the compiled Vite frontend assets from Stage 1
-COPY --from=frontend /app/public/build /var/www/html/public/build
-
-# Set correct permissions for Laravel
+# Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
 
 EXPOSE 9000
+
 CMD ["php-fpm"]
