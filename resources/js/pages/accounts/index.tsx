@@ -1,11 +1,10 @@
 import { usePage } from "@inertiajs/react";
 import { router } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Loader2, Search, ArrowDownUp } from "lucide-react";
-import SmartPagination from '@/components/SmartPagination';
 import { useState, useRef, useEffect, useMemo } from "react";
 import AvatarWithInitials from "@/components/avatar-with-initials";
+import SmartPagination from '@/components/SmartPagination';
 import { Button } from "@/components/ui/button";
-import { usePermission } from '@/hooks/use-permission';
 import {
     Dialog,
     DialogContent,
@@ -30,6 +29,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from "@/layout.tsx/default.";
 import type { User } from "@/types";
 
@@ -126,7 +126,7 @@ export default function AccountsPage({ users, roles }: Props) {
 
     // Roles available when creating new accounts (remove Super Admin always)
     const addRoleOptions = useMemo(() => {
-        let available = roles.filter(r => r !== 'super admin');
+        const available = roles.filter(r => r !== 'super admin');
         if (isAdmin) return available.filter(r => r === 'department head');
         if (isSuperAdmin) return available.filter(r => ['admin', 'department head'].includes(r));
         return available;

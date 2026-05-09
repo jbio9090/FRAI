@@ -1,6 +1,6 @@
 import { router, Link } from '@inertiajs/react';
 import { format } from 'date-fns';
-import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, ArrowLeftRight, MapPin, MoreHorizontal } from 'lucide-react';
+import { CalendarIcon, X, Clock, Users, AlertCircleIcon, Pen, MapPin, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { usePermission } from '@/hooks/use-permission';
@@ -104,7 +104,7 @@ export function BookingCard({ booking, index, onEdit, onRemove, onRefresh, class
                 try {
                     if (typeof onRefresh === 'function') onRefresh();
                 } catch (e) {
-                    /* swallow errors from parent callback */
+                    console.error(e);
                 }
                 router.reload();
             },

@@ -13,7 +13,7 @@ import {
     ArrowDownUp,
     ArrowUp,
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -61,6 +61,7 @@ import useDarkMode from "@/hooks/use-darkMode";
 import { usePermission } from "@/hooks/use-permission";
 import DefaultLayout from "@/layout.tsx/default.";
 import wordToColor from "@/lib/wordToColor";
+import SmartPagination from "@/components/SmartPagination";
 
 interface FacilityPivot {
     equipment_id: number;
@@ -86,6 +87,21 @@ interface Equipment {
 interface Assignment {
     facility_id: number;
     quantity: number;
+}
+
+interface PaginatedEquipments {
+    data: Equipment[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+}
+
+interface Filters {
+    search: string;
+    sort: string;
 }
 
 
@@ -218,6 +234,11 @@ function AssignDialog({
         }
     }, [equipment, open]);
 
+    const assignmentMap = useMemo(
+        () => new Map(assignments.map((a) => [a.facility_id, a])),
+        [assignments]
+    );
+
     const { totalAssigned, remaining, overAllocated, pct } = useMemo(() => {
         if (!equipment) return { totalAssigned: 0, remaining: 0, overAllocated: false, pct: 0 };
         const totalAssigned = assignments.reduce((s, a) => s + a.quantity, 0);
@@ -288,7 +309,7 @@ function AssignDialog({
 
                 <ScrollArea className="h-64 pr-3 -mr-3">
                     {facilities.map((f) => {
-                        const a = assignments.find((x) => x.facility_id === f.id);
+                        const a = assignmentMap.get(f.id);
                         const checked = !!a;
                         return (
                             <div
@@ -353,44 +374,51 @@ const SORT_OPTIONS: { label: string; value: SortValue | "" }[] = [
 export default function EquipmentsPage({
     equipments,
     facilities,
+    filters,
 }: {
-    equipments: Equipment[];
+    equipments: PaginatedEquipments;
     facilities: Facility[];
+    filters: Filters;
 }) {
-    const [search, setSearch] = useState("");
+    const [search, setSearch] = useState(filters.search ?? "");
+    const [sortValue, setSortValue] = useState<SortValue | "">(filters.sort as SortValue | "" ?? "");
     const [addOpen, setAddOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<Equipment | null>(null);
     const [assignTarget, setAssignTarget] = useState<Equipment | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
     const [deleting, setDeleting] = useState(false);
-    const [sortValue, setSortValue] = useState<SortValue | "">("");
     const { hasRole } = usePermission();
 
-
-    const filtered = useMemo(
-        () => equipments.filter((e) =>
-            e.name.toLowerCase().includes(search.toLowerCase())
-        ),
-        [equipments, search]
+    const applyFilters = useCallback(
+        (params: { search?: string; sort?: string; page?: number }) => {
+            router.get(
+                "/equipments",
+                {
+                    search: params.search ?? search,
+                    sort: params.sort !== undefined ? params.sort : sortValue,
+                    page: params.page ?? 1,
+                },
+                { preserveState: true, replace: true }
+            );
+        },
+        [search, sortValue]
     );
 
-    const sorted = useMemo(() => {
-        if (!sortValue) return filtered;
-        const [key, dir] = sortValue.split("-") as [string, "asc" | "desc"];
-        return [...filtered].sort((a, b) => {
-            let cmp = 0;
-            if (key === "name") {
-                cmp = a.name.localeCompare(b.name);
-            } else if (key === "quantity") {
-                cmp = a.quantity - b.quantity;
-            } else if (key === "assigned") {
-                const aAssigned = a.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
-                const bAssigned = b.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
-                cmp = aAssigned - bAssigned;
-            }
-            return dir === "asc" ? cmp : -cmp;
-        });
-    }, [filtered, sortValue]);
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            applyFilters({ search, page: 1 });
+        }, 350);
+        return () => clearTimeout(timeout);
+    }, [search]);
+
+    const handleSortChange = (value: SortValue | "") => {
+        setSortValue(value);
+        applyFilters({ sort: value, page: 1 });
+    };
+
+    const handlePageChange = (page: number) => {
+        applyFilters({ page });
+    };
 
     const confirmDelete = () => {
         if (!deleteTarget) return;
@@ -400,6 +428,24 @@ export default function EquipmentsPage({
             onError: () => setDeleting(false),
         });
     };
+
+    const enrichedEquipments = useMemo(
+        () =>
+            equipments.data.map((eq, i) => {
+                const assigned = eq.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
+                const over = assigned > eq.quantity;
+                const empty = assigned === 0;
+                const rowNumber = (equipments.from ?? 1) + i;
+                return { ...eq, assigned, over, empty, rowNumber };
+            }),
+        [equipments.data, equipments.from]
+    );
+
+    const paginationLabel = useMemo(
+        () =>
+            `Showing ${equipments.from ?? 0}–${equipments.to ?? 0} of ${equipments.total} equipment`,
+        [equipments.from, equipments.to, equipments.total]
+    );
 
     return (
         <DefaultLayout>
@@ -439,7 +485,9 @@ export default function EquipmentsPage({
                                 </AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
-                    </AlertDialog></>)}
+                    </AlertDialog>
+                </>
+            )}
 
             <div className="mb-4">
                 <h1 className="text-xl font-bold">Equipments</h1>
@@ -471,7 +519,7 @@ export default function EquipmentsPage({
                             {SORT_OPTIONS.map((opt) => (
                                 <Button
                                     key={opt.value || "none"}
-                                    onClick={() => setSortValue(opt.value)}
+                                    onClick={() => handleSortChange(opt.value)}
                                     variant={sortValue === opt.value ? "secondary" : "ghost"}
                                     className="justify-between w-full px-2"
                                     size="sm"
@@ -490,11 +538,12 @@ export default function EquipmentsPage({
                     </PopoverContent>
                 </Popover>
 
-                {(hasRole("admin")) && (<Button onClick={() => setAddOpen(true)}>
-                    <Plus size={16} />
-                    Add Equipment
-                </Button>)
-                }
+                {(hasRole("admin")) && (
+                    <Button onClick={() => setAddOpen(true)}>
+                        <Plus size={16} />
+                        Add Equipment
+                    </Button>
+                )}
             </div>
 
             <Table>
@@ -509,51 +558,36 @@ export default function EquipmentsPage({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {sorted.length === 0 ? (
+                    {enrichedEquipments.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="py-16 text-center text-muted-foreground">
+                            <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
                                 <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
                                 No equipment found
                             </TableCell>
                         </TableRow>
                     ) : (
-                        sorted.map((eq, i) => {
-                            const assigned = eq.facilities.reduce(
-                                (s, f) => s + (f.pivot?.quantity ?? 0),
-                                0
-                            );
-                            const pct =
-                                eq.quantity > 0
-                                    ? Math.min(100, Math.round((assigned / eq.quantity) * 100))
-                                    : 0;
+                        enrichedEquipments.map((eq) => {
+                            const { assigned, over, empty, rowNumber } = eq;
 
                             return (
                                 <TableRow key={eq.id}>
                                     <TableCell className="text-muted-foreground text-sm px-4">
-                                        {i + 1}
+                                        {rowNumber}
                                     </TableCell>
                                     <TableCell className="text-sm font-medium">{eq.name}</TableCell>
                                     <TableCell>
                                         <span className="text-sm font-medium text-right">{eq.quantity}</span>
                                     </TableCell>
                                     <TableCell>
-                                        {(() => {
-                                            const assigned = eq.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
-                                            const over = assigned > eq.quantity;
-                                            const empty = assigned === 0;
-                                            return (
-                                                <div className={`inline-flex items-center gap-0.5 rounded-md border px-2.5 py-1 text-sm
-                ${over ? "border-destructive/30" : "border-border bg-muted/40"}`}
-                                                >
-                                                    <span className={`font-medium ${over ? "text-destructive" : empty ? "text-muted-foreground" : "text-primary/60"
-                                                        }`}>
-                                                        {assigned}
-                                                    </span>
-                                                    <span className="text-sm text-muted-foreground/50 mx-0.5">/</span>
-                                                    <span className="text-sm text-muted-foreground">{eq.quantity}</span>
-                                                </div>
-                                            );
-                                        })()}
+                                        <div className={`inline-flex items-center gap-0.5 rounded-md border px-2.5 py-1 text-sm
+                                            ${over ? "border-destructive/30" : "border-border bg-muted/40"}`}
+                                        >
+                                            <span className={`font-medium ${over ? "text-destructive" : empty ? "text-muted-foreground" : "text-primary/60"}`}>
+                                                {assigned}
+                                            </span>
+                                            <span className="text-sm text-muted-foreground/50 mx-0.5">/</span>
+                                            <span className="text-sm text-muted-foreground">{eq.quantity}</span>
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-wrap gap-1">
@@ -634,6 +668,19 @@ export default function EquipmentsPage({
                     )}
                 </TableBody>
             </Table>
+
+            <p className="text-sm w-full mb-4 mt-2 text-right text-muted-foreground shrink-0">{paginationLabel}</p>
+
+            {/* Pagination footer */}
+            {equipments.last_page > 1 && (
+                <div className="flex items-center justify-between mt-4 gap-4">
+                    <SmartPagination
+                        currentPage={equipments.current_page}
+                        lastPage={equipments.last_page}
+                        onPageChange={handlePageChange}
+                    />
+                </div>
+            )}
         </DefaultLayout>
     );
 }

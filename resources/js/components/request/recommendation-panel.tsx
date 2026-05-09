@@ -2,8 +2,8 @@ import { Calendar, Clock, Sparkles } from 'lucide-react';
 import moment from 'moment';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import StatusTag from '../status-tag';
 import type { Request } from '@/types/request';
+import StatusTag from '../status-tag';
 
 interface RecommendationPanelProps {
     request: Request;

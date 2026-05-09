@@ -33,8 +33,8 @@ import {
     SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { usePermission } from '@/hooks/use-permission';
-import type { SharedData } from '@/types';
 import logo from '@/svg/FRAI.svg';
+import type { SharedData } from '@/types';
 
 const iconRailItem = 'group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center';
 

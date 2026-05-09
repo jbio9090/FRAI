@@ -27,8 +27,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import DefaultLayout from '@/layout.tsx/default.';
 import { usePermission } from '@/hooks/use-permission';
+import DefaultLayout from '@/layout.tsx/default.';
 
 interface PageProps extends Record<string, unknown> {
     auth: {
