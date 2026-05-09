@@ -27,6 +27,7 @@ class User extends Authenticatable
         'email',
         'password',
         'profile',
+        'is_active',
         'force_password_change',
     ];
 
@@ -49,8 +50,10 @@ class User extends Authenticatable
     {
         return [
             'admin_email_notifications_enabled' => 'boolean',
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'email_verified_at'                 => 'datetime',
+            'password'                          => 'hashed',
+            'is_active'                         => 'boolean',
+            'force_password_change'             => 'boolean',
         ];
     }
 }

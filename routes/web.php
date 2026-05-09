@@ -63,7 +63,7 @@ Route::middleware('auth')->group(function () {
             'recommended_action' => $request->getRawOriginal('recommended_action'),
             'recommended_action_reason' => $request->recommended_action_reason,
             'request_status' => $request->getRawOriginal('status'),
-            'request_facilities' => $request->requestFacilities->map(fn ($rf) => [
+            'request_facilities' => $request->requestFacilities->map(fn($rf) => [
                 'id' => $rf->id,
                 'facility_id' => $rf->facility_id,
                 'status' => $rf->getRawOriginal('status'),
@@ -126,6 +126,8 @@ Route::middleware('auth')->group(function () {
             Route::post('/accounts/{user}/reset-password', [\App\Http\Controllers\AccountController::class, 'resetPassword'])->name('accounts.reset-password');
         });
         Route::post('/accounts/batch', [AccountController::class, 'batchStore'])->name('accounts.batch-store');
+        Route::patch('accounts/{user}/toggle-status', [AccountController::class, 'toggleStatus'])
+            ->name('accounts.toggle-status');
     });
 
     Route::get('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');

@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Middleware\GenerateBreadcrumbs;
+use App\Http\Middleware\CheckIfAccountIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             RequirePasswordChange::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            CheckIfAccountIsActive::class,
         ]);
 
         $middleware->alias([

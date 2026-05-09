@@ -44,11 +44,12 @@ class AccountController extends Controller
 
         // Transform collection items for the frontend
         $users->getCollection()->transform(fn($user) => [
-            'id'      => $user->id,
-            'name'    => $user->name,
-            'email'   => $user->email,
-            'role'    => $user->roles->first()?->name,
-            'profile' => $user->profile,
+            'id'        => $user->id,
+            'name'      => $user->name,
+            'email'     => $user->email,
+            'role'      => $user->roles->first()?->name,
+            'profile'   => $user->profile,
+            'is_active' => $user->is_active,
         ]);
 
         return Inertia::render('accounts/index', [
@@ -272,6 +273,58 @@ class AccountController extends Controller
         $user->syncRoles([$role->name]);
 
         return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Toggle the active/inactive status of a user account.
+     *
+     * Rules:
+     *  - Super Admins can toggle anyone except themselves.
+     *  - Admins can only toggle Department Heads.
+     *  - No one can toggle a Super Admin account.
+     */
+    public function toggleStatus(Request $request, User $user): RedirectResponse
+    {
+        $actor = $request->user();
+
+        if ($msg = $this->canToggleStatus($actor, $user)) {
+            return back()->withErrors(['error' => $msg]);
+        }
+
+        $user->update(['is_active' => ! $user->is_active]);
+
+        return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Check whether an actor may toggle a target user's status.
+     *
+     * Returns null when allowed, otherwise returns an error message string.
+     */
+    private function canToggleStatus(User $actor, User $target): ?string
+    {
+        // Nobody can toggle a Super Admin
+        if ($target->hasRole('Super Admin')) {
+            return 'The status of a Super Admin account cannot be changed.';
+        }
+
+        // Super Admins can toggle anyone except themselves
+        if ($actor->hasRole('Super Admin')) {
+            if ($actor->id === $target->id) {
+                return 'You cannot deactivate your own account.';
+            }
+            return null;
+        }
+
+        // Admins can only toggle Department Heads
+        if ($actor->hasRole('admin')) {
+            if ($target->hasRole('Department Head')) {
+                return null;
+            }
+            return 'Admins may only change the status of Department Head accounts.';
+        }
+
+        return 'You are not authorized to change account status.';
     }
 
     /**
