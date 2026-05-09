@@ -32,6 +32,7 @@ services:
     volumes:
       - ./.env:/var/www/html/.env
       - storage-data:/var/www/html/storage
+      - ./custom.ini:/usr/local/etc/php/conf.d/custom.ini
     depends_on:
       db:
         condition: service_healthy
