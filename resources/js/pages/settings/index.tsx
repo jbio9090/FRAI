@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import PushNotifications from '@/components/notification/pushNotification';
 import { Button } from '@/components/ui/button';
+import { UserRoundPen, Mail } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -37,6 +38,7 @@ interface PageProps extends Record<string, unknown> {
             name: string;
             profile: string;
             roles: string[];
+            email: string;
             admin_email_notifications_enabled: boolean;
         };
     };
@@ -50,6 +52,24 @@ export default function Settings() {
     const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { hasRole } = usePermission();
+    const [editDetailsDialogOpen, setEditDetailsDialogOpen] = useState(false);
+
+    const {
+        data: detailsData,
+        setData: setDetailsData,
+        post: postDetails,
+        processing: detailsProcessing,
+        errors: detailsErrors
+    } = useForm({
+        name: auth.user.name,
+        email: auth.user.email,
+    });
+
+    const handleUpdateDetails = () => {
+        postDetails(route('settings.update-details', auth.user.id), {
+            onSuccess: () => setEditDetailsDialogOpen(false),
+        });
+    };
 
     const { data, setData, post, processing, errors, reset } = useForm<{ profile: File | null }>({
         profile: null,
@@ -159,8 +179,9 @@ export default function Settings() {
                         onChange={handleFileChange}
                     />
 
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="text-sm font-semibold leading-none truncate">{auth.user.name}</span>
+                    <div className="flex flex-col gap-1 min-w-0">
+                        <span className="text-md font-semibold leading-none truncate">{auth.user.name}</span>
+                        <span className="text-sm text-muted-foreground leading-none truncate flex gap-1 items-center"><Mail size={12}/>{auth.user.email}</span>
                         <span className="text-sm text-muted-foreground capitalize">{auth.user.roles.join(', ')}</span>
                     </div>
 
@@ -190,6 +211,12 @@ export default function Settings() {
                                         </svg>
                                         Upload photo
                                     </DropdownMenuItem>
+
+                                    <DropdownMenuItem  onClick={() => setEditDetailsDialogOpen(true)} className='cursor-pointer'>
+                                        <UserRoundPen size={12}/>
+                                        <span>Edit Details</span>
+                                    </DropdownMenuItem>
+            
                                     {hasCustomPicture && (
                                         <DropdownMenuItem onClick={handleRemove} disabled={removing} className="text-destructive focus:text-destructive cursor-pointer">
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -276,6 +303,59 @@ export default function Settings() {
                                 disabled={pwProcessing || !pwData.current_password || !pwData.password || !pwData.password_confirmation}
                             >
                                 {pwProcessing ? 'Saving…' : 'Save Password'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={editDetailsDialogOpen} onOpenChange={setEditDetailsDialogOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Edit Account Details</DialogTitle>
+                        </DialogHeader>
+
+                        <div className="flex flex-col gap-3 py-2">
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Full Name</Label>
+                                <Input
+                                    value={detailsData.name}
+                                    onChange={e => setDetailsData('name', e.target.value)}
+                                    placeholder="Your name"
+                                    disabled={detailsProcessing}
+                                />
+                                {detailsErrors.name && (
+                                    <span className="text-xs text-destructive">{detailsErrors.name}</span>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Email Address</Label>
+                                <Input
+                                    type="email"
+                                    value={detailsData.email}
+                                    onChange={e => setDetailsData('email', e.target.value)}
+                                    placeholder="Your email"
+                                    disabled={detailsProcessing}
+                                />
+                                {detailsErrors.email && (
+                                    <span className="text-xs text-destructive">{detailsErrors.email}</span>
+                                )}
+                            </div>
+                        </div>
+
+                        <DialogFooter className="gap-2">
+                            <DialogClose asChild>
+                                <Button variant="outline" size="sm" type="button" disabled={detailsProcessing}>
+                                    Cancel
+                                </Button>
+                            </DialogClose>
+                            <Button
+                                size="sm"
+                                type="button"
+                                onClick={handleUpdateDetails}
+                                disabled={detailsProcessing || !detailsData.name || !detailsData.email}
+                            >
+                                {detailsProcessing ? 'Saving…' : 'Save Changes'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
