@@ -16,8 +16,15 @@ FROM composer:2.7 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
 # Install only production dependencies
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader \
+    --ignore-platform-reqs \
+    --no-scripts
 COPY . .
+RUN php artisan package:discover --ansi
 
 # ==========================================
 # Stage 3: Final Production Image (Tiny & Fast)
