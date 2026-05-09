@@ -4,15 +4,13 @@ import { Calendar, Clock, SendHorizontal, Pen, CheckCircle, XCircle, ClipboardCh
 import moment from 'moment';
 import { useState, useEffect } from 'react';
 import { ActivityFeed } from '@/components/activity-feed';
-import { BookingCard } from '@/components/booking-card';
-import { RecommendationPanel } from '@/components/request/recommendation-panel';
-import { cn } from '@/lib/utils';
 import AnimatedText from '@/components/animated-text';
 import { AttachedFileList } from '@/components/attached-file-list';
 import AvatarWithInitials from '@/components/avatar-with-initials';
+import { BookingCard } from '@/components/booking-card';
 import Comment from '@/components/comment';
-import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
+import { RecommendationPanel } from '@/components/request/recommendation-panel';
 import SmartPagination from '@/components/SmartPagination';
 import StatusTag from '@/components/status-tag';
 import { Button } from '@/components/ui/button';
@@ -22,6 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
+import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
+import { cn } from '@/lib/utils';
 import type { Request } from '@/types/request';
 
 interface DetailProps {

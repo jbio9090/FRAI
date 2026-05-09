@@ -4,13 +4,7 @@ import { ArrowUpRight, ArrowLeft, ArrowRight, Bell, ClipboardList, CirclePlus, M
 import { ListFilter } from 'lucide-react';
 import { ArrowDownUp } from 'lucide-react';
 import moment from 'moment';
-import type { Request as FacilityRequest } from '@/types/request';
 import { useState, useEffect, useMemo } from 'react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { AuditLog } from '@/components/activity-feed';
-import { ActivityFeed } from '@/components/activity-feed';
 import {
     AreaChart,
     Area,
@@ -22,21 +16,14 @@ import {
     Pie,
     PieChart,
 } from 'recharts';
-import type {
-    ChartConfig} from '@/components/ui/chart';
-import {
-    ChartContainer,
-    ChartLegend,
-    ChartLegendContent,
-    ChartTooltip,
-    ChartTooltipContent,
-} from '@/components/ui/chart';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ActivityFeed } from '@/components/activity-feed';
+import type { AuditLog } from '@/components/activity-feed';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import FacilityCalendar from '@/components/FacilityCalendar';
 import RequestCard from '@/components/request-card';
-import { usePermission } from '@/hooks/use-permission';
 import SmallRequestCard from '@/components/small-request-card';
+import SmartPagination from "@/components/SmartPagination";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import type {
     CarouselApi} from "@/components/ui/carousel";
 import {
@@ -46,12 +33,25 @@ import {
     CarouselNext,
     CarouselPrevious
 } from "@/components/ui/carousel";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import SmartPagination from "@/components/SmartPagination";
 import { Button } from '@/components/ui/button';
+import type {
+    ChartConfig} from '@/components/ui/chart';
+import {
+    ChartContainer,
+    ChartLegend,
+    ChartLegendContent,
+    ChartTooltip,
+    ChartTooltipContent,
+} from '@/components/ui/chart';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from '@/lib/utils';
+import type { Request as FacilityRequest } from '@/types/request';
 
 interface Event {
     start: Date;

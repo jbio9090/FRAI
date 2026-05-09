@@ -1,11 +1,10 @@
 import { usePage } from "@inertiajs/react";
 import { router } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Loader2, Search, ArrowDownUp } from "lucide-react";
-import SmartPagination from '@/components/SmartPagination';
 import { useState, useRef, useEffect, useMemo } from "react";
 import AvatarWithInitials from "@/components/avatar-with-initials";
+import SmartPagination from '@/components/SmartPagination';
 import { Button } from "@/components/ui/button";
-import { usePermission } from '@/hooks/use-permission';
 import {
     Dialog,
     DialogContent,
@@ -30,6 +29,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from "@/layout.tsx/default.";
 import type { User } from "@/types";
 
@@ -102,6 +102,7 @@ export default function AccountsPage({ users, roles }: Props) {
     const csvInputRef = useRef<HTMLInputElement>(null);
     const { errors } = usePage<PageProps>().props;
     const { flash } = usePage<PageProps>().props;
+    const { auth } = usePage<PageProps>().props;
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [showBatchResultsModal, setShowBatchResultsModal] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -125,7 +126,7 @@ export default function AccountsPage({ users, roles }: Props) {
 
     // Roles available when creating new accounts (remove Super Admin always)
     const addRoleOptions = useMemo(() => {
-        let available = roles.filter(r => r !== 'super admin');
+        const available = roles.filter(r => r !== 'super admin');
         if (isAdmin) return available.filter(r => r === 'department head');
         if (isSuperAdmin) return available.filter(r => ['admin', 'department head'].includes(r));
         return available;
@@ -483,7 +484,7 @@ export default function AccountsPage({ users, roles }: Props) {
         <DefaultLayout>
             <h1 className="font-bold text-xl">Account Management</h1>
 
-            
+
             <div className="mt-6 flex items-center w-full gap-3 mb-4">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -849,23 +850,23 @@ export default function AccountsPage({ users, roles }: Props) {
                                         </TableHeader>
                                         <TableBody>
                                             {csvRows.map((row, i) => (
-                                                    <TableRow key={i} className={row.status === 'error' ? 'bg-destructive/5' : row.status === 'warning' ? 'bg-yellow-50 dark:bg-yellow-950/10' : ''}>
+                                                <TableRow key={i} className={row.status === 'error' ? 'bg-destructive/5' : row.status === 'warning' ? 'bg-yellow-50 dark:bg-yellow-950/10' : ''}>
                                                     <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
                                                     <TableCell className="font-medium">{row.name || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell className="hidden sm:table-cell">{row.email || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell className="capitalize">{row.role || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell>
-                                                            {row.status === 'valid' ? (
-                                                                <CircleCheck className="h-4 w-4 text-green-500" />
-                                                            ) : row.status === 'warning' ? (
-                                                                <span title={row.error}>
-                                                                    <CircleAlert className="h-4 w-4 text-amber-500" />
-                                                                </span>
-                                                            ) : (
-                                                                <span title={row.error}>
-                                                                    <CircleAlert className="h-4 w-4 text-destructive" />
-                                                                </span>
-                                                            )}
+                                                        {row.status === 'valid' ? (
+                                                            <CircleCheck className="h-4 w-4 text-green-500" />
+                                                        ) : row.status === 'warning' ? (
+                                                            <span title={row.error}>
+                                                                <CircleAlert className="h-4 w-4 text-amber-500" />
+                                                            </span>
+                                                        ) : (
+                                                            <span title={row.error}>
+                                                                <CircleAlert className="h-4 w-4 text-destructive" />
+                                                            </span>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -965,7 +966,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                 <TableCell className="font-medium">{(user as any).name}</TableCell>
                                 <TableCell>{(user as any).email}</TableCell>
                                 <TableCell className="capitalize">{(user as any).role}</TableCell>
-                                <TableCell className="flex gap-1">
+                                <TableCell className="flex gap-1 justify-end">
 
                                     {hasRole("Super Admin") && (<Button
                                         variant="ghost"
@@ -976,13 +977,13 @@ export default function AccountsPage({ users, roles }: Props) {
                                         <Key className="h-4 w-4 text-muted-foreground" />
                                     </Button>)}
 
-                                    <Button
+                                    {!(user.id === auth.user.id || user.role === "Super Admin") && (<Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => openEdit(user)}
                                     >
                                         <Pencil className="h-4 w-4" />
-                                    </Button>
+                                    </Button>)}
 
                                     <Button
                                         variant="ghost"

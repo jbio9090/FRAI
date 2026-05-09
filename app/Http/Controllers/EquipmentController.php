@@ -15,11 +15,51 @@ use Illuminate\Validation\Rule;
 
 class EquipmentController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $search = $request->input('search', '');
+        $sort   = $request->input('sort', '');
+
+        $query = Equipment::with('facilities');
+
+        if ($search) {
+            $query->where('name', 'like', '%' . $search . '%');
+        }
+
+        switch ($sort) {
+            case 'name-asc':
+                $query->orderBy('name', 'asc');
+                break;
+            case 'name-desc':
+                $query->orderBy('name', 'desc');
+                break;
+            case 'quantity-asc':
+                $query->orderBy('quantity', 'asc');
+                break;
+            case 'quantity-desc':
+                $query->orderBy('quantity', 'desc');
+                break;
+            default:
+                $query->orderBy('name', 'asc');
+                break;
+        }
+
+        if (in_array($sort, ['assigned-asc', 'assigned-desc'])) {
+            $direction = str_ends_with($sort, 'asc') ? 'asc' : 'desc';
+            $query->withCount([
+                'facilities as assigned_quantity' => fn ($q) => $q->selectRaw('COALESCE(SUM(facility_equipment.quantity), 0)'),
+            ])->orderBy('assigned_quantity', $direction);
+        }
+
+        $equipments = $query->paginate(20)->withQueryString();
+
         return Inertia::render('equipments/index', [
-            'equipments' => Equipment::with('facilities')->orderBy('name')->get(),
+            'equipments' => $equipments,
             'facilities' => Facility::select('id', 'name')->orderBy('name')->get(),
+            'filters'    => [
+                'search' => $search,
+                'sort'   => $sort,
+            ],
         ]);
     }
 
