@@ -1,16 +1,5 @@
 # ==========================================
-# Stage 1: Build Frontend Assets (Vite + React)
-# ==========================================
-FROM node:22-alpine AS frontend
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-# Compiles Tailwind, React, and Inertia down to static files in public/build
-RUN npm run build 
-
-# ==========================================
-# Stage 2: Install PHP Dependencies
+# Stage 1: Install PHP Dependencies
 # ==========================================
 FROM composer:2.7 AS vendor
 WORKDIR /app
@@ -20,9 +9,26 @@ RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoload
 COPY . .
 
 # ==========================================
+# Stage 2: Build Frontend Assets (Vite + React)
+# ==========================================
+# We use a PHP CLI image so Wayfinder can run `php artisan` during the Vite build
+FROM php:8.4-cli-alpine AS frontend
+
+# Install Node.js and npm into the PHP container
+RUN apk add --no-cache nodejs npm
+
+WORKDIR /app
+
+# Copy the entire app and vendor directory from Stage 1 so Artisan can boot
+COPY --from=vendor /app /app
+
+# Install node modules and run the build
+RUN npm ci
+RUN npm run build 
+
+# ==========================================
 # Stage 3: Final Production Image (Tiny & Fast)
 # ==========================================
-# Updated to PHP 8.4
 FROM php:8.4-fpm-alpine
 
 # Install Postgres PDO driver required for pgvector/pgsql
@@ -31,10 +37,10 @@ RUN apk add --no-cache postgresql-dev \
 
 WORKDIR /var/www/html
 
-# Copy the PHP application and vendor directory from Stage 2
+# Copy the PHP application and vendor directory from Stage 1
 COPY --from=vendor /app /var/www/html
 
-# Copy the compiled Vite frontend assets from Stage 1
+# Copy the compiled Vite frontend assets from Stage 2
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
 # Set correct permissions for Laravel
