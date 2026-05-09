@@ -4,8 +4,8 @@
 FROM composer:2.7 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-# Install only production dependencies
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
+# Added --no-scripts so it doesn't look for artisan before the code is copied
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs --no-scripts
 COPY . .
 
 # ==========================================
