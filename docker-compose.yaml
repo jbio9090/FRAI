@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Nginx to serve static files and proxy PHP requests
+  web:
+    image: nginx:alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - ./public:/var/www/html/public
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - laravel-net
+
+  # The main Laravel PHP-FPM application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: laravel
+      DB_USERNAME: laravel_user
+      DB_PASSWORD: laravel_password
+      # If you are using Ollama locally, you'd point this to your host machine's IP
+      OLLAMA_HOST: http://host.docker.internal:11434 
+    volumes:
+      - ./.env:/var/www/html/.env
+      - storage-data:/var/www/html/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - laravel-net
+
+  # Queue Worker for WebPush and other background tasks
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: php artisan queue:work --tries=3 --timeout=90
+    restart: unless-stopped
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: laravel
+      DB_USERNAME: laravel_user
+      DB_PASSWORD: laravel_password
+    volumes:
+      - ./.env:/var/www/html/.env
+      - storage-data:/var/www/html/storage
+    depends_on:
+      - db
+    networks:
+      - laravel-net
+
+  # PostgreSQL customized with the pgvector extension
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: laravel
+      POSTGRES_USER: laravel_user
+      POSTGRES_PASSWORD: laravel_password
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - laravel-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laravel_user -d laravel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  laravel-net:
+    driver: bridge
+
+volumes:
+  pg-data:
+  storage-data:
