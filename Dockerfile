@@ -4,12 +4,12 @@
 FROM composer:2.7 AS builder
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     nodejs \
     npm \
     git \
     unzip \
-    libpq-dev
+    postgresql-dev
 
 WORKDIR /app
 
