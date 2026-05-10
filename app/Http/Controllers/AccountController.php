@@ -22,6 +22,10 @@ class AccountController extends Controller
         $perPage = (int) $request->input('per_page', 10);
 
         $query = User::with('roles');
+        $archived = $request->boolean('archived');
+        if ($archived) {
+            $query = $query->onlyTrashed();
+        }
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
@@ -50,11 +54,14 @@ class AccountController extends Controller
             'role'      => $user->roles->first()?->name,
             'profile'   => $user->profile,
             'is_active' => $user->is_active,
+            'created_at' => $user->created_at,
+            'deleted_at' => $user->deleted_at,
         ]);
 
         return Inertia::render('accounts/index', [
             'users' => $users,
             'roles' => Role::pluck('name')->map(fn($role) => strtolower($role)),
+            'archived' => $archived,
         ]);
     }
 
@@ -390,13 +397,27 @@ class AccountController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
-        if ($user->profile && $user->profile !== 'default.png') {
-            Storage::disk('public')->delete('profiles/' . $user->profile);
-        }
-
+        // Soft-delete (archive) the user. Do not remove profile files when archiving.
         $user->delete();
 
         return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Restore a soft-deleted (archived) user.
+     */
+    public function restore(Request $request, $id): RedirectResponse
+    {
+        $actor = $request->user();
+        $user = User::withTrashed()->with('roles')->findOrFail($id);
+
+        if ($msg = $this->canEditUser($actor, $user)) {
+            return back()->withErrors(['error' => $msg]);
+        }
+
+        $user->restore();
+
+        return redirect()->route('accounts.index')->with('success', 'Account restored.');
     }
 
     public function resetPassword(Request $request, User $user): RedirectResponse

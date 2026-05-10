@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import AvatarWithInitials from "@/components/avatar-with-initials";
 import SmartPagination from '@/components/SmartPagination';
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Dialog,
     DialogContent,
@@ -33,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from "@/layout.tsx/default.";
 import type { User } from "@/types";
+import moment from "moment";
 
 interface PaginatedUsers {
     data: User[];
@@ -104,6 +106,8 @@ export default function AccountsPage({ users, roles }: Props) {
     const { errors } = usePage<PageProps>().props;
     const { flash } = usePage<PageProps>().props;
     const { auth } = usePage<PageProps>().props;
+    const archived = !!(usePage<PageProps>().props as any).archived;
+    const [activeTab, setActiveTab] = useState<string>(archived ? 'archived' : 'active');
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [showBatchResultsModal, setShowBatchResultsModal] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -146,18 +150,33 @@ export default function AccountsPage({ users, roles }: Props) {
         }
 
         const timeout = setTimeout(() => {
-            router.get(route('accounts.index'), { search: searchQuery, sort: sort === 'none' ? '' : sort }, {
+            router.get(route('accounts.index'), { search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, {
                 preserveState: true,
                 preserveScroll: true,
             });
         }, 400);
 
         return () => clearTimeout(timeout);
-    }, [searchQuery]);
+    }, [searchQuery, activeTab]);
 
     const handleSortChange = (value: string) => {
         setSort(value);
-        router.get(route('accounts.index'), { sort: value === 'none' ? '' : value }, { preserveState: true, preserveScroll: true });
+        router.get(route('accounts.index'), { sort: value === 'none' ? '' : value, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true });
+    };
+
+    useEffect(() => {
+        // keep controlled tab in sync with server-provided value
+        setActiveTab(archived ? 'archived' : 'active');
+    }, [archived]);
+
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+        router.get(route('accounts.index'), { archived: value === 'archived' ? 1 : '', search: searchQuery, sort: sort === 'none' ? '' : sort }, { preserveState: true, preserveScroll: true });
+    };
+
+    const handleRestore = (id: number) => {
+        if (!window.confirm('Restore this account from archives?')) return;
+        router.post(route('accounts.restore', id), {}, { preserveScroll: true });
     };
 
     useEffect(() => {
@@ -534,6 +553,15 @@ export default function AccountsPage({ users, roles }: Props) {
     return (
         <DefaultLayout>
             <h1 className="font-bold text-xl">Account Management</h1>
+
+            <div className="mt-4">
+                <Tabs value={activeTab} onValueChange={handleTabChange}>
+                    <TabsList variant="line">
+                        <TabsTrigger value="active">Active</TabsTrigger>
+                        <TabsTrigger value="archived">Archived</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
 
 
             <div className="mt-6 flex items-center w-full gap-3 mb-4">
@@ -988,7 +1016,7 @@ export default function AccountsPage({ users, roles }: Props) {
                         currentPage={(users as any).current_page}
                         lastPage={(users as any).last_page}
                         onPageChange={(page) =>
-                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort }, { preserveState: true, preserveScroll: true })
+                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true })
                         }
                         className={'my-4 px-4 py-0 md:px-8'}
                     />
@@ -1000,9 +1028,11 @@ export default function AccountsPage({ users, roles }: Props) {
                             <TableHead className="w-[50px]"></TableHead>
                             <TableHead>Name</TableHead>
                             <TableHead>Email</TableHead>
+                            <TableHead>Created At</TableHead>
+                            {activeTab === 'archived' && (<TableHead>Deleted At</TableHead>)}
                             <TableHead>Role</TableHead>
-                            {/* Status column — only shown when the actor can toggle at least one user */}
-                            {(isAdmin || isSuperAdmin) && (
+                            {/* Status column — only shown when the actor can toggle at least one user and not viewing archived */}
+                            {(isAdmin || isSuperAdmin) && activeTab !== 'archived' && (
                                 <TableHead className="w-[100px]">Status</TableHead>
                             )}
                             <TableHead className="w-[80px]" />
@@ -1035,10 +1065,12 @@ export default function AccountsPage({ users, roles }: Props) {
                                         )}
                                     </TableCell>
                                     <TableCell>{(rowUser as any).email}</TableCell>
+                                    <TableCell>{moment((rowUser as any).created_at).format("MMMM D, YYYY h:mm A")}</TableCell>
+                                    {activeTab === 'archived' && (<TableCell>{moment((rowUser as any).deleted_at).format("MMMM D, YYYY h:mm A")}</TableCell>)}
                                     <TableCell className="capitalize">{(rowUser as any).role}</TableCell>
 
                                     {/* Status toggle cell */}
-                                    {(isAdmin || isSuperAdmin) && (
+                                    {(isAdmin || isSuperAdmin) && activeTab !== 'archived' && (
                                         <TableCell>
                                             {togglable ? (
                                                 <div className="flex items-center gap-2">
@@ -1057,34 +1089,49 @@ export default function AccountsPage({ users, roles }: Props) {
                                     )}
 
                                     <TableCell className="flex gap-1 justify-end">
-                                        {hasRole("Super Admin") && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => handleResetPassword(rowUser)}
-                                                title="Force Password Reset"
-                                            >
-                                                <Key className="h-4 w-4 text-muted-foreground" />
-                                            </Button>
-                                        )}
+                                        {activeTab === 'archived' ? (
+                                            <>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleRestore((rowUser as any).id)}
+                                                    title="Restore Account"
+                                                >
+                                                    <ArrowDownUp className="h-4 w-4 text-primary" />
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {hasRole("Super Admin") && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleResetPassword(rowUser)}
+                                                        title="Force Password Reset"
+                                                    >
+                                                        <Key className="h-4 w-4 text-muted-foreground" />
+                                                    </Button>
+                                                )}
 
-                                        {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin") && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => openEdit(rowUser)}
-                                            >
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                        )}
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin") && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => openEdit(rowUser)}
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                )}
 
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => handleDelete((rowUser as any).id)}
-                                        >
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleDelete((rowUser as any).id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             );
@@ -1097,7 +1144,7 @@ export default function AccountsPage({ users, roles }: Props) {
                         currentPage={(users as any).current_page}
                         lastPage={(users as any).last_page}
                         onPageChange={(page) =>
-                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort }, { preserveState: true, preserveScroll: true })
+                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true })
                         }
                         className={'my-5 px-4 md:px-8'}
                     />

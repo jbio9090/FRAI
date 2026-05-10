@@ -123,6 +123,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/accounts/create', [AccountController::class, 'store'])->name('accounts.store');
         Route::put('/accounts/{user}', [AccountController::class, 'update'])->name('accounts.update');
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+        Route::post('/accounts/{id}/restore', [AccountController::class, 'restore'])->name('accounts.restore');
         Route::middleware(['auth'])->group(function () {
             Route::post('/accounts/{user}/reset-password', [\App\Http\Controllers\AccountController::class, 'resetPassword'])->name('accounts.reset-password');
         });
