@@ -1,686 +1,704 @@
-import { router } from "@inertiajs/react";
-import {
-    Plus,
-    Search,
-    MoreHorizontal,
-    Pencil,
-    Trash2,
-    ArrowLeftRight,
-    Package,
-    Building2,
-    Hash,
-    AlertCircle,
-    ArrowDownUp,
-    ArrowUp,
-} from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-    DialogDescription,
-} from "@/components/ui/dialog";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import useDarkMode from "@/hooks/use-darkMode";
-import { usePermission } from "@/hooks/use-permission";
-import DefaultLayout from "@/layout.tsx/default.";
-import wordToColor from "@/lib/wordToColor";
-import SmartPagination from "@/components/SmartPagination";
+import { Link, usePage } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
+import { Calendar, Clock, SendHorizontal, Pen, CheckCircle, XCircle, ClipboardCheck, MessageSquare, Sparkles, Download, ArrowLeft, ArrowRight } from 'lucide-react';
+import moment from 'moment';
+import { useState, useEffect } from 'react';
+import { ActivityFeed } from '@/components/activity-feed';
+import AnimatedText from '@/components/animated-text';
+import { AttachedFileList } from '@/components/attached-file-list';
+import AvatarWithInitials from '@/components/avatar-with-initials';
+import { BookingCard } from '@/components/booking-card';
+import Comment from '@/components/comment';
+import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
+import { RecommendationPanel } from '@/components/request/recommendation-panel';
+import SmartPagination from '@/components/SmartPagination';
+import StatusTag from '@/components/status-tag';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { usePermission } from '@/hooks/use-permission';
+import DefaultLayout from '@/layout.tsx/default.';
+import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
+import { cn } from '@/lib/utils';
+import type { Request } from '@/types/request';
 
-interface FacilityPivot {
-    equipment_id: number;
-    facility_id: number;
-    quantity: number;
+interface DetailProps {
+    children?: React.ReactNode;
+    request: Request | null;
+    auditLogs: { data: any[]; current_page: number; last_page: number; total: number } | null;
 }
 
-interface Facility {
-    id: number;
-    name: string;
-    building?: string;
-    capacity?: number;
-    pivot?: FacilityPivot;
+type RecommendedAction = 'Approved' | 'Conditionally Approved' | 'Denied' | 'For Reschedule' | string;
+
+function RecommendationBadge({ action }: { action: RecommendedAction }) {
+    const map: Record<string, { className: string; icon: React.ReactNode }> = {
+        approved: {
+            className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800',
+            icon: <CheckCircle className="h-3.5 w-3.5" />,
+        },
+        'conditionally approved': {
+            className: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800',
+            icon: <ClipboardCheck className="h-3.5 w-3.5" />,
+        },
+        denied: {
+            className: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
+            icon: <XCircle className="h-3.5 w-3.5" />,
+        },
+        'for reschedule': {
+            className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800',
+            icon: <Calendar className="h-3.5 w-3.5" />,
+        },
+    };
+
+    const key = action.toLowerCase();
+    const style = map[key] ?? {
+        className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800',
+        icon: <Sparkles className="h-3.5 w-3.5" />,
+    };
+
+    return (
+        <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold', style.className)}>
+            {style.icon}
+            {action}
+        </span>
+    );
 }
 
-interface Equipment {
-    id: number;
-    name: string;
-    quantity: number;
-    facilities: Facility[];
-}
-
-interface Assignment {
-    facility_id: number;
-    quantity: number;
-}
-
-interface PaginatedEquipments {
-    data: Equipment[];
-    current_page: number;
-    last_page: number;
-    per_page: number;
-    total: number;
-    from: number | null;
-    to: number | null;
-}
-
-interface Filters {
-    search: string;
-    sort: string;
-}
-
-
-function EquipmentDialog({
-    open,
-    equipment,
-    onClose,
-}: {
-    open: boolean;
-    equipment?: Equipment;
-    onClose: () => void;
-}) {
-    const isEdit = !!equipment;
-    const [name, setName] = useState("");
-    const [quantity, setQuantity] = useState(1);
-    const [errors, setErrors] = useState<{ name?: string; quantity?: string }>({});
-    const [processing, setProcessing] = useState(false);
+export default function RequestDetail({ request: initialRequest, auditLogs: auditLogsProp }: DetailProps) {
+    const auth = usePage().props.auth;
+    const [comment, setComment] = useState('');
+    const [isCommenting, setCommentInputState] = useState(false);
     const { hasRole } = usePermission();
+    const isAdmin = hasRole('admin') || hasRole('Super Admin');
 
-    if (!hasRole("admin")) {
-        return;
+    const [auditLogs, setAuditLogs] = useState(auditLogsProp?.data ?? []);
+    const [currentPage, setCurrentPage] = useState(auditLogsProp?.current_page ?? 1);
+    const [lastPage, setLastPage] = useState(auditLogsProp?.last_page ?? 1);
+    const [totalLogs, setTotalLogs] = useState(auditLogsProp?.total ?? 0);
+    const [logsLoading, setLogsLoading] = useState(false);
+    const [request, setRequest] = useState(initialRequest);
+    const [activeTab, setActiveTab] = useState('overview');
+    const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
+    const [canScrollPrev, setCanScrollPrev] = useState(false);
+    const [canScrollNext, setCanScrollNext] = useState(false);
+
+    useEffect(() => {
+        // Sync local activity state when the deferred prop resolves or changes
+        if (!auditLogsProp) return;
+
+        try {
+            if (Array.isArray(auditLogsProp.data)) {
+                setAuditLogs(auditLogsProp.data);
+                setCurrentPage(auditLogsProp.current_page ?? 1);
+                setLastPage(auditLogsProp.last_page ?? 1);
+                setTotalLogs(auditLogsProp.total ?? 0);
+            }
+        } catch (e) {
+            // ignore malformed/deferred shapes until resolved
+        }
+    }, [auditLogsProp]);
+
+    // True while we're still waiting for the AI recommendation to be generated.
+    const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(!initialRequest.recommended_action);
+
+    // True while any request_facility still has a null/pending status that we
+    // haven't received a definitive value for yet.
+    const facilitiesNeedPolling = (req: typeof initialRequest) => req.request_facilities?.some((rf) => rf.status == null) ?? false;
+    const [isLoadingFacilityStatuses, setIsLoadingFacilityStatuses] = useState(() => facilitiesNeedPolling(initialRequest));
+
+    const isPollingActive = isLoadingRecommendation || isLoadingFacilityStatuses;
+    const refreshRequest = async () => {
+        if (!request) return;
+        try {
+            const res = await fetch(route('request.recommendation', [request.id]), {
+                headers: { Accept: 'application/json' },
+            });
+
+            if (!res.ok) {
+                console.error('Recommendation endpoint error:', res.status);
+                return;
+            }
+
+            const data = await res.json();
+
+            setRequest((prev) => {
+                const mergedFacilities = prev.request_facilities?.map((rf) => {
+                    const updated = data.request_facilities?.find((u: { id: number }) => u.id === rf.id);
+                    if (!updated) return rf;
+                    return {
+                        ...rf,
+                        status: updated.status ?? rf.status,
+                        ai_recommended_status: updated.ai_recommended_status ?? rf.ai_recommended_status,
+                        ai_recommendation_reason: updated.ai_recommendation_reason ?? rf.ai_recommendation_reason,
+                    };
+                });
+
+                return {
+                    ...prev,
+                    status: data.request_status ?? prev.status,
+                    recommended_action: data.recommended_action ?? prev.recommended_action,
+                    recommended_action_reason: data.recommended_action_reason ?? prev.recommended_action_reason,
+                    request_facilities: mergedFacilities ?? prev.request_facilities,
+                };
+            });
+
+            if (data.recommended_action) setIsLoadingRecommendation(false);
+            if (!facilitiesNeedPolling({ ...request, request_facilities: data.request_facilities ?? request.request_facilities })) {
+                setIsLoadingFacilityStatuses(false);
+            }
+        } catch (e) {
+            console.error('Polling error:', e);
+        }
+    };
+
+    useEffect(() => {
+        if (!isPollingActive) return;
+
+        const interval = setInterval(() => {
+            void refreshRequest();
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [request.id, isPollingActive]);
+
+    useEffect(() => {
+        if (!carouselApi) return;
+        const update = () => {
+            setCanScrollPrev(carouselApi.canScrollPrev());
+            setCanScrollNext(carouselApi.canScrollNext());
+        };
+        update();
+        carouselApi.on('scroll', update);
+        carouselApi.on('reInit', update);
+        carouselApi.on('settle', update);
+        return () => {
+            carouselApi.off('scroll', update);
+            carouselApi.off('reInit', update);
+            carouselApi.off('settle', update);
+        };
+    }, [carouselApi]);
+
+    if (!initialRequest || !auditLogsProp) {
+        return (
+            <DefaultLayout>
+                <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    Loading request...
+                </div>
+            </DefaultLayout>
+        );
     }
 
-    useEffect(() => {
-        if (open) {
-            setName(equipment?.name ?? "");
-            setQuantity(equipment?.quantity ?? 1);
-            setErrors({});
-        }
-    }, [equipment, open]);
-
-    const submit = () => {
-        setProcessing(true);
-        const data = { name, quantity };
-        if (isEdit) {
-            router.put(`/equipments/${equipment!.id}`, data, {
-                onSuccess: () => { setProcessing(false); onClose(); },
-                onError: (e) => { setErrors(e as any); setProcessing(false); },
-            });
-        } else {
-            router.post("/equipments", data, {
-                onSuccess: () => { setProcessing(false); onClose(); },
-                onError: (e) => { setErrors(e as any); setProcessing(false); },
-            });
-        }
+    const fetchAuditLogs = async (page: number) => {
+        if (!request) return;
+        setLogsLoading(true);
+        const res = await fetch(`/requests/${request.id}/audit-logs?page=${page}`);
+        const json = await res.json();
+        setAuditLogs(json.data);
+        setCurrentPage(json.current_page);
+        setLastPage(json.last_page);
+        setTotalLogs(json.total);
+        setLogsLoading(false);
     };
 
-    return (
-        <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>{isEdit ? "Edit Equipment" : "Add Equipment"}</DialogTitle>
-                    <DialogDescription>
-                        {isEdit
-                            ? "Update the equipment details below."
-                            : "Fill in the details for the new equipment."}
-                    </DialogDescription>
-                </DialogHeader>
+    const canEdit = request.status === 'Pending' && !request.on_hold && request.user.id === auth.user.id;
 
-                <div className="space-y-4 py-2">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="eq-name">Equipment Name</Label>
-                        <Input
-                            id="eq-name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Wireless Microphone"
-                        />
-                        {errors.name && (
-                            <p className="text-sm text-destructive flex items-center gap-1">
-                                <AlertCircle className="w-3.5 h-3.5" />
-                                {errors.name}
-                            </p>
-                        )}
-                    </div>
+    const canReschedule = request.status === 'For Reschedule' && request.user.id === auth.user.id;
 
-                    <div className="space-y-1.5">
-                        <Label htmlFor="eq-qty">Total Quantity</Label>
-                        <Input
-                            id="eq-qty"
-                            type="number"
-                            min={1}
-                            value={quantity}
-                            onChange={(e) => setQuantity(Number(e.target.value))}
-                        />
-                        {errors.quantity && (
-                            <p className="text-sm text-destructive flex items-center gap-1">
-                                <AlertCircle className="w-3.5 h-3.5" />
-                                {errors.quantity}
-                            </p>
-                        )}
-                    </div>
-                </div>
+    const handleAction = (action: string) => {
+        const inertiaOptions = {
+            preserveState: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                setComment('');
+                setCommentInputState(false);
+            },
+        };
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button onClick={submit} disabled={processing}>
-                        {processing ? "Saving…" : isEdit ? "Save Changes" : "Add Equipment"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-
-function AssignDialog({
-    open,
-    equipment,
-    facilities,
-    onClose,
-}: {
-    open: boolean;
-    equipment: Equipment | null;
-    facilities: Facility[];
-    onClose: () => void;
-}) {
-    const [assignments, setAssignments] = useState<Assignment[]>([]);
-    const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-        if (open && equipment) {
-            const initialAssignments = equipment.facilities.map((f) => ({
-                facility_id: f.id,
-                quantity: f.pivot?.quantity ?? 1,
-            }));
-            setAssignments(initialAssignments);
+        if (action === 'hold') {
+            router.post(route('requests.hold', request.id), {}, inertiaOptions);
+            return;
         }
-    }, [equipment, open]);
 
-    const assignmentMap = useMemo(
-        () => new Map(assignments.map((a) => [a.facility_id, a])),
-        [assignments]
-    );
+        if (action === 'comment') {
+            router.post(
+                route('requests.updateStatus', request.id),
+                {
+                    action: 'comment',
+                    comment: comment.trim(),
+                },
+                inertiaOptions,
+            );
+            return;
+        }
 
-    const { totalAssigned, remaining, overAllocated, pct } = useMemo(() => {
-        if (!equipment) return { totalAssigned: 0, remaining: 0, overAllocated: false, pct: 0 };
-        const totalAssigned = assignments.reduce((s, a) => s + a.quantity, 0);
-        const remaining = equipment.quantity - totalAssigned;
-        const overAllocated = remaining < 0;
-        const pct = equipment.quantity > 0
-            ? Math.min(100, Math.round((totalAssigned / equipment.quantity) * 100))
-            : 0;
-        return { totalAssigned, remaining, overAllocated, pct };
-    }, [assignments, equipment]);
-
-    if (!equipment) return null;
-
-    const toggle = (fid: number, checked: boolean) => {
-        setAssignments((prev) =>
-            checked
-                ? [...prev, { facility_id: fid, quantity: 1 }]
-                : prev.filter((a) => a.facility_id !== fid)
-        );
-    };
-
-    const setQty = (fid: number, qty: number) => {
-        setAssignments((prev) =>
-            prev.map((a) => (a.facility_id === fid ? { ...a, quantity: qty } : a))
-        );
-    };
-
-    const submit = () => {
-        setSaving(true);
         router.post(
-            `/equipments/${equipment.id}/sync-facilities`,
-            { assignments },
+            route('requests.updateStatus', request.id),
             {
-                onSuccess: () => { setSaving(false); onClose(); },
-                onError: () => setSaving(false),
-            }
+                action,
+                comment: comment.length > 0 ? comment : null,
+            },
+            inertiaOptions,
         );
     };
 
-    return (
-        <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>{equipment.name}</DialogTitle>
-                    <DialogDescription>Assign to Facilities</DialogDescription>
-                </DialogHeader>
+    // Build the bookings array for PDF export
+    const facilitiesForPDF = request.request_facilities.map((rf) => {
+        const facility = request.facilities.find((f) => f.id === rf.facility_id);
+        return {
+            facility_name: facility?.name ?? 'Unknown Facility',
+            date: rf.date_requested,
+            time_start: rf.time_start,
+            time_end: rf.time_end,
+            has_outsiders: rf.has_outsiders ?? false,
+            expected_capacity: rf.expected_capacity ?? null,
+        };
+    });
 
-                <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Assigned</span>
-                        <span className={overAllocated ? "text-destructive font-semibold" : "font-medium"}>
-                            {totalAssigned} / {equipment.quantity}
-                        </span>
+    return (
+        <DefaultLayout hasPadding={false}>
+            <div className="flex w-full flex-col gap-4 *:text-sm">
+                <div className="flex flex-col gap-3 px-6 pt-6 md:px-8 md:pt-8">
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-2xl font-bold tracking-tight">{request.title}</h1>
+                        {canEdit && (
+                            <Link href={route('requests.edit', request.id)}>
+                                <Button variant={'ghost'} size={'icon-sm'}>
+                                    <Pen className="h-4 w-4" />
+                                </Button>
+                            </Link>
+                        )}
+                        {canReschedule && (
+                            <Link href={route('requests.edit', request.id)}>
+                                <Button variant={'outline'} size={'sm'} className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50">
+                                    <Calendar className="h-4 w-4" />
+                                    Reschedule
+                                </Button>
+                            </Link>
+                        )}
                     </div>
-                    <Progress
-                        value={pct}
-                        className={overAllocated ? "[&>div]:bg-destructive" : ""}
-                    />
-                    {overAllocated && (
-                        <p className="text-xs text-destructive flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />
-                            Over-allocated by {Math.abs(remaining)} unit{Math.abs(remaining) !== 1 ? "s" : ""}
-                        </p>
+
+                    <StatusTag requestStatus={request.status} />
+
+                    {isAdmin && (
+                        <div className="mt-2 flex w-full max-w-2xl flex-col">
+                            <div className="flex items-center">
+                                <div className="flex flex-col text-sm">
+                                    <span className="font-semibold text-muted-foreground">Recommendation</span>
+                                    {request.recommended_action ? (
+                                        <>
+                                            <span className={cn('text-lg font-black', request.recommended_action === 'Denied' && 'text-destructive')}>
+                                                {request.recommended_action}
+                                            </span>
+                                            {request.recommended_action_reason && (
+                                                <p className="mt-0.5 max-w-sm text-muted-foreground">{request.recommended_action_reason}</p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <AnimatedText italize={true} />
+                                    )}
+                                </div>
+
+                                <div className="ml-auto flex justify-end gap-2 self-start">
+                                    <Button size="sm" className="hidden xs:block" onClick={() => handleAction('approve')}>
+                                        Approve
+                                    </Button>
+
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="hidden hover:border-destructive hover:bg-destructive/5 hover:text-destructive xs:block"
+                                        onClick={() => handleAction('reject')}
+                                    >
+                                        Deny
+                                    </Button>
+
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button size="sm" variant="outline">
+                                                <span className="hidden xs:block">More</span>
+                                                <span className="block xs:hidden">Actions</span>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuGroup className="*:cursor-pointer">
+                                                <DropdownMenuItem onClick={() => handleAction('approve')} className="xs:hidden">
+                                                    <span>Approve</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleAction('reject')} className="xs:hidden">
+                                                    <span>Deny</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleAction('conditionally_approve')}>
+                                                    Conditionally Approve
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleAction('for_reschedule')}>
+                                                    Mark for Reschedule
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setCommentInputState((p) => !p)}>
+                                                    {isCommenting ? 'Cancel Note' : 'Add Note'}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleAction('hold')}>Hold Request</DropdownMenuItem>
+                                            </DropdownMenuGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </div>
+
+                            {isCommenting && (
+                                <div className="mt-3 flex flex-col gap-2">
+                                    <Textarea
+                                        placeholder="Add an optional reason or note..."
+                                        value={comment}
+                                        onChange={(e) => setComment(e.target.value)}
+                                        rows={2}
+                                        className="w-full resize-none bg-muted/30 text-sm"
+                                    />
+                                    {comment.trim().length > 0 && (
+                                        <Button size="sm" variant="outline" className="self-start" onClick={() => handleAction('comment')}>
+                                            Post Note
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
 
-                <Separator />
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 w-full">
+                    <div className="relative w-full">
+                        <Carousel opts={{ align: 'start', dragFree: true }} setApi={setCarouselApi} className="w-full">
+                            <CarouselContent className="-ml-1 border-b [&>*]:overflow-visible">
+                                {[
+                                    { value: 'overview', label: 'Overview', badge: undefined },
+                                    { value: 'facilities', label: 'Facilities', badge: request.facilities.length },
+                                    { value: 'comments', label: 'Comments', badge: request.comments.length },
+                                    { value: 'activity', label: 'Activity', badge: totalLogs },
+                                    { value: 'files', label: 'Files', badge: request.files?.length ?? 0 },
+                                    ...(isAdmin ? [{ value: 'recommendation', label: 'Recommendation', badge: undefined }] : []),
+                                ].map((tab) => (
+                                    <CarouselItem key={tab.value} className="basis-auto pl-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setActiveTab(tab.value)}
+                                            className={cn(
+                                                'flex items-center gap-1.5 rounded-none border-b-2 border-transparent pb-2 font-medium text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground',
+                                                activeTab === tab.value && 'border-primary text-foreground',
+                                            )}
+                                        >
+                                            <span>{tab.label}</span>
+                                            {tab.badge !== undefined && (
+                                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
+                                                    {tab.badge}
+                                                </span>
+                                            )}
+                                        </Button>
+                                    </CarouselItem>
+                                ))}
+                            </CarouselContent>
+                        </Carousel>
+                        {/* Custom buttons outside the Carousel so they're never clipped by overflow-hidden */}
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => carouselApi?.scrollPrev()}
+                            className={cn(
+                                'absolute top-1/2 left-0 z-10 size-8 -translate-x-full -translate-y-1/2 rounded-full transition-opacity',
+                                !canScrollPrev && 'pointer-events-none opacity-0',
+                            )}
+                        >
+                            <span className="sr-only">Previous</span>
+                            <ArrowLeft className="size-4" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => carouselApi?.scrollNext()}
+                            className={cn(
+                                'absolute top-1/2 right-0 z-10 size-8 translate-x-full -translate-y-1/2 rounded-full transition-opacity',
+                                !canScrollNext && 'pointer-events-none opacity-0',
+                            )}
+                        >
+                            <span className="sr-only">Next</span>
+                            <ArrowRight className="size-4" />
+                        </Button>
+                    </div>
 
-                <ScrollArea className="h-64 pr-3 -mr-3">
-                    {facilities.map((f) => {
-                        const a = assignmentMap.get(f.id);
-                        const checked = !!a;
-                        return (
-                            <div
-                                key={f.id}
-                                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors
-                                        ${checked
-                                        ? "border-primary/40 bg-primary/5"
-                                        : "border-border bg-background"
-                                    }`}
+                    {/* Overview Tab */}
+                    <TabsContent value="overview" className="mt-6 flex grid-cols-[8fr_6fr] flex-col gap-6 px-6 md:grid md:px-8">
+                        <div className="flex grid-cols-2 flex-col gap-4 md:grid">
+                            <div className="flex max-w-full flex-col">
+                                <p className="mb-2 font-semibold text-muted-foreground">Description</p>
+                                <p>{request.description ? request.description : 'No Description Provided'}</p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-12">
+                                <div className="flex flex-col">
+                                    <p className="mb-2 font-semibold text-muted-foreground">Requested by</p>
+                                    <div className="flex items-center gap-2">
+                                        <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size="sm" />
+                                        <p>{request.user.name}</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col">
+                                    <p className="mb-2 font-semibold text-muted-foreground">Date Submitted</p>
+                                    <p>{moment(request.created_at).format('MMMM D, YYYY')}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-12">
+                                <div className="flex flex-col">
+                                    <p className="mb-2 font-semibold text-muted-foreground">Processed by</p>
+                                    {request.processed_by ? (
+                                        <div className="flex items-center gap-2">
+                                            <AvatarWithInitials
+                                                avatarSrc={request.processed_by.profile}
+                                                username={request.processed_by.name}
+                                                size="sm"
+                                            />
+                                            <p>{request.processed_by.name}</p>
+                                        </div>
+                                    ) : (
+                                        <span>None</span>
+                                    )}
+                                </div>
+                                <div className="flex flex-col">
+                                    <p className="mb-2 font-semibold text-muted-foreground">Processed At</p>
+                                    {request.processed_at ? <p>{moment(request.processed_at).format('MMMM D, YYYY')}</p> : <span>None</span>}
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col">
+                                <p className="mb-2 font-semibold text-muted-foreground">Approved By</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {request.approved_by !== null ? (
+                                        request.approved_by.map((approvedBy, index) => (
+                                            <span key={index} className="text-sm font-bold">
+                                                {approvedBy}
+                                                {index < request.approved_by.length - 1 && ', '}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-sm font-semibold">None</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mx-auto flex items-center justify-between">
+                            <p className="text-sm text-muted-foreground">
+                                Export this request as a CSV file for reporting, sharing, or backup purposes. The downloaded file will include all
+                                relevant request details.
+                            </p>
+                            <Button
+                                onClick={() => downloadSingleRequestCSV(request)}
+                                size="sm"
+                                variant="outline"
+                                className="relative isolate mt-1 gap-2 overflow-hidden border-primary bg-transparent text-primary before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:bg-transparent hover:text-primary-foreground hover:before:scale-x-100"
                             >
-                                <Checkbox
-                                    id={`fac-${f.id}`}
-                                    checked={checked}
-                                    onCheckedChange={(v) => toggle(f.id, !!v)}
-                                />
-                                <Label
-                                    htmlFor={`fac-${f.id}`}
-                                    className="flex-1 cursor-pointer font-normal text-sm"
-                                >
-                                    {f.name}
-                                </Label>
-                                {checked && (
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        value={a!.quantity}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onChange={(e) => setQty(f.id, Number(e.target.value))}
-                                        className="w-20 h-8 text-center text-sm"
+                                <Download size={16} />
+                                <span>Export to CSV</span>
+                            </Button>
+                        </div>
+                    </TabsContent>
+
+                    {/* Facilities Tab */}
+                    <TabsContent value="facilities" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
+                        {/* ── PDF Export button ── */}
+                        <div className="flex justify-end">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="relative isolate gap-2 overflow-hidden border-primary bg-transparent text-primary before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:bg-transparent hover:text-primary-foreground hover:before:scale-x-100"
+                                onClick={() => downloadFacilitiesPDF(request.title, facilitiesForPDF)}
+                            >
+                                <Download size={16} />
+                                <span>Export Facilities to PDF</span>
+                            </Button>
+                        </div>
+
+                        {/* ── Booking Cards grid ── */}
+                        <div className="flex grid-cols-[1fr_1fr] flex-col gap-4 lg:grid">
+                            {request.request_facilities.map((rf, index) => {
+                                const facility = request.facilities.find((f) => f.id === rf.facility_id);
+                                if (!facility) return null;
+
+                                const ownEquipment =
+                                    request.equipment
+                                        ?.filter((eq) => !eq.pivot?.is_borrowed && eq.facilities?.some((f) => f.id === rf.facility_id))
+                                        .map((eq) => ({
+                                            equipment_id: eq.id,
+                                            equipment_name: eq.name,
+                                            quantity_needed: eq.pivot.quantity_needed,
+                                            max_quantity: eq.pivot.quantity_needed,
+                                        })) ?? [];
+
+                                const borrowedEquipment =
+                                    request.equipment
+                                        ?.filter((eq) => eq.pivot?.is_borrowed)
+                                        .map((eq) => ({
+                                            equipment_id: eq.id,
+                                            equipment_name: eq.name,
+                                            source_facility_id: eq.pivot.source_facility_id,
+                                            source_facility_name: eq.facilities?.find((f) => f.id === eq.pivot.source_facility_id)?.name ?? '',
+                                            quantity_needed: eq.pivot.quantity_needed,
+                                            max_quantity: eq.pivot.quantity_needed,
+                                        })) ?? [];
+
+                                const approvedConflicts =
+                                    request.approved_conflicts
+                                        ?.filter((c) => c.facility_id === rf.facility_id)
+                                        .map((c) => ({
+                                            request_id: c.request_id,
+                                            request_title: c.request.title,
+                                            status: c.request.status,
+                                            time_start: c.time_start,
+                                            time_end: c.time_end,
+                                        })) ?? [];
+
+                                const pendingConflicts =
+                                    request.pending_conflicts
+                                        ?.filter((c) => c.facility_id === rf.facility_id)
+                                        .map((c) => ({
+                                            request_id: c.request_id,
+                                            request_title: c.request.title,
+                                            status: c.request.status,
+                                            time_start: c.time_start,
+                                            time_end: c.time_end,
+                                        })) ?? [];
+
+                                const booking = {
+                                    facility_id: rf.facility_id,
+                                    facility_name: facility.name,
+                                    date: rf.date_requested,
+                                    time_start: rf.time_start,
+                                    time_end: rf.time_end,
+                                    expected_capacity: rf.expected_capacity ?? null,
+                                    has_outsiders: rf.has_outsiders ?? false,
+                                    equipment: ownEquipment,
+                                    borrowed_equipment: borrowedEquipment,
+                                    external_equipment: rf.external_equipments?.map((e) => ({ name: e.name })) ?? [],
+                                    conflicts: [...approvedConflicts, ...pendingConflicts],
+                                    equipment_conflicts: {},
+                                    facility_capacity: facility.capacity,
+                                    request_facility_status: rf.status ?? null,
+                                    request_id: rf.request_id,
+                                    request_facility_id: rf.id,
+                                };
+
+                                return (
+                                    <BookingCard
+                                        key={`${rf.facility_id}-${rf.date_requested}-${rf.time_start}`}
+                                        booking={booking}
+                                        index={index}
+                                        onRefresh={refreshRequest}
+                                        className="mt-4"
                                     />
+                                );
+                            })}
+                        </div>
+                    </TabsContent>
+
+                    {/* Comments Tab */}
+                    <TabsContent
+                        value="comments"
+                        className="relative mt-6 flex w-full flex-col items-start gap-4 px-6 md:grid md:grid-cols-[3fr_4fr] md:px-8"
+                    >
+                        <div className="order-1 h-full w-full max-w-2xl overflow-y-auto pr-2 pb-32 md:order-2 md:pb-0">
+                            <div className="flex flex-col gap-3">
+                                {request.comments?.length > 0 ? (
+                                    request.comments.map((comment) => <Comment key={comment.id} comment={comment} />)
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">No comments yet.</p>
                                 )}
                             </div>
-                        );
-                    })}
-                </ScrollArea>
+                        </div>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button onClick={submit} disabled={saving || overAllocated}>
-                        {saving ? "Saving…" : "Save Assignments"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                        <div className="fixed right-0 bottom-0 left-0 z-50 border-t bg-background p-4 md:sticky md:top-4 md:z-auto md:border-0 md:p-0">
+                            <div className="mx-auto flex max-w-2xl flex-col gap-3">
+                                <CommentForm requestId={request.id} />
+                            </div>
+                        </div>
+                    </TabsContent>
+
+                    {/* Activity Tab */}
+                    <TabsContent value="activity" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
+                        {logsLoading ? (
+                            <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                Loading activity...
+                            </div>
+                        ) : (
+                            <>
+                                <ActivityFeed auditLogs={auditLogs} />
+                                <SmartPagination currentPage={currentPage} lastPage={lastPage} onPageChange={fetchAuditLogs} />
+                            </>
+                        )}
+                    </TabsContent>
+
+                    {/* Files Tab */}
+                    <TabsContent value="files" className="mt-6 px-6 md:px-8">
+                        {request.files && request.files.length > 0 ? (
+                            <AttachedFileList
+                                serverFiles={request.files.map((f) => ({
+                                    path: f.path,
+                                    original_name: f.path.split('/').pop() ?? f.path,
+                                    mime_type: (() => {
+                                        const ext = f.path.split('.').pop()?.toLowerCase();
+                                        const map: Record<string, string> = {
+                                            png: 'image/png',
+                                            jpg: 'image/jpeg',
+                                            jpeg: 'image/jpeg',
+                                            gif: 'image/gif',
+                                            webp: 'image/webp',
+                                            pdf: 'application/pdf',
+                                        };
+                                        return map[ext ?? ''] ?? 'application/octet-stream';
+                                    })(),
+                                    size: 0,
+                                    url: `/storage/${f.path}`,
+                                }))}
+                            />
+                        ) : (
+                            <p className="text-sm text-muted-foreground">No files attached.</p>
+                        )}
+                    </TabsContent>
+                    {/* Recommendation Tab */}
+                    {isAdmin && (
+                        <TabsContent value="recommendation" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
+                            <RecommendationPanel request={request} isLoading={isLoadingRecommendation} variant="page" />
+                        </TabsContent>
+                    )}
+                </Tabs>
+            </div>
+        </DefaultLayout>
     );
 }
 
-type SortValue = "name-asc" | "name-desc" | "quantity-asc" | "quantity-desc" | "assigned-asc" | "assigned-desc";
+function CommentForm({ requestId }: { requestId: number }) {
+    const [body, setBody] = useState('');
 
-const SORT_OPTIONS: { label: string; value: SortValue | "" }[] = [
-    { label: "None", value: "" },
-    { label: "Name (A–Z)", value: "name-asc" },
-    { label: "Name (Z–A)", value: "name-desc" },
-    { label: "Quantity (Low)", value: "quantity-asc" },
-    { label: "Quantity (High)", value: "quantity-desc" },
-    { label: "Assigned (Low)", value: "assigned-asc" },
-    { label: "Assigned (High)", value: "assigned-desc" },
-];
-
-export default function EquipmentsPage({
-    equipments,
-    facilities,
-    filters,
-}: {
-    equipments: PaginatedEquipments;
-    facilities: Facility[];
-    filters: Filters;
-}) {
-    const [search, setSearch] = useState(filters.search ?? "");
-    const [sortValue, setSortValue] = useState<SortValue | "">(filters.sort as SortValue | "" ?? "");
-    const [addOpen, setAddOpen] = useState(false);
-    const [editTarget, setEditTarget] = useState<Equipment | null>(null);
-    const [assignTarget, setAssignTarget] = useState<Equipment | null>(null);
-    const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
-    const [deleting, setDeleting] = useState(false);
-    const { hasRole } = usePermission();
-
-    const applyFilters = useCallback(
-        (params: { search?: string; sort?: string; page?: number }) => {
-            router.get(
-                "/equipments",
-                {
-                    search: params.search ?? search,
-                    sort: params.sort !== undefined ? params.sort : sortValue,
-                    page: params.page ?? 1,
-                },
-                { preserveState: true, replace: true }
-            );
-        },
-        [search, sortValue]
-    );
-
-    useEffect(() => {
-        const timeout = setTimeout(() => {
-            applyFilters({ search, page: 1 });
-        }, 350);
-        return () => clearTimeout(timeout);
-    }, [search]);
-
-    const handleSortChange = (value: SortValue | "") => {
-        setSortValue(value);
-        applyFilters({ sort: value, page: 1 });
+    const submit = () => {
+        router.post(
+            route('requests.comment', requestId),
+            { body },
+            {
+                onSuccess: () => setBody(''),
+                preserveScroll: true,
+            },
+        );
     };
-
-    const handlePageChange = (page: number) => {
-        applyFilters({ page });
-    };
-
-    const confirmDelete = () => {
-        if (!deleteTarget) return;
-        setDeleting(true);
-        router.delete(`/equipments/${deleteTarget.id}`, {
-            onSuccess: () => { setDeleting(false); setDeleteTarget(null); },
-            onError: () => setDeleting(false),
-        });
-    };
-
-    const enrichedEquipments = useMemo(
-        () =>
-            equipments.data.map((eq, i) => {
-                const assigned = eq.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
-                const over = assigned > eq.quantity;
-                const empty = assigned === 0;
-                const rowNumber = (equipments.from ?? 1) + i;
-                return { ...eq, assigned, over, empty, rowNumber };
-            }),
-        [equipments.data, equipments.from]
-    );
-
-    const paginationLabel = useMemo(
-        () =>
-            `Showing ${equipments.from ?? 0}–${equipments.to ?? 0} of ${equipments.total} equipment`,
-        [equipments.from, equipments.to, equipments.total]
-    );
 
     return (
-        <DefaultLayout>
-            {(hasRole("admin")) && (
-                <>
-                    <EquipmentDialog open={addOpen} onClose={() => setAddOpen(false)} />
-                    <EquipmentDialog
-                        open={!!editTarget}
-                        equipment={editTarget ?? undefined}
-                        onClose={() => setEditTarget(null)}
-                    />
-                    <AssignDialog
-                        open={!!assignTarget}
-                        equipment={assignTarget}
-                        facilities={facilities}
-                        onClose={() => setAssignTarget(null)}
-                    />
-
-                    <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Equipment</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Are you sure you want to delete{" "}
-                                    <span className="font-medium text-foreground">{deleteTarget?.name}</span>?
-                                    This action cannot be undone.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={confirmDelete}
-                                    disabled={deleting}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                    {deleting ? "Deleting…" : "Delete"}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                </>
-            )}
-
-            <div className="mb-4">
-                <h1 className="text-xl font-bold">Equipments</h1>
-            </div>
-
-            <div className="flex items-center gap-3 mb-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search equipment…"
-                        className="pl-9"
-                    />
-                </div>
-
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
-                            <ArrowDownUp className="h-4 w-4" />
-                            <span>Sort By</span>
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="p-0 w-48">
-                        <p className="px-3 py-1 pt-4 text-xs text-muted-foreground font-semibold">
-                            Sort By
-                        </p>
-                        <div className="flex flex-col p-1">
-                            {SORT_OPTIONS.map((opt) => (
-                                <Button
-                                    key={opt.value || "none"}
-                                    onClick={() => handleSortChange(opt.value)}
-                                    variant={sortValue === opt.value ? "secondary" : "ghost"}
-                                    className="justify-between w-full px-2"
-                                    size="sm"
-                                >
-                                    <span>{opt.label}</span>
-                                    {opt.value !== "" && (
-                                        sortValue === opt.value
-                                            ? sortValue.endsWith("asc")
-                                                ? <ArrowUp size={14} className="rotate-180" />
-                                                : <ArrowUp size={14} />
-                                            : <ArrowUp size={14} className="opacity-0" />
-                                    )}
-                                </Button>
-                            ))}
-                        </div>
-                    </PopoverContent>
-                </Popover>
-
-                {(hasRole("admin")) && (
-                    <Button onClick={() => setAddOpen(true)}>
-                        <Plus size={16} />
-                        Add Equipment
-                    </Button>
-                )}
-            </div>
-
-            <Table>
-                <TableHeader>
-                    <TableRow className="text-sm">
-                        <TableHead className="w-10 px-4"></TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="w-36">Total Qty</TableHead>
-                        <TableHead className="w-36">Assigned</TableHead>
-                        <TableHead>Assigned To Facility</TableHead>
-                        <TableHead className="w-12" />
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {enrichedEquipments.length === 0 ? (
-                        <TableRow>
-                            <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
-                                <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                No equipment found
-                            </TableCell>
-                        </TableRow>
-                    ) : (
-                        enrichedEquipments.map((eq) => {
-                            const { assigned, over, empty, rowNumber } = eq;
-
-                            return (
-                                <TableRow key={eq.id}>
-                                    <TableCell className="text-muted-foreground text-sm px-4">
-                                        {rowNumber}
-                                    </TableCell>
-                                    <TableCell className="text-sm font-medium">{eq.name}</TableCell>
-                                    <TableCell>
-                                        <span className="text-sm font-medium text-right">{eq.quantity}</span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className={`inline-flex items-center gap-0.5 rounded-md border px-2.5 py-1 text-sm
-                                            ${over ? "border-destructive/30" : "border-border bg-muted/40"}`}
-                                        >
-                                            <span className={`font-medium ${over ? "text-destructive" : empty ? "text-muted-foreground" : "text-primary/60"}`}>
-                                                {assigned}
-                                            </span>
-                                            <span className="text-sm text-muted-foreground/50 mx-0.5">/</span>
-                                            <span className="text-sm text-muted-foreground">{eq.quantity}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-wrap gap-1">
-                                            {eq.facilities.length === 0 ? (
-                                                <span className="text-xs text-muted-foreground italic">
-                                                    Unassigned
-                                                </span>
-                                            ) : (
-                                                eq.facilities.map((f) => {
-                                                    const style = wordToColor(f.name);
-                                                    return (
-                                                        <Badge
-                                                            key={f.id}
-                                                            variant="secondary"
-                                                            className="text-xs flex items-center font-bold tag"
-                                                            style={style}
-                                                        >
-                                                            {(f.pivot?.quantity && f.pivot.quantity > 1)
-                                                                ? (<span className="">{`${f.pivot.quantity} in `}</span>)
-                                                                : ""}
-                                                            <span>{f.name}</span>
-                                                        </Badge>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-4 hidden md:block">
-                                            <Button onClick={() => setAssignTarget(eq)} variant="ghost">
-                                                <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                            </Button>
-                                            <Button onClick={() => setEditTarget(eq)} variant="ghost">
-                                                <Pencil className="w-4 h-4 mr-2" />
-                                            </Button>
-                                            <Button
-                                                onClick={() => setDeleteTarget(eq)}
-                                                variant="ghost"
-                                                className="text-destructive focus:text-destructive"
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-2" />
-                                            </Button>
-                                        </div>
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 block md:hidden"
-                                                >
-                                                    <MoreHorizontal className="w-4 h-4" />
-                                                    <span className="sr-only">Open menu</span>
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => setAssignTarget(eq)}>
-                                                    <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                                    Assign Facilities
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => setEditTarget(eq)}>
-                                                    <Pencil className="w-4 h-4 mr-2" />
-                                                    Edit
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                    onClick={() => setDeleteTarget(eq)}
-                                                    className="text-destructive focus:text-destructive"
-                                                >
-                                                    <Trash2 className="w-4 h-4 mr-2" />
-                                                    Delete
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })
-                    )}
-                </TableBody>
-            </Table>
-
-            <p className="text-sm w-full mb-4 mt-2 text-right text-muted-foreground shrink-0">{paginationLabel}</p>
-
-            {/* Pagination footer */}
-            {equipments.last_page > 1 && (
-                <div className="flex items-center justify-between mt-4 gap-4">
-                    <SmartPagination
-                        currentPage={equipments.current_page}
-                        lastPage={equipments.last_page}
-                        onPageChange={handlePageChange}
-                    />
-                </div>
-            )}
-        </DefaultLayout>
+        <div className="flex w-full max-w-2xl flex-col gap-3">
+            <p className="font-semibold text-muted-foreground">Add a comment</p>
+            <Textarea rows={3} className="w-full" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a comment..." />
+            <Button size="sm" variant="secondary" className="self-start" disabled={body.trim().length === 0} onClick={submit}>
+                <SendHorizontal size={16} />
+                <span>Send</span>
+            </Button>
+        </div>
     );
 }
