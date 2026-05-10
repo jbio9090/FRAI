@@ -30,13 +30,21 @@ RUN npm ci
 RUN npm run build 
 
 # ==========================================
-# Stage 3: Final Production Image (Tiny & Fast)
+# Stage 3: Final Production Image
 # ==========================================
 FROM php:8.4-fpm-alpine
 
-# Install Postgres PDO driver required for pgvector/pgsql
-RUN apk add --no-cache postgresql-dev \
-    && docker-php-ext-install pdo_pgsql
+# Install system dependencies for GD and Postgres
+RUN apk add --no-cache \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libwebp-dev \
+    postgresql-dev
+
+# Configure and install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j$(nproc) gd pdo_pgsql
 
 WORKDIR /var/www/html
 
