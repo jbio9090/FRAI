@@ -271,7 +271,7 @@
     --popover-foreground: oklch(0.90 0.01 263.24);
 
     /* Primary (Maintained from Light Mode) */
-    --primary: oklch(0.4531 0.2174 265.33);
+    --primary: oklch(0.5194 0.2684 263.2391);
     --primary-foreground: oklch(0.98 0.01 263.24);
 
     /* Secondary & Muted tones for softer UI elements */
