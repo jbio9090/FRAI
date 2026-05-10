@@ -19,8 +19,11 @@ RUN apk add --no-cache nodejs npm
 
 WORKDIR /app
 
-# Copy the entire app and vendor directory from Stage 1 so Artisan can boot
-COPY --from=vendor /app /app
+# Copy the entire app source so Wayfinder and npm can find package.json and artisan
+COPY . .
+
+# Copy the vendor directory from Stage 1 so Artisan can boot
+COPY --from=vendor /app/vendor /app/vendor
 
 # Install node modules and run the build
 RUN npm ci
