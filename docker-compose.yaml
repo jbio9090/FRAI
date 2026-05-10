@@ -95,7 +95,3 @@ volumes:
   pg-data:
   storage-data:
   vite-build: # Exposes the compiled frontend to Nginx
-volumes:
-  pg-data:
-  storage-data:
-  vite-build: # Exposes the compiled frontend to Nginx
