@@ -34,13 +34,15 @@ RUN npm run build
 # ==========================================
 FROM php:8.4-fpm-alpine
 
-# Install system dependencies for GD and Postgres
+# Install dependencies for Postgres, GD (images), and WebPush (gmp/bcmath)
 RUN apk add --no-cache \
+    postgresql-dev \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
-    libwebp-dev \
-    postgresql-dev
+    gmp-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) gd pdo_pgsql gmp bcmath
 
 # Configure and install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
