@@ -35,6 +35,7 @@ import {
 import { usePermission } from '@/hooks/use-permission';
 import logo from '@/svg/FRAI.svg';
 import type { SharedData } from '@/types';
+import { Button } from './ui/button';
 
 const iconRailItem = 'group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center';
 
@@ -172,9 +173,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             </SidebarMenuButton>
 
                             <CollapsibleTrigger asChild>
-                                <button className="flex shrink-0 items-center justify-center rounded-sm p-1 group-data-[collapsible=icon]:hidden hover:bg-white">
+                                <Button className="flex shrink-0 items-center group-data-[collapsible=icon]:hidden" variant="ghost">
                                     <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                                </button>
+                                </Button>
                             </CollapsibleTrigger>
                         </SidebarMenuItem>
 
