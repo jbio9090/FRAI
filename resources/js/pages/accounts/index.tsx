@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import AvatarWithInitials from "@/components/avatar-with-initials";
 import SmartPagination from '@/components/SmartPagination';
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Dialog,
     DialogContent,
@@ -29,9 +30,11 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from "@/layout.tsx/default.";
 import type { User } from "@/types";
+import moment from "moment";
 
 interface PaginatedUsers {
     data: User[];
@@ -103,10 +106,15 @@ export default function AccountsPage({ users, roles }: Props) {
     const { errors } = usePage<PageProps>().props;
     const { flash } = usePage<PageProps>().props;
     const { auth } = usePage<PageProps>().props;
+    const archived = !!(usePage<PageProps>().props as any).archived;
+    const [activeTab, setActiveTab] = useState<string>(archived ? 'archived' : 'active');
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [showBatchResultsModal, setShowBatchResultsModal] = useState(false);
     const [copied, setCopied] = useState(false);
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+    // Track which user's status toggle is in-flight to show optimistic UI
+    const [togglingUserId, setTogglingUserId] = useState<number | null>(null);
 
     // Batch state
     const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
@@ -142,18 +150,33 @@ export default function AccountsPage({ users, roles }: Props) {
         }
 
         const timeout = setTimeout(() => {
-            router.get(route('accounts.index'), { search: searchQuery, sort: sort === 'none' ? '' : sort }, {
+            router.get(route('accounts.index'), { search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, {
                 preserveState: true,
                 preserveScroll: true,
             });
         }, 400);
 
         return () => clearTimeout(timeout);
-    }, [searchQuery]);
+    }, [searchQuery, activeTab]);
 
     const handleSortChange = (value: string) => {
         setSort(value);
-        router.get(route('accounts.index'), { sort: value === 'none' ? '' : value }, { preserveState: true, preserveScroll: true });
+        router.get(route('accounts.index'), { sort: value === 'none' ? '' : value, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true });
+    };
+
+    useEffect(() => {
+        // keep controlled tab in sync with server-provided value
+        setActiveTab(archived ? 'archived' : 'active');
+    }, [archived]);
+
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+        router.get(route('accounts.index'), { archived: value === 'archived' ? 1 : '', search: searchQuery, sort: sort === 'none' ? '' : sort }, { preserveState: true, preserveScroll: true });
+    };
+
+    const handleRestore = (id: number) => {
+        if (!window.confirm('Restore this account from archives?')) return;
+        router.post(route('accounts.restore', id), {}, { preserveScroll: true });
     };
 
     useEffect(() => {
@@ -193,6 +216,57 @@ export default function AccountsPage({ users, roles }: Props) {
                 preserveScroll: true,
             });
         }
+    };
+
+    /**
+     * Toggle a user's active/inactive status.
+     * Uses optimistic state via togglingUserId so the switch feels instant.
+     */
+    const handleToggleStatus = (targetUser: User) => {
+        const nextState = !(targetUser as any).is_active;
+        const label = nextState ? 'activate' : 'deactivate';
+
+        if (!window.confirm(`Are you sure you want to ${label} ${targetUser.name}'s account?`)) return;
+
+        setTogglingUserId(targetUser.id);
+        router.patch(
+            route('accounts.toggle-status', targetUser.id),
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onFinish: () => setTogglingUserId(null),
+            }
+        );
+    };
+
+    /**
+     * Determine whether the currently logged-in user may toggle the status
+     * of a given row user. Mirrors the back-end canToggleStatus() logic so
+     * the switch is hidden/disabled correctly without an extra round-trip.
+     *
+     * Rules:
+     *  - Nobody can toggle a Super Admin.
+     *  - Super Admins can toggle anyone except themselves.
+     *  - Admins can only toggle Department Heads.
+     */
+    const canToggleStatus = (rowUser: User): boolean => {
+        const rowRole = ((rowUser as any).role ?? '').toLowerCase();
+
+        // Nobody can toggle a Super Admin
+        if (rowRole === 'super admin') return false;
+
+        // Super Admins can toggle everyone except themselves
+        if (isSuperAdmin) {
+            return rowUser.id !== auth.user.id;
+        }
+
+        // Admins can only toggle Department Heads
+        if (isAdmin) {
+            return rowRole === 'department head';
+        }
+
+        return false;
     };
 
     const handleAdd = (e: React.FormEvent) => {
@@ -242,7 +316,7 @@ export default function AccountsPage({ users, roles }: Props) {
 
         const headers = ['Name', 'Email', 'Temporary Password'];
         const rows = flash.batch_results.created.map(acc => [
-            `"${acc.name}"`, // Quote strings to handle names with commas
+            `"${acc.name}"`,
             `"${acc.email}"`,
             `"${acc.temp_password}"`
         ]);
@@ -292,7 +366,6 @@ export default function AccountsPage({ users, roles }: Props) {
         if (!role || !addRoleOptions.map(r => r.toLowerCase()).includes(role.toLowerCase()))
             return { name, email, role, status: 'error', error: `Row ${index + 1}: Role "${role}" is not valid` };
 
-        // If the email already exists in the system, mark as a warning
         const emailLower = email.toLowerCase();
         const existsInSystem = userList.some(u => (u.email ?? '').toLowerCase() === emailLower);
         if (existsInSystem) {
@@ -313,7 +386,6 @@ export default function AccountsPage({ users, roles }: Props) {
             return [];
         }
 
-        // First pass: parse and validate rows
         const parsed = lines.slice(1).filter(l => l.trim()).map((line, i) => {
             const values = line.split(',').map(v => v.trim());
             const row: Record<string, string> = {};
@@ -321,7 +393,6 @@ export default function AccountsPage({ users, roles }: Props) {
             return validateRow(row, i);
         });
 
-        // Detect duplicate emails within the CSV and mark them as warnings
         const emailCounts = parsed.reduce((acc: Record<string, number>, r) => {
             const e = (r.email ?? '').toLowerCase().trim();
             if (!e) return acc;
@@ -352,7 +423,6 @@ export default function AccountsPage({ users, roles }: Props) {
         };
         reader.readAsText(file);
 
-        // Reset input so same file can be re-selected
         e.target.value = '';
     };
 
@@ -483,6 +553,15 @@ export default function AccountsPage({ users, roles }: Props) {
     return (
         <DefaultLayout>
             <h1 className="font-bold text-xl">Account Management</h1>
+
+            <div className="mt-4">
+                <Tabs value={activeTab} onValueChange={handleTabChange}>
+                    <TabsList variant="line">
+                        <TabsTrigger value="active">Active</TabsTrigger>
+                        <TabsTrigger value="archived">Archived</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
 
 
             <div className="mt-6 flex items-center w-full gap-3 mb-4">
@@ -937,7 +1016,7 @@ export default function AccountsPage({ users, roles }: Props) {
                         currentPage={(users as any).current_page}
                         lastPage={(users as any).last_page}
                         onPageChange={(page) =>
-                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort }, { preserveState: true, preserveScroll: true })
+                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true })
                         }
                         className={'my-4 px-4 py-0 md:px-8'}
                     />
@@ -949,52 +1028,114 @@ export default function AccountsPage({ users, roles }: Props) {
                             <TableHead className="w-[50px]"></TableHead>
                             <TableHead>Name</TableHead>
                             <TableHead>Email</TableHead>
+                            <TableHead>Created At</TableHead>
+                            {activeTab === 'archived' && (<TableHead>Deleted At</TableHead>)}
                             <TableHead>Role</TableHead>
+                            {/* Status column — only shown when the actor can toggle at least one user and not viewing archived */}
+                            {(isAdmin || isSuperAdmin) && activeTab !== 'archived' && (
+                                <TableHead className="w-[100px]">Status</TableHead>
+                            )}
                             <TableHead className="w-[80px]" />
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {userList.map((user) => (
-                            <TableRow key={user.id}>
-                                <TableCell>
-                                    <AvatarWithInitials
-                                        username={user.name}
-                                        avatarSrc={(user as any).profile}
-                                        size="sm"
-                                    />
-                                </TableCell>
-                                <TableCell className="font-medium">{(user as any).name}</TableCell>
-                                <TableCell>{(user as any).email}</TableCell>
-                                <TableCell className="capitalize">{(user as any).role}</TableCell>
-                                <TableCell className="flex gap-1 justify-end">
+                        {userList.map((rowUser) => {
+                            const isActive = (rowUser as any).is_active ?? true;
+                            const togglable = canToggleStatus(rowUser);
+                            const isToggling = togglingUserId === rowUser.id;
 
-                                    {hasRole("Super Admin") && (<Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleResetPassword(user)}
-                                        title="Force Password Reset"
-                                    >
-                                        <Key className="h-4 w-4 text-muted-foreground" />
-                                    </Button>)}
+                            return (
+                                <TableRow
+                                    key={rowUser.id}
+                                    className={!isActive ? 'opacity-60' : ''}
+                                >
+                                    <TableCell>
+                                        <AvatarWithInitials
+                                            username={rowUser.name}
+                                            avatarSrc={(rowUser as any).profile}
+                                            size="sm"
+                                        />
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        <span>{(rowUser as any).name}</span>
+                                        {!isActive && (
+                                            <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                                Inactive
+                                            </span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>{(rowUser as any).email}</TableCell>
+                                    <TableCell>{moment((rowUser as any).created_at).format("MMMM D, YYYY h:mm A")}</TableCell>
+                                    {activeTab === 'archived' && (<TableCell>{moment((rowUser as any).deleted_at).format("MMMM D, YYYY h:mm A")}</TableCell>)}
+                                    <TableCell className="capitalize">{(rowUser as any).role}</TableCell>
 
-                                    {!(user.id === auth.user.id || user.role === "Super Admin") && (<Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => openEdit(user)}
-                                    >
-                                        <Pencil className="h-4 w-4" />
-                                    </Button>)}
+                                    {/* Status toggle cell */}
+                                    {(isAdmin || isSuperAdmin) && activeTab !== 'archived' && (
+                                        <TableCell>
+                                            {togglable ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Switch
+                                                        checked={isToggling ? !isActive : isActive}
+                                                        disabled={isToggling}
+                                                        onCheckedChange={() => handleToggleStatus(rowUser)}
+                                                        aria-label={isActive ? 'Deactivate account' : 'Activate account'}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                /* Non-togglable rows (Super Admin, self): render nothing */
+                                                <span />
+                                            )}
+                                        </TableCell>
+                                    )}
 
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleDelete((user as any).id)}
-                                    >
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                                    <TableCell className="flex gap-1 justify-end">
+                                        {activeTab === 'archived' ? (
+                                            <>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleRestore((rowUser as any).id)}
+                                                    title="Restore Account"
+                                                >
+                                                    <ArrowDownUp className="h-4 w-4 text-primary" />
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {hasRole("Super Admin") && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleResetPassword(rowUser)}
+                                                        title="Force Password Reset"
+                                                    >
+                                                        <Key className="h-4 w-4 text-muted-foreground" />
+                                                    </Button>
+                                                )}
+
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin") && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => openEdit(rowUser)}
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleDelete((rowUser as any).id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
                     </TableBody>
                 </Table>
 
@@ -1003,7 +1144,7 @@ export default function AccountsPage({ users, roles }: Props) {
                         currentPage={(users as any).current_page}
                         lastPage={(users as any).last_page}
                         onPageChange={(page) =>
-                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort }, { preserveState: true, preserveScroll: true })
+                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true })
                         }
                         className={'my-5 px-4 md:px-8'}
                     />

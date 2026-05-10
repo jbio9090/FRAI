@@ -22,6 +22,10 @@ class AccountController extends Controller
         $perPage = (int) $request->input('per_page', 10);
 
         $query = User::with('roles');
+        $archived = $request->boolean('archived');
+        if ($archived) {
+            $query = $query->onlyTrashed();
+        }
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
@@ -44,16 +48,20 @@ class AccountController extends Controller
 
         // Transform collection items for the frontend
         $users->getCollection()->transform(fn($user) => [
-            'id'      => $user->id,
-            'name'    => $user->name,
-            'email'   => $user->email,
-            'role'    => $user->roles->first()?->name,
-            'profile' => $user->profile,
+            'id'        => $user->id,
+            'name'      => $user->name,
+            'email'     => $user->email,
+            'role'      => $user->roles->first()?->name,
+            'profile'   => $user->profile,
+            'is_active' => $user->is_active,
+            'created_at' => $user->created_at,
+            'deleted_at' => $user->deleted_at,
         ]);
 
         return Inertia::render('accounts/index', [
             'users' => $users,
             'roles' => Role::pluck('name')->map(fn($role) => strtolower($role)),
+            'archived' => $archived,
         ]);
     }
 
@@ -275,6 +283,58 @@ class AccountController extends Controller
     }
 
     /**
+     * Toggle the active/inactive status of a user account.
+     *
+     * Rules:
+     *  - Super Admins can toggle anyone except themselves.
+     *  - Admins can only toggle Department Heads.
+     *  - No one can toggle a Super Admin account.
+     */
+    public function toggleStatus(Request $request, User $user): RedirectResponse
+    {
+        $actor = $request->user();
+
+        if ($msg = $this->canToggleStatus($actor, $user)) {
+            return back()->withErrors(['error' => $msg]);
+        }
+
+        $user->update(['is_active' => ! $user->is_active]);
+
+        return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Check whether an actor may toggle a target user's status.
+     *
+     * Returns null when allowed, otherwise returns an error message string.
+     */
+    private function canToggleStatus(User $actor, User $target): ?string
+    {
+        // Nobody can toggle a Super Admin
+        if ($target->hasRole('Super Admin')) {
+            return 'The status of a Super Admin account cannot be changed.';
+        }
+
+        // Super Admins can toggle anyone except themselves
+        if ($actor->hasRole('Super Admin')) {
+            if ($actor->id === $target->id) {
+                return 'You cannot deactivate your own account.';
+            }
+            return null;
+        }
+
+        // Admins can only toggle Department Heads
+        if ($actor->hasRole('admin')) {
+            if ($target->hasRole('Department Head')) {
+                return null;
+            }
+            return 'Admins may only change the status of Department Head accounts.';
+        }
+
+        return 'You are not authorized to change account status.';
+    }
+
+    /**
      * Check whether an actor may assign a role.
      *
      * Returns null when allowed, otherwise returns error message string.
@@ -337,13 +397,27 @@ class AccountController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
-        if ($user->profile && $user->profile !== 'default.png') {
-            Storage::disk('public')->delete('profiles/' . $user->profile);
-        }
-
+        // Soft-delete (archive) the user. Do not remove profile files when archiving.
         $user->delete();
 
         return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Restore a soft-deleted (archived) user.
+     */
+    public function restore(Request $request, $id): RedirectResponse
+    {
+        $actor = $request->user();
+        $user = User::withTrashed()->with('roles')->findOrFail($id);
+
+        if ($msg = $this->canEditUser($actor, $user)) {
+            return back()->withErrors(['error' => $msg]);
+        }
+
+        $user->restore();
+
+        return redirect()->route('accounts.index')->with('success', 'Account restored.');
     }
 
     public function resetPassword(Request $request, User $user): RedirectResponse

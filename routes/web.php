@@ -63,7 +63,7 @@ Route::middleware('auth')->group(function () {
             'recommended_action' => $request->getRawOriginal('recommended_action'),
             'recommended_action_reason' => $request->recommended_action_reason,
             'request_status' => $request->getRawOriginal('status'),
-            'request_facilities' => $request->requestFacilities->map(fn ($rf) => [
+            'request_facilities' => $request->requestFacilities->map(fn($rf) => [
                 'id' => $rf->id,
                 'facility_id' => $rf->facility_id,
                 'status' => $rf->getRawOriginal('status'),
@@ -92,6 +92,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::post('/settings/change-password', [SettingsController::class, 'changePassword'])->name('settings.change-password');
+    Route::post('/settings/change-own-account-details/{user}', [SettingsController::class, 'updateOwnAccountDetails'])->name('settings.update-details');
     Route::post('/settings/admin-email-notifications', [SettingsController::class, 'updateAdminEmailNotifications'])
         ->middleware(['role:admin|Super Admin', 'permission:approve requests'])
         ->name('settings.admin-email-notifications');
@@ -122,10 +123,13 @@ Route::middleware('auth')->group(function () {
         Route::post('/accounts/create', [AccountController::class, 'store'])->name('accounts.store');
         Route::put('/accounts/{user}', [AccountController::class, 'update'])->name('accounts.update');
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+        Route::post('/accounts/{id}/restore', [AccountController::class, 'restore'])->name('accounts.restore');
         Route::middleware(['auth'])->group(function () {
             Route::post('/accounts/{user}/reset-password', [\App\Http\Controllers\AccountController::class, 'resetPassword'])->name('accounts.reset-password');
         });
         Route::post('/accounts/batch', [AccountController::class, 'batchStore'])->name('accounts.batch-store');
+        Route::patch('accounts/{user}/toggle-status', [AccountController::class, 'toggleStatus'])
+            ->name('accounts.toggle-status');
     });
 
     Route::get('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');

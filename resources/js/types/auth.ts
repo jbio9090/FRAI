@@ -8,6 +8,7 @@ export type User = {
     updated_at: string;
     role: string;
     [key: string]: unknown; 
+    deleted_at?: string | null;
 };
 
 export type Auth = {

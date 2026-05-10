@@ -1,0 +1,97 @@
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8000:80"
+    volumes:
+      # Mount the whole app so Nginx sees the public folder, but use the named volume for the build
+      - .:/var/www/html
+      - vite-build:/var/www/html/public/build
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - storage-data:/var/www/html/storage:ro  
+    depends_on:
+      - app
+    networks:
+      - laravel-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: laravel
+      DB_USERNAME: laravel_user
+      DB_PASSWORD: laravel_password
+      OLLAMA_HOST: http://host.docker.internal:11434 
+    volumes:
+      # The main mount
+      - .:/var/www/html
+      # Anonymous volumes to protect container-installed dependencies
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+      # Named volume to share the build assets with Nginx
+      - vite-build:/var/www/html/public/build
+      - ./.env:/var/www/html/.env
+      - storage-data:/var/www/html/storage
+      - ./custom.ini:/usr/local/etc/php/conf.d/custom.ini
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - laravel-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: php artisan queue:work --tries=3 --timeout=90
+    restart: unless-stopped
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: laravel
+      DB_USERNAME: laravel_user
+      DB_PASSWORD: laravel_password
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+      - vite-build:/var/www/html/public/build
+      - ./.env:/var/www/html/.env
+      - storage-data:/var/www/html/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - laravel-net
+
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: laravel
+      POSTGRES_USER: laravel_user
+      POSTGRES_PASSWORD: laravel_password
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - laravel-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laravel_user -d laravel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  laravel-net:
+    driver: bridge
+
+volumes:
+  pg-data:
+  storage-data:
+  vite-build: # Exposes the compiled frontend to Nginx

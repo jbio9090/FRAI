@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Spatie\Permission\Models\Role;
 
 class SettingsController extends Controller
 {
@@ -35,7 +38,7 @@ class SettingsController extends Controller
 
         $image = $manager->decode($request->file('profile')->getRealPath())
             ->scale(width: 800, height: 800)
-            ->encodeUsingFileExtension('webp', quality:70);
+            ->encodeUsingFileExtension('webp', quality: 70);
 
         Storage::disk('public')->put('profiles/' . $filename, $image);
 
@@ -96,5 +99,22 @@ class SettingsController extends Controller
         Auth::logoutOtherDevices($request->password);
 
         return back()->with('success', 'Password changed successfully.');
+    }
+
+    public function updateOwnAccountDetails(Request $request, User $user): RedirectResponse
+    {
+        if ($user->id !== Auth::user()->id) abort(403, "This is not your account bro");
+
+        $validated = $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email|unique:users,email,' . $user->id,
+        ]);
+
+        $user->update([
+            'name'  => $validated['name'],
+            'email' => $validated['email'],
+        ]);
+
+        return redirect()->route('settings');
     }
 }
