@@ -7,6 +7,12 @@ echo "🚀 Starting deployment tasks..."
 
 tail -f /var/www/html/storage/logs/laravel.log
 
+echo "🔍 Validating environment..."
+: "${APP_KEY:?❌ APP_KEY is not set. Aborting.}"
+: "${APP_URL:?❌ APP_URL is not set. Aborting.}"
+: "${DB_HOST:?❌ DB_HOST is not set. Aborting.}"
+echo "✅ Environment looks good."
+
 # ------------------------------------------------------------------
 # 1. Wait briefly for the database to be reachable (optional safety
 #    net — Render's free Postgres sometimes takes a few seconds to
