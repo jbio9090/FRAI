@@ -38,6 +38,20 @@ class AuthenticationTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    public function test_user_sees_error_for_invalid_credentials()
+    {
+        $response = $this->from(route('login.show'))->post(route('login'), [
+            'email' => 'missing@example.com',
+            'password' => 'wrong-password'
+        ]);
+
+        $response->assertRedirect(route('login.show'));
+        $response->assertSessionHasErrors([
+            'email' => 'Authentication failed. Please check your credentials',
+        ]);
+        $this->assertGuest();
+    }
+
     public function test_guest_redirects_to_login()
     {
         $response = $this->get(route('dashboard'));

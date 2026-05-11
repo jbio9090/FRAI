@@ -33,7 +33,7 @@ class LoginController extends Controller
             'password' => ['required'],
         ]);
 
-        $user = User::where('email', $credentials['email'])->firstOrFail();
+        $user = User::where('email', $credentials['email'])->first();
 
         if ($user && !$user->is_active) {
             throw ValidationException::withMessages([
@@ -49,7 +49,7 @@ class LoginController extends Controller
 
         $this->auditLogger::loginFailed($credentials['email']);
         return back()->withErrors([
-            'email' => 'Email or password do not match',
+            'email' => 'Authentication failed. Please check your credentials',
         ])->onlyInput('email');
     }
 
