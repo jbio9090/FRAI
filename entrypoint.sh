@@ -5,7 +5,7 @@ set -e
 
 echo "🚀 Starting deployment tasks..."
 
-printenv
+tail -f /var/www/html/storage/logs/laravel.log
 
 # ------------------------------------------------------------------
 # 1. Wait briefly for the database to be reachable (optional safety
