@@ -49,11 +49,12 @@ class HandleInertiaRequests extends Middleware
                 ] : null,
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),
-            'flash' => fn () => [
+            'flash' => fn() => [
                 'success' => session('success'),
                 'error' => session('error'),
                 'temp_password_reset' => session('temp_password_reset'),
             ],
+            'vapidPublicKey' => config('webpush.vapid.public_key'),
         ]);
     }
 

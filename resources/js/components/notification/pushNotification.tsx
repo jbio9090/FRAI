@@ -1,8 +1,10 @@
 import { router } from '@inertiajs/react';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { usePage } from '@inertiajs/react';
 
 export default function PushNotifications() {
+    const { vapidPublicKey } = usePage().props as any;
     const [permission, setPermission] = useState(Notification.permission);
     const [subscription, setSubscription] = useState(null);
     const [isSupported, setIsSupported] = useState(false);
@@ -83,8 +85,8 @@ export default function PushNotifications() {
                 return;
             }
 
-            const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-            if (!vapidPublicKey) {
+            const validVapidPublicKey = vapidPublicKey ?? import.meta.env.VITE_VAPID_PUBLIC_KEY;
+            if (!validVapidPublicKey) {
                 setError('VAPID public key is not configured');
                 setLoading(false);
                 return;
