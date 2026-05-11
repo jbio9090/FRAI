@@ -43,6 +43,7 @@ echo "✅ Database is reachable."
 # ------------------------------------------------------------------
 echo "🗄️  Running migrations..."
 php /var/www/html/artisan migrate --force
+php /var/www/html/artisan db:seed --force
 echo "✅ Migrations complete."
 
 # ------------------------------------------------------------------

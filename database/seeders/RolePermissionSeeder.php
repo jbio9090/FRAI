@@ -34,33 +34,29 @@ class RolePermissionSeeder extends Seeder
         $userRole->givePermissionTo(['view requests', 'create requests']);
 
         $adminRole = Role::updateOrCreate(['name' => 'admin']);
-        $adminPermission = Permission::whereNotIn('name', ['reset password, create new admins']);
         $adminRole->givePermissionTo(Permission::all());
 
         $superAdminRole = Role::updateOrCreate(['name' => 'Super Admin']);
         $superAdminRole->givePermissionTo(Permission::all());
 
-        $admin = User::updateOrCreate([
-            'name' => 'GSO',
-            'email' => 'gso@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $admin->assignRole('Super Admin');
+        $superAdmin = User::firstOrCreate(
+            ['email' => 'gso@example.com'],
+            ['name' => 'GSO', 'password' => Hash::make('password')]
+        );
+        $superAdmin->assignRole('Super Admin');
 
         // Create admin user
-        $admin = User::updateOrCreate([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $admin->assignRole('admin');
+        $adminUser = User::firstOrCreate(
+            ['email' => 'admin@example.com'],
+            ['name' => 'Admin User', 'password' => Hash::make('password')]
+        );
+        $adminUser->assignRole('admin');
 
         // Create regular user
-        $user = User::updateOrCreate([
-            'name' => 'Regular User',
-            'email' => 'user@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $user->assignRole('Department Head');
+        $regularUser = User::firstOrCreate(
+            ['email' => 'user@example.com'],
+            ['name' => 'Regular User', 'password' => Hash::make('password')]
+        );
+        $regularUser->assignRole('Department Head');
     }
 }
