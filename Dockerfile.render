@@ -71,6 +71,9 @@ COPY nginx.conf /etc/nginx/http.d/default.conf
 # ── Supervisor ───────────────────────────────────────────────────
 COPY supervisord.conf /etc/supervisord.conf
 
+# ── PHP-FPM pool config ───────────────────────────────────────────
+COPY php-fpm-pool.conf /usr/local/etc/php-fpm.d/www.conf
+
 # ── Entrypoint ───────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
