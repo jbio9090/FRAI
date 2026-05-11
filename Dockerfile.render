@@ -4,37 +4,37 @@
 FROM composer:2.7 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-# Added --no-scripts so it doesn't look for artisan before the code is copied
+# --no-scripts prevents Artisan from running before the full source is present
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs --no-scripts
 COPY . .
 
 # ==========================================
 # Stage 2: Build Frontend Assets (Vite + React)
 # ==========================================
-# We use a PHP CLI image so Wayfinder can run `php artisan` during the Vite build
+# Uses a PHP CLI image so Wayfinder can call `php artisan` during the Vite build
 FROM php:8.4-cli-alpine AS frontend
 
-# Install Node.js and npm into the PHP container
+# Install Node.js and npm
 RUN apk add --no-cache nodejs npm
 
 WORKDIR /app
 
-# Copy the entire app source so Wayfinder and npm can find package.json and artisan
+# Copy the full source so Wayfinder and npm can find package.json and artisan
 COPY . .
 
-# Copy the vendor directory from Stage 1 so Artisan can boot
+# Bring vendor dir from Stage 1 so Artisan can boot
 COPY --from=vendor /app/vendor /app/vendor
 
-# Install node modules and run the build
+# Install node modules and build production assets
 RUN npm ci
-RUN npm run build 
+RUN npm run build
 
 # ==========================================
-# Stage 3: Final Production Image (Render Single Container)
+# Stage 3: Final Production Image (Render — single container)
 # ==========================================
 FROM php:8.4-fpm-alpine
 
-# Install Nginx, Supervisor, and system dependencies for Postgres, GD, and WebPush
+# Install Nginx, Supervisor, and system dependencies
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -49,23 +49,31 @@ RUN apk add --no-cache \
 
 WORKDIR /var/www/html
 
-# Copy application files and build assets from previous stages
+# Copy application source + compiled assets from previous stages
 COPY --from=vendor /app /var/www/html
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
-# Copy your local Nginx configuration file
+# ── Nginx ────────────────────────────────────────────────────────
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
-# Create a Supervisor config to run PHP-FPM, Nginx, and the Queue Worker simultaneously
-RUN printf "[supervisord]\nnodaemon=true\nuser=root\n\n[program:php-fpm]\ncommand=php-fpm -F\n\n[program:nginx]\ncommand=nginx -g 'daemon off;'\n\n[program:worker]\ncommand=php artisan queue:work --tries=3 --timeout=90\ndirectory=/var/www/html\nuser=www-data\nautostart=true\nautorestart=true\n" > /etc/supervisord.conf
+# ── Supervisor ───────────────────────────────────────────────────
+# Use a proper file instead of an inline RUN printf — easier to maintain
+COPY supervisord.conf /etc/supervisord.conf
 
-# Ensure correct permissions for Laravel's storage and cache
+# Create the log directory Supervisor expects
+RUN mkdir -p /var/log/supervisor
+
+# ── Entrypoint ───────────────────────────────────────────────────
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# ── Permissions ──────────────────────────────────────────────────
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
 
-# Expose port 80 for Nginx (Render expects web services to bind to a port)
+# Render expects web services to listen on port 80
 EXPOSE 80
 
-# Start Supervisor to manage all three processes
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+# Run migrations → cache → then hand off to Supervisor
+CMD ["/usr/local/bin/entrypoint.sh"]
