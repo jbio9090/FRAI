@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use NotificationChannels\WebPush\HasPushSubscriptions;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
@@ -16,7 +15,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, HasRoles, Notifiable, HasPushSubscriptions, SoftDeletes;
+    use HasFactory, HasRoles, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -56,5 +55,16 @@ class User extends Authenticatable
             'is_active'                         => 'boolean',
             'force_password_change'             => 'boolean',
         ];
+    }
+
+    public function routeNotificationForFcm()
+    {
+        // Return an array of FCM tokens for this user (multi-device)
+        return $this->fcmTokens()->pluck('fcm_token')->filter()->values()->toArray();
+    }
+
+    public function fcmTokens()
+    {
+        return $this->hasMany(UserFcmToken::class);
     }
 }

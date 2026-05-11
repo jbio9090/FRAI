@@ -32,6 +32,16 @@
             });
         }
     </script>
+
+    <script>
+        window.fcmConfig = {
+            apiKey: "AIzaSyDwLPU3m6tbA7UmD7wweysTILYzPKfqago",
+            authDomain: "frai-fc81c.firebaseapp.com",
+            projectId: "frai-fc81c",
+            messagingSenderId: "450348526079",
+            appId: "1:450348526079:web:6194f45198b8c9ba801fca",
+        };
+    </script>
 </body>
 
 </html>

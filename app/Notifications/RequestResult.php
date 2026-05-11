@@ -7,8 +7,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
-use NotificationChannels\WebPush\WebPushChannel;
-use NotificationChannels\WebPush\WebPushMessage;
+use NotificationChannels\Fcm\FcmChannel;
+use NotificationChannels\Fcm\FcmMessage;
+use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
 class RequestResult extends Notification implements ShouldQueue
 {
@@ -22,27 +23,13 @@ class RequestResult extends Notification implements ShouldQueue
 
     public function via($notifiable)
     {
-        return ['database', WebPushChannel::class];
+        return ['database', FcmChannel::class];
     }
-
-    public function toWebPush($notifiable, $notification): WebPushMessage
+    public function toFcm($notifiable): FcmMessage
     {
-        return (new WebPushMessage)
-            ->title($this->request_title)
-            ->icon('/FRAI.png')
-            ->body($this->statusMessage())
-            ->action('View your request', 'view_request')
-            ->options(['TTL' => 1000])
-            ->data(['url' => $this->url])
-            ->tag("{$this->status->value}-".$this->request_title.Date::now()->toString());
-        // ->vibrate();
-        // ->data(['id' => $notification->id])
-        // ->badge()
-        // ->dir()
-        // ->image()
-        // ->lang()
-        // ->renotify()
-        // ->requireInteraction()
+        return FcmMessage::create()
+            ->notification((new FcmNotification())->title($this->request_title)->body($this->statusMessage())->image('/FRAI.png'))
+            ->data(['url' => (string) $this->url, 'category' => 'request_result', 'status' => (string) $this->status->value]);
     }
 
     public function toDatabase($notifiable): array

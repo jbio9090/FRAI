@@ -4,36 +4,43 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Notification;
-use NotificationChannels\WebPush\WebPushChannel;
-use NotificationChannels\WebPush\WebPushMessage;
+use NotificationChannels\Fcm\FcmChannel;
+use NotificationChannels\Fcm\FcmMessage;
+use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
 class NotificationController extends Controller
 {
     public function subscribe(Request $request)
     {
         $validated = $request->validate([
-            'subscription.endpoint' => 'required|string',
-            'subscription.keys.p256dh' => 'required|string',
-            'subscription.keys.auth' => 'required|string',
+            'token' => 'required|string',
+            'device_type' => 'nullable|string',
         ]);
 
-        $request->user()->updatePushSubscription(
-            $validated["subscription"]["endpoint"],
-            $validated["subscription"]["keys"]["p256dh"],
-            $validated["subscription"]["keys"]["auth"],
-        );
+        $token = $validated['token'];
+        $deviceType = $validated['device_type'] ?? null;
 
+        $user = $request->user();
 
-        return redirect()->back()->with(['message' => 'Subscription saved']);
+        $user->fcmTokens()->updateOrCreate([
+            'fcm_token' => $token,
+        ], [
+            'device_type' => $deviceType,
+        ]);
+
+        return redirect()->back()->with(['message' => 'FCM token saved']);
     }
 
     public function unsubscribe(Request $request)
     {
         $validated = $request->validate([
-            'subscription.endpoint' => 'required|string',
+            'token' => 'required|string',
         ]);
 
-        $request->user()->deletePushSubscription($validated["subscription"]["endpoint"]);
+        $token = $validated['token'];
+        $user = $request->user();
+
+        $user->fcmTokens()->where('fcm_token', $token)->delete();
 
         return redirect()->back()->with(['message' => 'Unsubscribed']);
     }
@@ -59,16 +66,14 @@ class NotificationController extends Controller
 
             public function via($notifiable): array
             {
-                return [WebPushChannel::class];
+                return [FcmChannel::class];
             }
 
-            public function toWebPush($notifiable, $notification): WebPushMessage
+            public function toFcm($notifiable): FcmMessage
             {
-                return (new WebPushMessage)
-                    ->title($this->title)
-                    ->body($this->body)
-                    ->action('Open', 'open_url')
-                    ->data(['url' => $this->url]);
+                return FcmMessage::create()
+                    ->notification((new FcmNotification())->title($this->title)->body($this->body))
+                    ->data(['url' => (string) $this->url]);
             }
         });
 
