@@ -5,6 +5,8 @@ set -e
 
 echo "🚀 Starting deployment tasks..."
 
+printenv
+
 # ------------------------------------------------------------------
 # 1. Wait briefly for the database to be reachable (optional safety
 #    net — Render's free Postgres sometimes takes a few seconds to
