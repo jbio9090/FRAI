@@ -23,9 +23,37 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
 
     const isImage = current.mime_type.startsWith('image/');
     const isPdf = current.mime_type === 'application/pdf';
+    const [brokenPreview, setBrokenPreview] = useState(false);
 
-    function prev() { setCurrentIndex(i => Math.max(0, i - 1)); }
-    function next() { setCurrentIndex(i => Math.min(files.length - 1, i + 1)); }
+    // Compute a preview-friendly URL. For Cloudinary URLs we insert quality/format hints
+    // so images and PDFs load reliably in the browser.
+    function computePreviewUrl(url: string, mimeType?: string) {
+        try {
+            const decoded = url;
+            // For PDFs, return original URL — avoid Cloudinary transforming to first-page image
+            if (mimeType && mimeType === 'application/pdf') {
+                return decoded;
+            }
+            if (/\.pdf($|\?)/i.test(decoded)) {
+                return decoded;
+            }
+            // If this looks like a Cloudinary upload URL, inject f_auto,q_auto for better rendering
+            if (decoded.includes('res.cloudinary.com') && decoded.includes('/upload/')) {
+                // avoid inserting twice
+                if (!decoded.includes('/upload/f_') && !decoded.includes('/upload/f_auto')) {
+                    return decoded.replace('/upload/', '/upload/f_auto,q_auto/');
+                }
+            }
+            return decoded;
+        } catch (e) {
+            return url;
+        }
+    }
+
+    const previewUrl = computePreviewUrl(current.url, current.mime_type);
+
+    function prev() { setBrokenPreview(false); setCurrentIndex(i => Math.max(0, i - 1)); }
+    function next() { setBrokenPreview(false); setCurrentIndex(i => Math.min(files.length - 1, i + 1)); }
 
     // Keyboard nav
     function handleKey(e: React.KeyboardEvent) {
@@ -82,26 +110,28 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                 )}
 
                 {/* File display */}
-                {isImage && (
+                {isImage && !brokenPreview && (
                     <img
-                        src={current.url}
+                        src={encodeURI(previewUrl)}
                         alt={current.name}
                         className="max-h-full max-w-full object-contain select-none"
+                        onError={() => setBrokenPreview(true)}
                     />
                 )}
 
-                {isPdf && (
+                {isPdf && !brokenPreview && (
                     <iframe
-                        src={current.url}
+                        src={encodeURI(previewUrl)}
                         className="w-full h-full"
                         title={current.name}
+                        onError={() => setBrokenPreview(true)}
                     />
                 )}
 
-                {!isImage && !isPdf && (
+                {(brokenPreview || (!isImage && !isPdf)) && (
                     <div className="flex flex-col items-center gap-4 text-center p-8">
                         <File size={48} className="text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">Preview not available for this file type.</p>
+                        <p className="text-sm text-muted-foreground">Preview not available for this file. You can download it instead.</p>
                         <a href={current.url} download={current.name} target="_blank" rel="noreferrer">
                             <Button variant="secondary">
                                 <Download size={16} className="mr-2" />
@@ -128,7 +158,7 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                     className="flex gap-2 px-4 py-3 bg-foreground/90 text-background/90 dark:bg-background/90 dark:text-foreground/90 backdrop-blur border-t overflow-x-auto flex-shrink-0"
                     onClick={e => e.stopPropagation()}
                 >
-                    {files.map((f, i) => (
+                            {files.map((f, i) => (
                         <button
                             key={i}
                             onClick={() => setCurrentIndex(i)}
@@ -137,9 +167,9 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                                 i === currentIndex ? "border-primary" : "border-transparent hover:border-muted-foreground/50"
                             )}
                         >
-                            {f.mime_type.startsWith('image/') ? (
-                                <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
-                            ) : (
+                                    {f.mime_type.startsWith('image/') ? (
+                                        <img src={encodeURI(computePreviewUrl(f.url, f.mime_type))} alt={f.name} className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).src = f.url; }} />
+                                    ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-muted">
                                     {f.mime_type === 'application/pdf'
                                         ? <FileText size={20} className="text-red-500" />

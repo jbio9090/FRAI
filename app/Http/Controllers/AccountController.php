@@ -95,8 +95,8 @@ class AccountController extends Controller
         }
 
         if ($request->hasFile('profile')) {
-            $path = $request->file('profile')->store('profiles', 'public');
-            $validated['profile'] = basename($path);
+            $stored = app(\App\Services\StorageService::class)->uploadProfileFromUploadedFile($request->file('profile'));
+            $validated['profile'] = $stored;
         }
 
         $tempPassword = Str::random(10);
@@ -258,13 +258,16 @@ class AccountController extends Controller
         }
 
         if ($request->hasFile('profile')) {
-
             if ($user->profile && $user->profile !== 'default.png') {
-                Storage::disk('public')->delete('profiles/' . $user->profile);
+                try {
+                    app(\App\Services\StorageService::class)->deleteByPath($user->profile);
+                } catch (\Throwable $e) {
+                    // ignore
+                }
             }
 
-            $path = $request->file('profile')->store('profiles', 'public');
-            $user->profile = basename($path);
+            $stored = app(\App\Services\StorageService::class)->uploadProfileFromUploadedFile($request->file('profile'));
+            $user->profile = $stored;
         }
 
         $updateData = [

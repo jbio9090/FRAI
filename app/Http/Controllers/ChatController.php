@@ -3345,19 +3345,24 @@ class ChatController extends Controller
 
                             if ($tempFilePath) {
                                 $originalName = basename($tempFilePath);
-                                $permanentPath = "request-files/{$originalName}";
 
-                                $content = Storage::disk('public')->get($tempFilePath);
-                                Storage::disk('public')->put($permanentPath, $content);
+                                // Upload permanent copy (Cloudinary or public disk)
+                                $meta = app(\App\Services\StorageService::class)->uploadRequestFileFromLocalPath($tempFilePath, 'request-files');
 
                                 $facilityRequest->files()->create([
-                                    'path' => $permanentPath,
+                                    'path' => $meta['path'],
                                     'original_name' => $originalName,
-                                    'mime_type' => Storage::disk('public')->mimeType($tempFilePath),
-                                    'size' => Storage::disk('public')->size($tempFilePath),
+                                    'mime_type' => $meta['mime_type'] ?? Storage::disk('public')->mimeType($tempFilePath),
+                                    'size' => $meta['size'] ?? Storage::disk('public')->size($tempFilePath),
                                 ]);
 
-                                Storage::disk('public')->delete($tempFilePath);
+                                // remove the temp file
+                                try {
+                                    Storage::disk('public')->delete($tempFilePath);
+                                } catch (\Throwable $e) {
+                                    // ignore
+                                }
+
                                 $fileCount++;
                             }
                         } catch (\Exception $e) {

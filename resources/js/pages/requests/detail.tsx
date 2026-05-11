@@ -605,8 +605,8 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                             <AttachedFileList
                                 serverFiles={request.files.map((f) => ({
                                     path: f.path,
-                                    original_name: f.path.split('/').pop() ?? f.path,
-                                    mime_type: (() => {
+                                    original_name: f.original_name ?? f.path.split('/').pop() ?? f.path,
+                                    mime_type: f.mime_type ?? (() => {
                                         const ext = f.path.split('.').pop()?.toLowerCase();
                                         const map: Record<string, string> = {
                                             png: 'image/png',
@@ -618,8 +618,8 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                         };
                                         return map[ext ?? ''] ?? 'application/octet-stream';
                                     })(),
-                                    size: 0,
-                                    url: `/storage/${f.path}`,
+                                    size: f.size ?? 0,
+                                    url: f.url ?? `/storage/${f.path}`,
                                 }))}
                             />
                         ) : (

@@ -72,10 +72,10 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
     }));
 
     const serverViewable = serverFiles.map((f) => ({
-        name: getFilenameFromPath(f.path),
-        url: `/storage/${f.path}`,
-        mime_type: getMimeTypeFromPath(f.path),
-        size: null as number | null,
+        name: getFilenameFromPath(f.original_name ?? f.path),
+        url: f.url ?? `/storage/${f.path}`,
+        mime_type: f.mime_type ?? getMimeTypeFromPath(f.path),
+        size: f.size ?? null as number | null,
         isLocal: false as const,
         original_name: f.original_name,
     }));
@@ -135,9 +135,9 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
 
                 {/* Server files */}
                 {serverFiles.map((attached, index) => {
-                    const mime = getMimeTypeFromPath(attached.path);
-                    const name = getFilenameFromPath(attached.original_name);
-                    const url = `/storage/${attached.path}`;
+                    const mime = attached.mime_type ?? getMimeTypeFromPath(attached.path);
+                    const name = attached.original_name ?? getFilenameFromPath(attached.path);
+                    const url = attached.url ?? `/storage/${attached.path}`;
                     const viewerIdx = files.length + index; // offset past local files
 
                     return (
