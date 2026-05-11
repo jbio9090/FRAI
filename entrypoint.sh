@@ -29,7 +29,7 @@ echo "✅ Migrations complete."
 # ------------------------------------------------------------------
 echo "⚙️  Caching config, routes, and views..."
 php /var/www/html/artisan config:cache
-php /var/www/html/artisan route:cache
+# php /var/www/html/artisan route:cache
 php /var/www/html/artisan view:cache
 echo "✅ Caches rebuilt."
 
