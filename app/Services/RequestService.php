@@ -289,7 +289,11 @@ class RequestService
             $keptIds = array_map('intval', $validated['existing_file_ids'] ?? []);
             foreach ($facilityRequest->files as $file) {
                 if (! in_array($file->id, $keptIds)) {
-                    Storage::disk('public')->delete($file->path);
+                    try {
+                        app(\App\Services\StorageService::class)->deleteByPath($file->path);
+                    } catch (\Throwable $e) {
+                        // ignore
+                    }
                     $this->auditLogger::requestFileRemoved($facilityRequest, $file);
                     $file->delete();
                 }
@@ -702,13 +706,13 @@ class RequestService
     public function handleFileUploads(FacilityRequest $facilityRequest, array $files): void
     {
         foreach ($files as $file) {
-            $path = $file->store('request-files', 'public');
+            $meta = app(\App\Services\StorageService::class)->uploadRequestFileFromUploadedFile($file, 'request-files');
 
             $requestFile = $facilityRequest->files()->create([
-                'path' => $path,
+                'path' => $meta['path'],
                 'original_name' => $file->getClientOriginalName(),
-                'mime_type' => $file->getMimeType(),
-                'size' => $file->getSize(),
+                'mime_type' => $meta['mime_type'] ?? $file->getMimeType(),
+                'size' => $meta['size'] ?? $file->getSize(),
             ]);
 
             $this->auditLogger::requestFileUploaded($facilityRequest, $requestFile); // 👈
@@ -718,7 +722,12 @@ class RequestService
     public function deleteFiles(FacilityRequest $facilityRequest): void
     {
         foreach ($facilityRequest->files as $file) {
-            Storage::disk('local')->delete($file->path);
+            try {
+                app(\App\Services\StorageService::class)->deleteByPath($file->path);
+            } catch (\Throwable $e) {
+                // ignore deletion errors
+            }
+
             $this->auditLogger::requestFileRemoved($facilityRequest, $file); // 👈
             $file->delete();
         }

@@ -27,9 +27,12 @@ class SettingsController extends Controller
         ]);
 
         $user = Auth::user();
-
         if ($user->profile !== 'default.png') {
-            Storage::disk('public')->delete('profiles/' . $user->profile);
+            try {
+                app(\App\Services\StorageService::class)->deleteByPath($user->profile);
+            } catch (\Throwable $e) {
+                // ignore deletion errors
+            }
         }
 
         $filename = $user->id . '_' . time() . '.webp';
@@ -40,9 +43,16 @@ class SettingsController extends Controller
             ->scale(width: 800, height: 800)
             ->encodeUsingFileExtension('webp', quality: 70);
 
-        Storage::disk('public')->put('profiles/' . $filename, $image);
+        // write to temp file then upload via storage service (Cloudinary or public disk)
+        $tmp = tempnam(sys_get_temp_dir(), 'prof_');
+        file_put_contents($tmp, (string) $image);
 
-        $user->update(['profile' => $filename]);
+        try {
+            $stored = app(\App\Services\StorageService::class)->uploadProfileFromPath($tmp);
+            $user->update(['profile' => $stored]);
+        } finally {
+            @unlink($tmp);
+        }
 
         return back()->with('success', 'Profile picture updated.');
     }
@@ -50,9 +60,12 @@ class SettingsController extends Controller
     public function removeProfilePicture()
     {
         $user = Auth::user();
-
         if ($user->profile !== 'default.png') {
-            Storage::disk('public')->delete('profiles/' . $user->profile);
+            try {
+                app(\App\Services\StorageService::class)->deleteByPath($user->profile);
+            } catch (\Throwable $e) {
+                // ignore
+            }
             $user->update(['profile' => 'default.png']);
         }
 

@@ -56,7 +56,7 @@ export function LoginForm({
         </div>
 
         {errors.email && (
-          <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-md text-sm">
+          <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-md text-sm text-center">
             {errors.email}
           </div>
         )}

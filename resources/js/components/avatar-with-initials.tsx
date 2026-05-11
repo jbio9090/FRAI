@@ -42,8 +42,13 @@ export default function AvatarWithInitials({ username, avatarSrc, previewSrc, cl
     size?: keyof typeof sizeClasses;
     icon?: LucideIcon;
 }) {
-    const src = previewSrc
-        ?? (avatarSrc && avatarSrc !== 'default.png' ? `/storage/profiles/${avatarSrc}` : undefined);
+    const src = previewSrc ?? (avatarSrc && avatarSrc !== 'default.png' ? (
+        avatarSrc.startsWith('http') || avatarSrc.startsWith('https')
+            ? avatarSrc
+            : avatarSrc.startsWith('/storage')
+                ? avatarSrc
+                : `/storage/profiles/${avatarSrc}`
+    ) : undefined);
 
     const bgColor = getBackgroundColor(username);
     const activeSize = sizeClasses[size];
