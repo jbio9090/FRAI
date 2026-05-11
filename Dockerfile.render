@@ -14,7 +14,6 @@ COPY . .
 # Uses a PHP CLI image so Wayfinder can call `php artisan` during the Vite build
 FROM php:8.4-cli-alpine AS frontend
 
-# Install Node.js and npm
 RUN apk add --no-cache nodejs npm
 
 WORKDIR /app
@@ -25,7 +24,6 @@ COPY . .
 # Bring vendor dir from Stage 1 so Artisan can boot
 COPY --from=vendor /app/vendor /app/vendor
 
-# Install node modules and build production assets
 RUN npm ci
 RUN npm run build
 
@@ -53,29 +51,39 @@ WORKDIR /var/www/html
 COPY --from=vendor /app /var/www/html
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
+# Remove any local .env that got baked in from the vendor stage
 RUN rm -f /var/www/html/.env
+
+# ── Laravel storage structure ────────────────────────────────────
+# storage/ is gitignored so it won't exist in the image — create it manually
+RUN mkdir -p \
+        /var/www/html/storage/logs \
+        /var/www/html/storage/framework/cache/data \
+        /var/www/html/storage/framework/sessions \
+        /var/www/html/storage/framework/views \
+        /var/www/html/storage/app/public \
+        /var/www/html/bootstrap/cache \
+        /var/log/supervisor
 
 # ── Nginx ────────────────────────────────────────────────────────
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
 # ── Supervisor ───────────────────────────────────────────────────
-# Use a proper file instead of an inline RUN printf — easier to maintain
 COPY supervisord.conf /etc/supervisord.conf
-
-# Create the log directory Supervisor expects
-RUN mkdir -p /var/log/supervisor
 
 # ── Entrypoint ───────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# ── Permissions ──────────────────────────────────────────────────
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 /var/www/html/storage \
-    && chmod -R 775 /var/www/html/bootstrap/cache
+# ── Permissions (single RUN to keep layers minimal) ─────────────
+RUN chown -R www-data:www-data \
+        /var/www/html/storage \
+        /var/www/html/bootstrap/cache \
+    && chmod -R 775 \
+        /var/www/html/storage \
+        /var/www/html/bootstrap/cache
 
 # Render expects web services to listen on port 80
 EXPOSE 80
 
-# Run migrations → cache → then hand off to Supervisor
 CMD ["/usr/local/bin/entrypoint.sh"]
