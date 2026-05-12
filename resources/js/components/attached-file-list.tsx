@@ -24,9 +24,10 @@ interface AttachedFileListProps {
     files?: LocalAttachedFile[];
     serverFiles?: ServerAttachedFile[];
     onRemove?: (index: number) => void | null;
+    onRemoveServer?: (index: number) => void | null;
 }
 
-export function AttachedFileList({ files = [], serverFiles = [], onRemove }: AttachedFileListProps) {
+export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRemoveServer }: AttachedFileListProps) {
     const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
     if (files.length === 0 && serverFiles.length === 0) return null;
@@ -167,6 +168,18 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
                             >
                                 <p className="truncate text-sm font-medium">{name}</p>
                             </button>
+
+                            {onRemoveServer && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onRemoveServer(index)}
+                                    className="flex-shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
+                                >
+                                    <X size={14} />
+                                </Button>
+                            )}
                         </div>
                     );
                 })}
