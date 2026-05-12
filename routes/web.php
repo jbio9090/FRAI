@@ -11,6 +11,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RequestController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\FileController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -169,6 +170,11 @@ Route::middleware('auth')->group(function () {
         Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
 });
+
+
+Route::get('/files/{file}/stream', [FileController::class, 'stream'])
+    ->middleware('auth')
+    ->name('files.stream');
 
 Route::prefix('/login')->group(function () {
     Route::get('/', [LoginController::class, 'show'])->name('login.show');

@@ -159,6 +159,7 @@ class RequestService
         $request = FacilityRequest::with([
             'user',
             'facilities',
+            'files',
             'requestFacilities',
             'processedBy',
             'requestFacilities.externalEquipments',

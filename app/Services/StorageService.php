@@ -13,18 +13,29 @@ class StorageService
     public function __construct()
     {
         $this->useCloudinary = ! empty(env('CLOUDINARY_URL'));
-        if ($this->useCloudinary) {
-            try {
-                $this->cloudinary = new CloudinaryUploader();
-            } catch (\Throwable $e) {
-                $this->useCloudinary = false;
-                $this->cloudinary = null;
-            }
+        // Do not instantiate CloudinaryUploader here — delay until it's
+        // actually needed to avoid any potential Admin API calls or
+        // expensive setup on every request.
+        $this->cloudinary = null;
+    }
+
+    private function ensureCloudinary(): void
+    {
+        if ($this->cloudinary || ! $this->useCloudinary) {
+            return;
+        }
+
+        try {
+            $this->cloudinary = new CloudinaryUploader();
+        } catch (\Throwable $e) {
+            $this->useCloudinary = false;
+            $this->cloudinary = null;
         }
     }
 
     public function uploadProfileFromUploadedFile(UploadedFile $file): string
     {
+        $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($file, 'profiles');
             return $res['secure_url'] ?? $res['url'] ?? '';
@@ -36,6 +47,7 @@ class StorageService
 
     public function uploadProfileFromPath(string $localPath): string
     {
+        $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($localPath, 'profiles');
             return $res['secure_url'] ?? $res['url'] ?? '';
@@ -52,6 +64,7 @@ class StorageService
      */
     public function uploadRequestFileFromUploadedFile(UploadedFile $file, string $folder = 'request-files'): array
     {
+        $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($file, $folder);
             $resource = $res['resource_type'] ?? 'raw';
@@ -86,6 +99,7 @@ class StorageService
             throw new \RuntimeException("Local file not found: {$full}");
         }
 
+        $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($full, $folder);
             $resource = $res['resource_type'] ?? 'raw';
@@ -117,12 +131,17 @@ class StorageService
 
     public function deleteByPath(string $path): void
     {
-        if (str_starts_with($path, 'cloudinary://') && $this->useCloudinary && $this->cloudinary) {
-            $rest = substr($path, strlen('cloudinary://'));
-            [$resource, $publicAndMaybeExt] = explode('/', $rest, 2) + [1 => ''];
-            $publicId = preg_replace('/\.[^.]+$/', '', $publicAndMaybeExt);
-            $this->cloudinary->destroy($publicId, $resource);
-            return;
+        if (str_starts_with($path, 'cloudinary://') && $this->useCloudinary) {
+            $this->ensureCloudinary();
+            if ($this->cloudinary) {
+                $rest = substr($path, strlen('cloudinary://'));
+                [$resource, $publicAndMaybeExt] = explode('/', $rest, 2) + [1 => ''];
+                $publicId = preg_replace('/\.[^.]+$/', '', $publicAndMaybeExt);
+                $this->cloudinary->destroy($publicId, $resource);
+                return;
+            }
+            // If cloudinary isn't available, fall through and delete from disks
+            // below — nothing to do for remote-only resources.
         }
 
         // assume public disk path
@@ -132,43 +151,42 @@ class StorageService
     }
 
     /**
-     * Get a public URL for a stored path. For Cloudinary paths this will call the
-     * Cloudinary Admin API to retrieve the canonical `secure_url` (which includes
-     * the version) so the frontend can reliably fetch the resource.
+     * Get a public URL for a stored path by building it directly.
+     * Skips the slow Cloudinary Admin API entirely.
      *
      * @param string $path
      * @return string|null
      */
     public function getPublicUrl(string $path): ?string
     {
-        if (str_starts_with($path, 'cloudinary://') && $this->useCloudinary && $this->cloudinary) {
+        if (str_starts_with($path, 'cloudinary://') && $this->useCloudinary) {
+            // Strip the scheme: 'raw/request-files/abc123.pdf'
             $rest = substr($path, strlen('cloudinary://'));
-            [$resource, $publicAndMaybeExt] = explode('/', $rest, 2) + [1 => ''];
-            $publicId = preg_replace('/\.[^.]+$/', '', $publicAndMaybeExt);
 
-            try {
-                $res = $this->cloudinary->resource($publicId, $resource);
-                return $res['secure_url'] ?? $res['url'] ?? null;
-            } catch (\Throwable $e) {
-                // fallback: try to reconstruct a plausible URL (may miss version)
-                $cloudUrl = env('CLOUDINARY_URL');
-                if ($cloudUrl) {
-                    $parts = parse_url($cloudUrl);
-                    $cloud = $parts['host'] ?? null;
-                    if ($cloud) {
-                        $format = null;
-                        if (preg_match('/\.([a-z0-9]+)$/i', $publicAndMaybeExt, $m)) {
-                            $format = $m[1];
-                        }
-                        $url = "https://res.cloudinary.com/{$cloud}/{$resource}/upload/{$publicId}";
-                        if ($format) {
-                            $url .= '.' . $format;
-                        }
-                        return $url;
-                    }
-                }
-                return null;
+            // $resource = 'raw', $publicAndMaybeExt = 'request-files/abc123.pdf'
+            [$resource, $publicAndMaybeExt] = explode('/', $rest, 2) + [1 => ''];
+
+            // If the stored resource type looks like 'image' but the public
+            // id includes a non-image extension (e.g. .pdf), prefer the
+            // 'raw' delivery resource. This avoids building an image URL
+            // for PDFs which can result in 401/invalid responses.
+            $ext = strtolower(pathinfo($publicAndMaybeExt, PATHINFO_EXTENSION) ?: '');
+            $rawExts = ['pdf','doc','docx','xls','xlsx','ppt','pptx','zip','mp3','mp4','mov','avi','mkv','txt'];
+            if ($resource === 'image' && in_array($ext, $rawExts, true)) {
+                $resource = 'raw';
             }
+
+            $cloudUrl = env('CLOUDINARY_URL');
+            if ($cloudUrl) {
+                $parts = parse_url($cloudUrl);
+                $cloud = $parts['host'] ?? null;
+
+                if ($cloud) {
+                    // Direct Cloudinary delivery URL format
+                    return "https://res.cloudinary.com/{$cloud}/{$resource}/upload/{$publicAndMaybeExt}";
+                }
+            }
+            return null;
         }
 
         // fallback to local/public disk URL
