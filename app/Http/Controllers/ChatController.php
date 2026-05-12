@@ -8,11 +8,9 @@ use App\Models\Equipment;
 use App\Models\Facility;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
+use App\Services\AI\OpenRouterClient;
 use App\Services\ChatbotLogService;
-use App\Services\OllamaModelResolver;
 use App\Services\RAG\FaqMatchingService;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -27,25 +25,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatController extends Controller
 {
-    private string $ollamaUrl;
-
-    private string $model;
-
     private const SESSION_TTL_MINUTES = 15;
 
     public function __construct(
         protected ChatbotLogService $chatbotLogService,
         protected FaqMatchingService $faqMatchingService,
-        protected OllamaModelResolver $ollamaModelResolver
-    ) {
-        $this->ollamaUrl = config('ollama-laravel.url');
-        $this->model = config('ollama-laravel.model', 'qwen2.5:3b');
-    }
-
-    private function chatModel(): string
-    {
-        return $this->ollamaModelResolver->resolve($this->ollamaUrl, $this->model);
-    }
+        protected OpenRouterClient $ai
+    ) {}
 
     private function sessionCacheKey(): string
     {
@@ -575,8 +561,8 @@ class ChatController extends Controller
                 if ($quantityNeeded > $available) {
                     $errors["facility_bookings.{$bookingIndex}.equipment.{$equipmentIndex}.quantity_needed"][] =
                         $isBorrowed
-                            ? "{$equipment->name}: requested {$quantityNeeded} borrowed unit(s), available quantity is {$available} unit(s) from facility ID {$validationFacilityId} for the selected time slot."
-                            : "{$equipment->name}: requested {$quantityNeeded} unit(s), available quantity is {$available} unit(s) in this facility for the selected time slot.";
+                            ? "{$equipment->name}: requested {$quantityNeeded} borrowed unit(s), but only {$available} remaining from facility ID {$validationFacilityId} for the selected time slot."
+                            : "{$equipment->name}: requested {$quantityNeeded} unit(s), but only {$available} remaining in this facility for the selected time slot.";
                 }
             }
 
@@ -586,6 +572,21 @@ class ChatController extends Controller
         unset($booking);
 
         return $errors;
+    }
+
+    private function expandValidationErrors(array $errors): array
+    {
+        $expanded = $errors;
+
+        foreach ($errors as $key => $messages) {
+            if (! is_string($key) || ! str_contains($key, '.')) {
+                continue;
+            }
+
+            data_set($expanded, $key, $messages);
+        }
+
+        return $expanded;
     }
 
     private function lockFacilityEquipmentRows(array $facilityBookings): void
@@ -1250,17 +1251,7 @@ class ChatController extends Controller
         ];
 
         try {
-            $client = new Client(['timeout' => 60]);
-            $response = $client->post($this->ollamaUrl.'/api/chat', [
-                'json' => [
-                    'model' => $this->chatModel(),
-                    'messages' => $messages,
-                    'stream' => false,
-                ],
-            ]);
-
-            $data = json_decode($response->getBody(), true);
-            $raw = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+            $raw = $this->ai->chat($messages, ['timeout' => 60]);
             $parsed = json_decode($raw, true);
 
             $intent = is_array($parsed) ? trim((string) ($parsed['intent'] ?? '')) : '';
@@ -1484,17 +1475,7 @@ class ChatController extends Controller
         }
 
         try {
-            $client = new Client(['timeout' => 120]);
-            $response = $client->post($this->ollamaUrl.'/api/chat', [
-                'json' => [
-                    'model' => $this->chatModel(),
-                    'messages' => $llmMessages,
-                    'stream' => false,
-                ],
-            ]);
-
-            $data = json_decode($response->getBody(), true);
-            $content = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+            $content = trim($this->ai->chat($llmMessages, ['timeout' => 120]));
 
             return $content !== '' ? $content : null;
         } catch (\Throwable $exception) {
@@ -1547,17 +1528,7 @@ class ChatController extends Controller
         $content = null;
 
         try {
-            $client = new Client(['timeout' => 60]);
-            $response = $client->post($this->ollamaUrl.'/api/chat', [
-                'json' => [
-                    'model' => $this->chatModel(),
-                    'messages' => $llmMessages,
-                    'stream' => false,
-                ],
-            ]);
-
-            $data = json_decode($response->getBody(), true);
-            $content = trim((string) ($data['message']['content'] ?? $data['response'] ?? ''));
+            $content = trim($this->ai->chat($llmMessages, ['timeout' => 60]));
         } catch (\Throwable $exception) {
             \Log::warning('FAQ clarification response generation failed: '.$exception->getMessage());
         }
@@ -1605,7 +1576,7 @@ class ChatController extends Controller
 
     private function handleFaqModeConversation(array $messages, ?string $latestUserMessage): array
     {
-        $topK = max(1, min(20, (int) config('ollama-laravel.faq_mode_top_k', 5)));
+        $topK = max(1, min(20, (int) config('ai.faq.top_k', 5)));
         $retrievedFaqs = $this->faqMatchingService->retrieveCandidates($latestUserMessage, $topK);
         $retrievalMeta = $this->buildFaqRetrievalMeta($retrievedFaqs);
 
@@ -2212,16 +2183,7 @@ class ChatController extends Controller
                 return response()->json(['error' => 'No messages provided'], 400);
             }
 
-            $client = new Client(['timeout' => 580]);
-            $response = $client->post($this->ollamaUrl.'/api/chat', [
-                'json' => [
-                    'model' => $this->chatModel(),
-                    'messages' => $messages,
-                    'stream' => false,
-                ],
-            ]);
-
-            $data = json_decode($response->getBody(), true);
+            $data = $this->ai->chatResponse($messages, ['timeout' => 580]);
 
             $userAndAssistantMessages = array_filter($incomingMessages, fn ($m) => in_array($m['role'], ['user', 'assistant']));
             if (isset($data['message']['content'])) {
@@ -2249,18 +2211,7 @@ class ChatController extends Controller
                     ];
 
                     try {
-                        $validatorResp = $client->post($this->ollamaUrl.'/api/chat', [
-                            'json' => ['model' => $this->chatModel(), 'messages' => $validatorMessages, 'stream' => false],
-                        ]);
-
-                        if ($validatorResp->getStatusCode() >= 400) {
-                            \Log::warning('Validator API returned error status: '.$validatorResp->getStatusCode());
-
-                            return response()->json($data);
-                        }
-
-                        $validatorData = json_decode($validatorResp->getBody(), true);
-                        $jsonText = $validatorData['message']['content'] ?? $validatorData['response'] ?? (is_string($validatorData) ? $validatorData : '');
+                        $jsonText = $this->ai->chat($validatorMessages, ['timeout' => 60]);
                         $parsed = @json_decode($jsonText, true);
 
                         if (is_array($parsed) && ! empty($parsed['violations'])) {
@@ -2277,7 +2228,7 @@ class ChatController extends Controller
                                 ],
                             ];
                         }
-                    } catch (RequestException $ve) {
+                    } catch (\Throwable $ve) {
                         \Log::warning('Validator API request failed: '.$ve->getMessage());
 
                         return response()->json($data);
@@ -2325,7 +2276,7 @@ class ChatController extends Controller
 
             return response()->json($data);
 
-        } catch (RequestException $e) {
+        } catch (\RuntimeException $e) {
             \Log::error('Chat error: '.$e->getMessage());
             $this->chatbotLogService->logError(
                 $latestUserMessage ?? null,
@@ -2335,7 +2286,7 @@ class ChatController extends Controller
             );
 
             return response()->json([
-                'error' => 'Failed to connect to Ollama',
+                'error' => 'Failed to connect to OpenRouter',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         } catch (\Exception $e) {
@@ -2621,107 +2572,19 @@ class ChatController extends Controller
         return response()->stream(function () use ($messages, $incomingMessages, $rules, $latestUserMessage, $sessionId, $logContext) {
             set_time_limit(300);
 
-            $client = new Client(['timeout' => 580]);
             $fullContent = '';
             $generatedPayload = null;
 
             try {
-                $response = $client->post($this->ollamaUrl.'/api/chat', [
-                    'json' => [
-                        'model' => $this->chatModel(),
-                        'messages' => $messages,
-                        'stream' => true,
-                    ],
-                    'stream' => true,
-                ]);
+                $fullContent = $this->ai->chat($messages, ['timeout' => 580]);
 
-                $body = $response->getBody();
-
-                $isCapturingJson = false;
-                $jsonBuffer = '';
-
-                while (! $body->eof()) {
-                    $line = '';
-
-                    while (! $body->eof()) {
-                        $char = $body->read(1);
-                        if ($char === "\n") {
-                            break;
-                        }
-                        $line .= $char;
-                    }
-
-                    $line = trim($line);
-                    if (empty($line)) {
-                        continue;
-                    }
-
-                    $chunk = @json_decode($line, true);
-                    if (! is_array($chunk)) {
-                        continue;
-                    }
-
-                    $token = $chunk['message']['content'] ?? '';
-                    $done = $chunk['done'] ?? false;
-
-                    if ($token !== '') {
-                        $fullContent .= $token;
-
-                        // Detect start of JSON
-                        if (! $isCapturingJson && preg_match('/^\s*\{/', $token)) {
-                            $isCapturingJson = true;
-                            $jsonBuffer = $token;
-
-                            // Don't send JSON tokens to UI
-                            continue;
-                        }
-
-                        // Continue capturing JSON
-                        if ($isCapturingJson) {
-                            $jsonBuffer .= $token;
-
-                            // Try to parse complete JSON
-                            try {
-                                $parsed = json_decode($jsonBuffer, true);
-                                if ($parsed !== null && is_array($parsed) && isset($parsed['facility_bookings'])) {
-                                    // Valid JSON found - send as booking_payload
-                                    $generatedPayload = $parsed;
-                                    echo 'data: '.json_encode(['booking_payload' => $jsonBuffer])."\n\n";
-                                    ob_flush();
-                                    flush();
-
-                                    $isCapturingJson = false;
-                                    $jsonBuffer = '';
-                                }
-                            } catch (\Exception $e) {
-                                // Not valid JSON yet, keep accumulating
-                            }
-
-                            // Don't send JSON tokens to UI
-                            continue;
-                        }
-
-                        // Regular token (not JSON)
-                        echo 'data: '.json_encode(['token' => $token])."\n\n";
-                        ob_flush();
-                        flush();
-                    }
-
-                    if ($done) {
-                        break;
-                    }
-                }
-
-                if ($isCapturingJson && $jsonBuffer !== '') {
-                    $parsed = json_decode($jsonBuffer, true);
-                    if (is_array($parsed) && isset($parsed['facility_bookings'])) {
-                        $generatedPayload = $parsed;
-                        echo 'data: '.json_encode(['booking_payload' => $jsonBuffer])."\n\n";
-                        ob_flush();
-                        flush();
-                    }
-                    $isCapturingJson = false;
-                    $jsonBuffer = '';
+                $generatedPayload = $this->extractStructuredPayload($fullContent);
+                if (is_array($generatedPayload) && isset($generatedPayload['facility_bookings'])) {
+                    echo 'data: '.json_encode(['booking_payload' => json_encode($generatedPayload)])."\n\n";
+                    ob_flush();
+                    flush();
+                } elseif ($fullContent !== '') {
+                    $this->streamTextTokens($fullContent);
                 }
 
                 // Rule validation on full content
@@ -2732,12 +2595,7 @@ class ChatController extends Controller
                             ['role' => 'user',   'content' => "Rules:\n- ".implode("\n- ", $rules)."\n\nAssistant Response:\n".$fullContent],
                         ];
 
-                        $validatorResp = $client->post($this->ollamaUrl.'/api/chat', [
-                            'json' => ['model' => $this->chatModel(), 'messages' => $validatorMessages, 'stream' => false],
-                        ]);
-
-                        $validatorData = json_decode($validatorResp->getBody(), true);
-                        $jsonText = $validatorData['message']['content'] ?? '';
+                        $jsonText = $this->ai->chat($validatorMessages, ['timeout' => 60]);
                         $parsed = @json_decode($jsonText, true);
 
                         if (! empty($parsed['violations'])) {
@@ -2820,48 +2678,28 @@ class ChatController extends Controller
 
     public function testCsrf(): JsonResponse
     {
-        try {
-            $client = new Client(['timeout' => 10]);
-            $response = $client->get($this->ollamaUrl.'/api/tags');
-            $data = json_decode($response->getBody(), true);
-
-            return response()->json([
-                'message' => 'Connected to Ollama',
-                'configured_model' => $this->model,
-                'resolved_model' => $this->chatModel(),
-                'models' => $data['models'] ?? [],
-                'timestamp' => now(),
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Ollama connection test failed: '.$e->getMessage());
-
-            return response()->json([
-                'error' => 'Cannot connect to Ollama at '.$this->ollamaUrl,
-                'message' => config('app.debug') ? $e->getMessage() : 'Connection failed',
-            ], 500);
-        }
+        return response()->json([
+            'message' => $this->ai->isConfigured()
+                ? 'OpenRouter is configured'
+                : 'OpenRouter is not fully configured',
+            'configured_model' => $this->ai->model(),
+            'resolved_model' => $this->ai->model(),
+            'provider' => 'openrouter',
+            'base_url' => $this->ai->baseUrl(),
+            'timestamp' => now(),
+        ], $this->ai->isConfigured() ? 200 : 500);
     }
 
     public function models(): JsonResponse
     {
-        try {
-            $client = new Client(['timeout' => 10]);
-            $response = $client->get($this->ollamaUrl.'/api/tags');
-            $data = json_decode($response->getBody(), true);
-
-            return response()->json([
-                'configured_model' => $this->model,
-                'resolved_model' => $this->chatModel(),
-                'models' => $data['models'] ?? [],
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Models fetch error: '.$e->getMessage());
-
-            return response()->json([
-                'error' => 'Failed to fetch models',
-                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-            ], 500);
-        }
+        return response()->json([
+            'configured_model' => $this->ai->model(),
+            'resolved_model' => $this->ai->model(),
+            'models' => array_filter([
+                $this->ai->model() !== '' ? ['name' => $this->ai->model()] : null,
+            ]),
+            'provider' => 'openrouter',
+        ]);
     }
 
     public function latestRequests(Request $request): JsonResponse
@@ -3319,6 +3157,22 @@ class ChatController extends Controller
                             $sourceFacilityId = isset($equipment['source_facility_id']) && is_numeric($equipment['source_facility_id'])
                                 ? (int) $equipment['source_facility_id']
                                 : null;
+                            if ($sourceFacilityId === null) {
+                                $equipmentModel = Equipment::with('facilities:id')->find((int) $equipment['equipment_id']);
+                                if (
+                                    $equipmentModel
+                                    && ! $equipmentModel->facilities->contains('id', (int) $booking['facility_id'])
+                                ) {
+                                    $sourceFacilityId = $this->resolveBorrowSourceFacilityId(
+                                        $equipmentModel,
+                                        (int) $booking['facility_id'],
+                                        $dateOnly,
+                                        (string) $booking['time_start'],
+                                        (string) $booking['time_end'],
+                                        (int) $equipment['quantity_needed']
+                                    );
+                                }
+                            }
                             $isBorrowed = $sourceFacilityId !== null && $sourceFacilityId !== (int) $booking['facility_id'];
 
                             $facilityRequest->equipment()->attach($equipment['equipment_id'], [
@@ -3447,12 +3301,13 @@ class ChatController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Log::warning('Validation error in createRequestApi: '.json_encode($e->errors()));
+            $errors = $this->expandValidationErrors($e->errors());
             $failedPayload = is_array($request->all()) ? $request->all() : [];
             $this->chatbotLogService->logValidationFailure(
                 $failedPayload,
                 [
                     'passed' => false,
-                    'errors' => $e->errors(),
+                    'errors' => $errors,
                 ],
                 [
                     'user_message' => $latestUserMessage,
@@ -3461,7 +3316,7 @@ class ChatController extends Controller
                 $sessionId
             );
 
-            return response()->json(['error' => 'Validation failed', 'errors' => $e->errors()], 422);
+            return response()->json(['error' => 'Validation failed', 'errors' => $errors], 422);
         } catch (\Exception $e) {
             \Log::error('Request creation error: '.$e->getMessage());
             $this->chatbotLogService->logError(

@@ -140,6 +140,7 @@ function toMinutes(time: string): number {
 const MAX_END_TIME = '5:00 PM';
 const MAX_END_TIME_MINUTES = toMinutes(MAX_END_TIME);
 const START_TIME_OPTIONS = TIME_OPTIONS.filter(time => toMinutes(time) < MAX_END_TIME_MINUTES);
+const MIN_SCHEDULE_ADVANCE_DAYS = 5;
 
 function getAvailableEndTimeOptions(startTime: string): string[] {
     if (!startTime) {
@@ -294,7 +295,7 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
             case 'date':
                 return {
                     botMessage: 'Please select the date of the event.',
-                    quickReplies: ['In 3 days', 'In a week', 'In a month', 'Pick date'],
+                    quickReplies: ['In 5 days', 'In a week', 'In a month', 'Pick date'],
                     isTextInput: false,
                     showDatePicker: awaitingCustomDate,
                 };
@@ -448,8 +449,8 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
             }
 
             case 'date':
-                if (value === 'In 3 days') {
-                    update({ date: formatDate(getFutureDateStr(3)) });
+                if (value === 'In 5 days') {
+                    update({ date: formatDate(getFutureDateStr(MIN_SCHEDULE_ADVANCE_DAYS)) });
                     setStep('time_start');
                 } else if (value === 'In a week') {
                     update({ date: formatDate(getFutureDateStr(7)) });

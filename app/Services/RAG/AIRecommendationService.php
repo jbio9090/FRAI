@@ -2,14 +2,15 @@
 
 namespace App\Services\RAG;
 
+use App\Enums\RequestStatus;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
-use App\Enums\RequestStatus;
-use Illuminate\Support\Facades\DB;
+use App\Models\Rule;
+use App\Services\AI\OpenRouterClient;
 
 class AIRecommendationService
 {
-    public function __construct(protected OllamaService $ollama) {}
+    public function __construct(protected OpenRouterClient $ai) {}
 
     /**
      * Evaluate each RequestFacility in isolation and return a map of results.
@@ -37,7 +38,7 @@ class AIRecommendationService
             try {
                 $results[$rf->id] = $this->evaluateFacility($request, $rf);
             } catch (\Throwable $e) {
-                \Log::warning("AIRecommendationService: failed for RequestFacility#{$rf->id}, using fallback. Error: " . $e->getMessage());
+                \Log::warning("AIRecommendationService: failed for RequestFacility#{$rf->id}, using fallback. Error: ".$e->getMessage());
                 $results[$rf->id] = $this->fallbackForFacility($rf);
             }
         }
@@ -51,24 +52,11 @@ class AIRecommendationService
     private function evaluateFacility(FacilityRequest $request, RequestFacility $rf): array
     {
         $facilityContext = $this->buildRequestContext($request, $rf);
-        $embedding       = $this->ollama->embed($facilityContext);
+        $ruleLimit = (int) config('ai.recommendation.rule_limit', 10);
 
-        if (empty($embedding)) {
-            \Log::warning("AIRecommendationService: embed returned empty for RequestFacility#{$rf->id}, using fallback.");
-            return $this->fallbackForFacility($rf);
-        }
-
-        $vectorLiteral = '[' . implode(',', $embedding) . ']';
-
-        $ruleLimit = (int) config('ollama-laravel.recommendation_rule_limit', 10);
-
-        $relevantRules = DB::table('rule_embeddings')
-            ->join('rules', 'rules.id', '=', 'rule_embeddings.rule_id')
-            ->selectRaw(
-                'rule_embeddings.content, 1 - (rule_embeddings.embedding <=> ?) AS similarity',
-                [$vectorLiteral]
-            )
-            ->orderByRaw('rule_embeddings.embedding <=> ?', [$vectorLiteral])
+        $relevantRules = Rule::policy()
+            ->orderBy('priority')
+            ->orderBy('id')
             ->limit(max($ruleLimit, 1))
             ->get();
 
@@ -77,27 +65,24 @@ class AIRecommendationService
         }
 
         \Log::debug("Relevant rules for RequestFacility#{$rf->id}", [
-            'rules' => $relevantRules->map(fn($r) => [
-                'content'    => $r->content,
-                'similarity' => $r->similarity,
-            ])->toArray(),
+            'rules' => $relevantRules->pluck('rule')->all(),
         ]);
 
         $ruleLines = collect($relevantRules)
             ->values()
-            ->map(fn($r, $i) => ($i + 1) . '. ' . $r->content)
+            ->map(fn ($r, $i) => ($i + 1).'. '.trim((string) $r->rule))
             ->join("\n");
 
-        $ruleCount     = collect($relevantRules)->count();
+        $ruleCount = collect($relevantRules)->count();
         $validStatuses = implode(', ', array_column(
             array_filter(
                 RequestStatus::cases(),
-                fn($case) => $case->name !== RequestStatus::PENDING->name
+                fn ($case) => $case->name !== RequestStatus::PENDING->name
             ),
             'value'
         ));
 
-        $now     = now()->toDateTimeString();
+        $now = now()->toDateTimeString();
         $signals = $this->buildSignals($request, $rf);
 
         $prompt = <<<PROMPT
@@ -125,7 +110,16 @@ Respond using ONLY this JSON structure — no other text:
 {"status": "<valid status>", "reason": "<one sentence summarising the decisive rule or overall result>"}
 PROMPT;
 
-        $raw = $this->ollama->generate($prompt);
+        $raw = $this->ai->chat([
+            [
+                'role' => 'system',
+                'content' => 'You are a JSON-only response bot. You must output a single valid JSON object and absolutely nothing else. No explanation, no markdown, no preamble.',
+            ],
+            [
+                'role' => 'user',
+                'content' => $prompt,
+            ],
+        ]);
 
         return $this->parseResponse($raw);
     }
@@ -156,14 +150,14 @@ PROMPT;
 
         // --- Conflict signals scoped to this RequestFacility ---
         $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
-        $pendingConflictRfIds  = $request->pending_conflict_rf_ids  ?? [];
+        $pendingConflictRfIds = $request->pending_conflict_rf_ids ?? [];
 
         // Approved conflicts: check if THIS rf.id appears in the conflict set,
         // OR if this rf conflicts with any of the IDs in the list (depending on
         // how conflict IDs are stored in your application). Adjust the logic
         // below to match your actual conflict data shape.
         $hasApprovedConflict = in_array($rf->id, $approvedConflictRfIds, true);
-        $hasPendingConflict  = in_array($rf->id, $pendingConflictRfIds,  true);
+        $hasPendingConflict = in_array($rf->id, $pendingConflictRfIds, true);
 
         $lines[] = $hasApprovedConflict
             ? '- CONFLICT: This booking has a schedule conflict with an already APPROVED booking. This booking must be DENIED.'
@@ -181,9 +175,9 @@ PROMPT;
             : '- EQUIPMENT: No external equipment attached to this specific booking.';
 
         // --- Pre-approval (parent-level, still relevant context) ---
-        if (!empty($request->approved_by)) {
+        if (! empty($request->approved_by)) {
             $approvers = implode(', ', $request->approved_by);
-            $lines[]   = "- PRE-APPROVAL: The parent request has been pre-approved by: {$approvers}.";
+            $lines[] = "- PRE-APPROVAL: The parent request has been pre-approved by: {$approvers}.";
         }
 
         return implode("\n", $lines);
@@ -211,26 +205,24 @@ PROMPT;
 
         // Parent-level equipment applies to all bookings in the request.
         $equipment = $request->equipment->map(
-            fn($eq) =>
-            "{$eq->name} x{$eq->pivot->quantity_needed}" . ($eq->pivot->is_borrowed ? ' (borrowed)' : '')
+            fn ($eq) => "{$eq->name} x{$eq->pivot->quantity_needed}".($eq->pivot->is_borrowed ? ' (borrowed)' : '')
         )->join(', ');
 
         $hasExternalEquipment = ($rf->externalEquipments ?? collect())->isNotEmpty();
 
         // Conflict details scoped to this RequestFacility.
         $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
-        $pendingConflictRfIds  = $request->pending_conflict_rf_ids  ?? [];
+        $pendingConflictRfIds = $request->pending_conflict_rf_ids ?? [];
 
         $approvedConflictDetails = '';
-        $pendingConflictDetails  = '';
+        $pendingConflictDetails = '';
 
         if (in_array($rf->id, $approvedConflictRfIds, true)) {
             $approvedConflictDetails = \App\Models\RequestFacility::whereIn('id', $approvedConflictRfIds)
                 ->with(['facility', 'request.user'])
                 ->get()
                 ->map(
-                    fn($conflictRf) =>
-                    "  - \"{$conflictRf->request->title}\" by {$conflictRf->request->user->name} at {$conflictRf->facility->name} ({$conflictRf->time_start}–{$conflictRf->time_end})"
+                    fn ($conflictRf) => "  - \"{$conflictRf->request->title}\" by {$conflictRf->request->user->name} at {$conflictRf->facility->name} ({$conflictRf->time_start}–{$conflictRf->time_end})"
                 )->join("\n");
         }
 
@@ -239,8 +231,7 @@ PROMPT;
                 ->with(['facility', 'request.user'])
                 ->get()
                 ->map(
-                    fn($conflictRf) =>
-                    "  - \"{$conflictRf->request->title}\" by {$conflictRf->request->user->name} at {$conflictRf->facility->name} ({$conflictRf->time_start}–{$conflictRf->time_end})"
+                    fn ($conflictRf) => "  - \"{$conflictRf->request->title}\" by {$conflictRf->request->user->name} at {$conflictRf->facility->name} ({$conflictRf->time_start}–{$conflictRf->time_end})"
                 )->join("\n");
         }
 
@@ -248,13 +239,13 @@ PROMPT;
             "Title: {$request->title}",
             "Description: {$request->description}",
             "Priority Level: {$request->priority_level->name}",
-            $request->priority_reason   ? "Priority Reason: {$request->priority_reason}" : null,
+            $request->priority_reason ? "Priority Reason: {$request->priority_reason}" : null,
             "Facility Being Evaluated: {$facilityLine}",
-            $equipment                  ? "Equipment (parent request): {$equipment}"                            : null,
-            $hasExternalEquipment       ? "Has External (non-owned) Equipment for this booking: Yes"           : null,
-            $approvedConflictDetails    ? "Conflicts with APPROVED bookings:\n{$approvedConflictDetails}"      : "Conflicts with approved bookings: None",
-            $pendingConflictDetails     ? "Conflicts with PENDING bookings:\n{$pendingConflictDetails}"        : "Conflicts with pending bookings: None",
-            $request->approved_by       ? "Pre-approved by: " . implode(', ', $request->approved_by)          : null,
+            $equipment ? "Equipment (parent request): {$equipment}" : null,
+            $hasExternalEquipment ? 'Has External (non-owned) Equipment for this booking: Yes' : null,
+            $approvedConflictDetails ? "Conflicts with APPROVED bookings:\n{$approvedConflictDetails}" : 'Conflicts with approved bookings: None',
+            $pendingConflictDetails ? "Conflicts with PENDING bookings:\n{$pendingConflictDetails}" : 'Conflicts with pending bookings: None',
+            $request->approved_by ? 'Pre-approved by: '.implode(', ', $request->approved_by) : null,
         ]));
     }
 
@@ -269,10 +260,10 @@ PROMPT;
         $request = $rf->request;
 
         $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
-        $pendingConflictRfIds  = $request->pending_conflict_rf_ids  ?? [];
+        $pendingConflictRfIds = $request->pending_conflict_rf_ids ?? [];
 
-        $hasApprovedConflict  = in_array($rf->id, $approvedConflictRfIds, true);
-        $hasPendingConflict   = in_array($rf->id, $pendingConflictRfIds,  true);
+        $hasApprovedConflict = in_array($rf->id, $approvedConflictRfIds, true);
+        $hasPendingConflict = in_array($rf->id, $pendingConflictRfIds, true);
         $hasExternalEquipment = ($rf->externalEquipments ?? collect())->isNotEmpty();
 
         if ($hasApprovedConflict) {
@@ -304,7 +295,7 @@ PROMPT;
 
     private function parseResponse(string $raw): array
     {
-        \Log::debug('Ollama raw response: ' . $raw);
+        \Log::debug('AI recommendation raw response: '.$raw);
 
         $clean = preg_replace('/```json|```/i', '', $raw);
         $clean = trim($clean);
@@ -315,7 +306,7 @@ PROMPT;
 
         $decoded = json_decode($clean, true);
 
-        if (!$decoded || !isset($decoded['status'])) {
+        if (! $decoded || ! isset($decoded['status'])) {
             foreach (RequestStatus::cases() as $case) {
                 if (stripos($raw, $case->value) !== false) {
                     return [
