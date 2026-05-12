@@ -60,37 +60,45 @@ class StorageService
     }
 
     /**
-     * Upload a request/file attachment from an UploadedFile and return metadata array
+     * Upload a request/file attachment from an UploadedFile and return metadata array.
+     *
+     * For Cloudinary uploads the canonical 'path' is the secure_url returned by the
+     * API so that URL construction never needs to be re-done from constituent parts.
+     * 'public_id' and 'resource_type' are also returned so callers can persist them
+     * for future deletion without parsing the URL.
      */
     public function uploadRequestFileFromUploadedFile(UploadedFile $file, string $folder = 'request-files'): array
     {
         $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($file, $folder);
-            $resource = $res['resource_type'] ?? 'raw';
-            $publicId = $res['public_id'] ?? null;
-            $format = $res['format'] ?? null;
-            $path = "cloudinary://{$resource}/{$publicId}" . ($format ? ".{$format}" : '');
+            $secureUrl = $res['secure_url'] ?? $res['url'] ?? null;
 
             return [
-                'path' => $path,
-                'url' => $res['secure_url'] ?? $res['url'] ?? null,
-                'mime_type' => $file->getClientMimeType(),
-                'size' => $res['bytes'] ?? $file->getSize(),
+                // Store the canonical delivery URL directly — no manual reconstruction needed.
+                'path'          => $secureUrl,
+                'url'           => $secureUrl,
+                'public_id'     => $res['public_id'] ?? null,
+                'resource_type' => $res['resource_type'] ?? 'raw',
+                'mime_type'     => $file->getClientMimeType(),
+                'size'          => $res['bytes'] ?? $file->getSize(),
             ];
         }
 
         $path = $file->store($folder, 'public');
         return [
-            'path' => $path,
-            'url' => Storage::disk('public')->url($path),
+            'path'      => $path,
+            'url'       => Storage::disk('public')->url($path),
             'mime_type' => $file->getClientMimeType(),
-            'size' => $file->getSize(),
+            'size'      => $file->getSize(),
         ];
     }
 
     /**
-     * Upload a request file from an existing local storage path (relative to storage/app/public)
+     * Upload a request file from an existing local storage path (relative to storage/app/public).
+     *
+     * For Cloudinary uploads the canonical 'path' is the secure_url returned by the API.
+     * 'public_id' and 'resource_type' are also returned for future deletion support.
      */
     public function uploadRequestFileFromLocalPath(string $relativePath, string $folder = 'request-files'): array
     {
@@ -102,16 +110,16 @@ class StorageService
         $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($full, $folder);
-            $resource = $res['resource_type'] ?? 'raw';
-            $publicId = $res['public_id'] ?? null;
-            $format = $res['format'] ?? null;
-            $path = "cloudinary://{$resource}/{$publicId}" . ($format ? ".{$format}" : '');
+            $secureUrl = $res['secure_url'] ?? $res['url'] ?? null;
 
             return [
-                'path' => $path,
-                'url' => $res['secure_url'] ?? $res['url'] ?? null,
-                'mime_type' => mime_content_type($full) ?: 'application/octet-stream',
-                'size' => $res['bytes'] ?? filesize($full),
+                // Store the canonical delivery URL directly — no manual reconstruction needed.
+                'path'          => $secureUrl,
+                'url'           => $secureUrl,
+                'public_id'     => $res['public_id'] ?? null,
+                'resource_type' => $res['resource_type'] ?? 'raw',
+                'mime_type'     => mime_content_type($full) ?: 'application/octet-stream',
+                'size'          => $res['bytes'] ?? filesize($full),
             ];
         }
 
@@ -122,15 +130,34 @@ class StorageService
         Storage::disk('public')->put($permanent, $contents);
 
         return [
-            'path' => $permanent,
-            'url' => Storage::disk('public')->url($permanent),
+            'path'      => $permanent,
+            'url'       => Storage::disk('public')->url($permanent),
             'mime_type' => mime_content_type($full) ?: 'application/octet-stream',
-            'size' => filesize($full),
+            'size'      => filesize($full),
         ];
     }
 
     public function deleteByPath(string $path): void
     {
+        // New format: path IS the Cloudinary delivery URL (https://res.cloudinary.com/...).
+        // Extract resource type and public_id directly from the URL segments.
+        if (str_starts_with($path, 'https://res.cloudinary.com/') && $this->useCloudinary) {
+            $this->ensureCloudinary();
+            if ($this->cloudinary) {
+                $publicId = $this->extractPublicIdFromUrl($path);
+                // Determine resource type from URL: .../image/upload/... vs .../raw/upload/...
+                $resource = 'image';
+                if (preg_match('#/([^/]+)/upload/#', $path, $m)) {
+                    $resource = $m[1]; // 'image', 'raw', 'video', etc.
+                }
+                if ($publicId) {
+                    $this->cloudinary->destroy($publicId, $resource);
+                }
+                return;
+            }
+        }
+
+        // Legacy format: cloudinary://{resource}/{publicId.ext}
         if (str_starts_with($path, 'cloudinary://') && $this->useCloudinary) {
             $this->ensureCloudinary();
             if ($this->cloudinary) {
@@ -140,36 +167,41 @@ class StorageService
                 $this->cloudinary->destroy($publicId, $resource);
                 return;
             }
-            // If cloudinary isn't available, fall through and delete from disks
-            // below — nothing to do for remote-only resources.
+            // If cloudinary isn't available, nothing to do for remote-only resources.
+            return;
         }
 
-        // assume public disk path
-        // delete both from public and local to be safe
+        // Local disk path
         Storage::disk('public')->delete($path);
         Storage::disk('local')->delete($path);
     }
 
     /**
-     * Get a public URL for a stored path by building it directly.
-     * Skips the slow Cloudinary Admin API entirely.
+     * Get a public URL for a stored path.
+     *
+     * New uploads store the Cloudinary secure_url directly as the path, so this
+     * method just returns it as-is.  Older uploads used the 'cloudinary://' scheme;
+     * those are handled by reconstructing a delivery URL (best-effort, kept for
+     * backward compatibility).  Local-disk paths go through Storage::disk('public').
      *
      * @param string $path
      * @return string|null
      */
     public function getPublicUrl(string $path): ?string
     {
-        if (str_starts_with($path, 'cloudinary://') && $this->useCloudinary) {
-            // Strip the scheme: 'raw/request-files/abc123.pdf'
-            $rest = substr($path, strlen('cloudinary://'));
+        // New format: path is already a fully-qualified Cloudinary delivery URL.
+        if (str_starts_with($path, 'https://')) {
+            return $path;
+        }
 
-            // $resource = 'raw', $publicAndMaybeExt = 'request-files/abc123.pdf'
+        // Legacy format: cloudinary://{resource}/{publicId.ext}
+        // Reconstruct the delivery URL as a best-effort fallback for existing rows.
+        if (str_starts_with($path, 'cloudinary://') && $this->useCloudinary) {
+            $rest = substr($path, strlen('cloudinary://'));
             [$resource, $publicAndMaybeExt] = explode('/', $rest, 2) + [1 => ''];
 
-            // If the stored resource type looks like 'image' but the public
-            // id includes a non-image extension (e.g. .pdf), prefer the
-            // 'raw' delivery resource. This avoids building an image URL
-            // for PDFs which can result in 401/invalid responses.
+            // Promote image→raw when the public-id has a non-image extension so
+            // Cloudinary serves the file via the correct delivery pipeline.
             $ext = strtolower(pathinfo($publicAndMaybeExt, PATHINFO_EXTENSION) ?: '');
             $rawExts = ['pdf','doc','docx','xls','xlsx','ppt','pptx','zip','mp3','mp4','mov','avi','mkv','txt'];
             if ($resource === 'image' && in_array($ext, $rawExts, true)) {
@@ -179,17 +211,15 @@ class StorageService
             $cloudUrl = env('CLOUDINARY_URL');
             if ($cloudUrl) {
                 $parts = parse_url($cloudUrl);
-                $cloud = $parts['host'] ?? null;
-
+                $cloud  = $parts['host'] ?? null;
                 if ($cloud) {
-                    // Direct Cloudinary delivery URL format
                     return "https://res.cloudinary.com/{$cloud}/{$resource}/upload/{$publicAndMaybeExt}";
                 }
             }
             return null;
         }
 
-        // fallback to local/public disk URL
+        // Local / public-disk path
         return Storage::disk('public')->url($path);
     }
 

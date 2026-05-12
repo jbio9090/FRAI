@@ -66,6 +66,13 @@ class FileController extends Controller
         // the bytes through the app. This avoids Admin API calls and the
         // need for a configured `cloudinary` storage disk.
         if ($resolvedUrl) {
+            // For new-format uploads the path IS the Cloudinary secure_url, so
+            // skip the HEAD check — the URL is authoritative and a superfluous
+            // HEAD round-trip to Cloudinary just adds latency.
+            if (str_starts_with($file->path, 'https://')) {
+                return redirect()->away($resolvedUrl);
+            }
+
             // Perform a lightweight HEAD to verify the URL is publicly accessible.
             try {
                 $head = Http::timeout(10)->head($resolvedUrl);
@@ -168,6 +175,14 @@ class FileController extends Controller
      */
     private function resolveCloudinaryUrl(RequestFile $file): ?string
     {
+        // New format: path is already the canonical Cloudinary delivery URL.
+        // Return it directly — do not pass through Storage::disk()->url() which
+        // would prepend the local app base URL and corrupt the https:// path.
+        if (str_starts_with($file->path, 'https://')) {
+            return $file->path;
+        }
+
+        // Legacy format: cloudinary://{resource}/{publicId.ext}
         if (str_starts_with($file->path, 'cloudinary://')) {
             try {
                 return app(\App\Services\StorageService::class)->getPublicUrl($file->path);
