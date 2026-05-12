@@ -28,6 +28,11 @@ echo "✅ Migrations complete."
 # 3. Clear and rebuild caches so the fresh schema is picked up
 # ------------------------------------------------------------------
 echo "⚙️  Caching config, routes, and views..."
+echo "🧹 Clearing stale caches..."
+php /var/www/html/artisan route:clear
+php /var/www/html/artisan config:clear
+php /var/www/html/artisan view:clear
+
 php /var/www/html/artisan config:cache
 php /var/www/html/artisan route:cache
 php /var/www/html/artisan view:cache
