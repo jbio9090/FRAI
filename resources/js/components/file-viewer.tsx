@@ -1,5 +1,5 @@
-import { X, Download, FileText, File, ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { X, Download, FileText, File, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -26,62 +26,10 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
 
     const [brokenPreview, setBrokenPreview] = useState(false);
 
-    // PDF blob state — we fetch the PDF through the authed streaming route and
-    // turn it into a local blob URL so the iframe never has to deal with CORS,
-    // X-Frame-Options, or Google Docs Viewer's inability to use session cookies.
-    const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
-    const [pdfLoading, setPdfLoading] = useState(false);
-
-    // Track the active fetch so we can abort it when the file changes.
-    const abortRef = useRef<AbortController | null>(null);
-
-    // Reset all per-file state when navigating between files.
+    // Reset per-file state when navigating between files.
     useEffect(() => {
         setBrokenPreview(false);
-        setPdfBlobUrl(null);
-        setPdfLoading(false);
     }, [currentIndex]);
-
-    // Fetch the PDF with session credentials and create a local blob URL.
-    // This runs only for PDF files and is cleaned up on unmount / file change.
-    useEffect(() => {
-        if (!isPdf || brokenPreview) return;
-
-        // Abort any in-flight fetch from a previous file.
-        abortRef.current?.abort();
-        const controller = new AbortController();
-        abortRef.current = controller;
-
-        setPdfLoading(true);
-
-        fetch(current.url, { credentials: 'include', signal: controller.signal })
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.blob();
-            })
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                setPdfBlobUrl(url);
-            })
-            .catch(err => {
-                // Ignore abort errors — they are intentional on file navigation.
-                if (err.name !== 'AbortError') {
-                    setBrokenPreview(true);
-                }
-            })
-            .finally(() => {
-                setPdfLoading(false);
-            });
-
-        return () => {
-            controller.abort();
-            // Revoke the blob URL when this effect cleans up so we don't leak memory.
-            setPdfBlobUrl(prev => {
-                if (prev) URL.revokeObjectURL(prev);
-                return null;
-            });
-        };
-    }, [currentIndex, isPdf]);
 
     // Compute a preview-friendly URL for images hosted on Cloudinary.
     function computePreviewUrl(url: string, mimeType?: string) {
@@ -173,25 +121,18 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                     />
                 )}
 
-                {/* PDF — fetch through the authed streaming route, render via blob URL.
-                    This avoids CORS / X-Frame-Options issues entirely because the iframe
-                    src is a local blob:// URL the browser created, not a remote one.
-                    Download / open-in-new-tab buttons still point at the original route. */}
+                {/* PDF — the streaming route authenticates the request and redirects to
+                    the Cloudinary delivery URL. Iframes follow redirects natively and
+                    are not subject to the CORS restrictions that fetch() faces on
+                    cross-origin redirects, so this just works. */}
                 {isPdf && !brokenPreview && (
-                    <div className="w-full h-full bg-muted flex items-center justify-center">
-                        {pdfLoading && (
-                            <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                                <Loader2 size={32} className="animate-spin" />
-                                <span className="text-sm">Loading PDF…</span>
-                            </div>
-                        )}
-                        {pdfBlobUrl && !pdfLoading && (
-                            <iframe
-                                src={pdfBlobUrl}
-                                title={current.name}
-                                className="w-full h-full border-0"
-                            />
-                        )}
+                    <div className="w-full h-full bg-muted">
+                        <iframe
+                            src={current.url}
+                            title={current.name}
+                            className="w-full h-full border-0"
+                            onError={() => setBrokenPreview(true)}
+                        />
                     </div>
                 )}
 
