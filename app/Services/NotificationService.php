@@ -57,14 +57,16 @@ class NotificationService
     {
         try {
             $user = User::findOrFail($request->user_id);
+
+            Log::info('Dispatching RequestResult to queue for User: ' . $user->id); // Add this
+
             $user->notify(new RequestResult(
                 $request->title,
                 $request->status,
                 route('requests.detail', ['request_id' => $request->id])
             ));
         } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Queue dispatch failed: ' . $e->getMessage());
         }
     }
 

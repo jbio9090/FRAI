@@ -59,8 +59,8 @@ class User extends Authenticatable
 
     public function routeNotificationForFcm()
     {
-        // Return an array of FCM tokens for this user (multi-device)
-        return $this->fcmTokens()->pluck('fcm_token')->filter()->values()->toArray();
+        // Return an array of unique FCM tokens for this user (multi-device)
+        return $this->fcmTokens()->pluck('fcm_token')->filter()->unique()->values()->toArray();
     }
 
     public function fcmTokens()

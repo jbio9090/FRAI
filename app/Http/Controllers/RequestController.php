@@ -114,6 +114,13 @@ class RequestController extends Controller
             'user_id' => auth()->id(),
         ]);
 
+        // Ensure we notify with the latest persisted data
+        try {
+            $facilityRequest->refresh();
+        } catch (\Throwable $e) {
+            // ignore if refresh fails
+        }
+
         $this->notification->notifyUser($facilityRequest);
 
         return back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' successful');

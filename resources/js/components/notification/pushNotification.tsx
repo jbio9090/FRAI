@@ -34,7 +34,7 @@ export default function PushNotifications() {
         }
     }, []);
 
-  
+
     const checkExistingSubscription = async () => {
         const messaging = getFcmMessaging();
         if (!messaging) return;
@@ -49,9 +49,9 @@ export default function PushNotifications() {
             });
 
             if (token) {
-                setIsSubscribed(true); 
+                setIsSubscribed(true);
             } else {
-                setIsSubscribed(false); 
+                setIsSubscribed(false);
             }
         } catch (e) {
             console.log("No existing token found or error checking.", e);
@@ -134,7 +134,7 @@ export default function PushNotifications() {
     };
 
     const unsubscribe = async () => {
-        // 1. Get the messaging instance
+        // 1. Get the messaging instance properly
         const messaging = getFcmMessaging();
         if (!messaging) return;
 
@@ -143,16 +143,18 @@ export default function PushNotifications() {
 
         try {
             const registration = await getOrRegisterServiceWorker();
+            if (!registration) return;
 
-            // 2. Pass the messaging instance to getToken
-            const currentToken = await getToken(messaging, { serviceWorkerRegistration: registration });
+            // 2. Now messaging is defined for this call
+            const currentToken = await getToken(messaging, {
+                serviceWorkerRegistration: registration
+            });
 
             if (currentToken) {
                 await router.post('/push/unsubscribe', {
                     token: currentToken
                 }, {
                     preserveState: true,
-                    preserveScroll: true,
                     onSuccess: async () => {
                         await deleteToken(messaging);
                         setIsSubscribed(false);
