@@ -70,6 +70,10 @@ type AvailabilityFollowUpState = {
 type GuidedIntentRoute = 'booking' | 'availability' | 'equipment' | null;
 
 const GUIDED_TIME_OPTIONS = ['8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
+const GUIDED_BOOKING_MIN_ADVANCE_DAYS = 5;
+const GUIDED_BOOKING_WARNING_ADVANCE_DAYS = 7;
+const SHORT_NOTICE_WARNING_TITLE = 'Short Notice Schedule';
+const SHORT_NOTICE_WARNING_MESSAGE = 'This selected date is close to the minimum lead time. Please make sure all requirements can be prepared before submitting.';
 
 const INITIAL_GUIDED_FLOW: GuidedFlowState = {
     mode: 'none',
@@ -340,6 +344,48 @@ const formatDateYmd = (date: Date): string => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const getTodayStart = (): Date => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+};
+
+const addCalendarDays = (date: Date, days: number): Date => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    next.setHours(0, 0, 0, 0);
+    return next;
+};
+
+const parseDateYmd = (date: string): Date | null => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!match) return null;
+
+    const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
+};
+
+const isGuidedBookingDateSelectable = (date: string): boolean => {
+    const parsed = parseDateYmd(date);
+    if (!parsed) return false;
+
+    return parsed >= addCalendarDays(getTodayStart(), GUIDED_BOOKING_MIN_ADVANCE_DAYS);
+};
+
+const isGuidedBookingShortNoticeDate = (date: string | null): boolean => {
+    if (!date) return false;
+
+    const parsed = parseDateYmd(date);
+    if (!parsed) return false;
+
+    const today = getTodayStart();
+    return (
+        parsed >= addCalendarDays(today, GUIDED_BOOKING_MIN_ADVANCE_DAYS) &&
+        parsed <= addCalendarDays(today, GUIDED_BOOKING_WARNING_ADVANCE_DAYS)
+    );
 };
 
 const getAvailabilityStatus = (content: string): 'available' | 'unavailable' | null => {
@@ -728,6 +774,14 @@ export default function Chatbot() {
     };
 
     const handleGuidedDateSelection = (date: string) => {
+        if (guidedFlow.mode === 'booking' && !isGuidedBookingDateSelectable(date)) {
+            addMessage({
+                role: 'assistant',
+                content: `Please choose a date at least ${GUIDED_BOOKING_MIN_ADVANCE_DAYS} days from today.`,
+            });
+            return;
+        }
+
         addMessage({ role: 'user', content: `Date: ${date}` });
         setGuidedFlow((prev) => ({
             ...prev,
@@ -736,6 +790,12 @@ export default function Chatbot() {
             timeStart: null,
             timeEnd: null,
         }));
+        if (guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(date)) {
+            addMessage({
+                role: 'assistant',
+                content: `${SHORT_NOTICE_WARNING_TITLE}\n${SHORT_NOTICE_WARNING_MESSAGE}`,
+            });
+        }
         addMessage({
             role: 'assistant',
             content: 'Choose your start time.',
@@ -2021,10 +2081,9 @@ export default function Chatbot() {
 
     const buildGuidedQuickReplies = (): GuidedQuickReplyOption[] => {
         const today = new Date();
-        const plusTwoDays = new Date();
-        plusTwoDays.setDate(today.getDate() + 2);
-        const plusThreeDays = new Date();
-        plusThreeDays.setDate(today.getDate() + 3);
+        const plusTwoDays = addCalendarDays(today, 2);
+        const plusThreeDays = addCalendarDays(today, 3);
+        const plusFiveDays = addCalendarDays(today, 5);
         const plusSevenDays = new Date();
         plusSevenDays.setDate(today.getDate() + 7);
 
@@ -2188,14 +2247,9 @@ export default function Chatbot() {
             if (guidedFlow.step === 'date') {
                 return [
                     {
-                        id: 'guided-date-plus2',
-                        label: `In 2 Days (${formatDateYmd(plusTwoDays)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusTwoDays)),
-                    },
-                    {
-                        id: 'guided-date-plus3',
-                        label: `In 3 Days (${formatDateYmd(plusThreeDays)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusThreeDays)),
+                        id: 'guided-date-plus5',
+                        label: `In 5 Days (${formatDateYmd(plusFiveDays)})`,
+                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusFiveDays)),
                     },
                     {
                         id: 'guided-date-plus7',
@@ -2597,7 +2651,17 @@ export default function Chatbot() {
                     {guidedFlow.mode !== 'none' && guidedFlow.step === 'date' && (
                         <div className="mb-3 rounded-md border border-border p-3">
                             <p className="mb-2 text-xs text-muted-foreground">Custom date (calendar)</p>
-                            <DatePicker onSelect={handleGuidedDateSelection} minAdvanceDays={2} />
+                            <DatePicker
+                                onSelect={handleGuidedDateSelection}
+                                minAdvanceDays={guidedFlow.mode === 'booking' ? GUIDED_BOOKING_MIN_ADVANCE_DAYS : 2}
+                            />
+                        </div>
+                    )}
+
+                    {guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(guidedFlow.date) && (
+                        <div className="mb-3 rounded-md border border-amber-500 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-400">
+                            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">{SHORT_NOTICE_WARNING_TITLE}</p>
+                            <p className="mt-1 text-xs">{SHORT_NOTICE_WARNING_MESSAGE}</p>
                         </div>
                     )}
 

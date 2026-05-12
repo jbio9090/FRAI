@@ -18,6 +18,35 @@ interface FlowMessage {
     text: string;
 }
 
+const MIN_SCHEDULE_ADVANCE_DAYS = 5;
+const WARNING_ADVANCE_DAYS = 7;
+const SHORT_NOTICE_WARNING_TITLE = 'Short Notice Schedule';
+const SHORT_NOTICE_WARNING_MESSAGE = 'This selected date is close to the minimum lead time. Please make sure all requirements can be prepared before submitting.';
+
+function getTodayStart(): Date {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+}
+
+function addCalendarDays(date: Date, days: number): Date {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    next.setHours(0, 0, 0, 0);
+    return next;
+}
+
+function isShortNoticeDate(date: string): boolean {
+    if (!date) return false;
+
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return false;
+
+    parsed.setHours(0, 0, 0, 0);
+    const today = getTodayStart();
+    return parsed >= addCalendarDays(today, MIN_SCHEDULE_ADVANCE_DAYS) && parsed <= addCalendarDays(today, WARNING_ADVANCE_DAYS);
+}
+
 export default function BookingFlow({ bookingFlow, onComplete, onCancel, attachedFiles = [], onAttachFile, uploading = false, uploadError = null }: BookingFlowProps) {
     const { step, data, isSubmitting, submitResult, canGoBack, getCurrentEquipmentMaxQuantity, getStepConfig, handleInput, goBack, reset, update } = bookingFlow;
     const [textInput, setTextInput] = useState('');
@@ -227,7 +256,14 @@ export default function BookingFlow({ bookingFlow, onComplete, onCancel, attache
                         )}
 
                         {!isTypingPrompt && config.showDatePicker && (
-                            <DatePicker onSelect={(iso) => handleQuickReply(iso)} minAdvanceDays={2} />
+                            <DatePicker onSelect={(iso) => handleQuickReply(iso)} minAdvanceDays={MIN_SCHEDULE_ADVANCE_DAYS} />
+                        )}
+
+                        {!isTypingPrompt && isShortNoticeDate(data.date) && (
+                            <div className="mt-3 rounded-md border border-amber-500 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-400">
+                                <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">{SHORT_NOTICE_WARNING_TITLE}</p>
+                                <p className="mt-1 text-xs">{SHORT_NOTICE_WARNING_MESSAGE}</p>
+                            </div>
                         )}
 
                         {!isTypingPrompt && config.isTextInput && (

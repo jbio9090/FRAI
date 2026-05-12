@@ -297,6 +297,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [borrowSort, setBorrowSort] = useState<'name-asc' | 'name-desc' | 'qty-asc' | 'qty-desc'>('name-asc');
     const [borrowFacilityFilter, setBorrowFacilityFilter] = useState<string>('all');
     const hasNearMinimumScheduleDate = selectedDates.some((date) => date >= minSelectableDate && date <= warningCutoffDate);
+    const availableEndTimeOptions = currentTimeStart
+        ? BOOKING_TIME_OPTIONS.filter((time) => timeToMinutes(time) > timeToMinutes(currentTimeStart))
+        : BOOKING_TIME_OPTIONS;
     const canSaveFacilityBooking =
         !!selectedFacility &&
         selectedDates.length > 0 &&
@@ -661,10 +664,14 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     function handleTimeStartChange(newStartTime: string) {
         if (newStartTime && !isTimeWithinBookingHours(newStartTime)) return;
         setCurrentTimeStart(newStartTime);
+        if (currentTimeEnd && timeToMinutes(currentTimeEnd) <= timeToMinutes(newStartTime)) {
+            setCurrentTimeEnd('');
+        }
     }
 
     function handleTimeEndChange(newEndTime: string) {
         if (newEndTime && !isTimeWithinBookingHours(newEndTime)) return;
+        if (currentTimeStart && timeToMinutes(newEndTime) <= timeToMinutes(currentTimeStart)) return;
         setCurrentTimeEnd(newEndTime);
     }
 
@@ -1155,11 +1162,14 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     <SelectValue placeholder="Select end time" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {BOOKING_TIME_OPTIONS.map((time) => (
+                                                    {availableEndTimeOptions.map((time) => (
                                                         <SelectItem key={time} value={time}>
                                                             {formatTime(time)}
                                                         </SelectItem>
                                                     ))}
+                                                    {availableEndTimeOptions.length === 0 && (
+                                                        <div className="px-2 py-1.5 text-sm text-muted-foreground">No end times available</div>
+                                                    )}
                                                 </SelectContent>
                                             </Select>
                                         </div>
