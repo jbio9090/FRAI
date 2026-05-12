@@ -2576,15 +2576,21 @@ class ChatController extends Controller
             $generatedPayload = null;
 
             try {
-                $fullContent = $this->ai->chat($messages, ['timeout' => 580]);
+                echo ": connected\n\n";
+                ob_flush();
+                flush();
+
+                $fullContent = $this->ai->streamChat($messages, function (string $token): void {
+                    echo 'data: '.json_encode(['token' => $token])."\n\n";
+                    ob_flush();
+                    flush();
+                }, ['timeout' => 580]);
 
                 $generatedPayload = $this->extractStructuredPayload($fullContent);
                 if (is_array($generatedPayload) && isset($generatedPayload['facility_bookings'])) {
                     echo 'data: '.json_encode(['booking_payload' => json_encode($generatedPayload)])."\n\n";
                     ob_flush();
                     flush();
-                } elseif ($fullContent !== '') {
-                    $this->streamTextTokens($fullContent);
                 }
 
                 // Rule validation on full content

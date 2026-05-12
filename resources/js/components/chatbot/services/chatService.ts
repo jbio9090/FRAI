@@ -79,6 +79,7 @@ export async function sendChatMessageStream(
     let buffer = '';
     let fullContent = '';
     let bookingPayloadEmitted = false;
+    let tokenDisplayMode: 'undecided' | 'visible' | 'hiddenPayload' = 'undecided';
 
     while (true) {
         const { done, value } = await reader.read();
@@ -106,8 +107,28 @@ export async function sendChatMessageStream(
                         const payload = extractBookingPayloadFromText(fullContent);
                         if (payload) {
                             bookingPayloadEmitted = true;
+                            tokenDisplayMode = 'hiddenPayload';
                             onBookingPayload(payload);
                         }
+                    }
+
+                    if (tokenDisplayMode === 'undecided') {
+                        const trimmedContent = fullContent.trimStart();
+
+                        if (trimmedContent === '') {
+                            continue;
+                        }
+
+                        if (trimmedContent.startsWith('{')) {
+                            tokenDisplayMode = bookingPayloadEmitted ? 'hiddenPayload' : 'undecided';
+                            continue;
+                        }
+
+                        tokenDisplayMode = 'visible';
+                    }
+
+                    if (tokenDisplayMode === 'hiddenPayload') {
+                        continue;
                     }
 
                     onToken(token);
@@ -131,6 +152,11 @@ export async function sendChatMessageStream(
                 }
 
                 if (event.done) {
+                    if (tokenDisplayMode === 'undecided' && !bookingPayloadEmitted && fullContent.trim() !== '') {
+                        tokenDisplayMode = 'visible';
+                        onToken(fullContent);
+                    }
+
                     onDone();
                 }
 
