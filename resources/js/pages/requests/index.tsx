@@ -15,6 +15,7 @@ import {
     ArrowUp,
     Download,
     FolderOpen,
+    IterationCw,
 } from 'lucide-react';
 import moment from 'moment';
 import { motion, AnimatePresence } from 'motion/react';
@@ -84,7 +85,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const isInitialLoad = !hasLoadedOnce.current;
 
     const { hasRole } = usePermission();
-    const isAdmin = hasRole(['admin', 'Super Admin']);
+    const isAdmin = hasRole('admin') || hasRole('Super Admin');
 
     const statusOptions = [
         { label: 'Pending', value: 'pending' },
@@ -860,6 +861,16 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
                             <CheckLine size={14} />
                             <span>Conditionally Approve</span>
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="hover:text-yellow-500 dark:hover:text-yellow-400"
+                            onClick={() => bulkAction('for_reschedule')}
+                        >
+                            <IterationCw size={14} />
+                            <span>For Reschedule</span>
                         </Button>
 
                         <Button

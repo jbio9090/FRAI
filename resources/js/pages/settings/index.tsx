@@ -180,9 +180,9 @@ export default function Settings() {
                     />
 
                     <div className="flex flex-col gap-1 min-w-0">
-                        <span className="text-md font-semibold leading-none truncate">{auth.user.name}</span>
-                        <span className="text-sm text-muted-foreground leading-none truncate flex gap-1 items-center"><Mail size={12}/>{auth.user.email}</span>
-                        <span className="text-sm text-muted-foreground capitalize">{auth.user.roles.join(', ')}</span>
+                        <span className="text-md font-semibold leading-none truncate text-wrap">{auth.user.name}</span>
+                        <span className="text-sm text-muted-foreground leading-none text-wrap flex gap-1 items-center"><Mail size={12}/>{auth.user.email}</span>
+                        <span className="text-sm mt-1 text-muted-foreground capitalize text-wrap">{auth.user.roles.join(', ')}</span>
                     </div>
 
                     <div className="ml-auto flex items-center gap-2 shrink-0">
