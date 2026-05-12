@@ -1776,13 +1776,21 @@ class ChatController extends Controller
         for ($offset = 0; $offset < $length; $offset += $chunkSize) {
             $token = substr($text, $offset, $chunkSize);
             echo 'data: '.json_encode(['token' => $token])."\n\n";
-            ob_flush();
-            flush();
+            $this->flushStreamOutput();
 
             if ($delayMicroseconds > 0) {
                 usleep($delayMicroseconds);
             }
         }
+    }
+
+    private function flushStreamOutput(): void
+    {
+        if (ob_get_level() > 0) {
+            ob_flush();
+        }
+
+        flush();
     }
 
     private function storeAssistantReply(array $incomingMessages, string $content): void
@@ -2409,11 +2417,9 @@ class ChatController extends Controller
                     return response()->stream(function () use ($content, $deterministic) {
                         $this->streamTextTokens($content);
                         echo 'data: '.json_encode(['deterministic' => $deterministic])."\n\n";
-                        ob_flush();
-                        flush();
+                        $this->flushStreamOutput();
                         echo 'data: '.json_encode(['done' => true])."\n\n";
-                        ob_flush();
-                        flush();
+                        $this->flushStreamOutput();
                     }, 200, [
                         'Content-Type' => 'text/event-stream',
                         'Cache-Control' => 'no-cache',
@@ -2460,14 +2466,11 @@ class ChatController extends Controller
 
                     return response()->stream(function () use ($content, $availabilityResult) {
                         echo 'data: '.json_encode(['token' => $content])."\n\n";
-                        ob_flush();
-                        flush();
+                        $this->flushStreamOutput();
                         echo 'data: '.json_encode(['deterministic' => $availabilityResult['deterministic']])."\n\n";
-                        ob_flush();
-                        flush();
+                        $this->flushStreamOutput();
                         echo 'data: '.json_encode(['done' => true])."\n\n";
-                        ob_flush();
-                        flush();
+                        $this->flushStreamOutput();
                     }, 200, [
                         'Content-Type' => 'text/event-stream',
                         'Cache-Control' => 'no-cache',
@@ -2507,11 +2510,9 @@ class ChatController extends Controller
                         return response()->stream(function () use ($content, $faqResult) {
                             $this->streamTextTokens($content);
                             echo 'data: '.json_encode(['deterministic' => $faqResult['deterministic']])."\n\n";
-                            ob_flush();
-                            flush();
+                            $this->flushStreamOutput();
                             echo 'data: '.json_encode(['done' => true])."\n\n";
-                            ob_flush();
-                            flush();
+                            $this->flushStreamOutput();
                         }, 200, [
                             'Content-Type' => 'text/event-stream',
                             'Cache-Control' => 'no-cache',
@@ -2577,20 +2578,17 @@ class ChatController extends Controller
 
             try {
                 echo ": connected\n\n";
-                ob_flush();
-                flush();
+                $this->flushStreamOutput();
 
                 $fullContent = $this->ai->streamChat($messages, function (string $token): void {
                     echo 'data: '.json_encode(['token' => $token])."\n\n";
-                    ob_flush();
-                    flush();
+                    $this->flushStreamOutput();
                 }, ['timeout' => 580]);
 
                 $generatedPayload = $this->extractStructuredPayload($fullContent);
                 if (is_array($generatedPayload) && isset($generatedPayload['facility_bookings'])) {
                     echo 'data: '.json_encode(['booking_payload' => json_encode($generatedPayload)])."\n\n";
-                    ob_flush();
-                    flush();
+                    $this->flushStreamOutput();
                 }
 
                 // Rule validation on full content
@@ -2615,8 +2613,7 @@ class ChatController extends Controller
 
                             // Override the streamed content with the violation message
                             echo 'data: '.json_encode(['violation' => $violationMessage])."\n\n";
-                            ob_flush();
-                            flush();
+                            $this->flushStreamOutput();
 
                             $fullContent = $violationMessage;
                         }
@@ -2629,8 +2626,7 @@ class ChatController extends Controller
                     $generatedPayload = $this->extractStructuredPayload($fullContent);
                     if (is_array($generatedPayload)) {
                         echo 'data: '.json_encode(['booking_payload' => json_encode($generatedPayload)])."\n\n";
-                        ob_flush();
-                        flush();
+                        $this->flushStreamOutput();
                     }
                 }
 
@@ -2659,8 +2655,7 @@ class ChatController extends Controller
                 }
 
                 echo 'data: '.json_encode(['done' => true])."\n\n";
-                ob_flush();
-                flush();
+                $this->flushStreamOutput();
 
             } catch (\Exception $e) {
                 \Log::error('Stream error: '.$e->getMessage());
@@ -2671,8 +2666,7 @@ class ChatController extends Controller
                     $sessionId
                 );
                 echo 'data: '.json_encode(['error' => 'Stream failed'])."\n\n";
-                ob_flush();
-                flush();
+                $this->flushStreamOutput();
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',

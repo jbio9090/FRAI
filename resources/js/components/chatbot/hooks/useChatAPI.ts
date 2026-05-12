@@ -1,7 +1,30 @@
 import { useState, useCallback } from 'react';
-import { sendChatMessageStream } from '../services/chatService';
+import { sendChatMessage } from '../services/chatService';
 import { createRequest } from '../services/requestService';
 import type { Message, ChatRequest, CreateRequestPayload } from '../types';
+
+function typeOutContent(content: string, onToken?: (token: string) => void): Promise<void> {
+    return new Promise((resolve) => {
+        if (!content) {
+            resolve();
+            return;
+        }
+
+        let index = 0;
+        const chunkSize = 4;
+        const interval = window.setInterval(() => {
+            const nextIndex = Math.min(index + chunkSize, content.length);
+            const token = content.slice(index, nextIndex);
+            index = nextIndex;
+            onToken?.(token);
+
+            if (index >= content.length) {
+                window.clearInterval(interval);
+                resolve();
+            }
+        }, 16);
+    });
+}
 
 export function useChatAPI() {
     const [isLoading, setIsLoading] = useState(false);
@@ -26,43 +49,29 @@ export function useChatAPI() {
             if (faqMode) payload.faq_mode = true;
 
             let fullContent = '';
+            void sendChatMessage(payload)
+                .then(async ({ content, bookingPayload, deterministic }) => {
+                    fullContent = content;
 
-            sendChatMessageStream(
-                payload,
-
-                (token) => {
-                    fullContent += token;
-                    onToken?.(token);
-                },
-
-                (json) => {
-                    try {
-                        console.log('useChatAPI received booking payload:', json);
-                        // Don't auto-submit - pass to caller for confirmation
-                        onBookingPayload?.(json);
-                    } catch (e) {
-                        console.error('Error handling booking payload:', e);
+                    if (deterministic) {
+                        onDeterministic?.(deterministic);
                     }
-                },
-                (deterministic) => {
-                    onDeterministic?.(deterministic);
-                },
 
-                (violation) => {
-                    console.log('Violation detected:', violation);
-                },
+                    if (bookingPayload) {
+                        onBookingPayload?.(bookingPayload);
+                    } else {
+                        await typeOutContent(content, onToken);
+                    }
 
-                () => {
                     setIsLoading(false);
                     resolve(fullContent);
-                },
-
-                (message) => {
+                })
+                .catch((error) => {
+                    const message = error instanceof Error ? error.message : 'Unknown error occurred';
                     setIsLoading(false);
                     setError(message);
-                    reject(new Error(message));
-                },
-            );
+                    reject(error instanceof Error ? error : new Error(message));
+                });
         });
     }, []); 
 

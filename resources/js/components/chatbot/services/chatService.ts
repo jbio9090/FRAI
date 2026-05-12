@@ -40,6 +40,60 @@ function extractBookingPayloadFromText(content: string): string | null {
     return null;
 }
 
+interface ChatJsonResponse {
+    message?: {
+        role?: string;
+        content?: string;
+    };
+    response?: string;
+    deterministic?: Record<string, unknown>;
+    error?: string;
+}
+
+export async function sendChatMessage(
+    payload: ChatRequest,
+): Promise<{
+    content: string;
+    bookingPayload: string | null;
+    deterministic: Record<string, unknown> | null;
+}> {
+    const response = await fetch(route('api.chat'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+    });
+
+    if (response.status === 419) {
+        window.location.reload();
+        return {
+            content: '',
+            bookingPayload: null,
+            deterministic: null,
+        };
+    }
+
+    const data = (await response.json().catch(() => null)) as ChatJsonResponse | null;
+
+    if (!response.ok) {
+        const message = data?.message?.content ?? data?.error ?? `HTTP error ${response.status}`;
+        throw new Error(message);
+    }
+
+    const content = data?.message?.content ?? data?.response ?? '';
+
+    return {
+        content,
+        bookingPayload: extractBookingPayloadFromText(content),
+        deterministic: data?.deterministic ?? null,
+    };
+}
+
 export async function sendChatMessageStream(
     payload: ChatRequest,
     onToken: (token: string) => void,

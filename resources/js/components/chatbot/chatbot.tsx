@@ -1303,7 +1303,17 @@ export default function Chatbot() {
                     try {
                         const payload = JSON.parse(json);
                         if (payload && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
-                            setPendingPayload(withAttachedFiles(normalizePayloadForSubmission(payload)));
+                            const normalizedPayload = withAttachedFiles(normalizePayloadForSubmission(payload));
+                            setPendingPayload(normalizedPayload);
+                            setMessages((prev) => {
+                                if (prev.length === 0) return prev;
+                                const updated = [...prev];
+                                updated[updated.length - 1] = {
+                                    role: 'assistant',
+                                    content: `Please review this request before I submit it:\n\n${buildRequestSummary(normalizedPayload)}\n\nConfirm and Submit when everything looks correct.`,
+                                };
+                                return updated;
+                            });
                         }
                     } catch (_) {}
                 },
