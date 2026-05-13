@@ -17,13 +17,13 @@ class EquipmentController extends Controller
 {
     public function index(Request $request)
     {
-        $search = $request->input('search', '');
+        $search = trim($request->input('search', ''));
         $sort   = $request->input('sort', '');
 
         $query = Equipment::with('facilities');
 
         if ($search) {
-            $query->where('name', 'like', '%' . $search . '%');
+            $query->whereRaw('LOWER(name) LIKE ?', ['%' . mb_strtolower($search) . '%']);
         }
 
         switch ($sort) {
