@@ -16,12 +16,10 @@ import {
     ArrowUpDown,
     Box,
 } from 'lucide-react';
-import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { AttachedFileList } from '@/components/attached-file-list';
-import { BookingCard } from '@/components/booking-card';
 import { FacilityInfo } from '@/components/create-page/facility-info';
 import { BookingCardList } from '@/components/request/create/booking-card-list';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -1849,7 +1847,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         {data.facility_bookings.length === 0 && editingIndex === null && (
                                             <p className="text-xs text-destructive">At least one facility booking is required.</p>
                                         )}
-                                        <div className="flex w-full grid-cols-3 gap-2 md:grid">
+                                        <div className="grid w-full grid-cols-3 gap-2">
                                             {editingIndex !== null && (
                                                 <Button type="button" variant="outline" onClick={cancelEditBooking} className="">
                                                     Cancel Edit

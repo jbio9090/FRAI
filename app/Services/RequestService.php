@@ -886,6 +886,7 @@ class RequestService
                         'time_start' => $rf->time_start,
                         'time_end' => $rf->time_end,
                         'expected_capacity' => $rf->expected_capacity,
+                        'facility_capacity' => $rf->facility->capacity ?? null,
                         'external_equipment' => $rf->externalEquipments->map(fn ($e) => ['name' => $e->name])->values(),
                         'equipment' => $ownEquipment,
                         'borrowed_equipment' => $borrowedEquipment,

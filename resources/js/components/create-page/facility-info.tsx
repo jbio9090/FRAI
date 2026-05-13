@@ -178,6 +178,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                                                     request_facility_status: booking.status ?? null,
                                                 }}
                                                 index={idx}
+                                                showActions={false}
                                             />
                                         </motion.div>
                                     ))}

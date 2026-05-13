@@ -51,6 +51,14 @@ interface FacilityBooking {
     request_facility_status?: string;
 }
 
+interface DraftBookingConflict {
+    index: number;
+    facility_name: string;
+    date: string;
+    time_start: string;
+    time_end: string;
+}
+
 interface BookingCardProps {
     booking: FacilityBooking;
     index: number;
@@ -61,6 +69,7 @@ interface BookingCardProps {
     showActions?: boolean;
     /** When true the card is the one currently being edited in the form above */
     isEditing?: boolean;
+    draftConflicts?: DraftBookingConflict[];
 }
 
 function formatTime(time: string): string {
@@ -81,14 +90,24 @@ function groupBorrowed(borrowed: BorrowedEquipmentRequest[]): Record<string, Bor
     );
 }
 
-export function BookingCard({ booking, index, onEdit, onRemove, onRefresh, className, showActions = true, isEditing = false }: BookingCardProps) {
+export function BookingCard({
+    booking,
+    index,
+    onEdit,
+    onRemove,
+    onRefresh,
+    className,
+    showActions = true,
+    isEditing = false,
+    draftConflicts = [],
+}: BookingCardProps) {
     const { hasPermission } = usePermission();
 
     const hasOwnEquipment = booking.equipment.length > 0;
     const hasBorrowedEquipment = (booking.borrowed_equipment ?? []).length > 0;
     const hasExternalEquipment = (booking.external_equipment ?? []).length > 0;
     const hasAnyEquipment = hasOwnEquipment || hasBorrowedEquipment || hasExternalEquipment;
-    const hasConflicts = booking.conflicts.length > 0 || Object.keys(booking.equipment_conflicts ?? {}).length > 0;
+    const hasConflicts = booking.conflicts.length > 0 || Object.keys(booking.equipment_conflicts ?? {}).length > 0 || draftConflicts.length > 0;
 
     const isCapacityExceeded =
         booking.expected_capacity != null && booking.facility_capacity != null && booking.expected_capacity > booking.facility_capacity;
@@ -215,6 +234,12 @@ export function BookingCard({ booking, index, onEdit, onRemove, onRefresh, class
                 {/* Conflicts */}
                 {hasConflicts && (
                     <div className="my-2 mb-2 space-y-1.5">
+                        {draftConflicts.map((conflict) => (
+                            <p key={`draft-${conflict.index}`} className="text-sm text-destructive">
+                                Duplicate facility booking with card #{conflict.index + 1}: <strong>{conflict.facility_name}</strong> on{' '}
+                                {format(conflict.date, 'PPP')} ({formatTime(conflict.time_start)}-{formatTime(conflict.time_end)})
+                            </p>
+                        ))}
                         {booking.conflicts.map((conflict, i) => (
                             <p key={i} className="text-sm text-destructive">
                                 Schedule conflict with{' '}
