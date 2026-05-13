@@ -121,7 +121,7 @@ function EquipmentDialog({
     const [processing, setProcessing] = useState(false);
     const { hasRole } = usePermission();
 
-    if (!hasRole("admin")) {
+    if (!hasRole("admin") && !hasRole("Super Admin")) {
         return;
     }
 
@@ -449,7 +449,7 @@ export default function EquipmentsPage({
 
     return (
         <DefaultLayout>
-            {(hasRole("admin")) && (
+            {(hasRole("admin") || hasRole("Super Admin")) && (
                 <>
                     <EquipmentDialog open={addOpen} onClose={() => setAddOpen(false)} />
                     <EquipmentDialog
@@ -538,7 +538,7 @@ export default function EquipmentsPage({
                     </PopoverContent>
                 </Popover>
 
-                {(hasRole("admin")) && (
+                {(hasRole("admin") || hasRole("Super Admin")) && (
                     <Button onClick={() => setAddOpen(true)}>
                         <Plus size={16} />
                         Add Equipment

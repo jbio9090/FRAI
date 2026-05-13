@@ -257,7 +257,7 @@ export default function Dashboard({
         return () => { approvedConflictApi.off("select", update); };
     }, [approvedConflictApi]);
 
-    const isAdmin: boolean = hasRole("admin");
+    const isAdmin: boolean = hasRole("admin") || hasRole("Super Admin");
 
     const rangeOptions = {
         day: "Today",
