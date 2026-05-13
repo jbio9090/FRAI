@@ -21,7 +21,7 @@ class NotificationService
         try {
             $facilityRequest = \App\Models\Request::find($request_id); // Get the request model[cite: 3]
 
-            foreach (User::role('admin')->get() as $user) {
+            foreach (User::role(['admin', 'Super Admin'])->get() as $user) {
                 $user->notify(new NewPendingRequest(
                     $request_title,
                     $user_name,

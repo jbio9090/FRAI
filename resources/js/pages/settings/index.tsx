@@ -181,7 +181,7 @@ export default function Settings() {
 
                     <div className="flex flex-col gap-1 min-w-0">
                         <span className="text-md font-semibold leading-none truncate text-wrap">{auth.user.name}</span>
-                        <span className="text-sm text-muted-foreground leading-none text-wrap flex gap-1 items-center"><Mail size={12}/>{auth.user.email}</span>
+                        <span className="text-sm text-muted-foreground leading-none text-wrap flex gap-1 items-center"><Mail size={12} />{auth.user.email}</span>
                         <span className="text-sm mt-1 text-muted-foreground capitalize text-wrap">{auth.user.roles.join(', ')}</span>
                     </div>
 
@@ -212,11 +212,11 @@ export default function Settings() {
                                         Upload photo
                                     </DropdownMenuItem>
 
-                                    <DropdownMenuItem  onClick={() => setEditDetailsDialogOpen(true)} className='cursor-pointer'>
-                                        <UserRoundPen size={12}/>
+                                    <DropdownMenuItem onClick={() => setEditDetailsDialogOpen(true)} className='cursor-pointer'>
+                                        <UserRoundPen size={12} />
                                         <span>Edit Details</span>
                                     </DropdownMenuItem>
-            
+
                                     {hasCustomPicture && (
                                         <DropdownMenuItem onClick={handleRemove} disabled={removing} className="text-destructive focus:text-destructive cursor-pointer">
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -367,7 +367,7 @@ export default function Settings() {
                     <div className="flex justify-between items-center gap-4">
                         <span className="text-sm font-semibold">Email Notifications</span>
                         <Button
-                            variant="outline"
+                            variant={auth.user.admin_email_notifications_enabled ? "default" : "outline"}
                             size="sm"
                             type="button"
                             onClick={handleAdminEmailNotificationToggle}

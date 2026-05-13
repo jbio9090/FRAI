@@ -385,14 +385,13 @@ class AccountController extends Controller
             return null;
         }
 
-        // Admins may only edit users who are Admin or Department Head
+        // Admins may only edit Department Head users (not other Admins — that requires Super Admin)
         if ($actor->hasRole('admin')) {
             $targetRoles = $target->roles->pluck('name')->map(fn($r) => strtolower($r))->toArray();
-            $allowed = ['admin', 'department head'];
-            if (count(array_intersect($targetRoles, $allowed)) === 0) {
-                return 'Admins may only edit users with role Admin or Department Head.';
+            if (in_array('department head', $targetRoles, true)) {
+                return null;
             }
-            return null;
+            return 'Admins may only edit Department Head accounts. Editing Admin accounts requires Super Admin privileges.';
         }
 
         return 'You are not authorized to edit accounts.';
