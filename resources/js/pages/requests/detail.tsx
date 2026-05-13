@@ -79,6 +79,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     const [totalLogs, setTotalLogs] = useState(auditLogsProp?.total ?? 0);
     const [logsLoading, setLogsLoading] = useState(false);
     const [request, setRequest] = useState(initialRequest);
+    const [activeTab, setActiveTab] = useState('overview');
 
     useEffect(() => {
         // Sync local activity state when the deferred prop resolves or changes
@@ -95,6 +96,21 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
             // ignore malformed/deferred shapes until resolved
         }
     }, [auditLogsProp]);
+
+    // Sync local request state when Inertia refreshes the prop after an action
+    // (approve, reject, hold, etc.). preserveState: true keeps component state
+    // (scroll, tabs, comment text) but leaves this useState stale — this effect
+    // bridges that gap without triggering an extra network round-trip.
+    useEffect(() => {
+        if (!initialRequest) return;
+        setRequest(initialRequest);
+        if (initialRequest.recommended_action) {
+            setIsLoadingRecommendation(false);
+        }
+        if (!facilitiesNeedPolling(initialRequest)) {
+            setIsLoadingFacilityStatuses(false);
+        }
+    }, [initialRequest]);
 
     // True while we're still waiting for the AI recommendation to be generated.
     const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(!initialRequest.recommended_action);
@@ -345,7 +361,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     )}
                 </div>
 
-                <Tabs defaultValue="overview" className="mt-4 w-full">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 w-full">
                     <ScrollArea className="w-full" type="scroll">
                         <TabsList variant="line" className="ml-6 w-fit border-b md:ml-8">
                             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -388,80 +404,79 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     </ScrollArea>
 
                     {/* Overview Tab */}
-                    <TabsContent value="overview" className="mt-6 flex grid-cols-[8fr_6fr] flex-col gap-6 px-6 md:grid md:px-8">
-                        <div className="flex grid-cols-2 flex-col gap-4 md:grid">
-                            <div className="flex max-w-full flex-col">
-                                <p className="mb-2 font-semibold text-muted-foreground">Description</p>
-                                <p>{request.description ? request.description : 'No Description Provided'}</p>
+                    <TabsContent value="overview" className="mt-6 px-6 md:px-8">
+                        <div className="flex max-w-3xl flex-col gap-6">
+                            {/* Description */}
+                            <div>
+                                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</p>
+                                <p className="leading-relaxed text-foreground">
+                                    {request.description || 'No description provided.'}
+                                </p>
                             </div>
 
-                            <div className="flex flex-wrap gap-12">
-                                <div className="flex flex-col">
-                                    <p className="mb-2 font-semibold text-muted-foreground">Requested by</p>
-                                    <div className="flex items-center gap-2">
+                            {/* Metadata grid */}
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
+                                <div>
+                                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Requested by</p>
+                                    <div className="flex items-center gap-1.5">
                                         <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size="sm" />
-                                        <p>{request.user.name}</p>
+                                        <span>{request.user.name}</span>
                                     </div>
                                 </div>
-                                <div className="flex flex-col">
-                                    <p className="mb-2 font-semibold text-muted-foreground">Date Submitted</p>
-                                    <p>{moment(request.created_at).format('MMMM D, YYYY')}</p>
-                                </div>
-                            </div>
 
-                            <div className="flex flex-wrap gap-12">
-                                <div className="flex flex-col">
-                                    <p className="mb-2 font-semibold text-muted-foreground">Processed by</p>
+                                <div>
+                                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date Submitted</p>
+                                    <p>{moment(request.created_at).format('MMM D, YYYY')}</p>
+                                </div>
+
+                                <div>
+                                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Processed by</p>
                                     {request.processed_by ? (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1.5">
                                             <AvatarWithInitials
                                                 avatarSrc={request.processed_by.profile}
                                                 username={request.processed_by.name}
                                                 size="sm"
                                             />
-                                            <p>{request.processed_by.name}</p>
+                                            <span>{request.processed_by.name}</span>
                                         </div>
                                     ) : (
-                                        <span>None</span>
+                                        <span className="text-muted-foreground">—</span>
                                     )}
                                 </div>
-                                <div className="flex flex-col">
-                                    <p className="mb-2 font-semibold text-muted-foreground">Processed At</p>
-                                    {request.processed_at ? <p>{moment(request.processed_at).format('MMMM D, YYYY')}</p> : <span>None</span>}
-                                </div>
-                            </div>
 
-                            <div className="flex flex-col">
-                                <p className="mb-2 font-semibold text-muted-foreground">Approved By</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {request.approved_by !== null ? (
-                                        request.approved_by.map((approvedBy, index) => (
-                                            <span key={index} className="text-sm font-bold">
-                                                {approvedBy}
-                                                {index < request.approved_by.length - 1 && ', '}
-                                            </span>
-                                        ))
+                                <div>
+                                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Processed At</p>
+                                    {request.processed_at ? (
+                                        <p>{moment(request.processed_at).format('MMM D, YYYY')}</p>
                                     ) : (
-                                        <span className="text-sm font-semibold">None</span>
+                                        <span className="text-muted-foreground">—</span>
+                                    )}
+                                </div>
+
+                                <div className="col-span-2">
+                                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Approved By</p>
+                                    {request.approved_by?.length ? (
+                                        <p className="font-medium">{request.approved_by.join(', ')}</p>
+                                    ) : (
+                                        <span className="text-muted-foreground">—</span>
                                     )}
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="mx-auto flex items-center justify-between">
-                            <p className="text-sm text-muted-foreground">
-                                Export this request as a CSV file for reporting, sharing, or backup purposes. The downloaded file will include all
-                                relevant request details.
-                            </p>
-                            <Button
-                                onClick={() => downloadSingleRequestCSV(request)}
-                                size="sm"
-                                variant="outline"
-                                className="relative isolate mt-1 gap-2 overflow-hidden border-primary bg-transparent text-primary before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:bg-transparent hover:text-primary-foreground hover:before:scale-x-100"
-                            >
-                                <Download size={16} />
-                                <span>Export to CSV</span>
-                            </Button>
+                            {/* Export */}
+                            <div className="flex items-center gap-4 border-t pt-4">
+                                <p className="text-xs text-muted-foreground">Export this request as CSV for reporting or backup.</p>
+                                <Button
+                                    onClick={() => downloadSingleRequestCSV(request)}
+                                    size="sm"
+                                    variant="outline"
+                                    className="relative isolate ml-auto shrink-0 gap-2 overflow-hidden border-primary bg-transparent text-primary before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:bg-transparent hover:text-primary-foreground hover:before:scale-x-100"
+                                >
+                                    <Download size={16} />
+                                    <span>Export to CSV</span>
+                                </Button>
+                            </div>
                         </div>
                     </TabsContent>
 
