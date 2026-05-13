@@ -140,8 +140,13 @@ export default function AccountsPage({ users, roles }: Props) {
         return available;
     }, [roles, isAdmin, isSuperAdmin]);
 
-    // Roles available when editing: disallow Super Admin
-    const editRoleOptions = roles.filter(r => r !== 'super admin');
+    // Roles available when editing: Super Admin always excluded;
+    // Admins (non-Super Admin) may only assign Department Head
+    const editRoleOptions = roles.filter(r => {
+        if (r === 'super admin') return false;
+        if (isAdmin && !isSuperAdmin && r === 'admin') return false;
+        return true;
+    });
 
     useEffect(() => {
         if (!isMounted.current) {
@@ -1113,7 +1118,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                                     </Button>
                                                 )}
 
-                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin") && (
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && (rowUser as any).role?.toLowerCase() === "admin")) && (
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
@@ -1123,13 +1128,15 @@ export default function AccountsPage({ users, roles }: Props) {
                                                     </Button>
                                                 )}
 
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => handleDelete((rowUser as any).id)}
-                                                >
-                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                </Button>
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && (rowUser as any).role?.toLowerCase() === "admin")) && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleDelete((rowUser as any).id)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                )}
                                             </>
                                         )}
                                     </TableCell>
