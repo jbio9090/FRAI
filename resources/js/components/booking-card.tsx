@@ -266,6 +266,13 @@ export function BookingCard({
                     </div>
                 )}
 
+                {isCapacityExceeded && (
+                    <p className="my-2 flex items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-2 py-1.5 text-sm font-medium text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-300">
+                        <Users size={13} className="shrink-0" />
+                        Expected attendees exceed this facility's capacity ({booking.expected_capacity} expected, {booking.facility_capacity} capacity).
+                    </p>
+                )}
+
                 {/* Equipment */}
                 {hasAnyEquipment && (
                     <div className="my-2 space-y-2.5 rounded-md bg-background py-1">

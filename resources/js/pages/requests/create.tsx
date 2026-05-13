@@ -73,6 +73,7 @@ export interface FacilityBooking {
     conflicts: BookingSchedule[];
     external_equipment: { name: string }[];
     expected_capacity: number | null;
+    facility_capacity?: number | null;
     has_outsiders: boolean;
     equipment_conflicts: Record<number, EquipmentConflict[]>;
 }
@@ -714,6 +715,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                 conflicts: scheduleConflicts.filter((c) => c.date === format(date, 'yyyy-MM-dd')),
                 external_equipment: externalEquipment,
                 expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+                facility_capacity: facility.capacity,
                 has_outsiders: hasOutsiders,
                 equipment_conflicts: equipmentConflicts,
             };
@@ -743,6 +745,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                     conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd),
                     external_equipment: externalEquipment,
                     expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
+                    facility_capacity: facility.capacity,
                     has_outsiders: hasOutsiders,
                     equipment_conflicts: equipmentConflicts,
                 };
