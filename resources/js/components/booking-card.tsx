@@ -109,8 +109,10 @@ export function BookingCard({
     const hasAnyEquipment = hasOwnEquipment || hasBorrowedEquipment || hasExternalEquipment;
     const hasConflicts = booking.conflicts.length > 0 || Object.keys(booking.equipment_conflicts ?? {}).length > 0 || draftConflicts.length > 0;
 
+    const expectedNum = booking.expected_capacity != null ? Number(String(booking.expected_capacity).trim()) : null;
+    const capacityNum = booking.facility_capacity != null ? Number(String(booking.facility_capacity).trim()) : null;
     const isCapacityExceeded =
-        booking.expected_capacity != null && booking.facility_capacity != null && booking.expected_capacity > booking.facility_capacity;
+        expectedNum != null && capacityNum != null && !Number.isNaN(expectedNum) && !Number.isNaN(capacityNum) && expectedNum > capacityNum;
 
     const borrowedGroups = groupBorrowed(booking.borrowed_equipment ?? []);
 
@@ -192,7 +194,7 @@ export function BookingCard({
                                 {formatTime(booking.time_start)} – {formatTime(booking.time_end)}
                             </span>
                         </span>
-                        {booking.expected_capacity && (
+                        {booking.expected_capacity != null && (
                             <span className="flex items-center gap-1">
                                 <Users size={11} />
                                 {booking.expected_capacity}
