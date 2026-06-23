@@ -2,10 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Notifications\TestPushNotification;
 use Illuminate\Http\Request;
-use Illuminate\Notifications\Notification;
-use NotificationChannels\WebPush\WebPushChannel;
-use NotificationChannels\WebPush\WebPushMessage;
 
 class NotificationController extends Controller
 {
@@ -50,27 +48,7 @@ class NotificationController extends Controller
         $body = $validated['body'] ?? 'This is a push notification test.';
         $url = $validated['url'] ?? route('dashboard');
 
-        $request->user()->notify(new class($title, $body, $url) extends Notification {
-            public function __construct(
-                protected string $title,
-                protected string $body,
-                protected string $url,
-            ) {}
-
-            public function via($notifiable): array
-            {
-                return [WebPushChannel::class];
-            }
-
-            public function toWebPush($notifiable, $notification): WebPushMessage
-            {
-                return (new WebPushMessage)
-                    ->title($this->title)
-                    ->body($this->body)
-                    ->action('Open', 'open_url')
-                    ->data(['url' => $this->url]);
-            }
-        });
+        $request->user()->notify(new TestPushNotification($title, $body, $url));
 
         return redirect()->back()->with(['message' => 'Notification queued']);
     }
