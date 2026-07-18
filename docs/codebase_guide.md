@@ -79,8 +79,8 @@
 | Theme | next-themes |
 
 ### Database
-- **PostgreSQL** (primary) with **pgvector** extension for vector embeddings
-- SQLite available (likely for testing)
+- **PostgreSQL** (primary production hosting on **Supabase**) with **pgvector** extension for vector embeddings
+- SQLite/Local PostgreSQL available for development and testing
 
 ### DevOps
 - Docker (docker-compose, nginx, supervisor)
@@ -152,6 +152,26 @@ tests/
 storage/                          # Logs, uploaded files, compiled views
 public/                           # Web root (index.php, assets, serviceWorker.js)
 ```
+
+---
+
+## Production Database & Deployment
+
+### Supabase Integration
+For production hosting, the database is migrated from local/Render Postgres to **Supabase**, which supports `pgvector` out of the box.
+
+* **SSL Connection:** Enforced using `DB_SSLMODE=require`. PHP's `pdo_pgsql` driver automatically verifies Supabase's certificate using Render's pre-installed system root certificates.
+* **Network & Connection Pooling:** Since new Supabase projects use IPv6-only addresses by default and Render's egress network does not support IPv6, production uses **Supabase Connection Pooling** via the Supavisor Transaction Pooler (`DB_PORT=6543`), which routes over IPv4.
+* **Environment Variables:** Render's Docker build ignores any `.env` or `.env.production` files. All database credentials must be configured within the **Render Dashboard Environment Settings** tab.
+
+### Deployment Entrypoint (`entrypoint.sh`)
+When pushing changes to Render, the container executes `entrypoint.sh` automatically:
+1. **Validation:** Checks if critical variables like `APP_KEY`, `APP_URL`, and `DB_HOST` are set.
+2. **Connectivity Check (Robust & Detailed):**
+   * Retries up to 5 times (3-second intervals) to connect to Supabase.
+   * If the connection fails after 5 attempts, it prints the full uncensored PHP/PDO database exception directly to the Render deploy logs and exits with code 1, facilitating quick debugging.
+3. **Automated Migration & Seeding:** Runs `php artisan migrate --force` (enabling the `vector` extension and establishing the schema) and `php artisan db:seed --force` sequentially.
+4. **Caching & App Boot:** Clears and rebuilds config, route, and view caches under the `www-data` user before handing control off to Supervisor to run Nginx, PHP-FPM, and the Laravel queue worker.
 
 ---
 
