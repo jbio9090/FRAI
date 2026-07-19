@@ -5,12 +5,9 @@ namespace App\Providers;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
-use NotificationChannels\WebPush\Events\NotificationFailed;
-use NotificationChannels\WebPush\Events\NotificationSent;
 use Pgvector\Laravel\Schema as PgvectorSchema;
 use Illuminate\Support\Facades\URL;
 
@@ -35,7 +32,6 @@ class AppServiceProvider extends ServiceProvider
 
         PgvectorSchema::register();
         $this->configureDefaults();
-        $this->logWebPushReports();
         $this->createEmptySQLliteDatabase();
     }
 
@@ -83,58 +79,5 @@ class AppServiceProvider extends ServiceProvider
         if (! file_exists($path)) {
             touch($path);
         }
-    }
-
-    protected function logWebPushReports(): void
-    {
-        Event::listen(NotificationSent::class, function (NotificationSent $event): void {
-            $report = $event->report;
-            $response = $report->getResponse();
-
-            Log::info('WebPush notification accepted by push service.', [
-                'subscription_id' => $event->subscription->getKey(),
-                'endpoint' => str($report->getEndpoint())->limit(80)->toString(),
-                'status' => $response?->getStatusCode(),
-                'reason' => $report->getReason(),
-            ]);
-        });
-
-        Event::listen(NotificationFailed::class, function (NotificationFailed $event): void {
-            $report = $event->report;
-            $response = $report->getResponse();
-            $subscription = $event->subscription;
-            $isExpired = $report->isSubscriptionExpired();
-
-            Log::warning('WebPush notification rejected by push service.', [
-                'subscription_id' => $subscription->getKey(),
-                'endpoint' => str($report->getEndpoint())->limit(80)->toString(),
-                'status' => $response?->getStatusCode(),
-                'reason' => $report->getReason(),
-                'expired' => $isExpired,
-                'response' => $report->getResponseContent(),
-            ]);
-
-            if (! $isExpired) {
-                return;
-            }
-
-            try {
-                $subscriptionId = $subscription->getKey();
-                $endpoint = str($subscription->endpoint ?? $report->getEndpoint())->limit(80)->toString();
-
-                $subscription->delete();
-
-                Log::info('Deleted expired WebPush subscription.', [
-                    'subscription_id' => $subscriptionId,
-                    'endpoint' => $endpoint,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('Failed to delete expired WebPush subscription.', [
-                    'subscription_id' => $subscription->getKey(),
-                    'endpoint' => str($report->getEndpoint())->limit(80)->toString(),
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        });
     }
 }

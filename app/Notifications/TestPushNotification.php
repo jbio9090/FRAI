@@ -5,8 +5,9 @@ namespace App\Notifications;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
-use NotificationChannels\WebPush\WebPushChannel;
-use NotificationChannels\WebPush\WebPushMessage;
+use NotificationChannels\Fcm\FcmChannel;
+use NotificationChannels\Fcm\FcmMessage;
+use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
 class TestPushNotification extends Notification implements ShouldQueue
 {
@@ -20,15 +21,19 @@ class TestPushNotification extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return [WebPushChannel::class];
+        return [FcmChannel::class];
     }
 
-    public function toWebPush($notifiable, $notification): WebPushMessage
+    public function toFcm($notifiable, $notification): FcmMessage
     {
-        return (new WebPushMessage)
-            ->title($this->title)
-            ->body($this->body)
-            ->action('Open', 'open_url')
-            ->data(['url' => $this->url]);
+        return (new FcmMessage(
+            notification: new FcmNotification(
+                title: $this->title,
+                body: $this->body,
+                image: '/FRAI.png',
+            )
+        ))->data([
+            'url' => $this->url,
+        ]);
     }
 }

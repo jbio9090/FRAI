@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DeviceToken;
 use App\Notifications\TestPushNotification;
 use Illuminate\Http\Request;
 
@@ -10,30 +11,27 @@ class NotificationController extends Controller
     public function subscribe(Request $request)
     {
         $validated = $request->validate([
-            'subscription.endpoint' => 'required|string',
-            'subscription.keys.p256dh' => 'required|string',
-            'subscription.keys.auth' => 'required|string',
+            'token' => 'required|string|max:500',
+            'platform' => 'nullable|string|in:web,android,ios',
         ]);
 
-        $request->user()->updatePushSubscription(
-            $validated["subscription"]["endpoint"],
-            $validated["subscription"]["keys"]["p256dh"],
-            $validated["subscription"]["keys"]["auth"],
+        $request->user()->registerFcmToken(
+            $validated['token'],
+            $validated['platform'] ?? 'web'
         );
 
-
-        return redirect()->back()->with(['message' => 'Subscription saved']);
+        return redirect()->back()->with(['message' => 'Device registered for push notifications']);
     }
 
     public function unsubscribe(Request $request)
     {
         $validated = $request->validate([
-            'subscription.endpoint' => 'required|string',
+            'token' => 'required|string|max:500',
         ]);
 
-        $request->user()->deletePushSubscription($validated["subscription"]["endpoint"]);
+        $request->user()->removeFcmToken($validated['token']);
 
-        return redirect()->back()->with(['message' => 'Unsubscribed']);
+        return redirect()->back()->with(['message' => 'Device unregistered from push notifications']);
     }
 
     public function send(Request $request)
@@ -52,6 +50,4 @@ class NotificationController extends Controller
 
         return redirect()->back()->with(['message' => 'Notification queued']);
     }
-
-    
 }

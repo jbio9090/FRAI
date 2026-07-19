@@ -8,8 +8,9 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\URL;
-use NotificationChannels\WebPush\WebPushChannel;
-use NotificationChannels\WebPush\WebPushMessage;
+use NotificationChannels\Fcm\FcmChannel;
+use NotificationChannels\Fcm\FcmMessage;
+use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
 class NewPendingRequest extends Notification implements ShouldQueue
 {
@@ -24,12 +25,12 @@ class NewPendingRequest extends Notification implements ShouldQueue
         protected ?RequestStatus $recommended_action = null
     ) {}
 
-    public function via($notifiable)
+    public function via($notifiable): array
     {
-        return ['database', WebPushChannel::class];
+        return ['database', FcmChannel::class];
     }
 
-    public function toWebPush($notifiable, $notification): WebPushMessage
+    public function toFcm($notifiable, $notification): FcmMessage
     {
         $actionTitle = 'Approve';
         $routeAction = 'approve';
@@ -55,22 +56,19 @@ class NewPendingRequest extends Notification implements ShouldQueue
             ['id' => $this->request_id, 'action' => 'reject', 'admin_id' => $this->admin_id]
         );
 
-        // NOTE: scheme must match when validating signed URLs. Configure APP_URL (or generate
-        // signed URLs with the correct scheme) so the route signature remains valid.
-
-        return (new WebPushMessage)
-            ->title($this->request_title)
-            ->icon('/FRAI.png')
-            ->body('Pending Request from '.$this->user_name)
-            ->action($actionTitle, 'recommended_action') // Dynamic Action Button
-            ->action('Deny', 'deny_action')              // Secondary Action Button
-            ->options(['TTL' => 2419200])
-            ->data([
-                'url' => $this->url,
-                'recommended_action_url' => $recommendedUrl,
-                'deny_url' => $denyUrl,
-            ])
-            ->tag('pending-'.$this->request_title.Date::now()->toString());
+        return (new FcmMessage(
+            notification: new FcmNotification(
+                title: $this->request_title,
+                body: 'Pending Request from '.$this->user_name,
+                image: '/FRAI.png',
+            )
+        ))->data([
+            'url' => $this->url,
+            'recommended_action_url' => $recommendedUrl,
+            'deny_url' => $denyUrl,
+            'action_title' => $actionTitle,
+            'tag' => 'pending-'.$this->request_title.Date::now()->toString(),
+        ]);
     }
 
     public function toDatabase($notifiable): array

@@ -117,6 +117,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/subscribe', [NotificationController::class, 'subscribe'])->name('notification.subscribe');
         Route::post('/unsubscribe', [NotificationController::class, 'unsubscribe'])->name('notification.unsubscribe');
         Route::post('/send', [NotificationController::class, 'send'])->name('notification.send');
+        Route::post('/register-token', [NotificationController::class, 'subscribe'])->name('notification.register-token');
     });
 
     Route::middleware('permission:manage users')->group(function () {

@@ -54,7 +54,15 @@ class HandleInertiaRequests extends Middleware
                 'error' => session('error'),
                 'temp_password_reset' => session('temp_password_reset'),
             ],
-            'vapidPublicKey' => config('webpush.vapid.public_key'),
+            'firebaseConfig' => [
+                'apiKey'            => config('services.firebase.api_key'),
+                'authDomain'        => config('services.firebase.auth_domain'),
+                'projectId'         => config('services.firebase.project_id'),
+                'storageBucket'     => config('services.firebase.storage_bucket'),
+                'messagingSenderId' => config('services.firebase.messaging_sender_id'),
+                'appId'             => config('services.firebase.app_id'),
+                'measurementId'     => config('services.firebase.measurement_id'),
+            ],
         ]);
     }
 

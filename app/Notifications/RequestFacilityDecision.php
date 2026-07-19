@@ -7,8 +7,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
-use NotificationChannels\WebPush\WebPushChannel;
-use NotificationChannels\WebPush\WebPushMessage;
+use NotificationChannels\Fcm\FcmChannel;
+use NotificationChannels\Fcm\FcmMessage;
+use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
 class RequestFacilityDecision extends Notification implements ShouldQueue
 {
@@ -24,9 +25,9 @@ class RequestFacilityDecision extends Notification implements ShouldQueue
         protected ?string $timeEnd = null,
     ) {}
 
-    public function via($notifiable)
+    public function via($notifiable): array
     {
-        return ['database', WebPushChannel::class];
+        return ['database', FcmChannel::class];
     }
 
     private function makeBody(): string
@@ -51,18 +52,18 @@ class RequestFacilityDecision extends Notification implements ShouldQueue
         return $base;
     }
 
-    public function toWebPush($notifiable, $notification): WebPushMessage
+    public function toFcm($notifiable, $notification): FcmMessage
     {
-        $body = $this->makeBody();
-
-        return (new WebPushMessage)
-            ->title($this->requestTitle)
-            ->icon('/FRAI.png')
-            ->body($body)
-            ->action('View request', 'view_request')
-            ->options(['TTL' => 1000])
-            ->data(['url' => $this->url])
-            ->tag("facility-{$this->status->value}-".$this->facilityName.Date::now()->toString());
+        return (new FcmMessage(
+            notification: new FcmNotification(
+                title: $this->requestTitle,
+                body: $this->makeBody(),
+                image: '/FRAI.png',
+            )
+        ))->data([
+            'url' => $this->url,
+            'tag' => "facility-{$this->status->value}-".$this->facilityName.Date::now()->toString(),
+        ]);
     }
 
     public function toDatabase($notifiable): array
