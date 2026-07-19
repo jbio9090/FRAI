@@ -43,12 +43,16 @@ export default function PushNotifications() {
         }
     };
 
+    const getFirebaseApp = async () => {
+        const { getApps, initializeApp } = await import('firebase/app');
+        return getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    };
+
     const checkWebRegistration = async () => {
         try {
             const { getMessaging, getToken } = await import('firebase/messaging');
-            const { initializeApp } = await import('firebase/app');
 
-            const app = initializeApp(firebaseConfig);
+            const app = await getFirebaseApp();
             const messaging = getMessaging(app);
             const token = await getToken(messaging, {
                 vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
@@ -97,7 +101,7 @@ export default function PushNotifications() {
         PushNotifications.addListener('registration', async (token) => {
             try {
                 const fcmToken = await FCM.getToken();
-                await sendTokenToServer(fcmToken.token, getPlatform());
+                await sendTokenToServer(fcmToken.token, await getPlatform());
                 setIsRegistered(true);
             } catch (err) {
                 console.error('Error getting FCM token:', err);
@@ -121,9 +125,8 @@ export default function PushNotifications() {
         }
 
         const { getMessaging, getToken } = await import('firebase/messaging');
-        const { initializeApp } = await import('firebase/app');
 
-        const app = initializeApp(firebaseConfig);
+        const app = await getFirebaseApp();
         const messaging = getMessaging(app);
         const token = await getToken(messaging, {
             vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
@@ -169,9 +172,8 @@ export default function PushNotifications() {
                 await PushNotifications.unregister();
             } else {
                 const { getMessaging, getToken, deleteToken } = await import('firebase/messaging');
-                const { initializeApp } = await import('firebase/app');
 
-                const app = initializeApp(firebaseConfig);
+                const app = await getFirebaseApp();
                 const messaging = getMessaging(app);
                 const token = await getToken(messaging, {
                     vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
@@ -198,8 +200,8 @@ export default function PushNotifications() {
         }
     };
 
-    const getPlatform = (): string => {
-        const { Capacitor } = require('@capacitor/core');
+    const getPlatform = async (): Promise<string> => {
+        const { Capacitor } = await import('@capacitor/core');
         return Capacitor.getPlatform();
     };
 
