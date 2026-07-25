@@ -52,7 +52,7 @@ class RequestFacilityDecision extends Notification implements ShouldQueue
         return $base;
     }
 
-    public function toFcm($notifiable, $notification): FcmMessage
+    public function toFcm($notifiable): FcmMessage
     {
         return (new FcmMessage(
             notification: new FcmNotification(

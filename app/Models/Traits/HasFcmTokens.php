@@ -2,6 +2,7 @@
 
 namespace App\Models\Traits;
 
+use App\Models\DeviceToken;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 trait HasFcmTokens

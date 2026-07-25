@@ -30,7 +30,7 @@ class NewPendingRequest extends Notification implements ShouldQueue
         return ['database', FcmChannel::class];
     }
 
-    public function toFcm($notifiable, $notification): FcmMessage
+    public function toFcm($notifiable): FcmMessage
     {
         $actionTitle = 'Approve';
         $routeAction = 'approve';

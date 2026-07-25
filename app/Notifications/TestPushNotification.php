@@ -24,7 +24,7 @@ class TestPushNotification extends Notification implements ShouldQueue
         return [FcmChannel::class];
     }
 
-    public function toFcm($notifiable, $notification): FcmMessage
+    public function toFcm($notifiable): FcmMessage
     {
         return (new FcmMessage(
             notification: new FcmNotification(
