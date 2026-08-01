@@ -14,6 +14,7 @@
 - Role-based access control (admin, Super Admin) via Spatie Laravel-permission
 - Full audit logging for all actions
 - Conflict detection and priority-based resolution for overlapping bookings
+- Admin-configurable request options (approvers, booking window, minimum advance days) that drive both the create page and chatbot — see [Request Options Settings](request_options_settings.md)
 
 ---
 
@@ -26,7 +27,7 @@
 4. Successful login redirects to the dashboard
 
 ### Request Lifecycle
-1. **Submission** — User fills a multi-step form at `/requests/create` (facility, equipment, attendees, date/time, priority level). Submitted via `POST /requests` → `RequestController@store` → `RequestService@create`
+1. **Submission** — User fills a multi-step form at `/requests/create` (facility, equipment, attendees, date/time, priority level). Submitted via `POST /requests` → `RequestController@store` → `RequestService@create`. The form's booking window, time-step, selectable days, and approver list are driven by the admin-configurable request options (`RequestSettingsService`) shared to the frontend.
 2. **Queue Job** — `ProcessRequestRecommendation` is dispatched. The AI recommendation service evaluates each facility booking against rules using OpenRouter (LLM) + pre-computed signals (conflicts, timing, equipment availability)
 3. **Admin Review** — Admin views the request at `/requests/{id}` with full details, AI recommendations, and audit logs
 4. **Decision** — Admin can approve, reject, conditionally approve, or mark for rescheduling. Each action triggers notifications (push + email) to the requester
@@ -111,14 +112,15 @@ app/                              # Laravel application code
     ├── FacilityService.php
     ├── NotificationService.php
     ├── RequestService.php
+    ├── RequestSettingsService.php
     └── StorageService.php
 
 bootstrap/                        # Laravel bootstrapping
 config/                           # 16 configuration files (app, auth, ai, webpush, etc.)
 database/
 ├── factories/                    # 10 model factories
-├── migrations/                   # 32 migration files
-└── seeders/                      # 5 seeders
+├── migrations/                   # 33 migration files
+└── seeders/                      # 6 seeders (incl. SettingSeeder for request options)
 
 resources/
 ├── css/app.css                   # Tailwind v4 stylesheet

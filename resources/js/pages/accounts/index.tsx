@@ -1,11 +1,11 @@
 import { usePage } from "@inertiajs/react";
 import { router } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Loader2, Search, ArrowDownUp } from "lucide-react";
+import moment from "moment";
 import { useState, useRef, useEffect, useMemo } from "react";
 import AvatarWithInitials from "@/components/avatar-with-initials";
 import SmartPagination from '@/components/SmartPagination';
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Dialog,
     DialogContent,
@@ -22,6 +22,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
     Table,
     TableBody,
@@ -30,11 +31,10 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from "@/layout.tsx/default.";
 import type { User } from "@/types";
-import moment from "moment";
 
 interface PaginatedUsers {
     data: User[];

@@ -92,11 +92,6 @@ const PRIORITY_MAP: Record<string, { level: 0 | 1 | 2; label: string }> = {
     'Government':     { level: 2, label: 'Government' },
 };
 
-const TIME_OPTIONS = [
-    '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
-    '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
-];
-
 const PARTICIPANT_RANGES = ['1-100', '101-300', '301-500', '501-800', '801-1000'];
 
 const EDITABLE_FIELDS: Array<{ key: BookingStep; label: string }> = [
@@ -137,31 +132,53 @@ function toMinutes(time: string): number {
     return (hours * 60) + minutes;
 }
 
-const MAX_END_TIME = '5:00 PM';
-const MAX_END_TIME_MINUTES = toMinutes(MAX_END_TIME);
-const START_TIME_OPTIONS = TIME_OPTIONS.filter(time => toMinutes(time) < MAX_END_TIME_MINUTES);
-const MIN_SCHEDULE_ADVANCE_DAYS = 5;
+function minutesToAmPm(totalMinutes: number): string {
+    const h24 = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const modifier = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${modifier}`;
+}
 
-function getAvailableEndTimeOptions(startTime: string): string[] {
+/**
+ * Hourly quick-reply options within the admin-configured booking window.
+ * Bounds are rounded to the nearest whole hour to keep the chat bubble sane;
+ * users can still type custom times for half-hour/quarter-hour slots.
+ */
+function buildHourlyTimeOptions(startTime: string, endTime: string): string[] {
+    const startMinutes = toMinutes(startTime);
+    const endMinutes = toMinutes(endTime);
+    const firstSlot = Math.ceil(startMinutes / 60) * 60;
+    const lastSlot = Math.floor(endMinutes / 60) * 60;
+
+    const options: string[] = [];
+    for (let slot = firstSlot; slot <= lastSlot; slot += 60) {
+        options.push(minutesToAmPm(slot));
+    }
+
+    return options;
+}
+
+function getAvailableEndTimeOptions(startTime: string, timeOptions: string[], maxEndTimeMinutes: number): string[] {
     if (!startTime) {
-        return TIME_OPTIONS;
+        return timeOptions;
     }
 
     const startMinutes = toMinutes(startTime);
 
-    return TIME_OPTIONS.filter(time => {
+    return timeOptions.filter(time => {
         const endMinutes = toMinutes(time);
-        return endMinutes > startMinutes && endMinutes <= MAX_END_TIME_MINUTES;
+        return endMinutes > startMinutes && endMinutes <= maxEndTimeMinutes;
     });
 }
 
-function getAvailableDurationOptions(startTime: string): string[] {
+function getAvailableDurationOptions(startTime: string, maxEndTimeMinutes: number): string[] {
     if (!startTime) {
         return ['+1 Hour', '+2 Hours', '+3 Hours', 'Custom'];
     }
 
     const startMinutes = toMinutes(startTime);
-    const availableHours = Math.floor((MAX_END_TIME_MINUTES - startMinutes) / 60);
+    const availableHours = Math.floor((maxEndTimeMinutes - startMinutes) / 60);
     const durationOptions = Array.from(
         { length: Math.max(availableHours, 0) },
         (_, index) => `+${index + 1} ${index === 0 ? 'Hour' : 'Hours'}`
@@ -206,7 +223,13 @@ function getQuantityQuickReplies(maxQuantity: number): string[] {
     return options;
 }
 
-export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipment[]) {
+export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipment[], settings?: { booking_window?: { start_time: string; end_time: string }; min_advance_days?: number }) {
+    const bookingWindow = settings?.booking_window;
+    const timeOptions = buildHourlyTimeOptions(bookingWindow?.start_time ?? '07:00', bookingWindow?.end_time ?? '20:00');
+    const maxEndTimeMinutes = toMinutes(bookingWindow?.end_time ?? '20:00');
+    const startTimeOptions = timeOptions.filter(time => toMinutes(time) < maxEndTimeMinutes);
+    const minAdvanceDays = settings?.min_advance_days ?? 5;
+
     const [step, setStep] = useState<BookingStep>('title');
     const [data, setData] = useState<BookingData>({ ...INITIAL_DATA });
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -295,14 +318,14 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
             case 'date':
                 return {
                     botMessage: 'Please select the date of the event.',
-                    quickReplies: ['In 5 days', 'In a week', 'In a month', 'Pick date'],
+                    quickReplies: [`In ${minAdvanceDays} days`, 'In a week', 'In a month', 'Pick date'],
                     isTextInput: false,
                     showDatePicker: awaitingCustomDate,
                 };
             case 'time_start':
                 return {
                     botMessage: 'What time will the event start?',
-                    quickReplies: START_TIME_OPTIONS,
+                    quickReplies: startTimeOptions,
                     isTextInput: false,
                     showDatePicker: false,
                 };
@@ -310,8 +333,8 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
                 return {
                     botMessage: `What time will the event end? Start time is ${data.time_start}.`,
                     quickReplies: awaitingCustomTime
-                        ? getAvailableEndTimeOptions(data.time_start)
-                        : getAvailableDurationOptions(data.time_start),
+                        ? getAvailableEndTimeOptions(data.time_start, timeOptions, maxEndTimeMinutes)
+                        : getAvailableDurationOptions(data.time_start, maxEndTimeMinutes),
                     isTextInput: false,
                     showDatePicker: false,
                 };
@@ -449,8 +472,8 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
             }
 
             case 'date':
-                if (value === 'In 5 days') {
-                    update({ date: formatDate(getFutureDateStr(MIN_SCHEDULE_ADVANCE_DAYS)) });
+                if (value === `In ${minAdvanceDays} days`) {
+                    update({ date: formatDate(getFutureDateStr(minAdvanceDays)) });
                     setStep('time_start');
                 } else if (value === 'In a week') {
                     update({ date: formatDate(getFutureDateStr(7)) });
@@ -479,11 +502,11 @@ export function useBookingFlow(facilities: Facility[], equipmentOptions: Equipme
                 } else if (value.startsWith('+')) {
                     const hours = parseInt(value.replace(/\D/g, ''));
                     const calculatedEndTime = addHours(data.time_start, hours);
-                    if (toMinutes(calculatedEndTime) > MAX_END_TIME_MINUTES) break;
+                    if (toMinutes(calculatedEndTime) > maxEndTimeMinutes) break;
                     update({ time_end: calculatedEndTime });
                     setStep('equipment');
                 } else {
-                    if (!getAvailableEndTimeOptions(data.time_start).includes(value)) break;
+                    if (!getAvailableEndTimeOptions(data.time_start, timeOptions, maxEndTimeMinutes).includes(value)) break;
                     update({ time_end: value });
                     setAwaitingCustomTime(false);
                     setStep('equipment');

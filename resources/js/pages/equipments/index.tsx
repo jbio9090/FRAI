@@ -14,6 +14,7 @@ import {
     ArrowUp,
 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import SmartPagination from "@/components/SmartPagination";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -61,7 +62,6 @@ import useDarkMode from "@/hooks/use-darkMode";
 import { usePermission } from "@/hooks/use-permission";
 import DefaultLayout from "@/layout.tsx/default.";
 import wordToColor from "@/lib/wordToColor";
-import SmartPagination from "@/components/SmartPagination";
 
 interface FacilityPivot {
     equipment_id: number;

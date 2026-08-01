@@ -30,6 +30,7 @@ interface BookingSchedule {
     status: string;
     time_start: string;
     time_end: string;
+    date?: string;
 }
 
 interface FacilityBooking {
@@ -73,7 +74,11 @@ interface BookingCardProps {
 }
 
 function formatTime(time: string): string {
-    return new Date(`2000-01-01T${time}`).toLocaleTimeString([], {
+    if (!time) return '---';
+    const normalized = time === '24:00' || time === '24:00:00' ? '23:59:00' : time;
+    const parsed = new Date(`2000-01-01T${normalized}`);
+    if (isNaN(parsed.getTime())) return '---';
+    return parsed.toLocaleTimeString([], {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,

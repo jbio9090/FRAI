@@ -215,6 +215,8 @@ class RequestController extends Controller
 
         $saved_request = $this->service->create($validated);
 
+        $this->service->detectAndStoreConflicts($saved_request);
+
         ProcessRequestRecommendation::dispatch($saved_request);
 
         $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
@@ -312,6 +314,8 @@ class RequestController extends Controller
         $validated = $httpRequest->validated();
 
         $updated = $this->service->update($validated, $request->id);
+
+        $this->service->detectAndStoreConflicts($updated);
 
         ProcessRequestRecommendation::dispatch($updated);
 

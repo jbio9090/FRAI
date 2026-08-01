@@ -24,7 +24,7 @@ Example: 7:00–10:00 **conflicts with** 9:00–12:00 (since 9:00 < 10:00 and 10
 
 ## Flow by Status of the Conflicting Booking
 
-### On Create / Update (`RequestService::recommendAction`)
+### On Create / Update (`RequestService::detectAndStoreConflicts`)
 
 Only **Pending** and **Approved** bookings are checked as conflict sources.
 
@@ -80,13 +80,13 @@ Only used for the old model where the request has `facility_id`, `date`, `start_
 
 | File | Key Lines | Purpose |
 |---|---|---|
-| `app/Services/RequestService.php` | 379 | `checkForConflicts()` — generic overlap detection |
-| `app/Services/RequestService.php` | 437 | `recommendAction()` — conflict recording on create/update |
-| `app/Services/RequestService.php` | 549 | `approve()` — full request approval + override logic |
-| `app/Services/RequestService.php` | 670 | `getConflictingApprovedRequests()` — find approved overlaps |
-| `app/Services/RequestService.php` | 630 | `getEquipmentDisplacedRequests()` — find equipment-displaced requests |
-| `app/Services/RequestService.php` | 901 | `checkForEquipmentConflicts()` — equipment-level overlap |
-| `app/Services/RequestService.php` | 1027 | `approveFacility()` — single line-item approval |
+| `app/Services/RequestService.php` | 376 | `checkForConflicts()` — generic overlap detection |
+| `app/Services/RequestService.php` | 434 | `detectAndStoreConflicts()` — conflict recording on create/update |
+| `app/Services/RequestService.php` | 538 | `approve()` — full request approval + override logic |
+| `app/Services/RequestService.php` | 659 | `getConflictingApprovedRequests()` — find approved overlaps |
+| `app/Services/RequestService.php` | 619 | `getEquipmentDisplacedRequests()` — find equipment-displaced requests |
+| `app/Services/RequestService.php` | 890 | `checkForEquipmentConflicts()` — equipment-level overlap |
+| `app/Services/RequestService.php` | 1016 | `approveFacility()` — single line-item approval |
 | `app/Models/Request.php` | 125 | `scopeConflicting()` — legacy scope |
 | `app/Models/Request.php` | 157 | `handlePriorityConflict()` — legacy priority override |
 | `app/Enums/RequestStatus.php` | — | All status enum values |

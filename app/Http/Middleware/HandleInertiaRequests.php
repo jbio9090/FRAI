@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use App\Services\RequestSettingsService;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -54,6 +55,7 @@ class HandleInertiaRequests extends Middleware
                 'error' => session('error'),
                 'temp_password_reset' => session('temp_password_reset'),
             ],
+            'requestOptions' => RequestSettingsService::all(),
             'firebaseConfig' => [
                 'apiKey'            => config('services.firebase.api_key'),
                 'authDomain'        => config('services.firebase.auth_domain'),

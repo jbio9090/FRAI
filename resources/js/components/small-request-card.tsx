@@ -78,10 +78,10 @@ export default function SmallRequestCard({
 
     const canApprove = hasPermission('approve requests') && ["Pending", "For Reschedule"].includes(request.status);
 
-    const totalConflicts = [
-        ...(request.pending_conflicts ?? []),
-        ...(request.approved_conflicts ?? []),
-    ].length;
+    const totalConflicts = new Set([
+        ...(request.pending_conflicts ?? []).map((c) => c.request_id),
+        ...(request.approved_conflicts ?? []).map((c) => c.request_id),
+    ]).size;
 
     const commentCount = request.comments?.length ?? 0;
     const fileCount = request.files?.length ?? 0;

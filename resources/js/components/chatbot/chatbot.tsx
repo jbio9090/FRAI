@@ -1,9 +1,11 @@
+import { usePage } from '@inertiajs/react';
 import React, { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Equipment } from '@/types/equipment';
+import type { RequestOptions } from '@/types/request';
 import AvailabilityQuickFlow from './components/AvailabilityQuickFlow';
 import BookingFlow from './components/BookingFlow';
 import ChatInput from './components/ChatInput';
@@ -69,11 +71,36 @@ type AvailabilityFollowUpState = {
 
 type GuidedIntentRoute = 'booking' | 'availability' | 'equipment' | null;
 
-const GUIDED_TIME_OPTIONS = ['8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
-const GUIDED_BOOKING_MIN_ADVANCE_DAYS = 5;
-const GUIDED_BOOKING_WARNING_ADVANCE_DAYS = 7;
 const SHORT_NOTICE_WARNING_TITLE = 'Short Notice Schedule';
 const SHORT_NOTICE_WARNING_MESSAGE = 'This selected date is close to the minimum lead time. Please make sure all requirements can be prepared before submitting.';
+
+const minutesToAmPm = (totalMinutes: number): string => {
+    const h24 = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const modifier = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${modifier}`;
+};
+
+/**
+ * Hourly quick-reply chips within the admin-configured booking window.
+ * Bounds are rounded to the nearest whole hour to keep the chip list sane.
+ */
+const buildHourlyTimeOptions = (startTime: string, endTime: string): string[] => {
+    const startMinutes = toMinutes(startTime);
+    const endMinutes = toMinutes(endTime);
+    if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return [];
+
+    const firstSlot = Math.ceil(startMinutes / 60) * 60;
+    const lastSlot = Math.floor(endMinutes / 60) * 60;
+
+    const options: string[] = [];
+    for (let slot = firstSlot; slot <= lastSlot; slot += 60) {
+        options.push(minutesToAmPm(slot));
+    }
+
+    return options;
+};
 
 const INITIAL_GUIDED_FLOW: GuidedFlowState = {
     mode: 'none',
@@ -368,14 +395,14 @@ const parseDateYmd = (date: string): Date | null => {
     return parsed;
 };
 
-const isGuidedBookingDateSelectable = (date: string): boolean => {
+const isGuidedBookingDateSelectable = (date: string, minAdvanceDays: number): boolean => {
     const parsed = parseDateYmd(date);
     if (!parsed) return false;
 
-    return parsed >= addCalendarDays(getTodayStart(), GUIDED_BOOKING_MIN_ADVANCE_DAYS);
+    return parsed >= addCalendarDays(getTodayStart(), minAdvanceDays);
 };
 
-const isGuidedBookingShortNoticeDate = (date: string | null): boolean => {
+const isGuidedBookingShortNoticeDate = (date: string | null, minAdvanceDays: number, warningAdvanceDays: number): boolean => {
     if (!date) return false;
 
     const parsed = parseDateYmd(date);
@@ -383,8 +410,8 @@ const isGuidedBookingShortNoticeDate = (date: string | null): boolean => {
 
     const today = getTodayStart();
     return (
-        parsed >= addCalendarDays(today, GUIDED_BOOKING_MIN_ADVANCE_DAYS) &&
-        parsed <= addCalendarDays(today, GUIDED_BOOKING_WARNING_ADVANCE_DAYS)
+        parsed >= addCalendarDays(today, minAdvanceDays) &&
+        parsed <= addCalendarDays(today, warningAdvanceDays)
     );
 };
 
@@ -435,7 +462,14 @@ export default function Chatbot() {
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
     const { participantCount: trackedParticipantCount, setParticipantCount, extractAndSet, getCurrentCount } = useParticipantCount();
-    const bookingFlow = useBookingFlow(facilities, baseEquipmentOptions);
+    const { requestOptions } = usePage<{ requestOptions: RequestOptions }>().props;
+    const guidedMinAdvanceDays = requestOptions.min_advance_days;
+    const guidedWarningAdvanceDays = guidedMinAdvanceDays + 2;
+    const guidedTimeOptions = buildHourlyTimeOptions(
+        requestOptions.booking_window.start_time,
+        requestOptions.booking_window.end_time,
+    );
+    const bookingFlow = useBookingFlow(facilities, baseEquipmentOptions, requestOptions);
     const { isLoading, sendMessage, submitRequest } = useChatAPI();
     const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
@@ -556,7 +590,7 @@ export default function Chatbot() {
     };
 
     const getGuidedEndTimeOptions = (startTime: string): string[] => {
-        return GUIDED_TIME_OPTIONS.filter((option) => toMinutes(option) > toMinutes(startTime));
+        return guidedTimeOptions.filter((option) => toMinutes(option) > toMinutes(startTime));
     };
 
     const normalizeGuidedTimeInput = (value: string): string => {
@@ -774,10 +808,10 @@ export default function Chatbot() {
     };
 
     const handleGuidedDateSelection = (date: string) => {
-        if (guidedFlow.mode === 'booking' && !isGuidedBookingDateSelectable(date)) {
+        if (guidedFlow.mode === 'booking' && !isGuidedBookingDateSelectable(date, guidedMinAdvanceDays)) {
             addMessage({
                 role: 'assistant',
-                content: `Please choose a date at least ${GUIDED_BOOKING_MIN_ADVANCE_DAYS} days from today.`,
+                content: `Please choose a date at least ${guidedMinAdvanceDays} days from today.`,
             });
             return;
         }
@@ -790,7 +824,7 @@ export default function Chatbot() {
             timeStart: null,
             timeEnd: null,
         }));
-        if (guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(date)) {
+        if (guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(date, guidedMinAdvanceDays, guidedWarningAdvanceDays)) {
             addMessage({
                 role: 'assistant',
                 content: `${SHORT_NOTICE_WARNING_TITLE}\n${SHORT_NOTICE_WARNING_MESSAGE}`,
@@ -2273,7 +2307,7 @@ export default function Chatbot() {
 
             if (guidedFlow.step === 'time_start') {
                 return [
-                    ...GUIDED_TIME_OPTIONS.filter((option) => option !== GUIDED_TIME_OPTIONS[GUIDED_TIME_OPTIONS.length - 1]).map((time) => ({
+                    ...guidedTimeOptions.filter((option) => option !== guidedTimeOptions[guidedTimeOptions.length - 1]).map((time) => ({
                         id: `guided-start-${time}`,
                         label: time,
                         onSelect: () => handleGuidedStartTimeSelection(time),
@@ -2384,7 +2418,7 @@ export default function Chatbot() {
 
             if (guidedFlow.step === 'time_start') {
                 return [
-                    ...GUIDED_TIME_OPTIONS.filter((option) => option !== GUIDED_TIME_OPTIONS[GUIDED_TIME_OPTIONS.length - 1]).map((time) => ({
+                    ...guidedTimeOptions.filter((option) => option !== guidedTimeOptions[guidedTimeOptions.length - 1]).map((time) => ({
                         id: `guided-av-start-${time}`,
                         label: time,
                         onSelect: () => handleGuidedStartTimeSelection(time),
@@ -2663,12 +2697,12 @@ export default function Chatbot() {
                             <p className="mb-2 text-xs text-muted-foreground">Custom date (calendar)</p>
                             <DatePicker
                                 onSelect={handleGuidedDateSelection}
-                                minAdvanceDays={guidedFlow.mode === 'booking' ? GUIDED_BOOKING_MIN_ADVANCE_DAYS : 2}
+                                minAdvanceDays={guidedFlow.mode === 'booking' ? guidedMinAdvanceDays : 2}
                             />
                         </div>
                     )}
 
-                    {guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(guidedFlow.date) && (
+                    {guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(guidedFlow.date, guidedMinAdvanceDays, guidedWarningAdvanceDays) && (
                         <div className="mb-3 rounded-md border border-amber-500 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-400">
                             <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">{SHORT_NOTICE_WARNING_TITLE}</p>
                             <p className="mt-1 text-xs">{SHORT_NOTICE_WARNING_MESSAGE}</p>

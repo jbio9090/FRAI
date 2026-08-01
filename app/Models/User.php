@@ -3,11 +3,11 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Traits\HasFcmTokens;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use App\Models\Traits\HasFcmTokens;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
@@ -16,7 +16,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, HasRoles, Notifiable, HasFcmTokens, SoftDeletes;
+    use HasFactory, HasFcmTokens, HasRoles, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -30,6 +30,16 @@ class User extends Authenticatable
         'profile',
         'is_active',
         'force_password_change',
+    ];
+
+    /**
+     * The model's default attribute values, matching the database defaults.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'is_active' => true,
+        'force_password_change' => false,
     ];
 
     /**
@@ -51,10 +61,10 @@ class User extends Authenticatable
     {
         return [
             'admin_email_notifications_enabled' => 'boolean',
-            'email_verified_at'                 => 'datetime',
-            'password'                          => 'hashed',
-            'is_active'                         => 'boolean',
-            'force_password_change'             => 'boolean',
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'is_active' => 'boolean',
+            'force_password_change' => 'boolean',
         ];
     }
 }

@@ -526,10 +526,10 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                 const approvedConflicts =
                                     request.approved_conflicts
                                         ?.filter((c) => c.facility_id === rf.facility_id)
-                                        .map((c) => ({
+                                        ?.map((c) => ({
                                             request_id: c.request_id,
-                                            request_title: c.request.title,
-                                            status: c.request.status,
+                                            request_title: c.request?.title ?? 'Unknown',
+                                            status: c.request?.status ?? 'Approved',
                                             time_start: c.time_start,
                                             time_end: c.time_end,
                                         })) ?? [];
@@ -537,10 +537,10 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                 const pendingConflicts =
                                     request.pending_conflicts
                                         ?.filter((c) => c.facility_id === rf.facility_id)
-                                        .map((c) => ({
+                                        ?.map((c) => ({
                                             request_id: c.request_id,
-                                            request_title: c.request.title,
-                                            status: c.request.status,
+                                            request_title: c.request?.title ?? 'Unknown',
+                                            status: c.request?.status ?? 'Pending',
                                             time_start: c.time_start,
                                             time_end: c.time_end,
                                         })) ?? [];

@@ -1,4 +1,4 @@
-import { useForm, router } from '@inertiajs/react';
+import { useForm, usePage, router } from '@inertiajs/react';
 import { format } from 'date-fns';
 import {
     CalendarIcon,
@@ -51,6 +51,7 @@ import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from '@/lib/utils';
 import type { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
 import type { Facility } from '@/types/facility';
+import type { RequestOptions } from '@/types/request';
 import { PRIORITY_LABELS } from '@/types/request';
 
 interface BorrowedEquipmentRequest {
@@ -120,9 +121,10 @@ interface ExistingFile {
     path: string;
 }
 
-interface CreateRequestProps {
+interface CreateRequestProps extends Record<string, unknown> {
     facilities: Facility[];
     existingRequest?: ExistingRequest;
+    requestOptions: RequestOptions;
 }
 
 interface DraftData {
@@ -141,11 +143,6 @@ interface AttachedFile {
 }
 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
-const MIN_SCHEDULE_ADVANCE_DAYS = 5;
-const WARNING_ADVANCE_DAYS = 6;
-const MIN_BOOKING_TIME = '07:00';
-const MAX_BOOKING_TIME = '20:00';
-const BOOKING_TIME_STEP_MINUTES = 30;
 
 function getTodayStart(): Date {
     const today = new Date();
@@ -160,11 +157,6 @@ function addCalendarDays(date: Date, days: number): Date {
     return next;
 }
 
-function isTimeWithinBookingHours(time: string): boolean {
-    if (!time) return false;
-    return time >= MIN_BOOKING_TIME && time <= MAX_BOOKING_TIME;
-}
-
 function timeToMinutes(time: string): number {
     const [hours, minutes] = time.split(':').map(Number);
     return hours * 60 + minutes;
@@ -175,13 +167,6 @@ function minutesToTime(totalMinutes: number): string {
     const minutes = totalMinutes % 60;
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
-
-const BOOKING_TIME_OPTIONS = Array.from(
-    {
-        length: Math.floor((timeToMinutes(MAX_BOOKING_TIME) - timeToMinutes(MIN_BOOKING_TIME)) / BOOKING_TIME_STEP_MINUTES) + 1,
-    },
-    (_, index) => minutesToTime(timeToMinutes(MIN_BOOKING_TIME) + index * BOOKING_TIME_STEP_MINUTES),
-);
 
 function getDraftKey(existingId?: number) {
     return existingId ? `request_draft_edit_${existingId}` : 'request_draft_create';
@@ -228,21 +213,28 @@ function timeAgo(ts: number): string {
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
-const approversList = [
-    { id: 1, name: 'Faculty' },
-    { id: 3, name: 'College Dean' },
-    { id: 4, name: 'Chairperson' },
-    { id: 5, name: 'OSA' },
-    { id: 6, name: 'VP AA' },
-    { id: 7, name: 'VP Admin' },
-    { id: 8, name: 'President' },
-];
-
 export default function CreateRequest({ facilities, existingRequest }: CreateRequestProps) {
     const isEditing = !!existingRequest;
     const draft = loadDraft(existingRequest?.id);
-    const minSelectableDate = addCalendarDays(getTodayStart(), MIN_SCHEDULE_ADVANCE_DAYS);
-    const warningCutoffDate = addCalendarDays(getTodayStart(), WARNING_ADVANCE_DAYS);
+
+    const { requestOptions } = usePage<CreateRequestProps>().props;
+    const { start_time: minBookingTime, end_time: maxBookingTime, days_of_week: availableDaysOfWeek, step_minutes: bookingStepMinutes } =
+        requestOptions.booking_window;
+    const minAdvanceDays = requestOptions.min_advance_days;
+    const warningAdvanceDays = minAdvanceDays + 1;
+    const bookingTimeOptions = Array.from(
+        {
+            length: Math.floor((timeToMinutes(maxBookingTime) - timeToMinutes(minBookingTime)) / bookingStepMinutes) + 1,
+        },
+        (_, index) => minutesToTime(timeToMinutes(minBookingTime) + index * bookingStepMinutes),
+    );
+    const isTimeWithinBookingHours = (time: string): boolean => {
+        if (!time) return false;
+        return time >= minBookingTime && time <= maxBookingTime;
+    };
+
+    const minSelectableDate = addCalendarDays(getTodayStart(), minAdvanceDays);
+    const warningCutoffDate = addCalendarDays(getTodayStart(), warningAdvanceDays);
 
     function draftDiffersFromExisting(draft: DraftData, existing: ExistingRequest): boolean {
         if (draft.title !== existing.title) return true;
@@ -297,8 +289,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
     const [borrowFacilityFilter, setBorrowFacilityFilter] = useState<string>('all');
     const hasNearMinimumScheduleDate = selectedDates.some((date) => date >= minSelectableDate && date <= warningCutoffDate);
     const availableEndTimeOptions = currentTimeStart
-        ? BOOKING_TIME_OPTIONS.filter((time) => timeToMinutes(time) > timeToMinutes(currentTimeStart))
-        : BOOKING_TIME_OPTIONS;
+        ? bookingTimeOptions.filter((time) => timeToMinutes(time) > timeToMinutes(currentTimeStart))
+        : bookingTimeOptions;
     const canSaveFacilityBooking =
         !!selectedFacility &&
         selectedDates.length > 0 &&
@@ -1019,17 +1011,17 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 <Label className="font-semibold">Approved By</Label>
 
                                 <div className="mt-2 flex flex-wrap gap-4">
-                                    {approversList.map((approver) => {
-                                        const isChecked = data.approved_by.includes(approver.name);
+                                    {requestOptions.approvers.map((approver, index) => {
+                                        const isChecked = data.approved_by.includes(approver);
 
                                         return (
-                                            <div key={approver.id} className="flex items-center space-x-2">
+                                            <div key={`${approver}-${index}`} className="flex items-center space-x-2">
                                                 <Checkbox
-                                                    id={`approver-${approver.id}`}
+                                                    id={`approver-${index}`}
                                                     checked={isChecked}
-                                                    onCheckedChange={() => handleCheckboxChange(approver.name)}
+                                                    onCheckedChange={() => handleCheckboxChange(approver)}
                                                 />
-                                                <Label htmlFor={`approver-${approver.id}`}>{approver.name}</Label>
+                                                <Label htmlFor={`approver-${index}`}>{approver}</Label>
                                             </div>
                                         );
                                     })}
@@ -1118,7 +1110,10 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                         selected={selectedDates}
                                                         onSelect={handleDateChange}
                                                         initialFocus
-                                                        disabled={(date) => addCalendarDays(date, 0) < minSelectableDate}
+                                                        disabled={(date) =>
+                                                            addCalendarDays(date, 0) < minSelectableDate ||
+                                                            !availableDaysOfWeek.includes(date.getDay())
+                                                        }
                                                     />
                                                 </PopoverContent>
                                             </Popover>
@@ -1145,7 +1140,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                     <SelectValue placeholder="Select start time" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {BOOKING_TIME_OPTIONS.map((time) => (
+                                                    {bookingTimeOptions.map((time) => (
                                                         <SelectItem key={time} value={time}>
                                                             {formatTime(time)}
                                                         </SelectItem>

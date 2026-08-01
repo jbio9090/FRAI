@@ -1,9 +1,9 @@
 import { router, useForm, usePage } from '@inertiajs/react';
+import { UserRoundPen, Mail } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import PushNotifications from '@/components/notification/pushNotification';
 import { Button } from '@/components/ui/button';
-import { UserRoundPen, Mail } from 'lucide-react';
 import {
     Dialog,
     DialogContent,

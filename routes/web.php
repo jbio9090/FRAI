@@ -9,6 +9,7 @@ use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RequestController;
+use App\Http\Controllers\RequestSettingsController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\FileController;
@@ -97,6 +98,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/settings/admin-email-notifications', [SettingsController::class, 'updateAdminEmailNotifications'])
         ->middleware(['role:admin|Super Admin', 'permission:approve requests'])
         ->name('settings.admin-email-notifications');
+
+    // Admin-only request options (approvers, booking window, min advance days)
+    Route::middleware('permission:manage request options')->group(function () {
+        Route::get('/request-settings', [RequestSettingsController::class, 'index'])->name('request-settings');
+        Route::post('/request-settings', [RequestSettingsController::class, 'update'])->name('request-settings.update');
+    });
 
     Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');
     Route::post('/equipment/check-conflicts', [EquipmentController::class, 'checkConflicts'])

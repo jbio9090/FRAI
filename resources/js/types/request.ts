@@ -1,3 +1,5 @@
+import type { EquipmentConflict } from '@/types/equipment';
+
 export interface Request {
     id: number;
     title: string;
@@ -61,6 +63,36 @@ export const PRIORITY_LABELS: Record<0 | 1 | 2 | 3, string> = {
     3: 'Government',
 };
 
+export interface BookingWindow {
+    start_time: string;
+    end_time: string;
+    days_of_week: number[];
+    step_minutes: number;
+}
+
+export interface RequestOptions {
+    approvers: string[];
+    booking_window: BookingWindow;
+    min_advance_days: number;
+}
+
+interface FacilityEquipmentItem {
+    equipment_id: number;
+    equipment_name: string;
+    quantity_needed: number;
+    max_quantity: number;
+    conflicts?: EquipmentConflict[];
+}
+
+interface BorrowedEquipmentItem {
+    equipment_id: number;
+    equipment_name: string;
+    source_facility_id: number;
+    source_facility_name: string;
+    quantity_needed: number;
+    max_quantity: number;
+}
+
 interface RequestFacility {
     id: number;
     request_id: number;
@@ -72,8 +104,11 @@ interface RequestFacility {
     external_equipments: { id: number; name: string }[];
     has_outsiders: boolean;
     status: string;
-    ai_recommended_status: string | null; 
-    ai_recommendation_reason: string | null; 
+    ai_recommended_status: string | null;
+    ai_recommendation_reason: string | null;
+    equipment?: FacilityEquipmentItem[];
+    borrowed_equipment?: BorrowedEquipmentItem[];
+    equipment_conflicts?: Record<number, EquipmentConflict[]>;
 }
 
 export interface Facility {

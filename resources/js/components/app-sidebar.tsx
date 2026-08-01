@@ -17,6 +17,7 @@ import {
     MessagesSquare,
     ChevronRight,
     ClipboardList,
+    Settings2,
 } from 'lucide-react';
 import * as React from 'react';
 import ChatbotSessionModal from '@/components/ChatbotSessionModal';
@@ -53,6 +54,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: 'Equipments', url: 'equipments', icon: Cable },
             ...(hasPermission('manage users') ? [{ title: 'Accounts', url: 'accounts.index', icon: User }] : []),
             ...(hasPermission('view chatbot logs') ? [{ title: 'Chatbot Logs', url: 'chatbot.logs.index', icon: MessagesSquare }] : []),
+            ...(hasPermission('manage request options') ? [{ title: 'Request Settings', url: 'request-settings', icon: Settings2 }] : []),
         ],
         navMenu: [
             { title: 'Pending', url: route('requests.index', { status: 'pending' }), status: 'pending', icon: FileClock },

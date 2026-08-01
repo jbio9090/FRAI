@@ -27,6 +27,7 @@ class RolePermissionSeeder extends Seeder
         Permission::updateOrCreate(['name' => 'view chatbot logs']);
         Permission::updateOrCreate(['name' => 'reset password']);
         Permission::updateOrCreate(['name' => 'create new admins']);
+        Permission::updateOrCreate(['name' => 'manage request options']);
 
 
         // Create roles and assign permissions

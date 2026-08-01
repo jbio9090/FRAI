@@ -6,7 +6,6 @@ use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
-use App\Services\RAG\AIRecommendationService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -17,8 +16,6 @@ class RequestService
 {
     public function __construct(
         protected AuditLogger $auditLogger,
-        protected AIRecommendationService $aiRecommender,
-        protected NotificationService $notification,
     ) {}
 
     public function get(
@@ -434,17 +431,33 @@ class RequestService
         return $conflicts;
     }
 
-    public function recommendAction(array $validated, FacilityRequest $saved_request): array
+    public function detectAndStoreConflicts(FacilityRequest $request): void
     {
-        $hasExternalEquipment = false;
+        $request->loadMissing([
+            'requestFacilities.facility',
+            'requestFacilities.externalEquipments',
+            'equipment' => fn ($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
+            'equipment.facilities',
+        ]);
+
+        $this->attachPerFacilityEquipment($request);
+
+        $bookings = $request->requestFacilities->map(fn ($rf) => [
+            'facility_id'        => $rf->facility_id,
+            'date'               => $rf->date_requested,
+            'time_start'         => $rf->time_start,
+            'time_end'           => $rf->time_end,
+            'equipment'          => $rf->equipment?->toArray() ?? [],
+            'borrowed_equipment' => $rf->borrowed_equipment?->toArray() ?? [],
+            'external_equipment' => $rf->externalEquipments?->toArray() ?? [],
+        ])->toArray();
 
         $conflicts = $this->checkForConflicts(
-            $validated['facility_bookings'],
+            $bookings,
             [RequestStatus::PENDING, RequestStatus::APPROVED],
-            $saved_request->id
+            $request->id
         );
 
-        $hasApprovedConflict = collect($conflicts)->contains(fn ($c) => $c['status'] === RequestStatus::APPROVED);
         $pendingConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::PENDING)->values();
         $approvedConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED)->values();
 
@@ -452,10 +465,11 @@ class RequestService
         $approvedConflictRfIds = $approvedConflicts->pluck('request_facility_id')->unique()->values()->toArray();
 
         $equipmentConflicts = $this->checkForEquipmentConflicts(
-            $validated['facility_bookings'],
+            $bookings,
             [RequestStatus::PENDING, RequestStatus::APPROVED],
-            $saved_request->id
+            $request->id
         );
+
         $pendingEquipmentRequestIds = collect($equipmentConflicts)
             ->filter(fn ($c) => $c['status'] === RequestStatus::PENDING)
             ->pluck('request_id')->unique()->values()->toArray();
@@ -464,34 +478,14 @@ class RequestService
             ->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED)
             ->pluck('request_id')->unique()->values()->toArray();
 
-        foreach ($validated['facility_bookings'] as $booking) {
-            if (! empty($booking['external_equipment'])) {
-                $hasExternalEquipment = true;
-                break;
-            }
-        }
-
-        $saved_request->update([
+        $request->update([
             'pending_conflict_rf_ids' => $pendingConflictRfIds ?: [],
             'approved_conflict_rf_ids' => $approvedConflictRfIds ?: [],
             'pending_equipment_conflict_request_ids' => $pendingEquipmentRequestIds ?: [],
             'approved_equipment_conflict_request_ids' => $approvedEquipmentRequestIds ?: [],
         ]);
 
-        $saved_request->refresh();
-
-        $saved_request->loadMissing(['requestFacilities.facility', 'requestFacilities.externalEquipments', 'equipment']);
-
-        $ai = $this->aiRecommender->recommend($saved_request);
-
-        $saved_request->update([
-            'recommended_action' => $ai['status'],
-            'recommended_action_reason' => $ai['reason'],
-        ]);
-
-        $this->notification->notifyAdminsAfterAiRecommendation($saved_request);
-
-        $savedRequestRfIds = $saved_request->requestFacilities()->pluck('id')->toArray();
+        $savedRequestRfIds = $request->requestFacilities()->pluck('id')->toArray();
 
         $pendingConflicts
             ->pluck('request_id')
@@ -512,12 +506,7 @@ class RequestService
                 ]);
             });
 
-        $this->removeStalePendingConflictRefs($saved_request, $pendingConflictRfIds);
-
-        return [
-            'pending' => $pendingConflictRfIds,
-            'approved' => $approvedConflictRfIds,
-        ];
+        $this->removeStalePendingConflictRefs($request, $pendingConflictRfIds);
     }
 
     private function removeStalePendingConflictRefs(FacilityRequest $saved_request, array $currentPendingRfIds): void

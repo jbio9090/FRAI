@@ -384,8 +384,8 @@ function RequestDetails({
                                 .filter((c) => c.facility_id === rf.facility_id)
                                 .map((c) => ({
                                     request_id: c.request_id,
-                                    request_title: c.request.title,
-                                    status: 'Pending',
+                                    request_title: c.request?.title ?? 'Unknown',
+                                    status: c.request?.status ?? 'Pending',
                                     time_start: c.time_start,
                                     time_end: c.time_end,
                                 }));
@@ -394,8 +394,8 @@ function RequestDetails({
                                 .filter((c) => c.facility_id === rf.facility_id)
                                 .map((c) => ({
                                     request_id: c.request_id,
-                                    request_title: c.request.title,
-                                    status: 'Approved',
+                                    request_title: c.request?.title ?? 'Unknown',
+                                    status: c.request?.status ?? 'Approved',
                                     time_start: c.time_start,
                                     time_end: c.time_end,
                                 }));
@@ -419,7 +419,7 @@ function RequestDetails({
                                 request_facility_status: rf.status ?? null,
                             };
 
-                            return <BookingCard key={rf.date_requested + rf.time_start} booking={booking} index={0} className="mt-4" />;
+                            return <BookingCard key={rf.id} booking={booking} index={0} className="mt-4" />;
                         })}
                     </div>
                 </ScrollArea>
