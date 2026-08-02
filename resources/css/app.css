@@ -374,3 +374,161 @@
     background: oklch(var(--tag-bg-l) var(--tag-c) var(--tag-h) / var(--tag-bg-alpha));
     color: oklch(var(--tag-text-l) var(--tag-c) var(--tag-h));
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN PREVIEW — mock-up sandbox for the "Blueprint" design system.
+   Everything in this section is scoped to `.design-preview` and is
+   purely additive: the live app is untouched until the direction is
+   approved. Spec lives in docs/design-system.md
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* JetBrains Mono — the data voice (variable weight) */
+@font-face {
+    font-family: "JetBrains Mono";
+    src: url("/fonts/JetBrainsMono-Variable.ttf") format("truetype");
+    font-weight: 100 800;
+    font-style: normal;
+    font-display: swap;
+}
+
+.design-preview {
+    /* ── Blueprint tokens ─────────────────────────────────────────── */
+    --bp-chamfer: 16px;
+    --bp-ok: #2152ff;
+    --bp-ok-bg: rgba(33, 82, 255, 0.1);
+    --bp-amber: #a15c07;
+    --bp-amber-bg: rgba(196, 116, 16, 0.12);
+    --bp-danger: #bf3b37;
+    --bp-danger-bg: rgba(191, 59, 55, 0.1);
+    --bp-neutral: #5b6783;
+    --bp-neutral-bg: rgba(91, 103, 131, 0.12);
+
+    /* ── Chamfered radius: surfaces sharp, controls 0 ─────────────── */
+    --radius: 0px;
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    --radius-xl: 0px;
+    --radius-2xl: 0px;
+    --radius-3xl: 0px;
+    --radius-4xl: 0px;
+
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+
+    /* ── Light: paper + ink ───────────────────────────────────────── */
+    --background: #eef1f8;
+    --foreground: #16213d;
+    --card: #ffffff;
+    --card-foreground: #16213d;
+    --popover: #ffffff;
+    --popover-foreground: #16213d;
+    --primary: #2152ff;
+    --primary-foreground: #ffffff;
+    --secondary: #e6eaf4;
+    --secondary-foreground: #16213d;
+    --muted: #e6eaf4;
+    --muted-foreground: #5b6783;
+    --accent: #e2e7f3;
+    --accent-foreground: #16213d;
+    --destructive: #bf3b37;
+    --destructive-foreground: #ffffff;
+    --border: #d7ddeb;
+    --input: #d7ddeb;
+    --ring: #2152ff;
+
+    /* Sidebar shares the app's paper surface — the blue stays as identity */
+    --sidebar: #eef1f8;
+    --sidebar-foreground: #16213d;
+    --sidebar-primary: #2152ff;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #e2e7f3;
+    --sidebar-accent-foreground: #16213d;
+    --sidebar-border: #d7ddeb;
+    --sidebar-ring: #2152ff;
+
+    --chart-1: #2152ff;
+    --chart-2: #6079ff;
+    --chart-3: #8a9cff;
+    --chart-4: #1a41cc;
+    --chart-5: #aab6f0;
+}
+
+.dark .design-preview {
+    --bp-ok: #5a7bff;
+    --bp-ok-bg: rgba(90, 123, 255, 0.16);
+    --bp-amber: #e5a24e;
+    --bp-amber-bg: rgba(229, 162, 78, 0.16);
+    --bp-danger: #e06a64;
+    --bp-danger-bg: rgba(224, 106, 100, 0.16);
+    --bp-neutral: #8b96b5;
+    --bp-neutral-bg: rgba(139, 150, 181, 0.16);
+
+    --background: #0c1322;
+    --foreground: #dbe2f2;
+    --card: #121b30;
+    --card-foreground: #dbe2f2;
+    --popover: #121b30;
+    --popover-foreground: #dbe2f2;
+    --primary: #5a7bff;
+    --primary-foreground: #ffffff;
+    --secondary: #192440;
+    --secondary-foreground: #dbe2f2;
+    --muted: #16213a;
+    --muted-foreground: #8b96b5;
+    --accent: #1d2a49;
+    --accent-foreground: #e6ebf8;
+    --destructive: #e06a64;
+    --destructive-foreground: #ffffff;
+    --border: #25304f;
+    --input: #25304f;
+    --ring: #5a7bff;
+
+    --sidebar: #0c1322;
+    --sidebar-foreground: #dbe2f2;
+    --sidebar-primary: #5a7bff;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #1d2a49;
+    --sidebar-accent-foreground: #e6ebf8;
+    --sidebar-border: #25304f;
+}
+
+/* ── Rounded corner (temp look — was the chamfered cut) ───────────── */
+.design-preview .bp-chamfer {
+    border-radius: var(--bp-chamfer) 0 0 0;
+    overflow: hidden;
+}
+
+.design-preview .bp-chamfer-lg {
+    --bp-chamfer: 24px;
+}
+
+/* Rounded card with a 1px hairline that follows the edge */
+.design-preview .bp-card {
+    position: relative;
+    border-radius: var(--bp-chamfer) 0 0 0;
+    overflow: hidden;
+    background: var(--border);
+}
+
+.design-preview .bp-card::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: calc(var(--bp-chamfer) - 1px) 0 0 0;
+    background: var(--card);
+}
+
+.design-preview .bp-card-inner {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+}
+
+/* ── Eyebrow label (Manrope, weight for hierarchy) ────────────────── */
+.design-preview .bp-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+}

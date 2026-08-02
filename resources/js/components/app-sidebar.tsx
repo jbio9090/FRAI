@@ -16,12 +16,22 @@ import {
     IterationCw,
     MessagesSquare,
     ChevronRight,
+    ChevronsUpDown,
     ClipboardList,
     Settings2,
 } from 'lucide-react';
 import * as React from 'react';
+import AvatarWithInitials from '@/components/avatar-with-initials';
 import ChatbotSessionModal from '@/components/ChatbotSessionModal';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Sidebar,
     SidebarContent,
@@ -208,21 +218,61 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarFooter className="px-2 group-data-[collapsible=icon]:px-0">
                 <SidebarMenu className="pb-4">
                     <SidebarMenuItem className={iconRailItem}>
-                        <SidebarMenuButton asChild tooltip="Settings">
-                            <Link href={route('settings')} className="w-full cursor-pointer">
-                                <Settings className="h-4 w-4 shrink-0" />
-                                <span className="group-data-[collapsible=icon]:hidden">Settings</span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <SidebarMenuItem className={iconRailItem}>
-                        <SidebarMenuButton asChild tooltip="Logout">
-                            <button onClick={handleLogout} className="w-full cursor-pointer">
-                                <LogOut className="h-4 w-4 shrink-0" />
-                                <span className="group-data-[collapsible=icon]:hidden">Logout</span>
-                            </button>
-                        </SidebarMenuButton>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <SidebarMenuButton
+                                    size="lg"
+                                    tooltip={auth.user.name}
+                                    className="gap-2 cursor-pointer data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                                >
+                                    <AvatarWithInitials
+                                        username={auth.user.name}
+                                        avatarSrc={auth.user.profile}
+                                        size="sm"
+                                    />
+                                    <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                                        <span className="truncate font-semibold">{auth.user.name}</span>
+                                        <span className="truncate text-xs text-muted-foreground capitalize">
+                                            {(auth.user.roles?.length ? auth.user.roles : ['User']).join(', ')}
+                                        </span>
+                                    </div>
+                                    <ChevronsUpDown className="ml-auto size-4 shrink-0 group-data-[collapsible=icon]:hidden" />
+                                </SidebarMenuButton>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                className="min-w-56 rounded-lg"
+                                side="top"
+                                align="end"
+                                sideOffset={4}
+                            >
+                                <DropdownMenuLabel className="p-0 font-normal">
+                                    <div className="flex items-center gap-3 px-1 py-1.5">
+                                        <AvatarWithInitials
+                                            username={auth.user.name}
+                                            avatarSrc={auth.user.profile}
+                                            size="sm"
+                                        />
+                                        <div className="grid flex-1 text-left text-sm leading-tight">
+                                            <span className="truncate font-semibold">{auth.user.name}</span>
+                                            <span className="truncate text-xs text-muted-foreground capitalize">
+                                                {(auth.user.roles?.length ? auth.user.roles : ['User']).join(', ')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem asChild>
+                                    <Link href={route('settings')}>
+                                        <Settings className="h-4 w-4 shrink-0" />
+                                        Settings
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleLogout}>
+                                    <LogOut className="h-4 w-4 shrink-0" />
+                                    Logout
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>
