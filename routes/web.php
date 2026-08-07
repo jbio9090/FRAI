@@ -164,12 +164,6 @@ Route::middleware('auth')->group(function () {
         return Inertia::render('chatbot/chatbot');
     })->name('chatbot');
 
-    // ── Design preview (temporary mock-up sandbox) ──────────────────
-    // Render the "Blueprint" design system samples. Safe to delete once
-    // the direction is approved and rolled out.
-    Route::get('/design/preview', fn () => Inertia::render('design/PreviewDashboard'))->name('design.preview');
-    Route::get('/design/preview/create', fn () => Inertia::render('design/PreviewCreateRequest'))->name('design.preview.create');
-
     Route::prefix('/chat')->group(function () {
         Route::post('/', [ChatController::class, 'chat'])->name('api.chat')->middleware(['throttle:60,1']);
         Route::get('/test', [ChatController::class, 'testCsrf'])->name('chat.test');
