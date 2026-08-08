@@ -3,8 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Models\Equipment;
+use App\Models\Facility;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class FacilityFormRequest extends FormRequest
@@ -17,37 +17,31 @@ class FacilityFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title'                                                        => 'required|string|max:255',
-            'description'                                                  => 'nullable|string',
-            'priority_level'                                               => 'nullable|integer|in:0,1,2,3',
-            'priority_reason'                                              => 'nullable|string|max:512',
-            'facility_bookings'                                            => 'required|array|min:1',
-            'facility_bookings.*.facility_id'                             => [
-                'required',
-                Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
-            ],
-            'facility_bookings.*.date'                                     => 'required|date',
-            'facility_bookings.*.time_start'                              => 'required',
-            'facility_bookings.*.time_end'                                => 'required',
-            'facility_bookings.*.equipment'                               => 'array',
-            'facility_bookings.*.equipment.*.equipment_id'                => 'required|exists:equipments,id',
-            'facility_bookings.*.equipment.*.quantity_needed'             => 'required|integer|min:1',
-            'facility_bookings.*.external_equipment'                      => 'nullable|array',
-            'facility_bookings.*.external_equipment.*.name'               => 'required|string|max:255',
-            'facility_bookings.*.borrowed_equipment'                      => 'array',
-            'facility_bookings.*.borrowed_equipment.*.equipment_id'       => 'required|exists:equipments,id',
-            'facility_bookings.*.borrowed_equipment.*.source_facility_id' => [
-                'required',
-                Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
-            ],
-            'facility_bookings.*.borrowed_equipment.*.quantity_needed'    => 'required|integer|min:1',
-            'facility_bookings.*.expected_capacity'                       => 'nullable|integer|min:1',
-            'facility_bookings.*.has_outsiders'                       => 'nullable|boolean',
-            'files'                                                        => 'nullable|array|max:10',
-            'files.*'                                                      => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
-            'existing_file_ids'                                            => ['nullable', 'array'],
-            'existing_file_ids.*'                                          => ['integer'],
-            'approved_by' => ["nullable", "array"],
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'priority_level' => 'nullable|integer|in:0,1,2,3',
+            'priority_reason' => 'nullable|string|max:512',
+            'facility_bookings' => 'required|array|min:1',
+            'facility_bookings.*.facility_id' => ['required'],
+            'facility_bookings.*.date' => 'required|date',
+            'facility_bookings.*.time_start' => 'required',
+            'facility_bookings.*.time_end' => 'required',
+            'facility_bookings.*.equipment' => 'array',
+            'facility_bookings.*.equipment.*.equipment_id' => 'required|integer',
+            'facility_bookings.*.equipment.*.quantity_needed' => 'required|integer|min:1',
+            'facility_bookings.*.external_equipment' => 'nullable|array',
+            'facility_bookings.*.external_equipment.*.name' => 'required|string|max:255',
+            'facility_bookings.*.borrowed_equipment' => 'array',
+            'facility_bookings.*.borrowed_equipment.*.equipment_id' => 'required|integer',
+            'facility_bookings.*.borrowed_equipment.*.source_facility_id' => ['required'],
+            'facility_bookings.*.borrowed_equipment.*.quantity_needed' => 'required|integer|min:1',
+            'facility_bookings.*.expected_capacity' => 'nullable|integer|min:1',
+            'facility_bookings.*.has_outsiders' => 'nullable|boolean',
+            'files' => 'nullable|array|max:10',
+            'files.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
+            'existing_file_ids' => ['nullable', 'array'],
+            'existing_file_ids.*' => ['integer'],
+            'approved_by' => ['nullable', 'array'],
         ];
     }
 
@@ -66,92 +60,88 @@ class FacilityFormRequest extends FormRequest
         }
     }
 
-    // public function withValidator(Validator $validator): void
-    // {
-    //     $validator->after(function (Validator $validator) {
-    //         $bookings = $this->input('facility_bookings', []);
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            $bookings = $this->input('facility_bookings', []);
+            if (! is_array($bookings) || empty($bookings)) {
+                return;
+            }
 
-    //         foreach ($bookings as $bookingIndex => $booking) {
-    //             $facilityId = $booking['facility_id'] ?? null;
-    //             $date       = $booking['date'] ?? null;
-    //             $timeStart  = $booking['time_start'] ?? null;
-    //             $timeEnd    = $booking['time_end'] ?? null;
+            $facilityIds = collect($bookings)
+                ->pluck('facility_id')
+                ->merge(collect($bookings)->pluck('borrowed_equipment')->flatten(1)->pluck('source_facility_id'))
+                ->filter()
+                ->unique()
+                ->values();
 
-    //             if (!$facilityId || !$date || !$timeStart || !$timeEnd) continue;
+            $equipmentIds = collect($bookings)
+                ->pluck('equipment')
+                ->flatten(1)
+                ->pluck('equipment_id')
+                ->merge(collect($bookings)->pluck('borrowed_equipment')->flatten(1)->pluck('equipment_id'))
+                ->filter()
+                ->unique()
+                ->values();
 
-    //             $excludeRequestId = $this->route('request')?->id;
+            $validFacilityIds = $facilityIds->isNotEmpty()
+                ? Facility::whereIn('id', $facilityIds)->whereNull('deleted_at')->pluck('id')->all()
+                : [];
 
-    //             // Validate regular equipment
-    //             foreach ($booking['equipment'] ?? [] as $eqIndex => $item) {
-    //                 $eq = Equipment::find($item['equipment_id'] ?? null);
-    //                 if (!$eq) continue;
+            $validEquipmentIds = $equipmentIds->isNotEmpty()
+                ? Equipment::whereIn('id', $equipmentIds)->pluck('id')->all()
+                : [];
 
-    //                 $available = $eq->quantityAvailableInFacility(
-    //                     $facilityId,
-    //                     $date,
-    //                     $timeStart,
-    //                     $timeEnd,
-    //                     $excludeRequestId
-    //                 );
+            foreach ($bookings as $bookingIndex => $booking) {
+                if (isset($booking['facility_id']) && ! in_array($booking['facility_id'], $validFacilityIds)) {
+                    $validator->errors()->add(
+                        "facility_bookings.{$bookingIndex}.facility_id",
+                        'The selected facility is invalid.'
+                    );
+                }
 
-    //                 if ($item['quantity_needed'] > $available) {
-    //                     $validator->errors()->add(
-    //                         "facility_bookings.{$bookingIndex}.equipment.{$eqIndex}.quantity_needed",
-    //                         "{$eq->name} only has {$available} units available in this facility for this time slot."
-    //                     );
-    //                 }
-    //             }
+                foreach ($booking['equipment'] ?? [] as $eqIndex => $item) {
+                    if (isset($item['equipment_id']) && ! in_array($item['equipment_id'], $validEquipmentIds)) {
+                        $validator->errors()->add(
+                            "facility_bookings.{$bookingIndex}.equipment.{$eqIndex}.equipment_id",
+                            'The selected equipment is invalid.'
+                        );
+                    }
+                }
 
-    //             // Validate borrowed equipment
-    //             foreach ($booking['borrowed_equipment'] ?? [] as $eqIndex => $item) {
-    //                 $eq = Equipment::find($item['equipment_id'] ?? null);
-    //                 if (!$eq) continue;
+                foreach ($booking['borrowed_equipment'] ?? [] as $eqIndex => $item) {
+                    if (isset($item['equipment_id']) && ! in_array($item['equipment_id'], $validEquipmentIds)) {
+                        $validator->errors()->add(
+                            "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.equipment_id",
+                            'The selected equipment is invalid.'
+                        );
+                    }
 
-    //                 $sourceFacilityId = $item['source_facility_id'] ?? null;
-    //                 if (!$sourceFacilityId) continue;
-
-    //                 // Can't borrow from the same facility — just use regular equipment
-    //                 if ($sourceFacilityId == $facilityId) {
-    //                     $validator->errors()->add(
-    //                         "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.source_facility_id",
-    //                         "Cannot borrow from the same facility. Use the regular equipment section instead."
-    //                     );
-    //                     continue;
-    //                 }
-
-    //                 $available = $eq->quantityAvailableToBorrowFrom(
-    //                     $sourceFacilityId,
-    //                     $date,
-    //                     $timeStart,
-    //                     $timeEnd,
-    //                     $excludeRequestId
-    //                 );
-
-    //                 if ($item['quantity_needed'] > $available) {
-    //                     $validator->errors()->add(
-    //                         "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.quantity_needed",
-    //                         "{$eq->name} only has {$available} units available to borrow from that facility for this time slot."
-    //                     );
-    //                 }
-    //             }
-    //         }
-    //     });
-    // }
+                    if (isset($item['source_facility_id']) && ! in_array($item['source_facility_id'], $validFacilityIds)) {
+                        $validator->errors()->add(
+                            "facility_bookings.{$bookingIndex}.borrowed_equipment.{$eqIndex}.source_facility_id",
+                            'The selected facility is invalid.'
+                        );
+                    }
+                }
+            }
+        });
+    }
 
     public function attributes(): array
     {
         $attrs = [
-            'facility_bookings.*.facility_id'              => 'facility',
-            'facility_bookings.*.date'                     => 'booking date',
-            'facility_bookings.*.time_start'               => 'start time',
-            'facility_bookings.*.time_end'                 => 'end time',
+            'facility_bookings.*.facility_id' => 'facility',
+            'facility_bookings.*.date' => 'booking date',
+            'facility_bookings.*.time_start' => 'start time',
+            'facility_bookings.*.time_end' => 'end time',
             'facility_bookings.*.equipment.*.quantity_needed' => 'equipment quantity',
-            'facility_bookings.*.external_equipment'       => 'external equipment',
+            'facility_bookings.*.external_equipment' => 'external equipment',
         ];
 
         // Dynamically label each file by its original name
         foreach ($this->file('files', []) as $index => $file) {
-            $attrs["files.{$index}"] = $file?->getClientOriginalName() ?? "file " . ($index + 1);
+            $attrs["files.{$index}"] = $file?->getClientOriginalName() ?? 'file '.($index + 1);
         }
 
         return $attrs;
@@ -160,10 +150,10 @@ class FacilityFormRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'files.*.max'   => 'Each file must be under 10MB. ":attribute" exceeds the limit.',
+            'files.*.max' => 'Each file must be under 10MB. ":attribute" exceeds the limit.',
             'files.*.mimes' => '":attribute" is not an allowed file type. Accepted: JPG, PNG, PDF, DOC, DOCX, XLSX, PPTX.',
-            'files.*.file'  => '":attribute" could not be uploaded.',
-            'files.max'     => 'You may only attach up to 10 files.',
+            'files.*.file' => '":attribute" could not be uploaded.',
+            'files.max' => 'You may only attach up to 10 files.',
         ];
     }
 }

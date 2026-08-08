@@ -33,8 +33,8 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
     if (files.length === 0 && serverFiles.length === 0) return null;
 
     function getFileIcon(mimeType: string) {
-        if (mimeType.startsWith('image/')) return <ImageIcon size={16} className="text-blue-500" />;
-        if (mimeType === 'application/pdf') return <FileText size={16} className="text-red-500" />;
+        if (mimeType.startsWith('image/')) return <ImageIcon size={16} className="text-[var(--ads-ok)]" />;
+        if (mimeType === 'application/pdf') return <FileText size={16} className="text-[var(--ads-danger)]" />;
         return <File size={16} className="text-muted-foreground" />;
     }
 
@@ -76,7 +76,7 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRem
         name: getFilenameFromPath(f.original_name ?? f.path),
         url: f.url ?? `/storage/${f.path}`,
         mime_type: f.mime_type ?? getMimeTypeFromPath(f.path),
-        size: f.size ?? null as number | null,
+        size: f.size ?? (null as number | null),
         isLocal: false as const,
         original_name: f.original_name,
     }));

@@ -1,14 +1,14 @@
-import { format } from "date-fns";
-import { CalendarIcon, Building, User } from "lucide-react";
-import { motion } from "motion/react";
-import { useState, useEffect } from "react";
-import { BookingCard } from "@/components/booking-card";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import type { Facility } from "@/types/request";
+import { format } from 'date-fns';
+import { CalendarIcon, Building, User } from 'lucide-react';
+import { motion } from 'motion/react';
+import { useState, useEffect } from 'react';
+import { BookingCard } from '@/components/booking-card';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import type { Facility } from '@/types/request';
 
 interface FacilityInfoProps {
     facilities: Facility[];
@@ -33,9 +33,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
 
-    const facility = internalFacilityId
-        ? facilities.find((f) => f.id === internalFacilityId)
-        : null;
+    const facility = internalFacilityId ? facilities.find((f) => f.id === internalFacilityId) : null;
 
     // Reset date + schedule when facility changes
     useEffect(() => {
@@ -50,29 +48,30 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
         let cancelled = false;
         setLoadingSchedule(true);
 
-        fetch(route("facility.schedule", { facility: internalFacilityId, date: format(internalDate, "yyyy-MM-dd") }))
+        fetch(route('facility.schedule', { facility: internalFacilityId, date: format(internalDate, 'yyyy-MM-dd') }))
             .then((res) => res.json())
-            .then((data) => { if (!cancelled) setFacilitySchedule(data); })
+            .then((data) => {
+                if (!cancelled) setFacilitySchedule(data);
+            })
             .catch((err) => {
-                console.error("Failed to load schedule:", err);
+                console.error('Failed to load schedule:', err);
                 if (!cancelled) setFacilitySchedule(null);
             })
-            .finally(() => { if (!cancelled) setLoadingSchedule(false); });
+            .finally(() => {
+                if (!cancelled) setLoadingSchedule(false);
+            });
 
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+        };
     }, [internalFacilityId, internalDate]);
 
     return (
-        <div className={"space-y-4 " + (isForSidebar ? "hidden lg:block" : "block lg:hidden")}>
-            {isForSidebar && (
-                <h2 className="font-semibold text-sm text-foreground">Facility Info</h2>
-            )}
+        <div className={'space-y-4 ' + (isForSidebar ? 'hidden lg:block' : 'block lg:hidden')}>
+            {isForSidebar && <p className="ads-eyebrow">Facility info</p>}
 
             {/* Facility picker — owned by this component */}
-            <Select
-                value={internalFacilityId?.toString() ?? ""}
-                onValueChange={(v) => setInternalFacilityId(Number(v))}
-            >
+            <Select value={internalFacilityId?.toString() ?? ''} onValueChange={(v) => setInternalFacilityId(Number(v))}>
                 <SelectTrigger className="w-full">
                     <SelectValue placeholder="Choose a facility…" />
                 </SelectTrigger>
@@ -81,7 +80,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                         <SelectItem key={f.id} value={f.id.toString()}>
                             <span className="font-medium">{f.name}</span>
                             {f.capacity && (
-                                <span className="ml-1.5 text-xs text-muted-foreground flex items-center gap-1">
+                                <span className="ml-1.5 flex items-center gap-1 text-xs text-muted-foreground">
                                     <User className="h-3 w-3" />
                                     {f.capacity}
                                 </span>
@@ -92,24 +91,17 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
             </Select>
 
             {facility ? (
-                <motion.div
-                    key={facility.id}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-4"
-                >
+                <motion.div key={facility.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                     {/* Facility meta */}
                     <div>
-                        <h3 className="font-bold text-xl">{facility.name}</h3>
-                        <div className="flex items-center gap-1 mt-1.5 text-muted-foreground">
+                        <h3 className="text-xl font-bold">{facility.name}</h3>
+                        <div className="mt-1.5 flex items-center gap-1 text-muted-foreground">
                             <Building size={14} />
                             <span className="text-sm">{facility.building}</span>
                         </div>
-                        <div className="flex items-center gap-1 mt-1 text-muted-foreground">
+                        <div className="mt-1 flex items-center gap-1 text-muted-foreground">
                             <User size={14} />
-                            <span className="text-sm">
-                                {facility.capacity ? `${facility.capacity} capacity` : "N/A"}
-                            </span>
+                            <span className="text-sm">{facility.capacity ? `${facility.capacity} capacity` : 'N/A'}</span>
                         </div>
                     </div>
 
@@ -120,51 +112,37 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className={cn(
-                                    "w-full justify-start text-left font-normal",
-                                    !internalDate && "text-muted-foreground"
-                                )}
+                                className={cn('w-full justify-start text-left font-normal', !internalDate && 'text-muted-foreground')}
                             >
                                 <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                                {internalDate ? format(internalDate, "PPP") : "View schedule for a date…"}
+                                {internalDate ? format(internalDate, 'PPP') : 'View schedule for a date…'}
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                                mode="single"
-                                selected={internalDate}
-                                onSelect={setInternalDate}
-                                initialFocus
-                            />
+                            <Calendar mode="single" selected={internalDate} onSelect={setInternalDate} initialFocus />
                         </PopoverContent>
                     </Popover>
 
                     {/* Schedule */}
                     {internalDate && (
                         <div className="space-y-3">
-                            <h4 className="text-sm font-semibold flex flex-wrap items-center gap-1">
+                            <h4 className="flex flex-wrap items-center gap-1 text-sm font-semibold">
                                 <CalendarIcon size={14} />
                                 <span className="text-muted-foreground">Schedule for</span>
-                                <span>{format(internalDate, "PPP")}</span>
+                                <span>{format(internalDate, 'PPP')}</span>
                             </h4>
 
                             {loadingSchedule ? (
-                                <div className="text-sm text-muted-foreground py-4 text-center">
-                                    Loading schedule…
-                                </div>
+                                <div className="py-4 text-center text-sm text-muted-foreground">Loading schedule…</div>
                             ) : facilitySchedule && facilitySchedule.bookings.length > 0 ? (
                                 <div className="space-y-3">
                                     {facilitySchedule.bookings.map((booking, idx) => (
-                                        <motion.div
-                                            key={idx}
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                        >
+                                        <motion.div key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                                             <BookingCard
                                                 booking={{
                                                     facility_id: internalFacilityId!,
                                                     facility_name: booking.request_title,
-                                                    date: format(internalDate, "yyyy-MM-dd"),
+                                                    date: format(internalDate, 'yyyy-MM-dd'),
                                                     time_start: booking.time_start,
                                                     time_end: booking.time_end,
                                                     equipment: [],
@@ -187,7 +165,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                                 <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
-                                    className="text-sm text-muted-foreground py-4 text-center border rounded-md bg-muted/10"
+                                    className="rounded-md border bg-muted/10 py-4 text-center text-sm text-muted-foreground"
                                 >
                                     No bookings for this date
                                 </motion.div>
@@ -196,9 +174,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                     )}
                 </motion.div>
             ) : (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                    Pick a facility above to view its details and schedule.
-                </p>
+                <p className="py-6 text-center text-sm text-muted-foreground">Pick a facility above to view its details and schedule.</p>
             )}
         </div>
     );

@@ -1,51 +1,33 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import axios from "axios";
-import { ArrowUpRight, ArrowLeft, ArrowRight, Bell, ClipboardList, CirclePlus, MailOpen } from 'lucide-react';
-import { ListFilter } from 'lucide-react';
-import { ArrowDownUp } from 'lucide-react';
-import moment from 'moment';
-import { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import {
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    ResponsiveContainer,
-    Tooltip,
-    Pie,
-    PieChart,
-} from 'recharts';
+    Activity,
+    AlertTriangle,
+    ArrowDownUp,
+    ArrowUpRight,
+    Bell,
+    Calendar,
+    CheckCircle2,
+    CirclePlus,
+    ClipboardList,
+    ListFilter,
+    MailOpen,
+} from 'lucide-react';
+import moment from 'moment';
+import { useMemo, useState, useEffect } from 'react';
+import { AreaChart, Area, XAxis, YAxis, Pie, PieChart } from 'recharts';
 import { ActivityFeed } from '@/components/activity-feed';
 import type { AuditLog } from '@/components/activity-feed';
-import AvatarWithInitials from '@/components/avatar-with-initials';
 import FacilityCalendar from '@/components/FacilityCalendar';
-import RequestCard from '@/components/request-card';
-import SmallRequestCard from '@/components/small-request-card';
-import SmartPagination from "@/components/SmartPagination";
+import RequestRow from '@/components/request-row';
+import SmartPagination from '@/components/SmartPagination';
+import StatTile from '@/components/stat-tile';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import type {
-    CarouselApi} from "@/components/ui/carousel";
-import {
-    Carousel,
-    CarouselContent,
-    CarouselItem,
-    CarouselNext,
-    CarouselPrevious
-} from "@/components/ui/carousel";
-import type {
-    ChartConfig} from '@/components/ui/chart';
-import {
-    ChartContainer,
-    ChartLegend,
-    ChartLegendContent,
-    ChartTooltip,
-    ChartTooltipContent,
-} from '@/components/ui/chart';
+import type { ChartConfig } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
@@ -67,6 +49,13 @@ type ChartRow = {
     total: number;
 };
 
+type Kpis = {
+    awaitingDecision: number;
+    needsAction: number;
+    approvedThisWeek: number;
+    eventsToday: number;
+};
+
 type InboxNotification = {
     id: string;
     title: string;
@@ -77,6 +66,9 @@ type InboxNotification = {
     created_at: string | null;
     read_at: string | null;
 };
+
+const TABS = ['overview', 'calendar', 'activity', 'inbox'] as const;
+type Tab = (typeof TABS)[number];
 
 const chartConfig = {
     total: {
@@ -107,13 +99,24 @@ function formatEventLabel(event: string): string {
     return eventLabels[event] ?? event
         .replace(/^[^.]+\./, '')
         .replace(/_/g, ' ')
-        .replace(/\b\w/g, letter => letter.toUpperCase());
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 const CHART_COLORS = [
     'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
     'var(--chart-4)', 'var(--chart-5)',
 ];
+
+function greetingFor(name: string): string {
+    const hour = new Date().getHours();
+    const time = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    return `${time}, ${name.split(' ')[0]}`;
+}
+
+function getInitialTab(): Tab {
+    const tab = new URLSearchParams(window.location.search).get('tab') as Tab | null;
+    return tab && TABS.includes(tab) ? tab : 'overview';
+}
 
 export default function Dashboard({
     pending,
@@ -122,15 +125,15 @@ export default function Dashboard({
     auditLogs: auditLogsProp,
     chartData,
     notifications: notificationsProp,
+    kpis,
 }: {
     pending: { data: FacilityRequest[] };
-    approved: FacilityRequest[];
-    denied: FacilityRequest[];
     initialEvents: Event[];
     buildings: string[];
     auditLogs: { data: AuditLog[]; current_page: number; last_page: number };
     chartData: ChartRow[];
     notifications: InboxNotification[];
+    kpis: Kpis;
 }) {
     const [selectedBuildings, setSelectedBuildings] = useState<string[]>(buildings);
     const [range, setRange] = useState<'day' | 'week' | 'month' | '3months'>('week');
@@ -142,7 +145,7 @@ export default function Dashboard({
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp.data ?? []);
     const [currentPage, setCurrentPage] = useState(auditLogsProp.current_page ?? 1);
     const [lastPage, setLastPage] = useState(auditLogsProp.last_page ?? 1);
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState<Tab>(getInitialTab);
     const [notifications, setNotifications] = useState<InboxNotification[]>(notificationsProp ?? []);
     const [unreadCount, setUnreadCount] = useState(Number(auth.user.notification_unread_count ?? 0));
     const [markingNotificationsRead, setMarkingNotificationsRead] = useState(false);
@@ -164,7 +167,7 @@ export default function Dashboard({
         try {
             await axios.post('/dashboard/notifications/mark-read');
             const readAt = new Date().toISOString();
-            setNotifications(prev => prev.map(notification => ({
+            setNotifications((prev) => prev.map((notification) => ({
                 ...notification,
                 read_at: notification.read_at ?? readAt,
             })));
@@ -176,24 +179,12 @@ export default function Dashboard({
     };
 
     const handleTabChange = (value: string) => {
-        setActiveTab(value);
+        setActiveTab(value as Tab);
 
         if (value === 'inbox') {
             void markInboxRead();
         }
     };
-
-    const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
-    const [canScrollNext, setCanScrollNext] = useState(false);
-    const [canScrollPrev, setCanScrollPrev] = useState(false);
-
-    const [pendingConflictApi, setPendingConflictApi] = useState<CarouselApi | null>(null);
-    const [pendingConflictCanScrollNext, setPendingConflictCanScrollNext] = useState(false);
-    const [pendingConflictCanScrollPrev, setPendingConflictCanScrollPrev] = useState(false);
-
-    const [approvedConflictApi, setApprovedConflictApi] = useState<CarouselApi | null>(null);
-    const [approvedConflictCanScrollNext, setApprovedConflictCanScrollNext] = useState(false);
-    const [approvedConflictCanScrollPrev, setApprovedConflictCanScrollPrev] = useState(false);
 
     const [logFilter, setLogFilter] = useState<string>('all');
     const [logSort, setLogSort] = useState<'newest' | 'oldest'>('newest');
@@ -201,7 +192,7 @@ export default function Dashboard({
     const filteredLogs = useMemo(() => {
         let logs = [...auditLogs];
         if (logFilter !== 'all') {
-            logs = logs.filter(log => log.event === logFilter);
+            logs = logs.filter((log) => log.event === logFilter);
         }
         logs.sort((a, b) => {
             const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -214,53 +205,17 @@ export default function Dashboard({
         setLoading(true);
 
         fetch(`/dashboard/chart-data?range=${range}`)
-            .then(r => r.json())
-            .then(chartJson => setData(fillDateRange(chartJson, range)))
+            .then((r) => r.json())
+            .then((chartJson) => setData(fillDateRange(chartJson, range)))
             .finally(() => setLoading(false));
 
         fetchAuditLogs(1, range);
     }, [range]);
 
-    useEffect(() => {
-        if (!carouselApi) return;
-        const update = () => {
-            setCanScrollNext(carouselApi.canScrollNext());
-            setCanScrollPrev(carouselApi.canScrollPrev());
-        };
-        update();
-        carouselApi.on("select", update);
-        carouselApi.on("reInit", update);
-        return () => { carouselApi.off("select", update); };
-    }, [carouselApi]);
-
-    useEffect(() => {
-        if (!pendingConflictApi) return;
-        const update = () => {
-            setPendingConflictCanScrollNext(pendingConflictApi.canScrollNext());
-            setPendingConflictCanScrollPrev(pendingConflictApi.canScrollPrev());
-        };
-        update();
-        pendingConflictApi.on("select", update);
-        pendingConflictApi.on("reInit", update);
-        return () => { pendingConflictApi.off("select", update); };
-    }, [pendingConflictApi]);
-
-    useEffect(() => {
-        if (!approvedConflictApi) return;
-        const update = () => {
-            setApprovedConflictCanScrollNext(approvedConflictApi.canScrollNext());
-            setApprovedConflictCanScrollPrev(approvedConflictApi.canScrollPrev());
-        };
-        update();
-        approvedConflictApi.on("select", update);
-        approvedConflictApi.on("reInit", update);
-        return () => { approvedConflictApi.off("select", update); };
-    }, [approvedConflictApi]);
-
-    const isAdmin: boolean = hasRole("admin") || hasRole("Super Admin");
+    const isAdmin: boolean = hasRole('admin') || hasRole('Super Admin');
 
     const rangeOptions = {
-        day: "Today",
+        day: 'Today',
         week: 'Last 7 days',
         month: 'This month',
         '3months': 'Last 3 months',
@@ -269,30 +224,24 @@ export default function Dashboard({
     const rangeLabel = rangeOptions[range];
 
     const toggleBuilding = (building: string) => {
-        setSelectedBuildings(prev =>
+        setSelectedBuildings((prev) =>
             prev.includes(building)
-                ? prev.filter(b => b !== building)
+                ? prev.filter((b) => b !== building)
                 : [...prev, building]
         );
     };
 
-    const filteredEvents = useMemo(() => {
-        return initialEvents.filter(e =>
-            !e.building || selectedBuildings.includes(e.building)
-        );
-    }, [initialEvents, selectedBuildings]);
-
     const pendingConflictRequests = pending.data.filter(
-        r => r.pending_conflicts && r.pending_conflicts.length > 0
+        (r) => r.pending_conflicts && r.pending_conflicts.length > 0
     );
     const approvedConflictRequests = pending.data.filter(
-        r => r.approved_conflicts && r.approved_conflicts.length > 0
+        (r) => r.approved_conflicts && r.approved_conflicts.length > 0
     );
 
     const pieData = useMemo(() => {
         const counts: Record<string, number> = {};
-        auditLogs.forEach(log => {
-            const key = typeof log.event === 'object' ? (log.event as any).value ?? String(log.event) : String(log.event);
+        auditLogs.forEach((log) => {
+            const key = typeof log.event === 'object' ? (log.event as { value?: string }).value ?? String(log.event) : String(log.event);
             counts[key] = (counts[key] ?? 0) + 1;
         });
         return Object.entries(counts)
@@ -318,7 +267,7 @@ export default function Dashboard({
 
     function fillDateRange(data: ChartRow[], range: 'day' | 'week' | 'month' | '3months'): ChartRow[] {
         if (range === 'day') {
-            const dataMap = new Map(data.map(d => [d.date, d.total]));
+            const dataMap = new Map(data.map((d) => [d.date, d.total]));
             return Array.from({ length: 24 }, (_, i) => {
                 const hour = String(i).padStart(2, '0') + ':00';
                 return { date: hour, total: dataMap.get(hour) ?? 0 };
@@ -327,7 +276,7 @@ export default function Dashboard({
 
         const days = range === 'week' ? 7 : range === 'month' ? 30 : 90;
         const filled: ChartRow[] = [];
-        const dataMap = new Map(data.map(d => [d.date, d.total]));
+        const dataMap = new Map(data.map((d) => [d.date, d.total]));
         for (let i = days - 1; i >= 0; i--) {
             const date = moment.utc().subtract(i, 'days').format('YYYY-MM-DD');
             filled.push({ date, total: dataMap.get(date) ?? 0 });
@@ -335,6 +284,8 @@ export default function Dashboard({
         return filled;
     }
 
+    const roles = auth.user.roles?.length ? auth.user.roles : ['Member'];
+    const cardClass = 'rounded-lg border-border shadow-none';
 
     return (
         <DefaultLayout hasPadding={false}>
@@ -348,277 +299,221 @@ export default function Dashboard({
                             <span className="relative">
                                 Inbox
                                 {unreadCount > 0 && (
-                                    <span className="absolute -right-2 -top-1 size-2 rounded-full bg-red-500" />
+                                    <span className="absolute -right-2 -top-1 size-2 rounded-full bg-[var(--primary)]" />
                                 )}
                             </span>
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="overview" className="mt-4 flex flex-col gap-10">
-                        <div className="flex gap-4 items-center">
-                            <AvatarWithInitials className='border' username={auth.user.name} avatarSrc={auth.user.profile} />
-                            <div className="flex flex-col gap-0.5">
-                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Welcome back</p>
-                                <h1 className='text-3xl font-bold tracking-tight'>{auth.user.name}</h1>
+                    {/* ── Overview ─────────────────────────────────────────── */}
+                    <TabsContent value="overview" className="mt-6 flex flex-col gap-6">
+                        <div className="flex flex-wrap items-end justify-between gap-4">
+                            <div className="flex flex-col gap-1">
+                                <p className="ads-eyebrow">
+                                    {moment().format('dddd, MMMM D')}
+                                </p>
+                                <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
+                                    {greetingFor(auth.user.name)}
+                                </h1>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center rounded-[4px] bg-[var(--ads-neutral-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--ads-neutral)] capitalize">
+                                    {roles.join(', ')}
+                                </span>
+                                <Button size="sm" asChild>
+                                    <Link href={route('request.create')}>
+                                        <CirclePlus className="h-4 w-4" />
+                                        New request
+                                    </Link>
+                                </Button>
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-2">
-                            <Carousel
-                                opts={{ align: "start", dragFree: true, containScroll: "trimSnaps" }}
-                                className="w-full"
-                                setApi={setCarouselApi}
-                            >
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="flex flex-col gap-0.5">
-                                        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                                            {isAdmin ? "Queue" : "Your Queue"}
-                                        </p>
-                                        <h2 className='text-base font-semibold tracking-tight'>
-                                            {isAdmin ? "Pending Requests" : "Your Pending Requests"}
-                                        </h2>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Button
-                                            variant="outline"
-                                            size="icon"
-                                            className="size-8 rounded-full"
-                                            onClick={() => carouselApi?.scrollPrev()}
-                                            disabled={!canScrollPrev}
-                                        >
-                                            <ArrowLeft className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="icon"
-                                            className="size-8 rounded-full"
-                                            onClick={() => carouselApi?.scrollNext()}
-                                            disabled={!canScrollNext}
-                                        >
-                                            <ArrowRight className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
+                        {/* KPI strip */}
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            {isAdmin ? (
+                                <>
+                                    <StatTile
+                                        variant="accent"
+                                        icon={ClipboardList}
+                                        label="Awaiting decision"
+                                        value={kpis.awaitingDecision}
+                                        sub="pending requests"
+                                    />
+                                    <StatTile
+                                        variant={kpis.needsAction > 0 ? 'warning' : 'default'}
+                                        icon={AlertTriangle}
+                                        label="Needs action"
+                                        value={kpis.needsAction}
+                                        sub="conflicts to review"
+                                    />
+                                    <StatTile
+                                        icon={CheckCircle2}
+                                        label="Approved this week"
+                                        value={kpis.approvedThisWeek}
+                                        sub="last 7 days"
+                                    />
+                                    <StatTile
+                                        icon={Calendar}
+                                        label="Events today"
+                                        value={kpis.eventsToday}
+                                        sub={`${buildings.length} buildings`}
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <StatTile
+                                        variant="accent"
+                                        icon={ClipboardList}
+                                        label="My pending"
+                                        value={kpis.awaitingDecision}
+                                        sub="requests"
+                                    />
+                                    <StatTile
+                                        icon={CheckCircle2}
+                                        label="My approved this week"
+                                        value={kpis.approvedThisWeek}
+                                        sub="last 7 days"
+                                    />
+                                    <StatTile
+                                        icon={Calendar}
+                                        label="My events today"
+                                        value={kpis.eventsToday}
+                                        sub="bookings"
+                                    />
+                                </>
+                            )}
+                        </div>
 
-                                <div className="relative">
-                                    {/* Left fade */}
-                                    <div className={cn(
-                                        "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
-                                        canScrollPrev ? "opacity-100" : "opacity-0"
-                                    )} />
-                                    {/* Right fade */}
-                                    <div className={cn(
-                                        "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
-                                        canScrollNext ? "opacity-100" : "opacity-0"
-                                    )} />
+                        {/* Conflict banners */}
+                        {(isAdmin && (pendingConflictRequests.length > 0 || approvedConflictRequests.length > 0)) && (
+                            <div className="flex flex-col gap-2">
+                                {pendingConflictRequests.length > 0 && (
+                                    <Link
+                                        href={route('requests.index', { status: 'pending' })}
+                                        className="flex items-center gap-3 rounded-lg border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)] px-4 py-3 transition-colors hover:bg-[var(--ads-amber-bg)]/70"
+                                    >
+                                        <span className="size-2 shrink-0 rounded-full bg-[var(--ads-amber)]" />
+                                        <span className="text-sm font-semibold text-[var(--ads-amber)]">
+                                            Pending conflicts
+                                        </span>
+                                        <span className="text-xs text-[var(--ads-amber)]/80">
+                                            {pendingConflictRequests.length} request{pendingConflictRequests.length !== 1 ? 's' : ''} need review
+                                        </span>
+                                        <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-[var(--ads-amber)]" />
+                                    </Link>
+                                )}
+                                {approvedConflictRequests.length > 0 && (
+                                    <Link
+                                        href={route('requests.index', { status: 'approved' })}
+                                        className="flex items-center gap-3 rounded-lg border border-[var(--ads-danger)]/40 bg-[var(--ads-danger-bg)] px-4 py-3 transition-colors hover:bg-[var(--ads-danger-bg)]/70"
+                                    >
+                                        <span className="size-2 shrink-0 rounded-full bg-[var(--ads-danger)]" />
+                                        <span className="text-sm font-semibold text-[var(--ads-danger)]">
+                                            Approved conflicts
+                                        </span>
+                                        <span className="text-xs text-[var(--ads-danger)]/80">
+                                            {approvedConflictRequests.length} request{approvedConflictRequests.length !== 1 ? 's' : ''} need review
+                                        </span>
+                                        <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-[var(--ads-danger)]" />
+                                    </Link>
+                                )}
+                            </div>
+                        )}
 
+                        {/* Queue + live activity */}
+                        <div className="grid items-start gap-4 lg:grid-cols-[5fr_3fr]">
+                            <Card className={cardClass}>
+                                <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-border">
+                                    <div>
+                                        <CardTitle className="text-sm font-semibold">
+                                            {isAdmin ? 'Pending requests' : 'Your pending requests'}
+                                        </CardTitle>
+                                        <CardDescription>
+                                            {isAdmin ? 'Awaiting a decision' : 'Requests still being processed'}
+                                        </CardDescription>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">
+                                            {pending.data.length} shown
+                                        </span>
+                                        <Button variant="ghost" size="sm" asChild>
+                                            <Link href={route('requests.index', { status: 'pending' })}>
+                                                View all
+                                                <ArrowUpRight className="h-4 w-4" />
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-0">
                                     {pending.data.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center gap-3 py-10 border rounded-lg border-dashed text-center">
-                                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted">
+                                        <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+                                            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
                                                 <ClipboardList className="h-5 w-5 text-muted-foreground" />
                                             </div>
                                             <div className="flex flex-col gap-1">
                                                 <p className="text-sm font-semibold">No pending requests</p>
-                                                <p className="text-sm text-muted-foreground">You're all caught up! Submit a new facility request to get started.</p>
+                                                <p className="text-sm text-muted-foreground">
+                                                    You're all caught up! Submit a new facility request to get started.
+                                                </p>
                                             </div>
-                                            <Link href={route("request.create")}>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="mt-1 gap-2 relative isolate overflow-hidden border-primary text-primary bg-transparent hover:bg-transparent hover:text-primary-foreground before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary before:transition-transform before:duration-300 before:ease-out hover:before:scale-x-100"
-                                                >
-                                                    <CirclePlus className="h-4 w-4 z-10" />
-                                                    <span className="z-10">Create Request</span>
+                                            <Link href={route('request.create')}>
+                                                <Button size="sm" variant="outline" className="mt-1 gap-2">
+                                                    <CirclePlus className="h-4 w-4" />
+                                                    Create Request
                                                 </Button>
                                             </Link>
                                         </div>
                                     ) : (
-                                        <div className="relative">
-                                            <div className={cn(
-                                                "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
-                                                canScrollPrev ? "opacity-100" : "opacity-0"
-                                            )} />
-                                            <div className={cn(
-                                                "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
-                                                canScrollNext ? "opacity-100" : "opacity-0"
-                                            )} />
-                                            <CarouselContent className="-ml-4">
-                                                {pending.data.map(request => (
-                                                    <CarouselItem key={request.id} className="pl-4 basis-auto">
-                                                        <SmallRequestCard request={request} className='min-w-[400px] max-w-[400px]' />
-                                                    </CarouselItem>
-                                                ))}
-                                                <CarouselItem className="pl-4 basis-auto">
-                                                    <Link href={route("requests.index", { status: "pending" })}>
-                                                        <div className="min-w-[160px] max-w-[160px] h-full min-h-[160px] border rounded-lg flex flex-col items-center justify-center gap-2 text-sm font-semibold hover:bg-muted transition-colors cursor-pointer">
-                                                            <ArrowUpRight size={20} />
-                                                            <span>See All</span>
-                                                        </div>
-                                                    </Link>
-                                                </CarouselItem>
-                                            </CarouselContent>
+                                        <div className="flex flex-col">
+                                            {pending.data.slice(0, 6).map((request) => (
+                                                <RequestRow key={request.id} request={request} />
+                                            ))}
                                         </div>
                                     )}
-                                </div>
-                            </Carousel>
+                                </CardContent>
+                            </Card>
+
+                            <Card className={cardClass}>
+                                <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-border">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
+                                            <Activity className="h-4 w-4 text-[var(--ads-ok)]" />
+                                            Live activity
+                                        </CardTitle>
+                                        <CardDescription>Latest system events</CardDescription>
+                                    </div>
+                                    <Button variant="ghost" size="sm" onClick={() => setActiveTab('activity')}>
+                                        View all
+                                        <ArrowUpRight className="h-4 w-4" />
+                                    </Button>
+                                </CardHeader>
+                                <CardContent className="p-4">
+                                    <ActivityFeed auditLogs={auditLogs.slice(0, 6)} />
+                                </CardContent>
+                            </Card>
                         </div>
-
-                        {(pendingConflictRequests.length > 0 || approvedConflictRequests.length > 0) && (
-                            <div className="flex flex-col gap-6">
-                                <div className="flex flex-col gap-0.5">
-                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Attention needed</p>
-                                    <h2 className="text-base font-semibold tracking-tight">Requests with Conflicts</h2>
-                                </div>
-
-                                {pendingConflictRequests.length > 0 && (
-                                    <div className="flex flex-col gap-2">
-                                        <Carousel
-                                            opts={{ align: "start", dragFree: true, containScroll: "trimSnaps" }}
-                                            className="w-full"
-                                            setApi={setPendingConflictApi}
-                                        >
-                                            <div className="flex justify-between items-center mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                                                        Pending Conflicts
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {pendingConflictRequests.length} request{pendingConflictRequests.length !== 1 ? 's' : ''}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="icon"
-                                                        className="size-8 rounded-full"
-                                                        onClick={() => carouselApi?.scrollPrev()}
-                                                        disabled={!canScrollPrev}
-                                                    >
-                                                        <ArrowLeft className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="icon"
-                                                        className="size-8 rounded-full"
-                                                        onClick={() => carouselApi?.scrollNext()}
-                                                        disabled={!canScrollNext}
-                                                    >
-                                                        <ArrowRight className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <div className="relative">
-                                                <div className={cn(
-                                                    "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
-                                                    pendingConflictCanScrollPrev ? "opacity-100" : "opacity-0"
-                                                )} />
-                                                <div className={cn(
-                                                    "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
-                                                    pendingConflictCanScrollNext ? "opacity-100" : "opacity-0"
-                                                )} />
-
-                                                <CarouselContent className="-ml-4">
-                                                    {pendingConflictRequests.map(request => (
-                                                        <CarouselItem key={request.id} className="pl-4 basis-auto">
-                                                            <SmallRequestCard
-                                                                request={request}
-                                                                className="min-w-[400px] max-w-[400px] border-yellow-300 dark:border-yellow-700"
-                                                            />
-                                                        </CarouselItem>
-                                                    ))}
-                                                </CarouselContent>
-                                            </div>
-                                        </Carousel>
-                                    </div>
-                                )}
-
-                                {approvedConflictRequests.length > 0 && (
-                                    <div className="flex flex-col gap-2">
-                                        <Carousel
-                                            opts={{ align: "start", dragFree: true, containScroll: "trimSnaps" }}
-                                            className="w-full"
-                                            setApi={setApprovedConflictApi}
-                                        >
-                                            <div className="flex justify-between items-center mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-700">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                                                        Approved Conflicts
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {approvedConflictRequests.length} request{approvedConflictRequests.length !== 1 ? 's' : ''}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="icon"
-                                                        className="size-8 rounded-full"
-                                                        onClick={() => carouselApi?.scrollPrev()}
-                                                        disabled={!canScrollPrev}
-                                                    >
-                                                        <ArrowLeft className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="icon"
-                                                        className="size-8 rounded-full"
-                                                        onClick={() => carouselApi?.scrollNext()}
-                                                        disabled={!canScrollNext}
-                                                    >
-                                                        <ArrowRight className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <div className="relative">
-                                                <div className={cn(
-                                                    "pointer-events-none absolute left-0 top-0 h-full w-16 z-10 bg-gradient-to-r from-background to-transparent transition-opacity duration-300",
-                                                    approvedConflictCanScrollPrev ? "opacity-100" : "opacity-0"
-                                                )} />
-                                                <div className={cn(
-                                                    "pointer-events-none absolute right-0 top-0 h-full w-16 z-10 bg-gradient-to-l from-background to-transparent transition-opacity duration-300",
-                                                    approvedConflictCanScrollNext ? "opacity-100" : "opacity-0"
-                                                )} />
-
-                                                <CarouselContent className="-ml-4">
-                                                    {approvedConflictRequests.map(request => (
-                                                        <CarouselItem key={request.id} className="pl-4 basis-auto">
-                                                            <SmallRequestCard
-                                                                request={request}
-                                                                className="min-w-[400px] max-w-[400px] border-red-300 dark:border-red-700"
-                                                            />
-                                                        </CarouselItem>
-                                                    ))}
-                                                </CarouselContent>
-                                            </div>
-                                        </Carousel>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </TabsContent>
 
+                    {/* ── Schedule ─────────────────────────────────────────── */}
                     <TabsContent value="calendar">
                         <div className="mt-4">
-                            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                                <h2 className="font-semibold text-sm text-foreground">Facility Calendar Schedule</h2>
+                            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                                <h2 className="text-sm font-semibold text-foreground">Facility Calendar Schedule</h2>
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="sm" className="flex items-center gap-2">
                                             <ListFilter className="h-4 w-4" />
                                             <span>Filter Buildings</span>
                                             {selectedBuildings.length < buildings.length && (
-                                                <span className="ml-1 rounded-full bg-primary text-primary-foreground text-xs w-4 h-4 flex items-center justify-center">
+                                                <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
                                                     {selectedBuildings.length}
                                                 </span>
                                             )}
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-56 p-3" align="end">
-                                        <div className="flex items-center justify-between mb-3">
+                                        <div className="mb-3 flex items-center justify-between">
                                             <p className="text-sm font-semibold">Buildings</p>
                                             <button
                                                 className="text-xs text-muted-foreground hover:text-foreground"
@@ -632,17 +527,14 @@ export default function Dashboard({
                                             </button>
                                         </div>
                                         <div className="flex flex-col gap-2">
-                                            {buildings.map(building => (
+                                            {buildings.map((building) => (
                                                 <div key={building} className="flex items-center gap-2">
                                                     <Checkbox
                                                         id={`building-${building}`}
                                                         checked={selectedBuildings.includes(building)}
                                                         onCheckedChange={() => toggleBuilding(building)}
                                                     />
-                                                    <label
-                                                        htmlFor={`building-${building}`}
-                                                        className="text-sm cursor-pointer"
-                                                    >
+                                                    <label htmlFor={`building-${building}`} className="cursor-pointer text-sm">
                                                         {building}
                                                     </label>
                                                 </div>
@@ -660,17 +552,17 @@ export default function Dashboard({
                         </div>
                     </TabsContent>
 
+                    {/* ── Activity ─────────────────────────────────────────── */}
                     <TabsContent value="activity">
-                        <div className="flex flex-col gap-8 mt-6">
-                            {/* Header row */}
-                            <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="mt-6 flex flex-col gap-8">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div className="flex flex-col gap-0.5">
-                                    <h2 className="font-bold text-xl tracking-tight">Activity Report</h2>
+                                    <h2 className="text-xl font-bold tracking-tight">Activity Report</h2>
                                     <p className="text-sm text-muted-foreground">{rangeLabel} — system events over time</p>
                                 </div>
 
-                                <Select value={range} onValueChange={val => setRange(val as typeof range)}>
-                                    <SelectTrigger className="w-38 h-8 text-xs">
+                                <Select value={range} onValueChange={(val) => setRange(val as typeof range)}>
+                                    <SelectTrigger className="h-8 w-38 text-xs">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -681,30 +573,27 @@ export default function Dashboard({
                                 </Select>
                             </div>
 
-                            <div className="flex flex-col gap-2 xl:grid grid-cols-[5fr_3fr]">
-
-                                {/* Chart */}
-                                <Card className="overflow-hidden">
+                            <div className="flex flex-col gap-2 xl:grid xl:grid-cols-[5fr_3fr]">
+                                <Card className={cn(cardClass, 'overflow-hidden')}>
                                     <CardHeader className="pb-2">
                                         <div className="flex items-center justify-between">
                                             <CardTitle className="text-sm font-semibold">Events per day</CardTitle>
                                             <div className="flex items-center gap-1.5">
-                                                <span className="inline-block w-2 h-2 rounded-full bg-primary" />
+                                                <span className="inline-block h-2 w-2 rounded-full bg-primary" />
                                                 <span className="text-sm text-muted-foreground">Total events</span>
                                             </div>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="px-2 pb-4">
-
                                         {loading ? (
-                                            <div className="h-[300px] flex items-center justify-center">
+                                            <div className="flex h-[300px] items-center justify-center">
                                                 <div className="flex flex-col items-center gap-3">
-                                                    <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                                     <p className="text-sm text-muted-foreground">Fetching data...</p>
                                                 </div>
                                             </div>
                                         ) : data.length === 0 ? (
-                                            <div className="h-[300px] flex items-center justify-center">
+                                            <div className="flex h-[300px] items-center justify-center">
                                                 <p className="text-sm text-muted-foreground">No activity in this period.</p>
                                             </div>
                                         ) : (
@@ -724,15 +613,15 @@ export default function Dashboard({
                                                         tickLine={false}
                                                         axisLine={false}
                                                         tickMargin={10}
-                                                        interval={range === 'day' ? 2 : "preserveStartEnd"}
+                                                        interval={range === 'day' ? 2 : 'preserveStartEnd'}
                                                         minTickGap={range === 'day' ? 0 : 40}
                                                         tickFormatter={(val) => {
                                                             if (range === 'day') {
                                                                 const h = parseInt(val);
                                                                 if (h % 4 !== 0 && h !== 23) return '';
-                                                                return moment(val, "HH:mm").format("h A");
+                                                                return moment(val, 'HH:mm').format('h A');
                                                             }
-                                                            return moment(val).format("MMM D");
+                                                            return moment(val).format('MMM D');
                                                         }}
                                                     />
                                                     <YAxis
@@ -745,9 +634,9 @@ export default function Dashboard({
                                                         cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
                                                         content={
                                                             <ChartTooltipContent
-                                                                labelFormatter={val => range === 'day'
-                                                                    ? `Today at ${moment(val, "HH:mm").format("h:mm A")}`
-                                                                    : moment(val).format("dddd, MMM D YYYY")
+                                                                labelFormatter={(val) => range === 'day'
+                                                                    ? `Today at ${moment(val, 'HH:mm').format('h:mm A')}`
+                                                                    : moment(val).format('dddd, MMM D YYYY')
                                                                 }
                                                             />
                                                         }
@@ -767,27 +656,22 @@ export default function Dashboard({
                                     </CardContent>
                                 </Card>
 
-                                <Card className="overflow-hidden">
+                                <Card className={cn(cardClass, 'overflow-hidden')}>
                                     <CardHeader className="pb-2">
                                         <CardTitle className="text-sm font-semibold">Activity Breakdown</CardTitle>
                                         <CardDescription>Distribution of activity types in this period</CardDescription>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="flex flex-col md:flex-row items-center gap-4">
+                                        <div className="flex flex-col items-center gap-4 md:flex-row">
                                             {!logsLoading && pieData.length > 0 && (
-                                                <div className="flex flex-col md:flex-row items-center gap-4 px-4 pb-5">
+                                                <div className="flex flex-col items-center gap-4 px-4 pb-5 md:flex-row">
                                                     <ChartContainer
                                                         config={pieChartConfig}
                                                         className="mx-auto aspect-square max-h-[260px] min-w-[220px] [&_.recharts-pie-label-text]:fill-foreground"
                                                     >
                                                         <PieChart>
                                                             <ChartTooltip
-                                                                content={
-                                                                    <ChartTooltipContent
-                                                                        nameKey="event"
-                                                                        hideLabel
-                                                                    />
-                                                                }
+                                                                content={<ChartTooltipContent nameKey="event" hideLabel />}
                                                             />
                                                             <Pie
                                                                 data={pieData}
@@ -797,18 +681,17 @@ export default function Dashboard({
                                                         </PieChart>
                                                     </ChartContainer>
 
-                                                    {/* Legend */}
-                                                    <div className="flex flex-col gap-2 w-full">
+                                                    <div className="flex w-full flex-col gap-2">
                                                         {pieData.map((row, i) => (
                                                             <div key={row.event} className="flex items-center justify-between gap-2 text-xs">
-                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                <div className="flex min-w-0 items-center gap-2">
                                                                     <span
-                                                                        className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                                                                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
                                                                         style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
                                                                     />
                                                                     <span className="truncate text-muted-foreground">{row.label}</span>
                                                                 </div>
-                                                                <span className="font-semibold tabular-nums shrink-0">{row.count}</span>
+                                                                <span className="shrink-0 font-semibold tabular-nums">{row.count}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -819,42 +702,40 @@ export default function Dashboard({
                                 </Card>
                             </div>
 
-
                             {logsLoading ? (
                                 <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                                    <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                     Loading activity...
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-3">
-                                    {/* Filter + Sort bar */}
-                                    <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <Popover>
                                             <PopoverTrigger asChild>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     className={cn(
-                                                        "flex items-center gap-2",
-                                                        logSort !== 'newest' && "border-primary text-primary bg-primary/5"
+                                                        'flex items-center gap-2',
+                                                        logSort !== 'newest' && 'border-primary bg-primary/5 text-primary'
                                                     )}
                                                 >
                                                     <ArrowDownUp size={14} />
                                                     <span>Sort By</span>
                                                 </Button>
                                             </PopoverTrigger>
-                                            <PopoverContent className="p-0 w-44" align="start">
-                                                <p className="px-3 pt-3 pb-1 text-xs text-muted-foreground font-semibold">Sort By</p>
+                                            <PopoverContent className="w-44 p-0" align="start">
+                                                <p className="px-3 pb-1 pt-3 text-xs font-semibold text-muted-foreground">Sort By</p>
                                                 <div className="flex flex-col p-1">
                                                     {([
                                                         { label: 'Newest first', value: 'newest' },
                                                         { label: 'Oldest first', value: 'oldest' },
-                                                    ] as const).map(opt => (
+                                                    ] as const).map((opt) => (
                                                         <Button
                                                             key={opt.value}
                                                             variant={logSort === opt.value ? 'secondary' : 'ghost'}
                                                             size="sm"
-                                                            className="justify-start w-full px-2"
+                                                            className="w-full justify-start px-2"
                                                             onClick={() => setLogSort(opt.value)}
                                                         >
                                                             {opt.label}
@@ -870,23 +751,23 @@ export default function Dashboard({
                                                     variant="outline"
                                                     size="sm"
                                                     className={cn(
-                                                        "flex items-center gap-2",
-                                                        logFilter !== 'all' && "border-primary text-primary bg-primary/5"
+                                                        'flex items-center gap-2',
+                                                        logFilter !== 'all' && 'border-primary bg-primary/5 text-primary'
                                                     )}
                                                 >
                                                     <ListFilter size={14} />
                                                     <span>Filter</span>
                                                     {logFilter !== 'all' && (
-                                                        <span className="flex items-center justify-center bg-primary/12 text-primary h-4 min-w-[16px] px-1 rounded-full text-[10px] font-medium">
+                                                        <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-medium text-primary">
                                                             1
                                                         </span>
                                                     )}
                                                 </Button>
                                             </PopoverTrigger>
-                                            <PopoverContent className="p-0 w-52" align="start">
-                                                <div className="flex flex-col gap-1 p-3 max-h-72 overflow-y-auto">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <p className="text-xs text-muted-foreground font-semibold">Event Type</p>
+                                            <PopoverContent className="w-52 p-0" align="start">
+                                                <div className="flex max-h-72 flex-col gap-1 overflow-y-auto p-3">
+                                                    <div className="mb-1 flex items-center justify-between">
+                                                        <p className="text-xs font-semibold text-muted-foreground">Event Type</p>
                                                         {logFilter !== 'all' && (
                                                             <button
                                                                 className="text-xs text-primary hover:underline"
@@ -896,10 +777,10 @@ export default function Dashboard({
                                                             </button>
                                                         )}
                                                     </div>
-                                                    {[{ label: 'All event types', value: 'all' }, ...Object.keys(eventLabels).map((value) => ({ value, label: formatEventLabel(value) }))].map(opt => (
+                                                    {[{ label: 'All event types', value: 'all' }, ...Object.keys(eventLabels).map((value) => ({ value, label: formatEventLabel(value) }))].map((opt) => (
                                                         <label
                                                             key={opt.value}
-                                                            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer text-sm"
+                                                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                         >
                                                             <input
                                                                 type="radio"
@@ -921,7 +802,7 @@ export default function Dashboard({
                                     </div>
 
                                     {filteredLogs.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground py-4">No events match the current filter.</p>
+                                        <p className="py-4 text-sm text-muted-foreground">No events match the current filter.</p>
                                     ) : (
                                         <>
                                             <ActivityFeed auditLogs={filteredLogs} />
@@ -934,15 +815,15 @@ export default function Dashboard({
                                     )}
                                 </div>
                             )}
-
                         </div>
                     </TabsContent>
 
+                    {/* ── Inbox ────────────────────────────────────────────── */}
                     <TabsContent value="inbox">
                         <div className="mt-6 flex flex-col gap-4">
                             <div className="flex items-center justify-between gap-3">
                                 <div className="flex flex-col gap-0.5">
-                                    <h2 className="font-bold text-xl tracking-tight">Notification Inbox</h2>
+                                    <h2 className="text-xl font-bold tracking-tight">Notification Inbox</h2>
                                     <p className="text-sm text-muted-foreground">
                                         Recent request notifications sent to your account.
                                     </p>
@@ -964,7 +845,7 @@ export default function Dashboard({
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-2">
-                                    {notifications.map(notification => {
+                                    {notifications.map((notification) => {
                                         const isUnread = !notification.read_at;
 
                                         return (
@@ -972,13 +853,13 @@ export default function Dashboard({
                                                 key={notification.id}
                                                 href={notification.url}
                                                 className={cn(
-                                                    "group flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/60",
-                                                    isUnread && "border-primary/40 bg-primary/5"
+                                                    'group flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/60',
+                                                    isUnread && 'border-[var(--ads-ok-bg)] bg-[var(--ads-ok-bg)]/40'
                                                 )}
                                             >
                                                 <div className={cn(
-                                                    "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full",
-                                                    isUnread ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                                                    'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
+                                                    isUnread ? 'bg-[var(--ads-ok)] text-primary-foreground' : 'bg-muted text-muted-foreground'
                                                 )}>
                                                     <Bell className="h-4 w-4" />
                                                 </div>
@@ -991,7 +872,7 @@ export default function Dashboard({
                                                         <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
                                                     </div>
                                                     <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                                                        {isUnread && <span className="size-2 rounded-full bg-red-500" />}
+                                                        {isUnread && <span className="size-2 rounded-full bg-[var(--primary)]" />}
                                                         <span>
                                                             {notification.created_at
                                                                 ? moment(notification.created_at).fromNow()
@@ -1009,6 +890,6 @@ export default function Dashboard({
                     </TabsContent>
                 </Tabs>
             </div>
-        </DefaultLayout >
+        </DefaultLayout>
     );
 }

@@ -35,7 +35,7 @@ The **Request Options** page (`/request-settings`) is the single admin-controlle
 ## How the Frontend Consumes It
 
 - `HandleInertiaRequests` shares `requestOptions` (= `RequestSettingsService::all()`) to every Inertia page.
-- **Create page** (`resources/js/pages/requests/create.tsx`): reads `requestOptions` via `usePage()`. Replaces the old hardcoded constants — booking-time bounds, step, min/warning advance days, and the approver list all derive from settings. Calendar days not in `days_of_week` are disabled.
+- **Create page** (`resources/js/pages/requests/create/index.tsx`): reads `requestOptions` via `usePage()`. Replaces the old hardcoded constants — booking-time bounds, step, min/warning advance days, and the approver list all derive from settings. Calendar days not in `days_of_week` are disabled.
 - **Chatbot guided flow** (`resources/js/components/chatbot/chatbot.tsx` + `hooks/useBookingFlow.ts`): derives hourly quick-reply time options from the booking window, and uses `minAdvanceDays` for the earliest bookable date. Warning advance days are derived as `minAdvanceDays + 2` in the guided flow (preserving prior behavior).
 - **Types:** `BookingWindow` / `RequestOptions` in `resources/js/types/request.ts`.
 

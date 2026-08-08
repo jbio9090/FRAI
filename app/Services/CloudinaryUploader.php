@@ -7,8 +7,11 @@ use Illuminate\Http\UploadedFile;
 class CloudinaryUploader
 {
     protected string $apiKey;
+
     protected string $apiSecret;
+
     protected string $cloudName;
+
     protected string $uploadUrl;
 
     public function __construct()
@@ -28,10 +31,6 @@ class CloudinaryUploader
     /**
      * Upload a local file path or UploadedFile to Cloudinary.
      * Returns decoded response array on success.
-     *
-     * @param string|UploadedFile $file
-     * @param string|null $folder
-     * @return array
      */
     public function uploadFile(string|UploadedFile $file, ?string $folder = null): array
     {
@@ -57,7 +56,7 @@ class CloudinaryUploader
             $toSign[] = "{$k}={$v}";
         }
 
-        $signature = sha1(implode('&', $toSign) . $this->apiSecret);
+        $signature = sha1(implode('&', $toSign).$this->apiSecret);
 
         $post = $params + [
             'api_key' => $this->apiKey,
@@ -72,6 +71,8 @@ class CloudinaryUploader
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 180);
 
         $result = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -79,13 +80,13 @@ class CloudinaryUploader
         curl_close($ch);
 
         if ($err) {
-            throw new \RuntimeException('Cloudinary upload failed: ' . $err);
+            throw new \RuntimeException('Cloudinary upload failed: '.$err);
         }
 
         $decoded = json_decode($result, true) ?: [];
         if ($httpCode >= 400) {
             $message = $decoded['error']['message'] ?? $result;
-            throw new \RuntimeException('Cloudinary upload error: ' . $message);
+            throw new \RuntimeException('Cloudinary upload error: '.$message);
         }
 
         return $decoded;
@@ -93,10 +94,6 @@ class CloudinaryUploader
 
     /**
      * Destroy a resource by public_id and resource type (image/raw/video).
-     *
-     * @param string $publicId
-     * @param string $resourceType
-     * @return array
      */
     public function destroy(string $publicId, string $resourceType = 'image'): array
     {
@@ -114,7 +111,7 @@ class CloudinaryUploader
             $toSign[] = "{$k}={$v}";
         }
 
-        $signature = sha1(implode('&', $toSign) . $this->apiSecret);
+        $signature = sha1(implode('&', $toSign).$this->apiSecret);
 
         $post = $params + [
             'api_key' => $this->apiKey,
@@ -126,6 +123,8 @@ class CloudinaryUploader
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
 
         $result = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -133,13 +132,13 @@ class CloudinaryUploader
         curl_close($ch);
 
         if ($err) {
-            throw new \RuntimeException('Cloudinary destroy failed: ' . $err);
+            throw new \RuntimeException('Cloudinary destroy failed: '.$err);
         }
 
         $decoded = json_decode($result, true) ?: [];
         if ($httpCode >= 400) {
             $message = $decoded['error']['message'] ?? $result;
-            throw new \RuntimeException('Cloudinary destroy error: ' . $message);
+            throw new \RuntimeException('Cloudinary destroy error: '.$message);
         }
 
         return $decoded;
@@ -148,10 +147,6 @@ class CloudinaryUploader
     /**
      * Fetch resource details from Cloudinary Admin API for a given public id.
      * Returns decoded resource array (includes secure_url, bytes, format, etc).
-     *
-     * @param string $publicId
-     * @param string $resourceType
-     * @return array
      */
     public function resource(string $publicId, string $resourceType = 'image'): array
     {
@@ -162,6 +157,8 @@ class CloudinaryUploader
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_USERPWD, "{$this->apiKey}:{$this->apiSecret}");
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
 
         $result = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -169,13 +166,13 @@ class CloudinaryUploader
         curl_close($ch);
 
         if ($err) {
-            throw new \RuntimeException('Cloudinary resource lookup failed: ' . $err);
+            throw new \RuntimeException('Cloudinary resource lookup failed: '.$err);
         }
 
         $decoded = json_decode($result, true) ?: [];
         if ($httpCode >= 400) {
             $message = $decoded['error']['message'] ?? $result;
-            throw new \RuntimeException('Cloudinary resource error: ' . $message);
+            throw new \RuntimeException('Cloudinary resource error: '.$message);
         }
 
         return $decoded;

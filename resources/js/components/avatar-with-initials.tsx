@@ -3,20 +3,24 @@ import getInitials from "@/lib/getInitials";
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 
-function getBackgroundColor(name: string) {
-    const colors = [
-        "bg-red-500", "bg-pink-500", "bg-purple-500", "bg-indigo-500",
-        "bg-blue-500", "bg-cyan-500", "bg-teal-500", "bg-emerald-500",
-        "bg-orange-500", "bg-amber-500"
-    ];
+const AVATAR_TINTS = [
+    "bg-[var(--ads-av-1)] text-[var(--ads-av-ink-1)]",
+    "bg-[var(--ads-av-2)] text-[var(--ads-av-ink-2)]",
+    "bg-[var(--ads-av-3)] text-[var(--ads-av-ink-3)]",
+    "bg-[var(--ads-av-4)] text-[var(--ads-av-ink-4)]",
+    "bg-[var(--ads-av-5)] text-[var(--ads-av-ink-5)]",
+    "bg-[var(--ads-av-6)] text-[var(--ads-av-ink-6)]",
+    "bg-[var(--ads-av-7)] text-[var(--ads-av-ink-7)]",
+    "bg-[var(--ads-av-8)] text-[var(--ads-av-ink-8)]",
+];
 
+function getBackgroundColor(name: string) {
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
         hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
 
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
+    return AVATAR_TINTS[Math.abs(hash) % AVATAR_TINTS.length];
 }
 
 const sizeClasses = {
@@ -59,7 +63,7 @@ export default function AvatarWithInitials({ username, avatarSrc, previewSrc, cl
                 <AvatarImage src={src} alt={username} className="object-cover" />
                 <AvatarFallback
                     className={cn(
-                        "flex items-center justify-center font-semibold text-white select-none leading-none",
+                        "flex items-center justify-center font-semibold select-none leading-none",
                         bgColor,
                         activeSize.text
                     )}

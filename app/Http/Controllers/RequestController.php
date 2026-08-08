@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RequestStatus;
 use App\Http\Requests\FacilityFormRequest;
+use App\Jobs\ProcessRequestConflicts;
 use App\Jobs\ProcessRequestRecommendation;
 use App\Models\AuditLog;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\User;
-use App\Enums\RequestStatus;
 use App\Services\AuditLogger;
 use App\Services\NotificationService;
 use App\Services\RequestService;
@@ -31,18 +32,18 @@ class RequestController extends Controller
 
         $statusValues = $statusParam
             ? collect(explode(',', $statusParam))
-            ->map(fn($s) => collect(RequestStatus::cases())
-                ->firstWhere(fn($case) => strtolower($case->name) === strtolower(trim($s))))
-            ->filter()
-            ->values()
+                ->map(fn ($s) => collect(RequestStatus::cases())
+                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s))))
+                ->filter()
+                ->values()
             : collect();
 
         $pageTitle = $statusValues->isNotEmpty()
-            ? $statusValues->map(fn($s) => $s->value)->join(', ')
+            ? $statusValues->map(fn ($s) => $s->value)->join(', ')
             : 'All Requests';
 
         return Inertia::render('requests/index', [
-            'requests' => Inertia::defer(fn() => $this->service->get(
+            'requests' => Inertia::defer(fn () => $this->service->get(
                 $statusValues->isNotEmpty() ? $statusValues->all() : null,
                 $request->input('filter', 'this_week'),
                 $request->input('search'),
@@ -116,7 +117,7 @@ class RequestController extends Controller
 
         $this->notification->notifyUser($facilityRequest);
 
-        return back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' successful');
+        return back()->with('success', ucfirst(str_replace('_', ' ', $action)).' successful');
     }
 
     public function approve(Request $request, $id)
@@ -175,7 +176,7 @@ class RequestController extends Controller
     {
         return Inertia::render('requests/create', [
             'facilities' => Facility::with([
-                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name'),
             ])->select('id', 'name', 'capacity', 'building')->get(),
         ]);
@@ -188,7 +189,7 @@ class RequestController extends Controller
         return Inertia::render('requests/detail', [
             'labeledBreadcrumb' => $requestModel->title,
             'request' => $this->service->getDetail($request_id),
-            'auditLogs' => Inertia::defer(fn() => AuditLog::query()
+            'auditLogs' => Inertia::defer(fn () => AuditLog::query()
                 ->forSubject($requestModel)
                 ->with('user')
                 ->latest()
@@ -215,11 +216,8 @@ class RequestController extends Controller
 
         $saved_request = $this->service->create($validated);
 
-        $this->service->detectAndStoreConflicts($saved_request);
-
         ProcessRequestRecommendation::dispatch($saved_request);
-
-        $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
+        ProcessRequestConflicts::dispatch($saved_request);
 
         return redirect()->route('requests.index', ['status' => strtolower(RequestStatus::PENDING->name)])
             ->with('success', 'Request created successfully');
@@ -289,7 +287,7 @@ class RequestController extends Controller
             $this->notification->notifyUser($facilityRequest);
         }
 
-        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' applied to ' . count($facilityRequests) . ' request(s).');
+        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)).' applied to '.count($facilityRequests).' request(s).');
     }
 
     public function edit(FacilityRequest $request)
@@ -299,7 +297,7 @@ class RequestController extends Controller
 
         return Inertia::render('requests/create', [
             'facilities' => Facility::with([
-                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name'),
             ])->select('id', 'name', 'capacity', 'building')->get(),
             'existingRequest' => $this->service->getEditData($request->id),
@@ -315,9 +313,8 @@ class RequestController extends Controller
 
         $updated = $this->service->update($validated, $request->id);
 
-        $this->service->detectAndStoreConflicts($updated);
-
         ProcessRequestRecommendation::dispatch($updated);
+        ProcessRequestConflicts::dispatch($updated);
 
         return redirect()->route('requests.detail', $request->id);
     }
@@ -364,10 +361,10 @@ class RequestController extends Controller
         ]);
 
         $statusMap = [
-            'approve'               => RequestStatus::APPROVED,
-            'reject'                => RequestStatus::DENIED,
+            'approve' => RequestStatus::APPROVED,
+            'reject' => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
-            'for_reschedule'        => RequestStatus::FOR_RESCHEDULE,
+            'for_reschedule' => RequestStatus::FOR_RESCHEDULE,
         ];
 
         // $facilityId here is actually the request_facility id (the booking row id).
@@ -396,21 +393,21 @@ class RequestController extends Controller
 
             if ($uniqueStatuses->count() === 1) {
                 $facilityRequest->update([
-                    'status' => $uniqueStatuses->first()
+                    'status' => $uniqueStatuses->first(),
                 ]);
             } else {
-                $hasApproved = $allFacilityStatuses->contains(fn($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
+                $hasApproved = $allFacilityStatuses->contains(fn ($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
 
                 if ($hasApproved && $totalFacilities >= 2) {
                     $facilityRequest->update([
-                        'status' => RequestStatus::PARTIALLY_APPROVED
+                        'status' => RequestStatus::PARTIALLY_APPROVED,
                     ]);
                 }
             }
         }
 
         $facilityRequest->comments()->create([
-            'body'    => "Facility decision updated to: " . ucfirst(str_replace('_', ' ', $validated['action'])),
+            'body' => 'Facility decision updated to: '.ucfirst(str_replace('_', ' ', $validated['action'])),
             'user_id' => auth()->id(),
         ]);
 
@@ -487,7 +484,6 @@ class RequestController extends Controller
         $admin = User::find($request->integer('admin_id'));
         abort_unless($admin && $admin->hasRole(['admin', 'Super Admin']) && $admin->can('approve requests'), 403);
 
-        
         abort_unless(auth()->onceUsingId($admin->id), 403);
 
         $facilityRequest = \App\Models\Request::findOrFail($id);

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\RequestStatus;
 use App\Models\AuditLog;
 use App\Models\Facility;
+use App\Models\Request as FacilityRequest;
+use App\Models\RequestFacility;
 use App\Services\FacilityService;
 use App\Services\RequestService;
 use Illuminate\Http\Request;
@@ -18,11 +20,12 @@ class DashboardController extends Controller
     public function index()
     {
         $user = Auth::user();
+        $isAdmin = $user->hasRole(['admin', 'Super Admin']);
         $start = now()->startOfMonth()->format('Y-m-d');
         $end = now()->endOfMonth()->format('Y-m-d');
 
         $chartData = AuditLog::query()
-            ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
+            ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
             ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
@@ -34,18 +37,57 @@ class DashboardController extends Controller
             ])
             ->values();
 
+        $pending = $this->requestService->get([RequestStatus::PENDING]);
+
+        // ── KPI strip ────────────────────────────────────────────────────
+        $since = now()->subDays(6)->startOfDay();
+
+        $approvedThisWeek = FacilityRequest::query()
+            ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
+            ->where('status', RequestStatus::APPROVED->value)
+            ->where(fn ($q) => $q
+                ->where('processed_at', '>=', $since)
+                ->orWhere(fn ($q2) => $q2->whereNull('processed_at')->where('created_at', '>=', $since)))
+            ->count();
+
+        $eventsToday = $isAdmin
+            ? $this->facilityService->getAllSchedule(now()->startOfDay()->format('Y-m-d'), now()->endOfDay()->format('Y-m-d'))->count()
+            : RequestFacility::query()
+                ->whereDate('date_requested', now()->toDateString())
+                ->whereHas('request', fn ($q) => $q->where('user_id', $user->id))
+                ->count();
+
+        $conflictRequestIds = collect($pending->items())
+            ->flatMap(function ($request) {
+                $pending = collect($request->pending_conflicts ?? [])->all();
+                $approved = collect($request->approved_conflicts ?? [])->all();
+
+                return array_merge($pending, $approved);
+            })
+            ->pluck('request_id')
+            ->filter()
+            ->unique();
+
+        $kpis = [
+            'awaitingDecision' => $pending->total(),
+            'needsAction' => $conflictRequestIds->count(),
+            'approvedThisWeek' => $approvedThisWeek,
+            'eventsToday' => $eventsToday,
+        ];
+
         return Inertia::render('dashboard', [
             'labeledBreadcrumb' => 'Dashboard',
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
             'buildings' => Facility::distinct()->pluck('building')->filter()->values(),
             // Filter recent logs list
             'auditLogs' => AuditLog::with('user')
-                ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
+                ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
                 ->where('created_at', '>=', now()->subDays(6)->startOfDay())
                 ->latest()
                 ->paginate(10),
             'chartData' => $chartData,
-            'pending' => $this->requestService->get([RequestStatus::PENDING]),
+            'pending' => $pending,
+            'kpis' => $kpis,
             'notifications' => $user->notifications()
                 ->latest()
                 ->limit(20)

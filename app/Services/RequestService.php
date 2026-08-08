@@ -2,15 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\Request as FacilityRequest;
-use App\Models\RequestFacility;
 use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
+use App\Models\Request as FacilityRequest;
+use App\Models\RequestFacility;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class RequestService
 {
@@ -66,12 +65,12 @@ class RequestService
         if (! empty($statuses)) {
             // Accept arrays or Collections of BackedEnum instances or raw values
             $statusArray = is_array($statuses) ? $statuses : (is_iterable($statuses) ? (array) $statuses : [$statuses]);
-            $statusValues = array_map(fn($s) => $s instanceof \BackedEnum ? $s->value : $s, $statusArray);
+            $statusValues = array_map(fn ($s) => $s instanceof \BackedEnum ? $s->value : $s, $statusArray);
 
             // Match requests whose parent status matches OR any child request facility has the status
             $query->where(function ($q) use ($statusValues) {
                 $q->whereIn('requests.status', $statusValues)
-                  ->orWhereHas('requestFacilities', fn ($q2) => $q2->whereIn('status', $statusValues));
+                    ->orWhereHas('requestFacilities', fn ($q2) => $q2->whereIn('status', $statusValues));
             });
         }
 
@@ -344,31 +343,46 @@ class RequestService
                 'has_outsiders' => $booking['has_outsiders'] ?? false,
             ]);
 
-            // 2. Attach external equipment
-            foreach ($booking['external_equipment'] ?? [] as $externalItem) {
-                $requestFacility->externalEquipments()->create([
-                    'name' => $externalItem['name'],
-                ]);
+            // 2. Attach external equipment in a single bulk insert
+            $externalItems = collect($booking['external_equipment'] ?? [])
+                ->map(fn ($externalItem) => ['name' => $externalItem['name']])
+                ->all();
+
+            if ($externalItems) {
+                $requestFacility->externalEquipments()->createMany($externalItems);
             }
 
-            // 3. Attach standard equipment directly to THIS facility booking
+            // 3. Attach standard + borrowed equipment in a single bulk insert
+            $equipmentRows = [];
+
             foreach ($booking['equipment'] ?? [] as $equipment) {
-                $requestFacility->equipment()->attach($equipment['equipment_id'], [
-                    'request_id'         => $facilityRequest->id, // Maintain the original link for backward compatibility
-                    'quantity_needed'    => $equipment['quantity_needed'],
-                    'is_borrowed'        => false,
+                $equipmentRows[] = [
+                    'request_id' => $facilityRequest->id,
+                    'request_facility_id' => $requestFacility->id,
+                    'equipment_id' => $equipment['equipment_id'],
+                    'quantity_needed' => $equipment['quantity_needed'],
+                    'is_borrowed' => false,
                     'source_facility_id' => null,
-                ]);
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
             }
 
-            // 4. Attach borrowed equipment directly to THIS facility booking
             foreach ($booking['borrowed_equipment'] ?? [] as $equipment) {
-                $requestFacility->equipment()->attach($equipment['equipment_id'], [
-                    'request_id'         => $facilityRequest->id,
-                    'quantity_needed'    => $equipment['quantity_needed'],
-                    'is_borrowed'        => true,
+                $equipmentRows[] = [
+                    'request_id' => $facilityRequest->id,
+                    'request_facility_id' => $requestFacility->id,
+                    'equipment_id' => $equipment['equipment_id'],
+                    'quantity_needed' => $equipment['quantity_needed'],
+                    'is_borrowed' => true,
                     'source_facility_id' => $equipment['source_facility_id'],
-                ]);
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+
+            if ($equipmentRows) {
+                DB::table('request_equipment')->insert($equipmentRows);
             }
         }
     }
@@ -385,7 +399,7 @@ class RequestService
             ->whereIn('status', $statuses)
             ->whereHas('request', function ($query) use ($excludeRequestId) {
                 $query->where('on_hold', false)
-                    ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId));
+                    ->when($excludeRequestId, fn ($q) => $q->where('id', '!=', $excludeRequestId));
             })
             ->with(['facility', 'request'])
             ->get();
@@ -406,14 +420,14 @@ class RequestService
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
                     $status = $existing->request->status;
                     $conflicts[] = [
-                        'request_id'          => $existing->request_id,
+                        'request_id' => $existing->request_id,
                         'request_facility_id' => $existing->id,
-                        'request_title'       => $existing->request->title,
-                        'date'                => $existing->date_requested,
-                        'time_start'          => $existing->time_start,
-                        'time_end'            => $existing->time_end,
-                        'status'              => $status,
-                        'message'             => sprintf(
+                        'request_title' => $existing->request->title,
+                        'date' => $existing->date_requested,
+                        'time_start' => $existing->time_start,
+                        'time_end' => $existing->time_end,
+                        'status' => $status,
+                        'message' => sprintf(
                             'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing %s booking (%s - %s)',
                             $existing->facility->name,
                             Carbon::parse($requestedDate)->format('F j, Y'),
@@ -443,11 +457,11 @@ class RequestService
         $this->attachPerFacilityEquipment($request);
 
         $bookings = $request->requestFacilities->map(fn ($rf) => [
-            'facility_id'        => $rf->facility_id,
-            'date'               => $rf->date_requested,
-            'time_start'         => $rf->time_start,
-            'time_end'           => $rf->time_end,
-            'equipment'          => $rf->equipment?->toArray() ?? [],
+            'facility_id' => $rf->facility_id,
+            'date' => $rf->date_requested,
+            'time_start' => $rf->time_start,
+            'time_end' => $rf->time_end,
+            'equipment' => $rf->equipment?->toArray() ?? [],
             'borrowed_equipment' => $rf->borrowed_equipment?->toArray() ?? [],
             'external_equipment' => $rf->externalEquipments?->toArray() ?? [],
         ])->toArray();
@@ -513,24 +527,28 @@ class RequestService
     {
         $savedRfIds = $saved_request->requestFacilities()->pluck('id')->toArray();
 
+        if (empty($savedRfIds)) {
+            return;
+        }
+
+        // Map the saved request's still-conflicting RF ids to their owning
+        // request ids in one query instead of an EXISTS query per candidate.
+        $stillConflictingRequestIds = RequestFacility::whereIn('id', $currentPendingRfIds)
+            ->pluck('request_id')
+            ->all();
+
         $candidateRequests = FacilityRequest::where('id', '!=', $saved_request->id)
             ->whereNotNull('pending_conflict_rf_ids')
             ->get()
             ->filter(fn ($r) => ! empty(array_intersect($r->pending_conflict_rf_ids ?? [], $savedRfIds)));
 
         foreach ($candidateRequests as $candidate) {
-            $isStillConflicting = in_array($candidate->id, collect($currentPendingRfIds)->toArray())
-                || RequestFacility::whereIn('id', $currentPendingRfIds)
-                    ->where('request_id', $candidate->id)
-                    ->exists();
-
-            if ($isStillConflicting) {
+            if (in_array($candidate->id, $stillConflictingRequestIds, true)) {
                 continue;
             }
-            $cleaned = array_values(array_diff($candidate->pending_conflict_rf_ids ?? [], $savedRfIds));
 
             $candidate->update([
-                'pending_conflict_rf_ids' => $cleaned,
+                'pending_conflict_rf_ids' => array_values(array_diff($candidate->pending_conflict_rf_ids ?? [], $savedRfIds)),
             ]);
         }
     }
@@ -670,7 +688,7 @@ class RequestService
                 ->whereIn('status', [RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])
                 ->whereHas('request', function ($query) use ($excludeRequestId) {
                     $query->where('on_hold', false)
-                        ->when($excludeRequestId, fn($q) => $q->where('id', '!=', $excludeRequestId));
+                        ->when($excludeRequestId, fn ($q) => $q->where('id', '!=', $excludeRequestId));
                 })
                 ->with('request')
                 ->lockForUpdate()
@@ -696,16 +714,20 @@ class RequestService
     public function handleFileUploads(FacilityRequest $facilityRequest, array $files): void
     {
         foreach ($files as $file) {
-            $meta = app(\App\Services\StorageService::class)->uploadRequestFileFromUploadedFile($file, 'request-files');
+            // Store locally first so the request can return quickly; the
+            // ProcessRequestFiles job migrates the file to Cloudinary off-request.
+            $path = $file->store('request-files', 'public');
 
             $requestFile = $facilityRequest->files()->create([
-                'path' => $meta['path'],
+                'path' => $path,
                 'original_name' => $file->getClientOriginalName(),
-                'mime_type' => $meta['mime_type'] ?? $file->getMimeType(),
-                'size' => $meta['size'] ?? $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
             ]);
 
-            $this->auditLogger::requestFileUploaded($facilityRequest, $requestFile); // 👈
+            $this->auditLogger::requestFileUploaded($facilityRequest, $requestFile);
+
+            \App\Jobs\ProcessRequestFiles::dispatch($requestFile);
         }
     }
 
@@ -846,9 +868,9 @@ class RequestService
                             'max_quantity' => $eq->pivot->quantity_needed,
                         ])->values();
 
-                    $dateOnly  = Carbon::parse($rf->date_requested)->format('Y-m-d');
+                    $dateOnly = Carbon::parse($rf->date_requested)->format('Y-m-d');
                     $timeStart = substr($rf->time_start, 0, 5);
-                    $timeEnd   = substr($rf->time_end, 0, 5);
+                    $timeEnd = substr($rf->time_end, 0, 5);
 
                     $scheduleConflicts = RequestFacility::where('facility_id', $rf->facility_id)
                         ->where('date_requested', $dateOnly)
@@ -856,15 +878,15 @@ class RequestService
                         ->whereIn('status', [RequestStatus::PENDING, RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])
                         ->where('time_start', '<', $timeEnd)
                         ->where('time_end', '>', $timeStart)
-                        ->whereHas('request', fn($q) => $q->where('on_hold', false)->where('id', '!=', $detail->id))
+                        ->whereHas('request', fn ($q) => $q->where('on_hold', false)->where('id', '!=', $detail->id))
                         ->with('request')
                         ->get()
-                        ->map(fn($conflictRf) => [
-                            'request_id'    => $conflictRf->request_id,
+                        ->map(fn ($conflictRf) => [
+                            'request_id' => $conflictRf->request_id,
                             'request_title' => $conflictRf->request->title ?? '',
-                            'status'        => $conflictRf->request->status,
-                            'time_start'    => substr($conflictRf->time_start, 0, 5),
-                            'time_end'      => substr($conflictRf->time_end, 0, 5),
+                            'status' => $conflictRf->request->status,
+                            'time_start' => substr($conflictRf->time_start, 0, 5),
+                            'time_end' => substr($conflictRf->time_end, 0, 5),
                         ])
                         ->values();
 
@@ -879,8 +901,8 @@ class RequestService
                         'external_equipment' => $rf->externalEquipments->map(fn ($e) => ['name' => $e->name])->values(),
                         'equipment' => $ownEquipment,
                         'borrowed_equipment' => $borrowedEquipment,
-                        'conflicts'          => $scheduleConflicts,
-                        'has_outsiders'      => (bool) $rf->has_outsiders,
+                        'conflicts' => $scheduleConflicts,
+                        'has_outsiders' => (bool) $rf->has_outsiders,
                     ];
                 },
             )->values(),
@@ -1020,6 +1042,7 @@ class RequestService
             $rf->update(['status' => RequestStatus::APPROVED]);
             $this->handleFacilityLevelConflicts($rf);
             $this->syncParentRequestStatus($rf->request);
+
             return $rf;
         });
     }
@@ -1049,10 +1072,10 @@ class RequestService
         $booking = [
             [
                 'facility_id' => $approvedRf->facility_id,
-                'date'        => $approvedRf->date_requested,
-                'time_start'  => $approvedRf->time_start,
-                'time_end'    => $approvedRf->time_end,
-            ]
+                'date' => $approvedRf->date_requested,
+                'time_start' => $approvedRf->time_start,
+                'time_end' => $approvedRf->time_end,
+            ],
         ];
 
         $conflicts = $this->getConflictingApprovedRequests($booking, $approvedRf->request_id);
@@ -1061,7 +1084,7 @@ class RequestService
             $this->putOnHold(
                 $conflictingRequest,
                 $approvedRf->request,
-                'Conflict with approved facility: ' . $approvedRf->facility->name
+                'Conflict with approved facility: '.$approvedRf->facility->name
             );
         }
     }

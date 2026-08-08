@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\RequestStatus;
+use App\Jobs\ProcessRequestFiles;
 use App\Jobs\ProcessRequestRecommendation;
 use App\Models\Equipment;
 use App\Models\Facility;
@@ -3200,22 +3201,16 @@ class ChatController extends Controller
                             if ($tempFilePath) {
                                 $originalName = basename($tempFilePath);
 
-                                // Upload permanent copy (Cloudinary or public disk)
-                                $meta = app(\App\Services\StorageService::class)->uploadRequestFileFromLocalPath($tempFilePath, 'request-files');
-
-                                $facilityRequest->files()->create([
-                                    'path' => $meta['path'],
+                                // Keep the local temp copy and let the queued job
+                                // migrate it to Cloudinary off-request.
+                                $requestFile = $facilityRequest->files()->create([
+                                    'path' => $tempFilePath,
                                     'original_name' => $originalName,
-                                    'mime_type' => $meta['mime_type'] ?? Storage::disk('public')->mimeType($tempFilePath),
-                                    'size' => $meta['size'] ?? Storage::disk('public')->size($tempFilePath),
+                                    'mime_type' => Storage::disk('public')->mimeType($tempFilePath),
+                                    'size' => Storage::disk('public')->size($tempFilePath),
                                 ]);
 
-                                // remove the temp file
-                                try {
-                                    Storage::disk('public')->delete($tempFilePath);
-                                } catch (\Throwable $e) {
-                                    // ignore
-                                }
+                                ProcessRequestFiles::dispatch($requestFile);
 
                                 $fileCount++;
                             }

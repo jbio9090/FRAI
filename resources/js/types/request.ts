@@ -20,16 +20,16 @@ export interface Request {
     updated_at: string;
     files: [
         {
-            path: string
-        }
-    ]
+            path: string;
+        },
+    ];
     pending_conflict_rf_ids: number[] | null;
     approved_conflict_rf_ids: number[] | null;
     pending_conflicts?: ConflictingBooking[];
     approved_conflicts?: ConflictingBooking[];
-    processed_by?: User,
-    processed_at?: string,
-    approved_by: string[],
+    processed_by?: User;
+    processed_at?: string;
+    approved_by: string[];
 }
 
 export interface Comment {
@@ -61,6 +61,13 @@ export const PRIORITY_LABELS: Record<0 | 1 | 2 | 3, string> = {
     1: 'Organization',
     2: 'University',
     3: 'Government',
+};
+
+export const PRIORITY_ACCENT: Record<number, { fill: string; ink: string }> = {
+    0: { fill: 'var(--ads-ac-academic)', ink: 'var(--ads-ac-ink-academic)' },
+    1: { fill: 'var(--ads-ac-community)', ink: 'var(--ads-ac-ink-community)' },
+    2: { fill: 'var(--ads-ac-university)', ink: 'var(--ads-ac-ink-university)' },
+    3: { fill: 'var(--ads-ac-department)', ink: 'var(--ads-ac-ink-department)' },
 };
 
 export interface BookingWindow {
@@ -115,7 +122,7 @@ export interface Facility {
     id: number;
     name: string;
     building: string;
-    capacity: number
+    capacity: number;
 }
 
 export interface RequestsPageProps {

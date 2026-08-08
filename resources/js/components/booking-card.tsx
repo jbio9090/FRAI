@@ -165,7 +165,7 @@ export function BookingCard({
                             {booking.facility_name}
                         </Link>
                         {isEditing && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                            <span className="inline-flex items-center gap-1 rounded-[4px] bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                                 <Pen size={9} />
                                 Editing
                             </span>
@@ -173,16 +173,16 @@ export function BookingCard({
                         {booking.request_facility_status && <StatusTag requestStatus={booking.request_facility_status} variant="small" />}
 
                         {booking.has_outsiders && (
-                            <span className="rounded-full bg-amber-100 px-1 text-xs font-medium text-amber-600 dark:text-amber-400">Outsiders</span>
+                            <span className="rounded-[4px] bg-[var(--ads-amber-bg)] px-1 text-xs font-medium text-[var(--ads-amber)]">Outsiders</span>
                         )}
                         {hasConflicts && (
-                            <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-1 text-xs font-medium text-destructive">
+                            <span className="flex items-center gap-1 rounded-[4px] bg-destructive/10 px-1 text-xs font-medium text-destructive">
                                 <AlertCircleIcon size={10} />
                                 Conflicts
                             </span>
                         )}
                         {isCapacityExceeded && (
-                            <span className="flex items-center gap-1 rounded-full bg-orange-100 px-1 text-xs font-medium text-orange-600 dark:bg-orange-950/40 dark:text-orange-400">
+                            <span className="flex items-center gap-1 rounded-[4px] bg-[var(--ads-amber-bg)] px-1 text-xs font-medium text-[var(--ads-amber)]">
                                 <Users size={10} />
                                 Capacity Exceeded
                             </span>
@@ -274,9 +274,10 @@ export function BookingCard({
                 )}
 
                 {isCapacityExceeded && (
-                    <p className="my-2 flex items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-2 py-1.5 text-sm font-medium text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-300">
+                    <p className="my-2 flex items-center gap-1.5 rounded-md border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/50 px-2 py-1.5 text-sm font-medium text-[var(--ads-amber)]">
                         <Users size={13} className="shrink-0" />
-                        Expected attendees exceed this facility's capacity ({booking.expected_capacity} expected, {booking.facility_capacity} capacity).
+                        Expected attendees exceed this facility's capacity ({booking.expected_capacity} expected, {booking.facility_capacity}{' '}
+                        capacity).
                     </p>
                 )}
 

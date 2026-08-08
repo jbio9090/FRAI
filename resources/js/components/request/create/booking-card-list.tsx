@@ -4,9 +4,8 @@ import MotionChevron from '@/components/animated_icons/MotionChevron';
 import { BookingCard } from '@/components/booking-card';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Select, SelectContent, SelectTrigger, SelectItem, SelectGroup, SelectLabel, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectTrigger, SelectItem, SelectValue } from '@/components/ui/select';
 import type { FacilityBooking } from '@/pages/requests/create';
-import type { Facility } from '@/types/facility';
 
 /* ─────────────────────────────────────────────────────────────────────────
  | BookingCardList — sortable, filterable, collapsible list of booked slots
@@ -27,10 +26,9 @@ interface BookingCardListProps {
     editingIndex: number | null;
     onEdit: (index: number) => void;
     onRemove: (index: number) => void;
-    facilities: Facility[];
 }
 
-export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, facilities }: BookingCardListProps) {
+export function BookingCardList({ bookings, editingIndex, onEdit, onRemove }: BookingCardListProps) {
     const [isOpen, setIsOpen] = useState(true);
     const [sortKey, setSortKey] = useState<BookingSortKey>('date-asc');
     const [filterFacility, setFilterFacility] = useState<string>('all');
@@ -58,12 +56,7 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
         for (let j = i + 1; j < bookings.length; j++) {
             const a = bookings[i];
             const b = bookings[j];
-            if (
-                a.facility_id === b.facility_id &&
-                a.date === b.date &&
-                a.time_start < b.time_end &&
-                a.time_end > b.time_start
-            ) {
+            if (a.facility_id === b.facility_id && a.date === b.date && a.time_start < b.time_end && a.time_end > b.time_start) {
                 addDraftConflict(i, j);
                 addDraftConflict(j, i);
             }
@@ -100,7 +93,13 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
         });
 
     const hasConflicts = bookings.some((b) => b.conflicts.length > 0) || draftConflictsByIndex.size > 0;
-    const draftConflictFacilities = Array.from(new Set(Array.from(draftConflictsByIndex.values()).flat().map((conflict) => conflict.facility_name)));
+    const draftConflictFacilities = Array.from(
+        new Set(
+            Array.from(draftConflictsByIndex.values())
+                .flat()
+                .map((conflict) => conflict.facility_name),
+        ),
+    );
 
     return (
         <div className="mt-9">
@@ -114,7 +113,7 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
                         >
                             <h2 className="flex items-center gap-2 font-semibold tracking-tight">
                                 Facility Bookings
-                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-background">
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-[4px] bg-primary px-1 text-xs font-medium text-background">
                                     {bookings.length}
                                 </span>
                             </h2>

@@ -5,41 +5,36 @@ interface StatusTagProps {
     variant?: 'default' | 'small';
 }
 
+const STATUS_TONES: Record<string, 'ok' | 'amber' | 'danger' | 'neutral'> = {
+    Approved: 'ok',
+    'Conditionally Approved': 'ok',
+    Pending: 'neutral',
+    Denied: 'danger',
+    'On Hold': 'danger',
+    'For Reschedule': 'amber',
+    'Partially Approved': 'amber',
+};
+
+const toneStyles = {
+    ok: 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]',
+    amber: 'bg-[var(--ads-amber-bg)] text-[var(--ads-amber)]',
+    danger: 'bg-[var(--ads-danger-bg)] text-[var(--ads-danger)]',
+    neutral: 'bg-[var(--ads-neutral-bg)] text-[var(--ads-neutral)]',
+} as const;
+
 export default function StatusTag({ requestStatus, variant = 'default' }: StatusTagProps) {
-    const wtc = (status: string) => {
-        let statusColor;
-        switch (status) {
-            case 'Approved':
-                statusColor = 'bg-primary/20 border-primary text-primary dark:bg-blue-400/15 dark:border-blue-400 dark:text-blue-300';
-                break;
-            case 'Pending':
-                statusColor = 'border-foreground bg-gray-100/20';
-                break;
-            case 'Denied':
-                statusColor = 'bg-destructive/20 border-destructive text-destructive';
-                break;
-            case 'Conditionally Approved':
-                statusColor = 'bg-primary/20 border-primary/70 text-primary dark:bg-blue-400/10 dark:border-blue-400/60 dark:text-blue-300';
-                break;
-            case 'For Reschedule':
-                statusColor = 'bg-slate-500/20 border-slate-500 text-slate-600 dark:text-slate-400';
-                break;
-            case 'Partially Approved':
-                statusColor = 'bg-slate-500/20 border-slate-500 text-slate-600 dark:text-slate-400';
-                break;
-        }
-        return statusColor;
-    };
+    const tone = STATUS_TONES[requestStatus] ?? 'neutral';
 
     return (
-        <div
+        <span
             className={cn(
-                'flex w-fit gap-1 rounded-full border font-semibold',
-                variant === 'small' ? 'px-1 text-xs' : 'px-2 py-1 text-xs',
-                wtc(requestStatus),
+                'inline-flex w-fit items-center gap-1.5 rounded-[4px] font-semibold whitespace-nowrap',
+                toneStyles[tone],
+                variant === 'small' ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-0.5 text-xs',
             )}
         >
-            <span>{requestStatus}</span>
-        </div>
+            <span className="size-1.5 shrink-0 rounded-full bg-current" />
+            {requestStatus}
+        </span>
     );
 }
