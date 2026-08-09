@@ -31,7 +31,7 @@ pages follow incrementally.** The confirmed decisions log lives in §10.
 | Asset      | Value                                                                            |
 | ---------- | -------------------------------------------------------------------------------- |
 | Logomark   | `resources/js/svg/FRAI.svg` — faceted blue prism                                 |
-| Brand blue | `#0C66E4` (light, = `primary`) · `#579DFF` (dark) · focus `#388BFF`              |
+| Brand blue | `#0C66E4` (light, = `primary`) · `#3B82F6` (dark) · focus `#388BFF`              |
 | UI / body  | **Manrope** (kept — Atlassian Sans/Charlie are auth-gated and cannot be bundled) |
 | Data       | none — no mono voice                                                             |
 | GSO · PLV  | Institution context: city university general services office                     |
@@ -63,7 +63,7 @@ tokens.
 ### 3.2 Core (dark)
 
 `--background #1D2125` · `--card #1D2125` · `--popover #282E33` · `--foreground #B6C2CF`
-· `--primary #579DFF` · `--muted-foreground #9FADBC` · `--border #A6C5E229`.
+· `--primary #3B82F6` · `--muted-foreground #9FADBC` · `--border #A6C5E229`.
 
 ### 3.3 Semantic status → tone mapping (the whole app uses this)
 

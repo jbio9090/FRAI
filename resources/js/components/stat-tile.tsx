@@ -12,19 +12,19 @@ interface StatTileProps {
 
 const variantStyles = {
     default: 'border-border bg-card text-foreground',
-    accent: 'border-primary bg-primary text-primary-foreground',
+    accent: 'border-primary bg-primary text-primary-foreground dark:text-foreground',
     warning: 'border-[var(--ads-amber)]/50 bg-[var(--ads-amber-bg)] text-[var(--ads-amber)]',
 } as const;
 
 const iconStyles = {
     default: 'bg-muted text-muted-foreground',
-    accent: 'bg-primary-foreground/15 text-primary-foreground',
+    accent: 'bg-primary-foreground/15 text-primary-foreground dark:bg-foreground/15 dark:text-foreground',
     warning: 'bg-[var(--ads-amber)]/15 text-[var(--ads-amber)]',
 } as const;
 
 const subStyles = {
     default: 'text-muted-foreground',
-    accent: 'text-primary-foreground/80',
+    accent: 'text-primary-foreground/80 dark:text-foreground/80',
     warning: 'text-[var(--ads-amber)]/80',
 } as const;
 

@@ -313,7 +313,7 @@
     /* Lifted background (less deep black) */
     --background: #1d2125;
     /* Softened foreground (off-white/light gray) */
-    --foreground: #b6c2cf;
+    --foreground: #e7e7e7;
 
     /* Surfaces with tighter contrast to background */
     --card: #1d2125;
@@ -322,7 +322,7 @@
     --popover-foreground: #b6c2cf;
 
     /* Primary (Maintained from Light Mode) */
-    --primary: #579dff;
+    --primary: #3b82f6;
     --primary-foreground: #1d2125;
 
     /* Secondary & Muted tones for softer UI elements */
@@ -353,7 +353,7 @@
     /* Sidebar - slightly darker than main content for depth */
     --sidebar: #161a1d;
     --sidebar-foreground: #b6c2cf;
-    --sidebar-primary: #579dff;
+    --sidebar-primary: #3b82f6;
     --sidebar-primary-foreground: #1d2125;
     --sidebar-accent: #a1bdd914;
     --sidebar-accent-foreground: #dee4ea;
@@ -361,7 +361,7 @@
     --sidebar-ring: #388bff;
 
     /* ADS semantic status tones (dark) */
-    --ads-ok: #579dff;
+    --ads-ok: #3b82f6;
     --ads-ok-bg: #1c3a5f;
     --ads-amber: #faa53d;
     --ads-amber-bg: #3d2b00;
@@ -374,7 +374,7 @@
     --ads-ac-routine: #a1bdd914;
     --ads-ac-ink-routine: #c7d1db;
     --ads-ac-department: #1c3a5f;
-    --ads-ac-ink-department: #579dff;
+    --ads-ac-ink-department: #3b82f6;
     --ads-ac-academic: #352c63;
     --ads-ac-ink-academic: #8777d9;
     --ads-ac-university: #3d2b00;
