@@ -264,7 +264,7 @@ export function BookingCard({
                             conflicts.map((c, i) => {
                                 const eqName = booking.equipment.find((e) => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
                                 return (
-                                    <p key={`eq-${eqId}-${i}`} className="text-[12px] text-amber-600 dark:text-amber-400">
+                                    <p key={`eq-${eqId}-${i}`} className="text-xs text-[var(--ads-amber)]">
                                         Equipment conflict ({eqName}) — also requested by "{c.request_title}" ({c.status})
                                     </p>
                                 );

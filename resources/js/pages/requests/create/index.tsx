@@ -130,15 +130,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         </Alert>
                     )}
 
-                    <div className="flex flex-wrap items-end justify-between gap-4">
-                        <div className="flex flex-col gap-1">
-                            <p className="ads-eyebrow">Requests · {isEditing ? 'Edit request' : 'New request'}</p>
-                            <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
-                                {isEditing ? 'Edit Request' : 'Create Request'}
-                            </h1>
-                        </div>
-                    </div>
-
                     <Tabs defaultValue="details" className="w-full">
                         <TabsList variant="line" className="border-b border-border">
                             <TabsTrigger value="details">Details</TabsTrigger>

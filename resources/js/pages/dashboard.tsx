@@ -424,7 +424,7 @@ export default function Dashboard({
                         {/* Queue + live activity */}
                         <div className="grid items-start gap-4 lg:grid-cols-[5fr_3fr]">
                             <Card className={cardClass}>
-                                <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-border">
+                                <CardHeader className="flex w-full items-start justify-between space-y-0 border-b border-border">
                                     <div>
                                         <CardTitle className="text-sm font-semibold">
                                             {isAdmin ? 'Pending requests' : 'Your pending requests'}
@@ -433,16 +433,16 @@ export default function Dashboard({
                                             {isAdmin ? 'Awaiting a decision' : 'Requests still being processed'}
                                         </CardDescription>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-muted-foreground">
-                                            {pending.data.length} shown
-                                        </span>
-                                        <Button variant="ghost" size="sm" asChild>
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Button variant="outline" size="xs" className="w-[5.5rem] justify-center" asChild>
                                             <Link href={route('requests.index', { status: 'pending' })}>
                                                 View all
                                                 <ArrowUpRight className="h-4 w-4" />
                                             </Link>
                                         </Button>
+                                        <span className="text-xs text-muted-foreground">
+                                            {pending.data.length} shown
+                                        </span>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="p-0">
@@ -475,7 +475,7 @@ export default function Dashboard({
                             </Card>
 
                             <Card className={cardClass}>
-                                <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-border">
+                                <CardHeader className="flex items-start justify-between space-y-0 border-b border-border">
                                     <div>
                                         <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
                                             <Activity className="h-4 w-4 text-[var(--ads-ok)]" />
@@ -483,7 +483,12 @@ export default function Dashboard({
                                         </CardTitle>
                                         <CardDescription>Latest system events</CardDescription>
                                     </div>
-                                    <Button variant="ghost" size="sm" onClick={() => setActiveTab('activity')}>
+                                    <Button
+                                        variant="outline"
+                                        size="xs"
+                                        className="w-[5.5rem] justify-center"
+                                        onClick={() => setActiveTab('activity')}
+                                    >
                                         View all
                                         <ArrowUpRight className="h-4 w-4" />
                                     </Button>

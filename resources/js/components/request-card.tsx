@@ -20,14 +20,13 @@ import {
 import moment from 'moment';
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
-import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, type CarouselApi } from '@/components/ui/carousel';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
-import { PRIORITY_LABELS } from '@/types/request';
+import { cn, recommendedActionToPresentTense } from '@/lib/utils';
+import { PRIORITY_LABELS, PRIORITY_ACCENT } from '@/types/request';
 import type { Request } from '@/types/request';
 import AnimatedText from './animated-text';
 import { AttachedFileList } from './attached-file-list';
@@ -187,7 +186,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection?.(request.id)}
             className={cn(
-                'h-content mx-auto min-h-0 w-full rounded-lg border p-8 shadow-2xs transition-all duration-200',
+                'ads-card mx-auto min-h-0 w-full p-8 transition-all duration-200',
                 className,
                 isSelecting && 'cursor-pointer hover:border-primary/50',
                 isSelected && 'border-primary ring-1 ring-primary',
@@ -202,21 +201,27 @@ export default function RequestCard({
                             <StatusTag requestStatus={request.status} />
 
                             {request.priority_level > 0 && (
-                                <div className="flex gap-1 rounded-full border-1 border-border px-2 py-1 text-xs font-semibold">
+                                <div
+                                    className="flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11px] font-semibold"
+                                    style={{
+                                        backgroundColor: PRIORITY_ACCENT[request.priority_level].fill,
+                                        color: PRIORITY_ACCENT[request.priority_level].ink,
+                                    }}
+                                >
                                     {PRIORITY_ICONS[request.priority_level as 0 | 1 | 2]}
                                     <span>{PRIORITY_LABELS[request.priority_level]}</span>
                                 </div>
                             )}
 
                             {request.on_hold && (
-                                <div className="flex items-center gap-1 rounded-full border-1 border-yellow-900 bg-yellow-200/50 px-2 py-1 text-xs font-semibold text-yellow-900 dark:border-yellow-200 dark:text-yellow-100">
+                                <div className="flex items-center gap-1 rounded-[4px] bg-[var(--ads-danger-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ads-danger)]">
                                     <CirclePause size={14} />
                                     <span>On Hold</span>
                                 </div>
                             )}
                         </div>
 
-                        <p className="mt-2 text-sm text-foreground/70">{request.description}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">{request.description}</p>
 
                         {request.approved_by !== null && (
                             <div className="flex flex-wrap gap-1 text-sm">
@@ -346,7 +351,6 @@ function RequestDetails({
     isLoadingRecommendation: boolean;
     files?: typeof request.files;
 }) {
-    const isPending: boolean = request.status === 'Pending';
     const [activeTab, setActiveTab] = useState('facilities');
     const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
     const [canScrollPrev, setCanScrollPrev] = useState(false);
@@ -493,7 +497,7 @@ function RequestDetails({
                                     {tab.icon}
                                     <span>{tab.label}</span>
                                     {tab.badge !== undefined && (
-                                        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
+                                        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-[4px] bg-[var(--ads-neutral-bg)] px-1 text-[10px] font-semibold text-[var(--ads-neutral)]">
                                             {tab.badge}
                                         </span>
                                     )}

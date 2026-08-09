@@ -301,6 +301,7 @@ class RequestController extends Controller
                     ->orderBy('equipments.name'),
             ])->select('id', 'name', 'capacity', 'building')->get(),
             'existingRequest' => $this->service->getEditData($request->id),
+            'labeledBreadcrumb' => 'Edit Request',
         ]);
     }
 

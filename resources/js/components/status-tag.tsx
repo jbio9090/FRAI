@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 interface StatusTagProps {
     requestStatus: string;
-    variant?: 'default' | 'small';
+    variant?: 'default' | 'small' | 'large';
 }
 
 const STATUS_TONES: Record<string, 'ok' | 'amber' | 'danger' | 'neutral'> = {
@@ -30,7 +30,11 @@ export default function StatusTag({ requestStatus, variant = 'default' }: Status
             className={cn(
                 'inline-flex w-fit items-center gap-1.5 rounded-[4px] font-semibold whitespace-nowrap',
                 toneStyles[tone],
-                variant === 'small' ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-0.5 text-xs',
+                variant === 'small'
+                    ? 'px-1.5 py-0.5 text-[11px]'
+                    : variant === 'large'
+                      ? 'px-3 py-1 text-sm'
+                      : 'px-2 py-0.5 text-xs',
             )}
         >
             <span className="size-1.5 shrink-0 rounded-full bg-current" />

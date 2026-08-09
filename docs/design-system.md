@@ -237,9 +237,11 @@ dashboard's information architecture.
     the "FRAI" wordmark uses `text-[var(--foreground)]`. Caveat: `@atlaskit/icon` declares a
     `react ^18.2.0` peer while this app is on React 19, so install with
     `npm install --legacy-peer-deps`.
-12. **Create request page (applied, verified):** header = eyebrow + `font-display` H1
-    (`Requests · New request` / `Create Request`), line-variant tabs (`Details` / `Facility`),
-    and the form is grouped into flat `.ads-card` sections with `.ads-eyebrow` headers
+12. **Create request page (applied, verified):** no standalone header — the layout breadcrumb
+    (`Requests / Create`, or `Requests / Edit Request` via `labeledBreadcrumb` in the edit
+    controller) already provides page context, so the page starts directly with line-variant tabs
+    (`Details` / `Facility`), and the form is grouped into flat `.ads-card` sections with
+    `.ads-eyebrow` headers
     (`Request details`, `Event type & approval`, `Attachments`, `Schedule`, `Facility &
 equipment`). Event Type options and the selected value render as **accent lozenges** from
     `PRIORITY_ACCENT` (Academic=purple, Organization=green, University=orange, Government=blue) —

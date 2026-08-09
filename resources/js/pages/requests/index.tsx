@@ -1,5 +1,4 @@
-import { router } from '@inertiajs/react';
-import { Deferred } from '@inertiajs/react';
+import { router, Link } from '@inertiajs/react';
 import {
     CheckLine,
     MessageCirclePlus,
@@ -16,6 +15,7 @@ import {
     Download,
     FolderOpen,
     IterationCw,
+    CirclePlus,
 } from 'lucide-react';
 import moment from 'moment';
 import { motion, AnimatePresence } from 'motion/react';
@@ -25,6 +25,7 @@ import RequestCard from '@/components/request-card';
 import RequestsSkeleton from '@/components/skeleton/RequestIndexSkeleton';
 import SmartPagination from '@/components/SmartPagination';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
@@ -228,10 +229,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
     return (
         <DefaultLayout hasPadding={false}>
             <div className="mx-auto w-full max-w-7xl">
-                <h1 className="mb-6 px-4 pt-4 text-xl font-bold md:px-8 md:pt-8 pb-2">Requests</h1>
-
-                <div className="mt-4 flex w-full flex-col flex-wrap justify-center gap-4 px-4 md:px-8">
-                    <div className="flex gap-2">
+                <div className="flex w-full flex-col flex-wrap gap-4 px-4 pt-4 md:px-8 md:pt-8">
+                    <div className="flex flex-wrap items-center gap-2">
                         <InputGroup className="max-w-xs sm:max-w-sm md:max-w-md">
                             <InputGroupAddon>
                                 <Search />
@@ -290,7 +289,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         <span>Filters</span>
                                         {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + statusFilter.length >
                                             0 && (
-                                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-medium text-primary">
+                                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-[4px] bg-primary/12 px-1 text-[10px] font-medium text-primary">
                                                 {requesterFilter.length +
                                                     facilityFilter.length +
                                                     (externalEquipmentFilter ? 1 : 0) +
@@ -323,11 +322,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={f.id}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={facilityFilter.includes(String(f.id))}
-                                                            onChange={() => toggleFacility(String(f.id))}
+                                                            onCheckedChange={() => toggleFacility(String(f.id))}
                                                         />
                                                         {f.name}
                                                     </label>
@@ -357,11 +354,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={opt.value}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={statusFilter.includes(opt.value)}
-                                                            onChange={() => toggleStatus(opt.value)}
+                                                            onCheckedChange={() => toggleStatus(opt.value)}
                                                         />
                                                         {opt.label}
                                                     </label>
@@ -391,11 +386,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={r.id}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={requesterFilter.includes(String(r.id))}
-                                                            onChange={() => toggleRequester(String(r.id))}
+                                                            onCheckedChange={() => toggleRequester(String(r.id))}
                                                         />
                                                         {r.name}
                                                     </label>
@@ -414,11 +407,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={opt.value}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={externalEquipmentFilter === opt.value}
-                                                            onChange={() =>
+                                                            onCheckedChange={() =>
                                                                 setExternalEquipmentFilter((prev) => (prev === opt.value ? '' : opt.value))
                                                             }
                                                         />
@@ -553,11 +544,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={opt.value}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={statusFilter.includes(opt.value)}
-                                                        onChange={() => toggleStatus(opt.value)}
+                                                        onCheckedChange={() => toggleStatus(opt.value)}
                                                     />
                                                     {opt.label}
                                                 </label>
@@ -587,11 +576,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={f.id}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={facilityFilter.includes(String(f.id))}
-                                                        onChange={() => toggleFacility(String(f.id))}
+                                                        onCheckedChange={() => toggleFacility(String(f.id))}
                                                     />
                                                     {f.name}
                                                 </label>
@@ -621,11 +608,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={r.id}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={requesterFilter.includes(String(r.id))}
-                                                        onChange={() => toggleRequester(String(r.id))}
+                                                        onCheckedChange={() => toggleRequester(String(r.id))}
                                                     />
                                                     {r.name}
                                                 </label>
@@ -644,11 +629,11 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={opt.value}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={externalEquipmentFilter === opt.value}
-                                                        onChange={() => setExternalEquipmentFilter((prev) => (prev === opt.value ? '' : opt.value))}
+                                                        onCheckedChange={() =>
+                                                            setExternalEquipmentFilter((prev) => (prev === opt.value ? '' : opt.value))
+                                                        }
                                                     />
                                                     {opt.label}
                                                 </label>
@@ -686,7 +671,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         </Sheet>
                     </div>
 
-                    <div className="flex max-w-full gap-2 overflow-x-scroll [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div className="flex max-w-full gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         {commonFilterOptions.map((filter) => (
                             <Button
                                 className="rounded-full"
@@ -794,11 +779,21 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         initial={{ opacity: 0, scale: 0 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ duration: 0.4, scale: { type: 'tween', visualDuration: 0.4, bounce: 0.5 } }}
-                                        className="col-span-full m-auto mt-8 flex flex-col items-center gap-2 text-center"
+                                        className="col-span-full m-auto mt-8 flex flex-col items-center gap-3 text-center"
                                     >
-                                        <FolderOpen size={32} />
-                                        <h1 className="text-2xl font-bold">No Requests</h1>
-                                        <p>Nothing to see here...</p>
+                                        <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                                            <FolderOpen className="h-5 w-5 text-muted-foreground" />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <p className="text-sm font-semibold">No requests</p>
+                                            <p className="text-sm text-muted-foreground">Nothing to see here...</p>
+                                        </div>
+                                        <Link href={route('request.create')}>
+                                            <Button size="sm" variant="outline" className="mt-1 gap-2">
+                                                <CirclePlus className="h-4 w-4" />
+                                                Create Request
+                                            </Button>
+                                        </Link>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -829,7 +824,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 80, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-                        className="fixed right-0 bottom-0 left-0 z-50 flex flex-wrap items-center gap-2 border-t bg-secondary px-4 py-3 backdrop-blur-sm md:justify-center"
+                        className="fixed right-0 bottom-0 left-0 z-50 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-4 py-3 shadow-md backdrop-blur-sm md:justify-center"
                     >
                         <Button size="sm" variant="outline" onClick={clearAllSelection} className="flex items-center gap-1.5 hover:text-primary">
                             <span className="text-sm font-medium">{selected.length} selected</span>
@@ -841,7 +836,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         <Button
                             size="sm"
                             variant="outline"
-                            className="hover:text-green-500 dark:hover:text-green-500"
+                            className="hover:text-[var(--ads-ok)] dark:hover:text-[var(--ads-ok)]"
                             onClick={() => bulkAction('approve')}
                         >
                             <Check size={14} />
@@ -866,7 +861,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         <Button
                             size="sm"
                             variant="outline"
-                            className="hover:text-yellow-500 dark:hover:text-yellow-400"
+                            className="hover:text-[var(--ads-amber)] dark:hover:text-[var(--ads-amber)]"
                             onClick={() => bulkAction('for_reschedule')}
                         >
                             <IterationCw size={14} />
