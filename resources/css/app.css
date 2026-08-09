@@ -122,6 +122,8 @@
         var(--border);
     --color-input:
         var(--input);
+    --color-input-bg:
+        var(--input-bg);
     --color-ring:
         var(--ring);
     --color-chart-1:
@@ -219,6 +221,7 @@
     --destructive-foreground: #ffffff;
     --border: #091e4224;
     --input: #8590a2;
+    --input-bg: #ffffff;
     --ring: #388bff;
     --chart-1: #1d7f8c;
     --chart-2: #5e4db2;
@@ -337,6 +340,7 @@
     /* Borders - less sharp than before */
     --border: #a6c5e229;
     --input: #8c9bab;
+    --input-bg: #161a1d;
     --ring: #388bff;
 
     /* Chart palette (ADS dark) */
@@ -506,12 +510,16 @@
     border-radius: 0.5rem;
 }
 
-/* Section eyebrow: semibold, 11px, uppercase, muted */
+/* Display headers render in all caps (ClashDisplay) */
+.font-display {
+    text-transform: uppercase;
+}
+
+/* Section eyebrow: semibold, 11px, sentence case, muted */
 .ads-eyebrow {
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: var(--muted-foreground);
 }
 

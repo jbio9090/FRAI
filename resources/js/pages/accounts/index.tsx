@@ -1,7 +1,7 @@
-import { usePage } from "@inertiajs/react";
-import { router } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Loader2, Search, ArrowDownUp } from "lucide-react";
 import moment from "moment";
+import { motion, useReducedMotion } from "motion/react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import AvatarWithInitials from "@/components/avatar-with-initials";
 import SmartPagination from '@/components/SmartPagination';
@@ -36,8 +36,12 @@ import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from "@/layout.tsx/default.";
 import type { User } from "@/types";
 
+interface RowUser extends User {
+    is_active: boolean;
+}
+
 interface PaginatedUsers {
-    data: User[];
+    data: RowUser[];
     links?: { url: string | null; label: string; active: boolean }[];
     current_page: number;
     last_page: number;
@@ -46,7 +50,7 @@ interface PaginatedUsers {
 }
 
 interface Props {
-    users: PaginatedUsers | User[];
+    users: PaginatedUsers | RowUser[];
     roles: string[];
 }
 
@@ -67,6 +71,7 @@ interface AccountForm {
 interface PageProps {
     errors: Partial<Record<keyof AccountForm, string>>;
     [key: string]: unknown;
+    archived?: boolean;
     flash?: {
         success?: string;
         error?: string;
@@ -96,9 +101,17 @@ const CSV_HEADERS = ['name', 'email', 'role'];
 const CSV_TEMPLATE = `name,email,role\nJohn Doe,johndoe@example.com,admin\nJane Smith,janesmith@example.com,staff`;
 
 export default function AccountsPage({ users, roles }: Props) {
+    const reduceMotion = useReducedMotion();
+
+    const motionProps = {
+        initial: reduceMotion ? false : { opacity: 0, y: 6 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.25, ease: 'easeOut' as const },
+    };
+
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isBatchOpen, setIsBatchOpen] = useState(false);
-    const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [editingUser, setEditingUser] = useState<RowUser | null>(null);
     const [addForm, setAddForm] = useState<UserForm>(emptyForm);
     const [editForm, setEditForm] = useState<UserForm>(emptyForm);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,7 +119,7 @@ export default function AccountsPage({ users, roles }: Props) {
     const { errors } = usePage<PageProps>().props;
     const { flash } = usePage<PageProps>().props;
     const { auth } = usePage<PageProps>().props;
-    const archived = !!(usePage<PageProps>().props as any).archived;
+    const archived = !!usePage<PageProps>().props.archived;
     const [activeTab, setActiveTab] = useState<string>(archived ? 'archived' : 'active');
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [showBatchResultsModal, setShowBatchResultsModal] = useState(false);
@@ -123,7 +136,7 @@ export default function AccountsPage({ users, roles }: Props) {
     const [batchParseError, setBatchParseError] = useState<string>('');
 
     // Server-side listing helpers
-    const userList: User[] = Array.isArray(users) ? users : ((users as any)?.data ?? []);
+    const userList: RowUser[] = Array.isArray(users) ? users : users.data;
     const [searchQuery, setSearchQuery] = useState('');
     const [sort, setSort] = useState('');
     const isMounted = useRef(false);
@@ -214,7 +227,7 @@ export default function AccountsPage({ users, roles }: Props) {
         setTimeout(() => setCopiedIndex(null), 2000);
     };
 
-    const handleResetPassword = (targetUser: User) => {
+    const handleResetPassword = (targetUser: RowUser) => {
         if (window.confirm(`Are you sure you want to force a password reset for ${targetUser.name}?`)) {
             setEditingUser(null);
             router.post(route('accounts.reset-password', targetUser.id), {}, {
@@ -227,8 +240,8 @@ export default function AccountsPage({ users, roles }: Props) {
      * Toggle a user's active/inactive status.
      * Uses optimistic state via togglingUserId so the switch feels instant.
      */
-    const handleToggleStatus = (targetUser: User) => {
-        const nextState = !(targetUser as any).is_active;
+    const handleToggleStatus = (targetUser: RowUser) => {
+        const nextState = !targetUser.is_active;
         const label = nextState ? 'activate' : 'deactivate';
 
         if (!window.confirm(`Are you sure you want to ${label} ${targetUser.name}'s account?`)) return;
@@ -255,8 +268,8 @@ export default function AccountsPage({ users, roles }: Props) {
      *  - Super Admins can toggle anyone except themselves.
      *  - Admins can only toggle Department Heads.
      */
-    const canToggleStatus = (rowUser: User): boolean => {
-        const rowRole = ((rowUser as any).role ?? '').toLowerCase();
+    const canToggleStatus = (rowUser: RowUser): boolean => {
+        const rowRole = rowUser.role.toLowerCase();
 
         // Nobody can toggle a Super Admin
         if (rowRole === 'super admin') return false;
@@ -287,7 +300,7 @@ export default function AccountsPage({ users, roles }: Props) {
         });
     };
 
-    const openEdit = (user: User) => {
+    const openEdit = (user: RowUser) => {
         setEditingUser(user);
         setEditForm({
             username: user.name,
@@ -314,32 +327,6 @@ export default function AccountsPage({ users, roles }: Props) {
 
     const handleDelete = (id: number) => {
         router.delete(route("accounts.destroy", id));
-    };
-
-    const downloadBatchPasswordsCsv = () => {
-        if (!flash?.batch_results?.created) return;
-
-        const headers = ['Name', 'Email', 'Temporary Password'];
-        const rows = flash.batch_results.created.map(acc => [
-            `"${acc.name}"`,
-            `"${acc.email}"`,
-            `"${acc.temp_password}"`
-        ]);
-
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(e => e.join(','))
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `batch_credentials_${new Date().toISOString().slice(0, 10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
     };
 
     const exportCsvTemplate = () => {
@@ -557,69 +544,80 @@ export default function AccountsPage({ users, roles }: Props) {
 
     return (
         <DefaultLayout>
-            <h1 className="font-bold text-xl">Account Management</h1>
+            <div className="flex flex-col gap-6">
+                <motion.div {...motionProps}>
+                    <div className="flex flex-col gap-1">
+                        <p className="ads-eyebrow">User administration</p>
+                        <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
+                            Account Management
+                        </h1>
+                    </div>
+                </motion.div>
 
-            <div className="mt-4">
-                <Tabs value={activeTab} onValueChange={handleTabChange}>
-                    <TabsList variant="line">
-                        <TabsTrigger value="active">Active</TabsTrigger>
-                        <TabsTrigger value="archived">Archived</TabsTrigger>
-                    </TabsList>
-                </Tabs>
-            </div>
+                <motion.div {...motionProps}>
+                    <Tabs value={activeTab} onValueChange={handleTabChange}>
+                        <TabsList variant="line">
+                            <TabsTrigger value="active">Active</TabsTrigger>
+                            <TabsTrigger value="archived">Archived</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                </motion.div>
 
+                <motion.div {...motionProps} className="flex flex-wrap items-center gap-3">
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search accounts…"
+                            className="pl-9"
+                        />
+                    </div>
 
-            <div className="mt-6 flex items-center w-full gap-3 mb-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search accounts…"
-                        className="pl-9"
-                    />
-                </div>
+                    <div className="w-44">
+                        <Select value={sort} onValueChange={handleSortChange}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Sort" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                <SelectItem value="name-asc">Name (A → Z)</SelectItem>
+                                <SelectItem value="name-desc">Name (Z → A)</SelectItem>
+                                <SelectItem value="email-asc">Email (A → Z)</SelectItem>
+                                <SelectItem value="email-desc">Email (Z → A)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-                <div className="w-44">
-                    <Select value={sort} onValueChange={handleSortChange}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Sort" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            <SelectItem value="name-asc">Name (A → Z)</SelectItem>
-                            <SelectItem value="name-desc">Name (Z → A)</SelectItem>
-                            <SelectItem value="email-asc">Email (A → Z)</SelectItem>
-                            <SelectItem value="email-desc">Email (Z → A)</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+                    <div className="ml-auto flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            className="flex items-center gap-2"
+                            onClick={() => setIsAddOpen(true)}
+                        >
+                            <UserPlus2 className="h-4 w-4" />
+                            Add User
+                        </Button>
 
-                <Button
-                    variant="outline"
-                    className="flex items-center gap-2 ml-auto"
-                    onClick={() => setIsAddOpen(true)}
-                >
-                    <UserPlus2 className="h-4 w-4" />
-                    Add User
-                </Button>
-
-                <Button
-                    variant="default"
-                    className="flex items-center gap-2 mr-0"
-                    onClick={() => setIsBatchOpen(true)}
-                >
-                    <Users className="h-4 w-4" />
-                    Batch Import
-                </Button>
-            </div>
+                        <Button
+                            variant="default"
+                            className="flex items-center gap-2"
+                            onClick={() => setIsBatchOpen(true)}
+                        >
+                            <Users className="h-4 w-4" />
+                            Batch Import
+                        </Button>
+                    </div>
+                </motion.div>
 
             {/* ── Temp Password Modal ───────────────────────────────────────── */}
             <Dialog open={showPasswordModal} onOpenChange={setShowPasswordModal}>
-                <DialogContent className="sm:max-w-md border-t-4 border-t-primary">
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Key className="h-5 w-5 text-primary" />
+                            <span className="flex size-8 items-center justify-center rounded-md bg-[var(--ads-neutral-bg)] text-primary">
+                                <Key className="size-4" />
+                            </span>
                             {flash?.temp_password_reset?.context === 'create'
                                 ? "New Account Created"
                                 : "Password Reset Successful"}
@@ -653,7 +651,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                 className="h-12 w-12"
                                 onClick={copyToClipboard}
                             >
-                                {copied ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}
+                                {copied ? <Check className="h-5 w-5 text-[var(--ads-ok)]" /> : <Copy className="h-5 w-5" />}
                             </Button>
                         </div>
                     </div>
@@ -668,10 +666,12 @@ export default function AccountsPage({ users, roles }: Props) {
 
             {/* ── Batch Results Modal ───────────────────────────────────────── */}
             <Dialog open={showBatchResultsModal} onOpenChange={setShowBatchResultsModal}>
-                <DialogContent className="sm:max-w-2xl border-t-4 border-t-primary max-h-[90vh] flex flex-col">
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Users className="h-5 w-5 text-primary" />
+                            <span className="flex size-8 items-center justify-center rounded-md bg-[var(--ads-neutral-bg)] text-primary">
+                                <Users className="size-4" />
+                            </span>
                             Batch Import Results
                         </DialogTitle>
                     </DialogHeader>
@@ -679,18 +679,18 @@ export default function AccountsPage({ users, roles }: Props) {
                     <div className="flex-1 overflow-y-auto flex flex-col gap-4 py-2">
                         {/* Summary */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="flex items-center gap-3 rounded-lg border bg-green-50 dark:bg-green-950/20 p-3">
-                                <CircleCheck className="h-5 w-5 text-green-600 shrink-0" />
+                            <div className="flex items-center gap-3 rounded-lg border bg-[var(--ads-ok-bg)] p-3">
+                                <CircleCheck className="h-5 w-5 text-[var(--ads-ok)] shrink-0" />
                                 <div>
-                                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Successfully Created</p>
-                                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">{flash?.batch_results?.created.length ?? 0}</p>
+                                    <p className="text-sm font-medium text-[var(--ads-ok)]">Successfully Created</p>
+                                    <p className="text-2xl font-bold text-[var(--ads-ok)]">{flash?.batch_results?.created.length ?? 0}</p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 rounded-lg border bg-red-50 dark:bg-red-950/20 p-3">
-                                <CircleAlert className="h-5 w-5 text-red-600 shrink-0" />
+                            <div className="flex items-center gap-3 rounded-lg border bg-[var(--ads-danger-bg)] p-3">
+                                <CircleAlert className="h-5 w-5 text-[var(--ads-danger)] shrink-0" />
                                 <div>
-                                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Failed</p>
-                                    <p className="text-2xl font-bold text-red-700 dark:text-red-400">{flash?.batch_results?.failed.length ?? 0}</p>
+                                    <p className="text-sm font-medium text-[var(--ads-danger)]">Failed</p>
+                                    <p className="text-2xl font-bold text-[var(--ads-danger)]">{flash?.batch_results?.failed.length ?? 0}</p>
                                 </div>
                             </div>
                         </div>
@@ -716,7 +716,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                                     onClick={() => copyBatchPassword(acc.temp_password, i)}
                                                 >
                                                     {copiedIndex === i
-                                                        ? <Check className="h-3.5 w-3.5 text-green-500" />
+                                                        ? <Check className="h-3.5 w-3.5 text-[var(--ads-ok)]" />
                                                         : <Copy className="h-3.5 w-3.5" />}
                                                 </Button>
                                             </div>
@@ -732,11 +732,11 @@ export default function AccountsPage({ users, roles }: Props) {
                                 <p className="text-sm font-semibold text-foreground">Failed Rows</p>
                                 <div className="rounded-md border divide-y overflow-hidden">
                                     {flash?.batch_results?.failed.map((f, i) => (
-                                        <div key={i} className="flex items-start gap-3 px-3 py-2.5 bg-red-50/50 dark:bg-red-950/10">
-                                            <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                                        <div key={i} className="flex items-start gap-3 px-3 py-2.5 bg-[var(--ads-danger-bg)]">
+                                            <AlertTriangle className="h-4 w-4 text-[var(--ads-danger)] mt-0.5 shrink-0" />
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium">{f.name || '(empty)'} — {f.email || '(empty)'}</p>
-                                                <p className="text-xs text-red-600 dark:text-red-400">{f.reason}</p>
+                                                <p className="text-xs text-[var(--ads-danger)]">{f.reason}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -761,7 +761,9 @@ export default function AccountsPage({ users, roles }: Props) {
                 <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85dvh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <UserPlus2 />
+                            <span className="flex size-8 items-center justify-center rounded-md bg-[var(--ads-neutral-bg)] text-primary">
+                                <UserPlus2 className="size-4" />
+                            </span>
                             Add User
                         </DialogTitle>
                     </DialogHeader>
@@ -782,7 +784,9 @@ export default function AccountsPage({ users, roles }: Props) {
                 <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85dvh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <UserPen className="h-5 w-5" />
+                            <span className="flex size-8 items-center justify-center rounded-md bg-[var(--ads-neutral-bg)] text-primary">
+                                <UserPen className="size-4" />
+                            </span>
                             Edit User Profile
                         </DialogTitle>
                     </DialogHeader>
@@ -829,7 +833,9 @@ export default function AccountsPage({ users, roles }: Props) {
                 <DialogContent className="flex flex-col w-[calc(100vw-2rem)] max-w-2xl max-h-[85dvh] overflow-hidden p-4 sm:p-6">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
-                            <Users className="h-5 w-5" />
+                            <span className="flex size-8 items-center justify-center rounded-md bg-[var(--ads-neutral-bg)] text-primary">
+                                <Users className="size-4" />
+                            </span>
                             Batch Import Accounts
                         </DialogTitle>
                     </DialogHeader>
@@ -899,14 +905,14 @@ export default function AccountsPage({ users, roles }: Props) {
                                     <p className="text-sm font-medium">Preview</p>
                                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                         {validCount > 0 && (
-                                            <span className="flex items-center gap-1 text-green-600">
+                                            <span className="flex items-center gap-1 text-[var(--ads-ok)]">
                                                 <CircleCheck className="h-3.5 w-3.5" />
                                                 {validCount} valid
                                             </span>
                                         )}
 
                                         {warningCount > 0 && (
-                                            <span className="flex items-center gap-1 text-amber-600">
+                                            <span className="flex items-center gap-1 text-[var(--ads-amber)]">
                                                 <CircleAlert className="h-3.5 w-3.5" />
                                                 {warningCount} warnings
                                             </span>
@@ -934,21 +940,21 @@ export default function AccountsPage({ users, roles }: Props) {
                                         </TableHeader>
                                         <TableBody>
                                             {csvRows.map((row, i) => (
-                                                <TableRow key={i} className={row.status === 'error' ? 'bg-destructive/5' : row.status === 'warning' ? 'bg-yellow-50 dark:bg-yellow-950/10' : ''}>
+                                                <TableRow key={i} className={row.status === 'error' ? 'bg-[var(--ads-danger-bg)]' : row.status === 'warning' ? 'bg-[var(--ads-amber-bg)]' : ''}>
                                                     <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
                                                     <TableCell className="font-medium">{row.name || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell className="hidden sm:table-cell">{row.email || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell className="capitalize">{row.role || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell>
                                                         {row.status === 'valid' ? (
-                                                            <CircleCheck className="h-4 w-4 text-green-500" />
+                                                            <CircleCheck className="h-4 w-4 text-[var(--ads-ok)]" />
                                                         ) : row.status === 'warning' ? (
                                                             <span title={row.error}>
-                                                                <CircleAlert className="h-4 w-4 text-amber-500" />
+                                                                <CircleAlert className="h-4 w-4 text-[var(--ads-amber)]" />
                                                             </span>
                                                         ) : (
                                                             <span title={row.error}>
-                                                                <CircleAlert className="h-4 w-4 text-destructive" />
+                                                                <CircleAlert className="h-4 w-4 text-[var(--ads-danger)]" />
                                                             </span>
                                                         )}
                                                     </TableCell>
@@ -960,8 +966,8 @@ export default function AccountsPage({ users, roles }: Props) {
 
                                 {warningCount > 0 && (
                                     <div className="flex flex-col gap-1">
-                                        <p className="text-xs text-amber-700 flex items-center gap-1.5">
-                                            <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" />
+                                        <p className="text-xs text-[var(--ads-amber)] flex items-center gap-1.5">
+                                            <AlertTriangle className="h-3 w-3 shrink-0 text-[var(--ads-amber)]" />
                                             {warningSummary}
                                         </p>
                                     </div>
@@ -970,7 +976,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                 {errorCount > 0 && (
                                     <div className="flex flex-col gap-1">
                                         {csvRows.filter(r => r.status === 'error').map((r, i) => (
-                                            <p key={i} className="text-xs text-destructive flex items-center gap-1.5">
+                                            <p key={i} className="text-xs text-[var(--ads-danger)] flex items-center gap-1.5">
                                                 <AlertTriangle className="h-3 w-3 shrink-0" />
                                                 {r.error}
                                             </p>
@@ -1015,15 +1021,50 @@ export default function AccountsPage({ users, roles }: Props) {
             </Dialog>
 
             {/* ── Users Table ──────────────────────────────────────────────── */}
-            <div className="mt-6">
-                {!Array.isArray(users) && (users as any).last_page > 1 && (
+            <motion.div {...motionProps} className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
+                        <div className="flex size-9 items-center justify-center rounded-md bg-[var(--ads-neutral-bg)] text-foreground">
+                            <Users className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-muted-foreground">Total Accounts</p>
+                            <p className="font-display text-xl font-semibold">{userList.length}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
+                        <div className="flex size-9 items-center justify-center rounded-md bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]">
+                            <CircleCheck className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-muted-foreground">Active</p>
+                            <p className="font-display text-xl font-semibold">
+                                {userList.filter(u => u.is_active).length}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
+                        <div className="flex size-9 items-center justify-center rounded-md bg-[var(--ads-danger-bg)] text-[var(--ads-danger)]">
+                            <CircleAlert className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-muted-foreground">Inactive</p>
+                            <p className="font-display text-xl font-semibold">
+                                {userList.filter(u => !u.is_active).length}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border bg-card">
+                {!Array.isArray(users) && users.last_page > 1 && (
                     <SmartPagination
-                        currentPage={(users as any).current_page}
-                        lastPage={(users as any).last_page}
+                        currentPage={users.current_page}
+                        lastPage={users.last_page}
                         onPageChange={(page) =>
                             router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true })
                         }
-                        className={'my-4 px-4 py-0 md:px-8'}
+                        className={'my-4 px-4 py-0 md:px-6'}
                     />
                 )}
 
@@ -1045,7 +1086,7 @@ export default function AccountsPage({ users, roles }: Props) {
                     </TableHeader>
                     <TableBody>
                         {userList.map((rowUser) => {
-                            const isActive = (rowUser as any).is_active ?? true;
+                            const isActive = rowUser.is_active ?? true;
                             const togglable = canToggleStatus(rowUser);
                             const isToggling = togglingUserId === rowUser.id;
 
@@ -1057,22 +1098,23 @@ export default function AccountsPage({ users, roles }: Props) {
                                     <TableCell>
                                         <AvatarWithInitials
                                             username={rowUser.name}
-                                            avatarSrc={(rowUser as any).profile}
+                                            avatarSrc={rowUser.profile}
                                             size="sm"
                                         />
                                     </TableCell>
                                     <TableCell className="font-medium">
-                                        <span>{(rowUser as any).name}</span>
+                                        <span>{rowUser.name}</span>
                                         {!isActive && (
-                                            <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                            <span className="ml-2 inline-flex items-center gap-1 rounded-[4px] bg-[var(--ads-neutral-bg)] px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                                <span className="size-1 rounded-full bg-current" />
                                                 Inactive
                                             </span>
                                         )}
                                     </TableCell>
-                                    <TableCell>{(rowUser as any).email}</TableCell>
-                                    <TableCell>{moment((rowUser as any).created_at).format("MMMM D, YYYY h:mm A")}</TableCell>
-                                    {activeTab === 'archived' && (<TableCell>{moment((rowUser as any).deleted_at).format("MMMM D, YYYY h:mm A")}</TableCell>)}
-                                    <TableCell className="capitalize">{(rowUser as any).role}</TableCell>
+                                    <TableCell>{rowUser.email}</TableCell>
+                                    <TableCell>{moment(rowUser.created_at).format("MMMM D, YYYY h:mm A")}</TableCell>
+                                    {activeTab === 'archived' && (<TableCell>{moment(rowUser.deleted_at).format("MMMM D, YYYY h:mm A")}</TableCell>)}
+                                    <TableCell className="capitalize">{rowUser.role}</TableCell>
 
                                     {/* Status toggle cell */}
                                     {(isAdmin || isSuperAdmin) && activeTab !== 'archived' && (
@@ -1099,7 +1141,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => handleRestore((rowUser as any).id)}
+                                                    onClick={() => handleRestore(rowUser.id)}
                                                     title="Restore Account"
                                                 >
                                                     <ArrowDownUp className="h-4 w-4 text-primary" />
@@ -1118,7 +1160,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                                     </Button>
                                                 )}
 
-                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && (rowUser as any).role?.toLowerCase() === "admin")) && (
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && rowUser.role.toLowerCase() === "admin")) && (
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
@@ -1128,11 +1170,11 @@ export default function AccountsPage({ users, roles }: Props) {
                                                     </Button>
                                                 )}
 
-                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && (rowUser as any).role?.toLowerCase() === "admin")) && (
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && rowUser.role.toLowerCase() === "admin")) && (
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        onClick={() => handleDelete((rowUser as any).id)}
+                                                        onClick={() => handleDelete(rowUser.id)}
                                                     >
                                                         <Trash2 className="h-4 w-4 text-destructive" />
                                                     </Button>
@@ -1146,16 +1188,18 @@ export default function AccountsPage({ users, roles }: Props) {
                     </TableBody>
                 </Table>
 
-                {!Array.isArray(users) && (users as any).last_page > 1 && (
+                {!Array.isArray(users) && users.last_page > 1 && (
                     <SmartPagination
-                        currentPage={(users as any).current_page}
-                        lastPage={(users as any).last_page}
+                        currentPage={users.current_page}
+                        lastPage={users.last_page}
                         onPageChange={(page) =>
                             router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true })
                         }
-                        className={'my-5 px-4 md:px-8'}
+                        className={'my-5 px-4 md:px-6'}
                     />
                 )}
+                </div>
+                </motion.div>
             </div>
         </DefaultLayout>
     );

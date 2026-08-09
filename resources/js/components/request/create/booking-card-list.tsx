@@ -52,13 +52,26 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove }: Bo
         draftConflictsByIndex.set(sourceIndex, existing);
     };
 
+    // Normalize HH:MM:SS (existing bookings) and HH:MM (freshly added) to minutes so
+    // adjacent slots that only touch at a boundary are not treated as overlapping.
+    const toMinutes = (time: string): number => {
+        const [hours, minutes] = time.split(':').map(Number);
+        return hours * 60 + minutes;
+    };
+
     for (let i = 0; i < bookings.length; i++) {
         for (let j = i + 1; j < bookings.length; j++) {
             const a = bookings[i];
             const b = bookings[j];
-            if (a.facility_id === b.facility_id && a.date === b.date && a.time_start < b.time_end && a.time_end > b.time_start) {
-                addDraftConflict(i, j);
-                addDraftConflict(j, i);
+            if (a.facility_id === b.facility_id && a.date === b.date) {
+                const aStart = toMinutes(a.time_start);
+                const aEnd = toMinutes(a.time_end);
+                const bStart = toMinutes(b.time_start);
+                const bEnd = toMinutes(b.time_end);
+                if (aStart < bEnd && aEnd > bStart) {
+                    addDraftConflict(i, j);
+                    addDraftConflict(j, i);
+                }
             }
         }
     }

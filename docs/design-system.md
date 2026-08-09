@@ -115,11 +115,11 @@ sidebar renders as a 256px offcanvas drawer with a backdrop.
 
 | Role               | Face                 | Notes                                             |
 | ------------------ | -------------------- | ------------------------------------------------- |
-| Display / headings | Manrope Bold         | greeting, wordmark, stat numerals; tight tracking |
+| Display / headings | ClashDisplay (all caps) | greeting, wordmark, stat numerals; tight tracking; `font-display` renders uppercase |
 | UI / body          | Manrope              | 400 / 500 / 600 / 700; body 14px                  |
 | Data               | none — no mono voice |                                                   |
 
-**Eyebrow spec:** `.ads-eyebrow` — Manrope semibold, 11px, uppercase, `--muted-foreground`.
+**Eyebrow spec:** `.ads-eyebrow` — Manrope semibold, 11px, sentence case, `--muted-foreground`.
 Section eyebrows carry real meaning (e.g. `GSO desk · Aug 12`), never decorative numbering.
 
 ---

@@ -184,6 +184,7 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                     currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
                     timeStart: currentTimeStart,
                     timeEnd: currentTimeEnd,
+                    excludeRequestId: existingRequest?.id ?? null,
                 }).then((conflicts) => {
                     if (conflicts) setEquipmentConflicts(conflicts);
                 });
@@ -204,7 +205,7 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         } else {
             setEquipmentAvailability({});
         }
-    }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility]);
+    }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility, existingRequest?.id]);
 
     useEffect(() => {
         if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
@@ -256,8 +257,8 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
 
         setSelectedFacility(booking.facility_id);
         setSelectedDates([new Date(booking.date)]);
-        setCurrentTimeStart(booking.time_start);
-        setCurrentTimeEnd(booking.time_end);
+        setCurrentTimeStart(booking.time_start.slice(0, 5));
+        setCurrentTimeEnd(booking.time_end.slice(0, 5));
         setSelectedEquipment(booking.equipment);
         setSelectedBorrowedEquipment(booking.borrowed_equipment ?? []);
         setExternalEquipment(booking.external_equipment ?? []);
@@ -377,6 +378,7 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                 currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
                 timeStart: currentTimeStart,
                 timeEnd: currentTimeEnd,
+                excludeRequestId: existingRequest?.id ?? null,
             }).then((conflicts) => {
                 if (conflicts) setEquipmentConflicts(conflicts);
             });

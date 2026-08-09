@@ -7,13 +7,14 @@ import {
     Trash2,
     ArrowLeftRight,
     Package,
-    Building2,
-    Hash,
     AlertCircle,
     ArrowDownUp,
     ArrowUp,
+    Check,
+    ChevronDown,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import SmartPagination from "@/components/SmartPagination";
 import {
     AlertDialog,
@@ -27,7 +28,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
     Dialog,
@@ -46,7 +46,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+    Popover,
+    PopoverContent,
+    PopoverHeader,
+    PopoverTitle,
+    PopoverTrigger,
+} from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -58,9 +64,9 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import useDarkMode from "@/hooks/use-darkMode";
 import { usePermission } from "@/hooks/use-permission";
 import DefaultLayout from "@/layout.tsx/default.";
+import { cn } from "@/lib/utils";
 import wordToColor from "@/lib/wordToColor";
 
 interface FacilityPivot {
@@ -104,7 +110,6 @@ interface Filters {
     sort: string;
 }
 
-
 function EquipmentDialog({
     open,
     equipment,
@@ -119,11 +124,6 @@ function EquipmentDialog({
     const [quantity, setQuantity] = useState(1);
     const [errors, setErrors] = useState<{ name?: string; quantity?: string }>({});
     const [processing, setProcessing] = useState(false);
-    const { hasRole } = usePermission();
-
-    if (!hasRole("admin") && !hasRole("Super Admin")) {
-        return;
-    }
 
     useEffect(() => {
         if (open) {
@@ -139,12 +139,12 @@ function EquipmentDialog({
         if (isEdit) {
             router.put(`/equipments/${equipment!.id}`, data, {
                 onSuccess: () => { setProcessing(false); onClose(); },
-                onError: (e) => { setErrors(e as any); setProcessing(false); },
+                onError: (e) => { setErrors(e as Record<string, string>); setProcessing(false); },
             });
         } else {
             router.post("/equipments", data, {
                 onSuccess: () => { setProcessing(false); onClose(); },
-                onError: (e) => { setErrors(e as any); setProcessing(false); },
+                onError: (e) => { setErrors(e as Record<string, string>); setProcessing(false); },
             });
         }
     };
@@ -153,7 +153,10 @@ function EquipmentDialog({
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>{isEdit ? "Edit Equipment" : "Add Equipment"}</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2">
+                        {isEdit ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                        {isEdit ? "Edit Equipment" : "Add Equipment"}
+                    </DialogTitle>
                     <DialogDescription>
                         {isEdit
                             ? "Update the equipment details below."
@@ -208,7 +211,6 @@ function EquipmentDialog({
         </Dialog>
     );
 }
-
 
 function AssignDialog({
     open,
@@ -282,7 +284,10 @@ function AssignDialog({
         <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>{equipment.name}</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2">
+                        <ArrowLeftRight className="h-4 w-4" />
+                        {equipment.name}
+                    </DialogTitle>
                     <DialogDescription>Assign to Facilities</DialogDescription>
                 </DialogHeader>
 
@@ -314,11 +319,12 @@ function AssignDialog({
                         return (
                             <div
                                 key={f.id}
-                                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors
-                                        ${checked
+                                className={cn(
+                                    "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors",
+                                    checked
                                         ? "border-primary/40 bg-primary/5"
                                         : "border-border bg-background"
-                                    }`}
+                                )}
                             >
                                 <Checkbox
                                     id={`fac-${f.id}`}
@@ -388,20 +394,32 @@ export default function EquipmentsPage({
     const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
     const [deleting, setDeleting] = useState(false);
     const { hasRole } = usePermission();
+    const reduceMotion = useReducedMotion();
+
+    const motionProps = {
+        initial: reduceMotion ? false : { opacity: 0, y: 6 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.25, ease: "easeOut" as const },
+    };
+
+    const latestParams = useRef({ search, sortValue });
+    useEffect(() => {
+        latestParams.current = { search, sortValue };
+    }, [search, sortValue]);
 
     const applyFilters = useCallback(
         (params: { search?: string; sort?: string; page?: number }) => {
             router.get(
                 "/equipments",
                 {
-                    search: params.search ?? search,
-                    sort: params.sort !== undefined ? params.sort : sortValue,
+                    search: params.search ?? latestParams.current.search,
+                    sort: params.sort !== undefined ? params.sort : latestParams.current.sortValue,
                     page: params.page ?? 1,
                 },
                 { preserveState: true, replace: true }
             );
         },
-        [search, sortValue]
+        []
     );
 
     useEffect(() => {
@@ -409,7 +427,7 @@ export default function EquipmentsPage({
             applyFilters({ search, page: 1 });
         }, 350);
         return () => clearTimeout(timeout);
-    }, [search]);
+    }, [search, applyFilters]);
 
     const handleSortChange = (value: SortValue | "") => {
         setSortValue(value);
@@ -431,15 +449,16 @@ export default function EquipmentsPage({
 
     const enrichedEquipments = useMemo(
         () =>
-            equipments.data.map((eq, i) => {
+            equipments.data.map((eq) => {
                 const assigned = eq.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
                 const over = assigned > eq.quantity;
                 const empty = assigned === 0;
-                const rowNumber = (equipments.from ?? 1) + i;
-                return { ...eq, assigned, over, empty, rowNumber };
+                return { ...eq, assigned, over, empty };
             }),
-        [equipments.data, equipments.from]
+        [equipments.data]
     );
+
+    const currentSortLabel = SORT_OPTIONS.find((o) => o.value === sortValue)?.label;
 
     const paginationLabel = useMemo(
         () =>
@@ -489,198 +508,234 @@ export default function EquipmentsPage({
                 </>
             )}
 
-            <div className="mb-4">
-                <h1 className="text-xl font-bold">Equipments</h1>
-            </div>
+            <div className="flex flex-col gap-6">
+                <motion.div {...motionProps}>
+                    <div className="flex flex-col gap-1">
+                        <p className="ads-eyebrow">Equipment inventory</p>
+                        <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
+                            Equipments
+                        </h1>
+                    </div>
+                </motion.div>
 
-            <div className="flex items-center gap-3 mb-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search equipment…"
-                        className="pl-9"
-                    />
-                </div>
+                <motion.div {...motionProps} className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search equipment…"
+                            className="pl-9"
+                        />
+                    </div>
 
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
-                            <ArrowDownUp className="h-4 w-4" />
-                            <span>Sort By</span>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline">
+                                <ArrowDownUp className="h-4 w-4" />
+                                <span>{currentSortLabel && currentSortLabel !== "None" ? currentSortLabel : "Sort By"}</span>
+                                <ChevronDown className="h-4 w-4" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-48 p-0">
+                            <PopoverHeader>
+                                <PopoverTitle className="px-3 py-1 pt-4 text-xs font-semibold text-muted-foreground">
+                                    Sort By
+                                </PopoverTitle>
+                            </PopoverHeader>
+                            <div className="flex flex-col p-1">
+                                {SORT_OPTIONS.map((opt) => (
+                                    <Button
+                                        key={opt.value || "none"}
+                                        onClick={() => handleSortChange(opt.value)}
+                                        variant={sortValue === opt.value ? "secondary" : "ghost"}
+                                        className="justify-between w-full px-2"
+                                        size="sm"
+                                    >
+                                        <span>{opt.label}</span>
+                                        {opt.value === "" ? (
+                                            sortValue === opt.value
+                                                ? <Check size={14} />
+                                                : <Check size={14} className="opacity-0" />
+                                        ) : (
+                                            sortValue === opt.value
+                                                ? sortValue.endsWith("asc")
+                                                    ? <ArrowUp size={14} className="rotate-180" />
+                                                    : <ArrowUp size={14} />
+                                                : <ArrowUp size={14} className="opacity-0" />
+                                        )}
+                                    </Button>
+                                ))}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+
+                    {(hasRole("admin") || hasRole("Super Admin")) && (
+                        <Button onClick={() => setAddOpen(true)} className="gap-2">
+                            <Plus size={16} />
+                            Add Equipment
                         </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="p-0 w-48">
-                        <p className="px-3 py-1 pt-4 text-xs text-muted-foreground font-semibold">
-                            Sort By
-                        </p>
-                        <div className="flex flex-col p-1">
-                            {SORT_OPTIONS.map((opt) => (
-                                <Button
-                                    key={opt.value || "none"}
-                                    onClick={() => handleSortChange(opt.value)}
-                                    variant={sortValue === opt.value ? "secondary" : "ghost"}
-                                    className="justify-between w-full px-2"
-                                    size="sm"
-                                >
-                                    <span>{opt.label}</span>
-                                    {opt.value !== "" && (
-                                        sortValue === opt.value
-                                            ? sortValue.endsWith("asc")
-                                                ? <ArrowUp size={14} className="rotate-180" />
-                                                : <ArrowUp size={14} />
-                                            : <ArrowUp size={14} className="opacity-0" />
-                                    )}
-                                </Button>
-                            ))}
-                        </div>
-                    </PopoverContent>
-                </Popover>
+                    )}
+                </motion.div>
 
-                {(hasRole("admin") || hasRole("Super Admin")) && (
-                    <Button onClick={() => setAddOpen(true)}>
-                        <Plus size={16} />
-                        Add Equipment
-                    </Button>
-                )}
-            </div>
-
-            <Table>
-                <TableHeader>
-                    <TableRow className="text-sm">
-                        <TableHead className="w-10 px-4"></TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="w-36">Total Qty</TableHead>
-                        <TableHead className="w-36">Assigned</TableHead>
-                        <TableHead>Assigned To Facility</TableHead>
-                        <TableHead className="w-12" />
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {enrichedEquipments.length === 0 ? (
-                        <TableRow>
-                            <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
-                                <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                No equipment found
-                            </TableCell>
-                        </TableRow>
-                    ) : (
-                        enrichedEquipments.map((eq) => {
-                            const { assigned, over, empty, rowNumber } = eq;
-
-                            return (
-                                <TableRow key={eq.id}>
-                                    <TableCell className="text-muted-foreground text-sm px-4">
-                                        {rowNumber}
-                                    </TableCell>
-                                    <TableCell className="text-sm font-medium">{eq.name}</TableCell>
-                                    <TableCell>
-                                        <span className="text-sm font-medium text-right">{eq.quantity}</span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className={`inline-flex items-center gap-0.5 rounded-md border px-2.5 py-1 text-sm
-                                            ${over ? "border-destructive/30" : "border-border bg-muted/40"}`}
-                                        >
-                                            <span className={`font-medium ${over ? "text-destructive" : empty ? "text-muted-foreground" : "text-primary/60"}`}>
-                                                {assigned}
-                                            </span>
-                                            <span className="text-sm text-muted-foreground/50 mx-0.5">/</span>
-                                            <span className="text-sm text-muted-foreground">{eq.quantity}</span>
+                <motion.div
+                    {...motionProps}
+                    className="ads-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0"
+                >
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="text-sm">
+                                <TableHead>Name</TableHead>
+                                <TableHead className="w-36">Total Qty</TableHead>
+                                <TableHead className="w-36">Assigned</TableHead>
+                                <TableHead>Assigned To Facility</TableHead>
+                                <TableHead className="w-28" />
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {enrichedEquipments.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-32">
+                                        <div className="flex flex-col items-center justify-center gap-2">
+                                            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                                                <Package className="h-5 w-5 text-muted-foreground" />
+                                            </div>
+                                            <p className="text-sm text-muted-foreground">No equipment found.</p>
                                         </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-wrap gap-1">
-                                            {eq.facilities.length === 0 ? (
-                                                <span className="text-xs text-muted-foreground italic">
-                                                    Unassigned
-                                                </span>
-                                            ) : (
-                                                eq.facilities.map((f) => {
-                                                    const style = wordToColor(f.name);
-                                                    return (
-                                                        <Badge
-                                                            key={f.id}
-                                                            variant="secondary"
-                                                            className="text-xs flex items-center font-bold tag"
-                                                            style={style}
-                                                        >
-                                                            {(f.pivot?.quantity && f.pivot.quantity > 1)
-                                                                ? (<span className="">{`${f.pivot.quantity} in `}</span>)
-                                                                : ""}
-                                                            <span>{f.name}</span>
-                                                        </Badge>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-4 hidden md:block">
-                                            <Button onClick={() => setAssignTarget(eq)} variant="ghost">
-                                                <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                            </Button>
-                                            <Button onClick={() => setEditTarget(eq)} variant="ghost">
-                                                <Pencil className="w-4 h-4 mr-2" />
-                                            </Button>
-                                            <Button
-                                                onClick={() => setDeleteTarget(eq)}
-                                                variant="ghost"
-                                                className="text-destructive focus:text-destructive"
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-2" />
-                                            </Button>
-                                        </div>
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 block md:hidden"
-                                                >
-                                                    <MoreHorizontal className="w-4 h-4" />
-                                                    <span className="sr-only">Open menu</span>
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => setAssignTarget(eq)}>
-                                                    <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                                    Assign Facilities
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => setEditTarget(eq)}>
-                                                    <Pencil className="w-4 h-4 mr-2" />
-                                                    Edit
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                    onClick={() => setDeleteTarget(eq)}
-                                                    className="text-destructive focus:text-destructive"
-                                                >
-                                                    <Trash2 className="w-4 h-4 mr-2" />
-                                                    Delete
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
-                            );
-                        })
-                    )}
-                </TableBody>
-            </Table>
+                            ) : (
+                                enrichedEquipments.map((eq) => {
+                                    const { assigned, over, empty } = eq;
 
-            <p className="text-sm w-full mb-4 mt-2 text-right text-muted-foreground shrink-0">{paginationLabel}</p>
+                                    const ratioTone = over
+                                        ? "border-[var(--ads-danger)]/30 bg-[var(--ads-danger-bg)] text-[var(--ads-danger)]"
+                                        : empty
+                                            ? "border-border bg-[var(--ads-neutral-bg)] text-[var(--ads-neutral)]"
+                                            : "border-[var(--ads-ok)]/30 bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]";
 
-            {/* Pagination footer */}
-            {equipments.last_page > 1 && (
-                <div className="flex items-center justify-between mt-4 gap-4">
-                    <SmartPagination
-                        currentPage={equipments.current_page}
-                        lastPage={equipments.last_page}
-                        onPageChange={handlePageChange}
-                    />
-                </div>
-            )}
+                                    return (
+                                        <TableRow key={eq.id}>
+                                            <TableCell className="text-sm font-medium">{eq.name}</TableCell>
+                                            <TableCell>
+                                                <span className="text-sm font-semibold tabular-nums">{eq.quantity}</span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className={cn(
+                                                    "inline-flex items-center gap-1 rounded-[4px] border px-2.5 py-0.5 text-sm whitespace-nowrap",
+                                                    ratioTone
+                                                )}>
+                                                    <span className="font-semibold tabular-nums">{assigned}</span>
+                                                    <span className="opacity-60">/</span>
+                                                    <span className="tabular-nums">{eq.quantity}</span>
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {eq.facilities.length === 0 ? (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Unassigned
+                                                        </span>
+                                                    ) : (
+                                                        eq.facilities.map((f) => {
+                                                            const style = wordToColor(f.name);
+                                                            return (
+                                                                <Badge
+                                                                    key={f.id}
+                                                                    variant="secondary"
+                                                                    className="tag items-center gap-1 rounded-[4px] border border-border px-2 py-0.5 text-xs font-semibold"
+                                                                    style={style}
+                                                                >
+                                                                    {(f.pivot?.quantity && f.pivot.quantity > 1)
+                                                                        ? <span>{`${f.pivot.quantity} in`}</span>
+                                                                        : null}
+                                                                    <span className="size-1.5 rounded-full bg-current" />
+                                                                    <span>{f.name}</span>
+                                                                </Badge>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap text-right">
+                                                <div className="hidden items-center justify-end gap-1 md:flex">
+                                                    <Button
+                                                        onClick={() => setAssignTarget(eq)}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        aria-label={`Assign ${eq.name}`}
+                                                    >
+                                                        <ArrowLeftRight className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button
+                                                        onClick={() => setEditTarget(eq)}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        aria-label={`Edit ${eq.name}`}
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button
+                                                        onClick={() => setDeleteTarget(eq)}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-destructive focus:text-destructive"
+                                                        aria-label={`Delete ${eq.name}`}
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 md:hidden"
+                                                            aria-label="Open menu"
+                                                        >
+                                                            <MoreHorizontal className="w-4 h-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => setAssignTarget(eq)}>
+                                                            <ArrowLeftRight className="w-4 h-4 mr-2" />
+                                                            Assign Facilities
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => setEditTarget(eq)}>
+                                                            <Pencil className="w-4 h-4 mr-2" />
+                                                            Edit
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            onClick={() => setDeleteTarget(eq)}
+                                                            className="text-destructive focus:text-destructive"
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-2" />
+                                                            Delete
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                </motion.div>
+
+                <p className="text-sm w-full mb-4 mt-2 text-right text-muted-foreground shrink-0">{paginationLabel}</p>
+
+                {equipments.last_page > 1 && (
+                    <div className="flex items-center justify-between mt-4 gap-4">
+                        <SmartPagination
+                            currentPage={equipments.current_page}
+                            lastPage={equipments.last_page}
+                            onPageChange={handlePageChange}
+                        />
+                    </div>
+                )}
+            </div>
         </DefaultLayout>
     );
 }

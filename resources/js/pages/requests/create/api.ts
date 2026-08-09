@@ -83,6 +83,7 @@ export async function fetchEquipmentConflicts(params: {
     currentDate: string;
     timeStart: string;
     timeEnd: string;
+    excludeRequestId?: number | null;
 }): Promise<Record<number, EquipmentConflict[]> | null> {
     if (!params.currentDate || !params.timeStart || !params.timeEnd || params.equipmentIds.length === 0) return null;
 
@@ -98,6 +99,7 @@ export async function fetchEquipmentConflicts(params: {
                 date: params.currentDate,
                 time_start: params.timeStart,
                 time_end: params.timeEnd,
+                exclude_request_id: params.excludeRequestId ?? null,
             }),
         });
         const data = await res.json();
