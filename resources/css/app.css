@@ -313,13 +313,13 @@
     /* Lifted background (less deep black) */
     --background: #1d2125;
     /* Softened foreground (off-white/light gray) */
-    --foreground: #e7e7e7;
+    --foreground: #f2f4f7;
 
     /* Surfaces with tighter contrast to background */
     --card: #1d2125;
-    --card-foreground: #b6c2cf;
+    --card-foreground: #c7d1db;
     --popover: #282e33;
-    --popover-foreground: #b6c2cf;
+    --popover-foreground: #c7d1db;
 
     /* Primary (Maintained from Light Mode) */
     --primary: #3b82f6;
@@ -327,13 +327,13 @@
 
     /* Secondary & Muted tones for softer UI elements */
     --secondary: #161a1d;
-    --secondary-foreground: #c7d1db;
+    --secondary-foreground: #dee4ea;
     --muted: #161a1d;
-    --muted-foreground: #9fadbc;
+    --muted-foreground: #b6c2cf;
 
     /* Accents */
     --accent: #a1bdd914;
-    --accent-foreground: #dee4ea;
+    --accent-foreground: #e9eef3;
     --destructive: #f87462;
     --destructive-foreground: #1d2125;
 
@@ -352,11 +352,11 @@
 
     /* Sidebar - slightly darker than main content for depth */
     --sidebar: #161a1d;
-    --sidebar-foreground: #b6c2cf;
+    --sidebar-foreground: #c7d1db;
     --sidebar-primary: #3b82f6;
     --sidebar-primary-foreground: #1d2125;
     --sidebar-accent: #a1bdd914;
-    --sidebar-accent-foreground: #dee4ea;
+    --sidebar-accent-foreground: #e9eef3;
     --sidebar-border: #a6c5e229;
     --sidebar-ring: #388bff;
 
@@ -367,7 +367,7 @@
     --ads-amber-bg: #3d2b00;
     --ads-danger: #f87462;
     --ads-danger-bg: #4d1a14;
-    --ads-neutral: #9fadbc;
+    --ads-neutral: #b6c2cf;
     --ads-neutral-bg: #161a1d;
 
     /* ADS event-type accents (dark) */

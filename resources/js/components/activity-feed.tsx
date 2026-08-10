@@ -46,6 +46,7 @@ const eventLabels: Record<string, string> = {
     "request.marked_for_reschedule": "Marked for Reschedule",
     "request.file_uploaded": "File Uploaded",
     "request.file_removed": "File Removed",
+    "settings.updated": "Settings Updated",
 };
 
 function formatEventLabel(event: string): string {

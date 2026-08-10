@@ -61,7 +61,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: 'Equipments', url: 'equipments', icon: ComponentIcon },
             ...(hasPermission('manage users') ? [{ title: 'Accounts', url: 'accounts.index', icon: PersonIcon }] : []),
             ...(hasPermission('view chatbot logs') ? [{ title: 'Chatbot Logs', url: 'chatbot.logs.index', icon: CommentIcon }] : []),
-            ...(hasPermission('manage request options') ? [{ title: 'Request Settings', url: 'request-settings', icon: SettingsIcon }] : []),
+            ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
         ],
         navMenu: [
             { title: 'Pending', url: route('requests.index', { status: 'pending' }), status: 'pending', icon: ClockIcon },

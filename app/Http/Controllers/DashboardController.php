@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AuditEvent;
 use App\Enums\RequestStatus;
 use App\Models\AuditLog;
 use App\Models\Facility;
@@ -9,7 +10,9 @@ use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Services\FacilityService;
 use App\Services\RequestService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 
@@ -17,12 +20,13 @@ class DashboardController extends Controller
 {
     public function __construct(protected RequestService $requestService, protected FacilityService $facilityService) {}
 
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
         $isAdmin = $user->hasRole(['admin', 'Super Admin']);
         $start = now()->startOfMonth()->format('Y-m-d');
         $end = now()->endOfMonth()->format('Y-m-d');
+        $auditRange = [now()->subDays(6)->startOfDay(), now()->endOfDay()];
 
         $chartData = AuditLog::query()
             ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
@@ -80,11 +84,12 @@ class DashboardController extends Controller
             'initialEvents' => $this->facilityService->getAllSchedule($start, $end),
             'buildings' => Facility::distinct()->pluck('building')->filter()->values(),
             // Filter recent logs list
-            'auditLogs' => AuditLog::with('user')
-                ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
-                ->where('created_at', '>=', now()->subDays(6)->startOfDay())
-                ->latest()
-                ->paginate(10),
+            'auditLogs' => $this->auditLogQuery($request, $auditRange)->paginate(10),
+            'auditEvents' => collect(AuditEvent::cases())->map(fn ($case) => [
+                'value' => $case->value,
+                'label' => $case->label(),
+            ])->values(),
+            'breakdown' => $this->eventBreakdown($request, $auditRange),
             'chartData' => $chartData,
             'pending' => $pending,
             'kpis' => $kpis,
@@ -174,22 +179,60 @@ class DashboardController extends Controller
 
     public function auditLogs(Request $request)
     {
-        $user = Auth::user();
-        $range = $request->input('range', 'week');
+        $range = $this->resolveRange($request->input('range', 'week'));
 
-        [$start, $end] = match ($range) {
+        $logs = $this->auditLogQuery($request, $range)->paginate(10)->toArray();
+        $logs['breakdown'] = $this->eventBreakdown($request, $range);
+
+        return response()->json($logs);
+    }
+
+    private function resolveRange(string $range): array
+    {
+        return match ($range) {
             'day' => [now()->startOfDay(), now()->endOfDay()],
             'month' => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
             '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
             default => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
         };
+    }
 
-        return response()->json(
-            AuditLog::with('user')
-                ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
-                ->whereBetween('created_at', [$start, $end])
-                ->latest()
-                ->paginate(10)
-        );
+    private function auditLogQuery(Request $request, array $range): Builder
+    {
+        $user = Auth::user();
+        $event = $request->input('event');
+        $sort = $request->input('sort', 'newest');
+
+        $validEvents = array_column(AuditEvent::cases(), 'value');
+        $event = $event && in_array($event, $validEvents, true) ? $event : null;
+
+        return AuditLog::with('user')
+            ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
+            ->when($event, fn ($q) => $q->where('event', $event))
+            ->whereBetween('created_at', $range)
+            ->orderBy('created_at', $sort === 'oldest' ? 'asc' : 'desc');
+    }
+
+    private function eventBreakdown(Request $request, array $range): Collection
+    {
+        $user = Auth::user();
+
+        return AuditLog::query()
+            ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
+            ->whereBetween('created_at', $range)
+            ->selectRaw('event, COUNT(*) as count')
+            ->groupBy('event')
+            ->orderByDesc('count')
+            ->get()
+            ->map(function ($row) {
+                $event = $row->event instanceof AuditEvent ? $row->event : AuditEvent::tryFrom($row->event);
+
+                return [
+                    'event' => $event?->value ?? (string) $row->event,
+                    'label' => $event?->label() ?? (string) $row->event,
+                    'count' => (int) $row->count,
+                ];
+            })
+            ->values();
     }
 }

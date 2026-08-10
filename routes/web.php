@@ -101,8 +101,8 @@ Route::middleware('auth')->group(function () {
 
     // Admin-only request options (approvers, booking window, min advance days)
     Route::middleware('permission:manage request options')->group(function () {
-        Route::get('/request-settings', [RequestSettingsController::class, 'index'])->name('request-settings');
-        Route::post('/request-settings', [RequestSettingsController::class, 'update'])->name('request-settings.update');
+        Route::get('/request-options', [RequestSettingsController::class, 'index'])->name('request-options');
+        Route::post('/request-options', [RequestSettingsController::class, 'update'])->name('request-options.update');
     });
 
     Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');

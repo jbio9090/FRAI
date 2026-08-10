@@ -17,11 +17,11 @@ class RequestSettingsTest extends TestCase
         $user = User::factory()->create();
 
         $this->actingAs($user)
-            ->get(route('request-settings'))
+            ->get(route('request-options'))
             ->assertForbidden();
 
         $this->actingAs($user)
-            ->post(route('request-settings.update'), $this->validPayload())
+            ->post(route('request-options.update'), $this->validPayload())
             ->assertForbidden();
     }
 
@@ -29,7 +29,7 @@ class RequestSettingsTest extends TestCase
     {
         $this->actingAsRequestSettingsAdmin();
 
-        $this->get(route('request-settings'))
+        $this->get(route('request-options'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->component('settings/request-options'));
     }
@@ -48,7 +48,7 @@ class RequestSettingsTest extends TestCase
         ];
         $payload['min_advance_days'] = 3;
 
-        $this->post(route('request-settings.update'), $payload)
+        $this->post(route('request-options.update'), $payload)
             ->assertRedirect()
             ->assertSessionHas('success');
 
@@ -68,7 +68,7 @@ class RequestSettingsTest extends TestCase
         $payload['approvers'] = [];
         $payload['booking_window']['step_minutes'] = 45;
 
-        $this->post(route('request-settings.update'), $payload)
+        $this->post(route('request-options.update'), $payload)
             ->assertSessionHasErrors(['approvers', 'booking_window.step_minutes']);
     }
 
@@ -80,7 +80,7 @@ class RequestSettingsTest extends TestCase
         $payload['booking_window']['start_time'] = '20:00';
         $payload['booking_window']['end_time'] = '08:00';
 
-        $this->post(route('request-settings.update'), $payload)
+        $this->post(route('request-options.update'), $payload)
             ->assertSessionHasErrors(['booking_window.end_time']);
     }
 

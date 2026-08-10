@@ -77,31 +77,6 @@ const chartConfig = {
     },
 } satisfies ChartConfig;
 
-const eventLabels: Record<string, string> = {
-    'auth.login': 'Login',
-    'auth.login_failed': 'Failed Login',
-    'auth.logout': 'Logout',
-    'auth.password_reset_initiated': 'Password Reset by Admin',
-    'auth.password_self_updated': 'Password Updated',
-    'request.created': 'Request Created',
-    'request.updated': 'Request Updated',
-    'request.approved': 'Request Approved',
-    'request.denied': 'Request Denied',
-    'request.conditionally_approved': 'Cond. Approved',
-    'request.held': 'Request Held',
-    'request.comment_added': 'Comment Added',
-    'request.marked_for_reschedule': 'Marked Reschedule',
-    'request.file_uploaded': 'File Uploaded',
-    'request.file_removed': 'File Removed',
-};
-
-function formatEventLabel(event: string): string {
-    return eventLabels[event] ?? event
-        .replace(/^[^.]+\./, '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 const CHART_COLORS = [
     'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
     'var(--chart-4)', 'var(--chart-5)',
@@ -123,6 +98,8 @@ export default function Dashboard({
     initialEvents,
     buildings,
     auditLogs: auditLogsProp,
+    auditEvents,
+    breakdown,
     chartData,
     notifications: notificationsProp,
     kpis,
@@ -130,7 +107,9 @@ export default function Dashboard({
     pending: { data: FacilityRequest[] };
     initialEvents: Event[];
     buildings: string[];
-    auditLogs: { data: AuditLog[]; current_page: number; last_page: number };
+    auditLogs: { data: AuditLog[]; current_page: number; last_page: number; total: number };
+    auditEvents: { value: string; label: string }[];
+    breakdown: { event: string; label: string; count: number }[];
     chartData: ChartRow[];
     notifications: InboxNotification[];
     kpis: Kpis;
@@ -145,18 +124,38 @@ export default function Dashboard({
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp.data ?? []);
     const [currentPage, setCurrentPage] = useState(auditLogsProp.current_page ?? 1);
     const [lastPage, setLastPage] = useState(auditLogsProp.last_page ?? 1);
+    const [totalLogs, setTotalLogs] = useState(auditLogsProp.total ?? 0);
+    const [pieData, setPieData] = useState<{ event: string; label: string; count: number; fill: string }[]>(() =>
+        (breakdown ?? []).map((row, i) => ({
+            event: row.event,
+            label: row.label,
+            count: row.count,
+            fill: CHART_COLORS[i % CHART_COLORS.length],
+        }))
+    );
     const [activeTab, setActiveTab] = useState<Tab>(getInitialTab);
     const [notifications, setNotifications] = useState<InboxNotification[]>(notificationsProp ?? []);
     const [unreadCount, setUnreadCount] = useState(Number(auth.user.notification_unread_count ?? 0));
     const [markingNotificationsRead, setMarkingNotificationsRead] = useState(false);
 
-    const fetchAuditLogs = async (page = 1, selectedRange = range) => {
+    const fetchAuditLogs = async (page = 1, selectedRange = range, event = logFilter, sort = logSort) => {
         setLogsLoading(true);
-        const res = await fetch(`/dashboard/audit-logs?range=${selectedRange}&page=${page}`);
+        const params = new URLSearchParams({ range: selectedRange, page: String(page), sort });
+        if (event !== 'all') params.set('event', event);
+        const res = await fetch(`/dashboard/audit-logs?${params.toString()}`);
         const json = await res.json();
         setAuditLogs(json.data);
         setCurrentPage(json.current_page);
         setLastPage(json.last_page);
+        setTotalLogs(json.total);
+        setPieData(
+            (json.breakdown ?? []).map((row: { event: string; label: string; count: number }, i: number) => ({
+                event: row.event,
+                label: row.label,
+                count: row.count,
+                fill: CHART_COLORS[i % CHART_COLORS.length],
+            }))
+        );
         setLogsLoading(false);
     };
 
@@ -189,18 +188,6 @@ export default function Dashboard({
     const [logFilter, setLogFilter] = useState<string>('all');
     const [logSort, setLogSort] = useState<'newest' | 'oldest'>('newest');
 
-    const filteredLogs = useMemo(() => {
-        let logs = [...auditLogs];
-        if (logFilter !== 'all') {
-            logs = logs.filter((log) => log.event === logFilter);
-        }
-        logs.sort((a, b) => {
-            const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-            return logSort === 'newest' ? -diff : diff;
-        });
-        return logs;
-    }, [auditLogs, logFilter, logSort]);
-
     useEffect(() => {
         setLoading(true);
 
@@ -209,8 +196,8 @@ export default function Dashboard({
             .then((chartJson) => setData(fillDateRange(chartJson, range)))
             .finally(() => setLoading(false));
 
-        fetchAuditLogs(1, range);
-    }, [range]);
+        fetchAuditLogs(1, range, logFilter, logSort);
+    }, [range, logFilter, logSort]);
 
     const isAdmin: boolean = hasRole('admin') || hasRole('Super Admin');
 
@@ -237,22 +224,6 @@ export default function Dashboard({
     const approvedConflictRequests = pending.data.filter(
         (r) => r.approved_conflicts && r.approved_conflicts.length > 0
     );
-
-    const pieData = useMemo(() => {
-        const counts: Record<string, number> = {};
-        auditLogs.forEach((log) => {
-            const key = typeof log.event === 'object' ? (log.event as { value?: string }).value ?? String(log.event) : String(log.event);
-            counts[key] = (counts[key] ?? 0) + 1;
-        });
-        return Object.entries(counts)
-            .sort((a, b) => b[1] - a[1])
-            .map(([event, count], i) => ({
-                event,
-                label: formatEventLabel(event),
-                count,
-                fill: CHART_COLORS[i % CHART_COLORS.length],
-            }));
-    }, [auditLogs]);
 
     const pieChartConfig = useMemo(() => {
         const config: ChartConfig = { count: { label: 'Events' } };
@@ -782,7 +753,7 @@ export default function Dashboard({
                                                             </button>
                                                         )}
                                                     </div>
-                                                    {[{ label: 'All event types', value: 'all' }, ...Object.keys(eventLabels).map((value) => ({ value, label: formatEventLabel(value) }))].map((opt) => (
+                                                    {[{ label: 'All event types', value: 'all' }, ...auditEvents.map((ev) => ({ value: ev.value, label: ev.label }))].map((opt) => (
                                                         <label
                                                             key={opt.value}
                                                             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
@@ -802,19 +773,19 @@ export default function Dashboard({
                                         </Popover>
 
                                         <span className="ml-auto text-xs text-muted-foreground">
-                                            {filteredLogs.length} event{filteredLogs.length !== 1 ? 's' : ''} · page {currentPage} of {lastPage}
+                                            {totalLogs} event{totalLogs !== 1 ? 's' : ''} · page {currentPage} of {lastPage}
                                         </span>
                                     </div>
 
-                                    {filteredLogs.length === 0 ? (
+                                    {totalLogs === 0 ? (
                                         <p className="py-4 text-sm text-muted-foreground">No events match the current filter.</p>
                                     ) : (
                                         <>
-                                            <ActivityFeed auditLogs={filteredLogs} />
+                                            <ActivityFeed auditLogs={auditLogs} />
                                             <SmartPagination
                                                 currentPage={currentPage}
                                                 lastPage={lastPage}
-                                                onPageChange={(page) => fetchAuditLogs(page, range)}
+                                                onPageChange={(page) => fetchAuditLogs(page, range, logFilter, logSort)}
                                             />
                                         </>
                                     )}
