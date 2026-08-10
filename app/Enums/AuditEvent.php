@@ -22,6 +22,8 @@ enum AuditEvent: string
 
     case SettingsUpdated             = 'settings.updated';
 
+    case Unknown                     = 'unknown';
+
     case AuthPasswordResetInitiated = 'auth.password_reset_initiated';
     case AuthPasswordSelfUpdated    = 'auth.password_self_updated';
 
@@ -44,6 +46,7 @@ enum AuditEvent: string
             self::AuthPasswordResetInitiated => 'Password Reset (Admin)',
             self::AuthPasswordSelfUpdated    => 'Password Updated',
             self::SettingsUpdated            => 'Settings Updated',
+            self::Unknown                    => 'Unknown',
         };
     }
 }

@@ -85,7 +85,9 @@ class DashboardController extends Controller
             'buildings' => Facility::distinct()->pluck('building')->filter()->values(),
             // Filter recent logs list
             'auditLogs' => $this->auditLogQuery($request, $auditRange)->paginate(10),
-            'auditEvents' => collect(AuditEvent::cases())->map(fn ($case) => [
+            'auditEvents' => collect(AuditEvent::cases())
+                ->filter(fn ($case) => $case !== AuditEvent::Unknown)
+                ->map(fn ($case) => [
                 'value' => $case->value,
                 'label' => $case->label(),
             ])->values(),
