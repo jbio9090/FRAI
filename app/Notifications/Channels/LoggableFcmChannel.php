@@ -56,7 +56,7 @@ class LoggableFcmChannel extends FcmChannel
             $reports = parent::send($notifiable, $notification);
 
             if ($reports !== null) {
-                $this->logReportFailures($reports, $context);
+                $this->logReportFailures($reports, $context, $notifiable);
             }
 
             Log::info('FCM send completed.', $context);
@@ -73,7 +73,7 @@ class LoggableFcmChannel extends FcmChannel
         }
     }
 
-    protected function logReportFailures(Collection $reports, array $context): void
+    protected function logReportFailures(Collection $reports, array $context, mixed $notifiable): void
     {
         foreach ($reports as $report) {
             if (! $report instanceof MulticastSendReport) {
@@ -93,8 +93,48 @@ class LoggableFcmChannel extends FcmChannel
                         'unknown_token' => $item->messageWasSentToUnknownToken(),
                         'invalid_message' => $item->messageWasInvalid(),
                     ]);
+
+                    if ($this->shouldRemoveToken($item)) {
+                        $this->removeToken($notifiable, $token);
+                    }
                 }
             }
+        }
+    }
+
+    protected function shouldRemoveToken($item): bool
+    {
+        if ($item->messageWasSentToUnknownToken()) {
+            return true;
+        }
+
+        $message = strtolower($item->error()?->getMessage() ?? '');
+
+        return str_contains($message, 'unregistered') || str_contains($message, 'device unregistered');
+    }
+
+    protected function removeToken(mixed $notifiable, string $token): void
+    {
+        if (! is_object($notifiable) || ! method_exists($notifiable, 'removeFcmToken')) {
+            Log::warning('Unable to remove stale FCM token.', [
+                'notifiable' => is_object($notifiable) ? get_class($notifiable) : gettype($notifiable),
+                'token' => strlen($token) > 24 ? substr($token, 0, 24).'…' : $token,
+            ]);
+
+            return;
+        }
+
+        try {
+            $notifiable->removeFcmToken($token);
+
+            Log::info('Deactivated stale FCM token.', [
+                'notifiable' => get_class($notifiable),
+                'token' => strlen($token) > 24 ? substr($token, 0, 24).'…' : $token,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to deactivate stale FCM token.', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }
