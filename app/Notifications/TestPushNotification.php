@@ -2,11 +2,11 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Channels\LoggableFcmChannel;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\URL;
-use NotificationChannels\Fcm\FcmChannel;
 use NotificationChannels\Fcm\FcmMessage;
 use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
@@ -22,7 +22,7 @@ class TestPushNotification extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return [FcmChannel::class];
+        return [LoggableFcmChannel::class];
     }
 
     public function toFcm($notifiable): FcmMessage

@@ -21,7 +21,15 @@ class NotificationService
         try {
             $facilityRequest = \App\Models\Request::find($request_id); // Get the request model[cite: 3]
 
-            foreach (User::role(['admin', 'Super Admin'])->get() as $user) {
+            $admins = User::role(['admin', 'Super Admin'])->get();
+
+            Log::notice('Queuing NewPendingRequest push notifications.', [
+                'request_id' => $request_id,
+                'admin_count' => $admins->count(),
+                'recipient_ids' => $admins->pluck('id')->all(),
+            ]);
+
+            foreach ($admins as $user) {
                 $user->notify(new NewPendingRequest(
                     $request_title,
                     $user_name,

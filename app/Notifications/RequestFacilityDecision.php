@@ -3,12 +3,12 @@
 namespace App\Notifications;
 
 use App\Enums\RequestStatus;
+use App\Notifications\Channels\LoggableFcmChannel;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\URL;
-use NotificationChannels\Fcm\FcmChannel;
 use NotificationChannels\Fcm\FcmMessage;
 use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
@@ -28,7 +28,7 @@ class RequestFacilityDecision extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return ['database', FcmChannel::class];
+        return ['database', LoggableFcmChannel::class];
     }
 
     private function makeBody(): string

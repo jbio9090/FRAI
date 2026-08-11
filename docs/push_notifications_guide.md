@@ -196,7 +196,7 @@ const messaging = firebase.messaging();
 
 | Variable | Where Used | Description |
 |---|---|---|
-| `FIREBASE_CREDENTIALS` | Laravel backend | Path to Firebase service account JSON (e.g. `storage/app/firebase-auth.json`) — resolved relative to project root by `kreait/laravel-firebase` |
+| `FIREBASE_CREDENTIALS` | Laravel backend | Path to Firebase service account JSON (e.g. `storage/app/firebase-auth.json`) — resolved relative to project root by `kreait/laravel-firebase`. On Render Docker use the absolute `/etc/secrets/firebase-auth.json` (see [Render secret files](#secret-files-on-render-docker)) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Laravel backend (fallback) | Same file, fallback path |
 | `VITE_FIREBASE_API_KEY` | Frontend + Inertia | Firebase project API key |
 | `VITE_FIREBASE_AUTH_DOMAIN` | Frontend + Inertia | Firebase auth domain |
@@ -242,6 +242,57 @@ const messaging = firebase.messaging();
 ### Firebase credentials not found
 **Cause:** `FIREBASE_CREDENTIALS=firebase-auth.json` resolves relative to the project root, but the file is at `storage/app/firebase-auth.json`.
 **Fix:** Set `FIREBASE_CREDENTIALS=storage/app/firebase-auth.json` in `.env`.
+
+### "Permission denied" reading `/etc/secrets/firebase-auth.json` (Render Docker)
+**Cause:** Render mounts secret files group-readable by group `1000` only. The queue worker runs as `www-data`, which is not in group `1000` on the base PHP image, so opening the file fails with `SplFileObject::__construct(...): Failed to open stream: Permission denied`.
+**Fix (one of):**
+1. Add `www-data` to group `1000` in the image (requires a full image rebuild):
+   ```dockerfile
+   RUN apk add --no-cache shadow \
+       && usermod -a -G 1000 www-data
+   ```
+2. Or copy the secret at boot in `entrypoint.sh` (runs as root, immune to group permissions) before `config:cache`:
+   ```sh
+   if [ -f /etc/secrets/firebase-auth.json ]; then
+       cp /etc/secrets/firebase-auth.json /var/www/html/storage/app/firebase-auth.json
+       chown www-data:www-data /var/www/html/storage/app/firebase-auth.json
+   fi
+   ```
+   and point `FIREBASE_CREDENTIALS` at `storage/app/firebase-auth.json`.
+
+**Troubleshooting note:** this failure does **not** appear in the queue worker output — the job just logs `FAIL` and the exception lives in `failed_jobs.exception`. Check that table (see [Server-Side Push Logging](#server-side-push-logging)) to see the real error.
+
+---
+
+## Server-Side Push Logging
+
+Notifications are delivered from the queue worker via `App\Notifications\Channels\LoggableFcmChannel` (a wrapper around `NotificationChannels\Fcm\FcmChannel`). It logs the following to the default log channel (`storage/logs/laravel.log`, `LOG_CHANNEL=stack`):
+
+| Message | Level | When | Key context |
+|---|---|---|---|
+| `FCM send starting.` | info | efore sending, only when the recipient has ≥1 active token | `notifiable`, `id`, `notification`, `token_count` |
+| `FCM client initialization failed.` | error | Building the Firebase `Messaging` client throws (e.g. missing/closed service account, wrong path, `Permission denied`) | `error`, `trace` — **job still fails and lands in `failed_jobs`** |
+| `FCM send completed.` | info | A multicast send finished without throwing | — |
+| `FCM token-level failure.` | warning | An individual token was rejected by FCM (no throw, job completes) — e.g. `UNREGISTERED`, expired token, bad image URL | `token` (truncated), `error`, `unknown_token` |
+| `FCM send threw an exception.` | error | The send itself threw (rare; client init usually throws first) | `error`, `trace` |
+| `Queuing NewPendingRequest push notifications.` | notice | Request created; emitted by `NotificationService::notifyAdmin()` | `request_id`, `admin_count`, `recipient_ids` |
+
+Because the client is resolved **lazily inside `send()`** (not in the channel constructor), init exceptions are caught and logged here instead of failing silently at construction.
+
+### Reading the real failure
+Queue worker `FAIL` lines don't print the exception. To see it:
+1. `failed_jobs.exception` (default `QUEUE_CONNECTION=database`) — full stack trace.
+2. `storage/logs/laravel.log` — `FCM client initialization failed.` with `error` + `trace`.
+3. Reproduce in a worker shell:
+   ```sh
+   php artisan tinker --execute="Firebase::project()->messaging(); echo 'messaging OK';"
+   ```
+
+### Secret Files on Render (Docker)
+1. Render Dashboard → service → **Environment** → **Secret Files** → add file `firebase-auth.json` (service account JSON contents).
+2. It is mounted at `/etc/secrets/firebase-auth.json`.
+3. Set `FIREBASE_CREDENTIALS=/etc/secrets/firebase-auth.json` (and optionally `GOOGLE_APPLICATION_CREDENTIALS` to the same value). Because the deploy runs `config:cache`, redeploy after changing these.
+4. Ensure `www-data` can read it (group `1000`, see above).
 
 ---
 
