@@ -60,7 +60,7 @@ class NewPendingRequest extends Notification implements ShouldQueue
             notification: new FcmNotification(
                 title: $this->request_title,
                 body: 'Pending Request from '.$this->user_name,
-                image: '/FRAI.png',
+                image: URL::to('/FRAI.png'),
             )
         ))->data([
             'url' => $this->url,

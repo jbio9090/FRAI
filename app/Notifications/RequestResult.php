@@ -7,6 +7,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\URL;
 use NotificationChannels\Fcm\FcmChannel;
 use NotificationChannels\Fcm\FcmMessage;
 use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
@@ -32,7 +33,7 @@ class RequestResult extends Notification implements ShouldQueue
             notification: new FcmNotification(
                 title: $this->request_title,
                 body: $this->statusMessage(),
-                image: '/FRAI.png',
+                image: URL::to('/FRAI.png'),
             )
         ))->data([
             'url' => $this->url,
