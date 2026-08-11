@@ -43,7 +43,10 @@ RUN apk add --no-cache \
     libwebp-dev \
     gmp-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install -j$(nproc) gd pdo_pgsql gmp bcmath
+    && docker-php-ext-install -j$(nproc) gd pdo_pgsql gmp bcmath \
+    && apk add --no-cache shadow \
+    && addgroup -g 1000 runner \
+    && usermod -a -G runner www-data
 
 WORKDIR /var/www/html
 
