@@ -15,12 +15,24 @@ function setupForegroundPushListener(firebaseConfig: Record<string, any> | undef
 
     void import('firebase/app')
         .then(async ({ getApps, initializeApp }) => {
-            const { getMessaging, onMessage } = await import('firebase/messaging');
+            const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
 
             const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
             const messaging = getMessaging(app);
 
+            // Initialize the FCM channel / service worker so onMessage fires on every
+            // page, not only after visiting Settings (the only place getToken runs today).
+            try {
+                await getToken(messaging, {
+                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                });
+            } catch (err) {
+                console.warn('FCM getToken init failed — foreground push may not fire:', err);
+            }
+
             onMessage(messaging, (payload) => {
+                console.log('Foreground push received:', payload);
+
                 const title = payload.notification?.title || 'Notification';
                 const body = payload.notification?.body || '';
                 const options = {
