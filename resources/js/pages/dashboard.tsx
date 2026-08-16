@@ -361,8 +361,8 @@ export default function Dashboard({
                             <div className="flex flex-col gap-2">
                                 {pendingConflictRequests.length > 0 && (
                                     <Link
-                                        href={route('requests.index', { status: 'pending' })}
-                                        className="flex items-center gap-3 rounded-lg border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)] px-4 py-3 transition-colors hover:bg-[var(--ads-amber-bg)]/70"
+                                        href={route('requests.index', { status: 'pending', has_pending_conflicts: '1' })}
+                                        className="flex items-center gap-3 rounded-lg border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/20 px-4 py-3 transition-colors hover:bg-[var(--ads-amber-bg)]/70"
                                     >
                                         <span className="size-2 shrink-0 rounded-full bg-[var(--ads-amber)]" />
                                         <span className="text-sm font-semibold text-[var(--ads-amber)]">
@@ -376,7 +376,7 @@ export default function Dashboard({
                                 )}
                                 {approvedConflictRequests.length > 0 && (
                                     <Link
-                                        href={route('requests.index', { status: 'approved' })}
+                                        href={route('requests.index', { status: 'approved', has_approved_conflicts: '1' })}
                                         className="flex items-center gap-3 rounded-lg border border-[var(--ads-danger)]/40 bg-[var(--ads-danger-bg)] px-4 py-3 transition-colors hover:bg-[var(--ads-danger-bg)]/70"
                                     >
                                         <span className="size-2 shrink-0 rounded-full bg-[var(--ads-danger)]" />

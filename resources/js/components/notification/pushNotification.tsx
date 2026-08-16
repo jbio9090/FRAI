@@ -1,6 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 export default function PushNotifications() {
     const { firebaseConfig } = usePage().props as any;
@@ -9,6 +10,7 @@ export default function PushNotifications() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSupported, setIsSupported] = useState(false);
+    const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
 
     useEffect(() => {
         checkSupport();
@@ -138,18 +140,21 @@ export default function PushNotifications() {
         }
     };
 
-    const sendTokenToServer = async (token: string, platform: string) => {
-        await router.post('/push/subscribe', {
-            token,
-            platform,
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-            onError: (errors) => {
-                setError('Failed to save device token');
-                console.error(errors);
-            },
-        });
+    const isIOS = (): boolean => {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    };
+
+    const isSafari = (): boolean => {
+        return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    };
+
+    const isStandalone = (): boolean => {
+        return window.matchMedia('(display-mode: standalone)').matches || 
+               (window.navigator as any).standalone === true;
+    };
+
+    const showIOSInstallPrompt = (): boolean => {
+        return isIOS() && isSafari() && !isStandalone();
     };
 
     const unsubscribe = async () => {
@@ -205,6 +210,20 @@ export default function PushNotifications() {
         return Capacitor.getPlatform();
     };
 
+    const sendTokenToServer = async (token: string, platform: string) => {
+        await router.post('/push/subscribe', {
+            token,
+            platform,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            onError: (errors) => {
+                setError('Failed to save device token');
+                console.error(errors);
+            },
+        });
+    };
+
     if (!isSupported) {
         return (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -225,7 +244,36 @@ export default function PushNotifications() {
                 </div>
             )}
 
-            {!isRegistered && (
+            {isSupported && isIOS() && isSafari() && !isStandalone() && (
+                <button
+                    type="button"
+                    onClick={() => setShowIOSInstallModal(true)}
+                    className="text-blue-600 underline text-sm font-medium"
+                >
+                    Install on iPhone
+                </button>
+            )}
+
+            {isSupported && isIOS() && isSafari() && isStandalone() && isRegistered && (
+                <p className="text-sm text-blue-600 text-center">
+                    Open from Home Screen for push notifications to work. How to install? {" "}
+                    <button
+                        type="button"
+                        onClick={() => setShowIOSInstallModal(true)}
+                        className="underline hover:text-blue-800"
+                    >
+                        How to install
+                    </button>
+                </p>
+            )}
+
+            {isSupported && !isIOS() && isRegistered && (
+                <p className="text-sm text-green-600 text-center">
+                    Push notifications are active on this device.
+                </p>
+            )}
+
+            {!isRegistered && !showIOSInstallPrompt() && (
                 <Button
                     onClick={requestPermissionAndRegister}
                     disabled={loading}

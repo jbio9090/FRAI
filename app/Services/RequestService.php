@@ -26,7 +26,8 @@ class RequestService
         ?string $requester = null,
         ?string $facility = null,
         ?string $hasExternalEquipment = null,
-        ?bool $hasConflicts = false,
+        ?bool $hasPendingConflicts = false,
+        ?bool $hasApprovedConflicts = false,
     ) {
         $user = Auth::user();
         $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
@@ -92,6 +93,14 @@ class RequestService
             $query->whereHas('requestFacilities.externalEquipments');
         } elseif ($hasExternalEquipment === 'no') {
             $query->whereDoesntHave('requestFacilities.externalEquipments');
+        }
+
+        if ($hasPendingConflicts) {
+            $query->whereJsonLength('requests.pending_conflict_rf_ids', '>', 0);
+        }
+
+        if ($hasApprovedConflicts) {
+            $query->whereJsonLength('requests.approved_conflict_rf_ids', '>', 0);
         }
 
         $sortMap = [

@@ -74,6 +74,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
     const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string[]>([]);
+    const [pendingConflictFilter, setPendingConflictFilter] = useState(false);
+    const [approvedConflictFilter, setApprovedConflictFilter] = useState(false);
     const hasLoadedOnce = useRef(false);
     const staleRequests = useRef<PaginatedRequests | null>(null);
 
@@ -147,6 +149,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
         ...(requesterFilter.length && { requester: requesterFilter.join(',') }),
         ...(facilityFilter.length && { facility: facilityFilter.join(',') }),
         ...(externalEquipmentFilter && { has_external_equipment: externalEquipmentFilter }),
+        ...(pendingConflictFilter && { has_pending_conflicts: '1' }),
+        ...(approvedConflictFilter && { has_approved_conflicts: '1' }),
         ...overrides,
     });
 
@@ -281,19 +285,28 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     <Button
                                         variant="outline"
                                         className={cn(
-                                            (requesterFilter.length || facilityFilter.length || externalEquipmentFilter || statusFilter.length) &&
+                                            (requesterFilter.length || facilityFilter.length || externalEquipmentFilter || statusFilter.length ||
+                                                pendingConflictFilter ||
+                                                approvedConflictFilter) &&
                                                 'border-primary bg-primary/5 text-primary',
                                         )}
                                     >
                                         <ListFilter size={16} />
                                         <span>Filters</span>
-                                        {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + statusFilter.length >
+                                        {requesterFilter.length +
+                                            facilityFilter.length +
+                                            (externalEquipmentFilter ? 1 : 0) +
+                                            statusFilter.length +
+                                            (pendingConflictFilter ? 1 : 0) +
+                                            (approvedConflictFilter ? 1 : 0) >
                                             0 && (
                                             <span className="flex h-5 min-w-[20px] items-center justify-center rounded-[4px] bg-primary/12 px-1 text-[10px] font-medium text-primary">
                                                 {requesterFilter.length +
                                                     facilityFilter.length +
                                                     (externalEquipmentFilter ? 1 : 0) +
-                                                    statusFilter.length}
+                                                    statusFilter.length +
+                                                    (pendingConflictFilter ? 1 : 0) +
+                                                    (approvedConflictFilter ? 1 : 0)}
                                             </span>
                                         )}
                                     </Button>
@@ -418,6 +431,26 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 ))}
                                             </div>
                                         </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs font-semibold text-muted-foreground">Conflicts</p>
+                                            <div className="flex flex-col gap-1">
+                                                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                    <Checkbox
+                                                        checked={pendingConflictFilter}
+                                                        onCheckedChange={() => setPendingConflictFilter((prev) => !prev)}
+                                                    />
+                                                    Has pending conflicts
+                                                </label>
+                                                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                    <Checkbox
+                                                        checked={approvedConflictFilter}
+                                                        onCheckedChange={() => setApprovedConflictFilter((prev) => !prev)}
+                                                    />
+                                                    Has approved conflicts
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="flex gap-2 border-t p-3">
@@ -432,6 +465,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 setRequesterFilter([]);
                                                 setFacilityFilter([]);
                                                 setExternalEquipmentFilter('');
+                                                setStatusFilter([]);
+                                                setPendingConflictFilter(false);
+                                                setApprovedConflictFilter(false);
                                                 router.get(
                                                     route(route().current(), { status: route().params.status }),
                                                     { filter: filterMap[currentActiveFitler], search: searchQuery },
@@ -641,6 +677,26 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         </div>
                                     </div>
 
+                                    <div className="flex flex-col gap-2">
+                                        <p className="pt-4 text-xs font-semibold text-muted-foreground">Conflicts</p>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                <Checkbox
+                                                    checked={pendingConflictFilter}
+                                                    onCheckedChange={() => setPendingConflictFilter((prev) => !prev)}
+                                                />
+                                                Has pending conflicts
+                                            </label>
+                                            <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                <Checkbox
+                                                    checked={approvedConflictFilter}
+                                                    onCheckedChange={() => setApprovedConflictFilter((prev) => !prev)}
+                                                />
+                                                Has approved conflicts
+                                            </label>
+                                        </div>
+                                    </div>
+
                                     <div className="sticky bottom-0 flex gap-2 bg-background py-4">
                                         <SheetClose asChild>
                                             <Button size="sm" className="flex-1" onClick={applyAdvancedFilters}>
@@ -656,6 +712,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 setFacilityFilter([]);
                                                 setExternalEquipmentFilter('');
                                                 setStatusFilter([]);
+                                                setPendingConflictFilter(false);
+                                                setApprovedConflictFilter(false);
                                                 router.get(
                                                     route(route().current(), { status: route().params.status }),
                                                     { filter: filterMap[currentActiveFitler], search: searchQuery },

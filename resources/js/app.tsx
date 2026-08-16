@@ -13,6 +13,15 @@ function setupForegroundPushListener(firebaseConfig: Record<string, any> | undef
         return;
     }
 
+    // Register Service Worker for PWA web push notifications
+    void navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
+        .then((reg) => {
+            console.log('FCM Service Worker registered:', reg.scope);
+        })
+        .catch((err) => {
+            console.error('FCM Service Worker registration failed:', err);
+        });
+
     void import('firebase/app')
         .then(async ({ getApps, initializeApp }) => {
             const { getMessaging, getToken, onMessage } = await import('firebase/messaging');

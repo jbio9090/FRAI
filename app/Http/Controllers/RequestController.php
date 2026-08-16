@@ -52,6 +52,8 @@ class RequestController extends Controller
                 $request->input('requester'),
                 $request->input('facility'),
                 $request->input('has_external_equipment'),
+                $request->boolean('has_pending_conflicts'),
+                $request->boolean('has_approved_conflicts'),
             )),
             'page_title' => $pageTitle,
             'filters' => ['status' => $statusParam],
