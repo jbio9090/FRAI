@@ -29,6 +29,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { RoleBadge } from '@/components/ui/role-badge';
 import {
     Sidebar,
     SidebarContent,
@@ -227,12 +228,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     className="cursor-pointer gap-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                                 >
                                     <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
-                                    <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                                        <span className="truncate font-semibold">{auth.user.name}</span>
-                                        <span className="truncate text-xs text-muted-foreground capitalize">
-                                            {(auth.user.roles?.length ? auth.user.roles : ['User']).join(', ')}
-                                        </span>
-                                    </div>
+<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+    <span className="truncate font-semibold">{auth.user.name}</span>
+    <RoleBadge roles={auth.user.roles} variant="sm" />
+</div>
                                     <span className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
                                         <ChevronDownIcon label="Account menu" color="currentColor" />
                                     </span>
@@ -242,12 +241,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 <DropdownMenuLabel className="p-0 font-normal">
                                     <div className="flex items-center gap-3 px-1 py-1.5">
                                         <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
-                                        <div className="grid flex-1 text-left text-sm leading-tight">
-                                            <span className="truncate font-semibold">{auth.user.name}</span>
-                                            <span className="truncate text-xs text-muted-foreground capitalize">
-                                                {(auth.user.roles?.length ? auth.user.roles : ['User']).join(', ')}
-                                            </span>
-                                        </div>
+<div className="grid flex-1 text-left text-sm leading-tight">
+    <span className="truncate font-semibold">{auth.user.name}</span>
+    <RoleBadge roles={auth.user.roles} variant="sm" />
+</div>
                                     </div>
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />

@@ -28,6 +28,7 @@ import type { ChartConfig } from '@/components/ui/chart';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RoleBadge } from '@/components/ui/role-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
@@ -287,11 +288,9 @@ export default function Dashboard({
                                     {greetingFor(auth.user.name)}
                                 </h1>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center rounded-[4px] bg-[var(--ads-neutral-bg)] px-2 py-0.5 text-xs font-semibold text-[var(--ads-neutral)] capitalize">
-                                    {roles.join(', ')}
-                                </span>
-                                <Button size="sm" asChild>
+<div className="flex items-center gap-2">
+    <RoleBadge roles={roles} />
+    <Button size="sm" asChild>
                                     <Link href={route('request.create')}>
                                         <CirclePlus className="h-4 w-4" />
                                         New request

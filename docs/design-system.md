@@ -138,7 +138,7 @@ Section eyebrows carry real meaning (e.g. `GSO desk · Aug 12`), never decorativ
 
 ## 7. Components
 
-- **StatusLozenge** — the status badge. Same
+- **RoleBadge** — user role indicator. Renders each role as ADS neutral lozenge (4px radius, `--ads-neutral-bg`/`--ads-neutral`). One lozenge per role. Variants: `sm` (px-1.5 py-0.5 text-[11px]), `default` (px-2 py-0.5 text-xs), `lg` (px-3 py-1 text-sm). Used in sidebar dropdown, dashboard header, settings page.
   `STATUS_TONES` semantics as before, tokenized off `--ads-*`, 4px lozenge + dot. Approved stays
   brand blue.
 - **Avatar / AvatarStack** — soft people-palette tints
