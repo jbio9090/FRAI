@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Equipment;
 use App\Models\Facility;
+use App\Services\RequestSettingsService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -16,6 +17,12 @@ class FacilityFormRequest extends FormRequest
 
     public function rules(): array
     {
+        $fileRules = ['file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx'];
+        $maxKb = RequestSettingsService::maxFileSizeKb();
+        if ($maxKb !== null) {
+            $fileRules[] = "max:{$maxKb}";
+        }
+
         return [
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -38,7 +45,7 @@ class FacilityFormRequest extends FormRequest
             'facility_bookings.*.expected_capacity' => 'nullable|integer|min:1',
             'facility_bookings.*.has_outsiders' => 'nullable|boolean',
             'files' => 'nullable|array|max:10',
-            'files.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,pptx',
+            'files.*' => implode('|', $fileRules),
             'existing_file_ids' => ['nullable', 'array'],
             'existing_file_ids.*' => ['integer'],
             'approved_by' => ['nullable', 'array'],
@@ -149,8 +156,11 @@ class FacilityFormRequest extends FormRequest
 
     public function messages(): array
     {
+        $maxMb = RequestSettingsService::maxFileSizeMb();
+        $limitText = $maxMb !== null ? number_format($maxMb, 2, '.', '').'MB' : 'the allowed limit';
+
         return [
-            'files.*.max' => 'Each file must be under 10MB. ":attribute" exceeds the limit.',
+            'files.*.max' => "Each file must be under {$limitText}. \":attribute\" exceeds the limit.",
             'files.*.mimes' => '":attribute" is not an allowed file type. Accepted: JPG, PNG, PDF, DOC, DOCX, XLSX, PPTX.',
             'files.*.file' => '":attribute" could not be uploaded.',
             'files.max' => 'You may only attach up to 10 files.',

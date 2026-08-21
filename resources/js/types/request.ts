@@ -81,6 +81,7 @@ export interface RequestOptions {
     approvers: string[];
     booking_window: BookingWindow;
     min_advance_days: number;
+    max_file_size_mb: number | null;
 }
 
 interface FacilityEquipmentItem {
@@ -146,5 +147,27 @@ export interface ConflictingBooking {
     facility: {
         id: number;
         name: string;
+    };
+}
+
+export interface AlternativeSlot {
+    facility_id: number;
+    facility_name: string;
+    facility_capacity: number;
+    date: string;
+    time_start: string;
+    time_end: string;
+    type: 'same_facility_time' | 'same_facility_date' | 'different_facility' | 'different_facility_date';
+    equipment_available: boolean;
+    capacity_fit: 'exact' | 'larger' | 'smaller';
+}
+
+export interface AlternativesResponse {
+    alternatives: Record<number, AlternativeSlot[]>;
+    metadata: {
+        include_equipment: boolean;
+        max_results: number;
+        date_range_days: number;
+        per_facility: boolean;
     };
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import type { EquipmentConflict } from '@/types/equipment';
 import type { FacilityEquipment } from '@/types/equipment';
+import type { AlternativeSlot } from '@/types/request';
 import { fetchBorrowableAvailability, fetchEquipmentAvailability, fetchEquipmentConflicts, loadSchedule as loadFacilitySchedule } from './api';
 import type { BorrowableAvailabilityMap, EquipmentAvailabilityMap } from './api';
 import type { BorrowPanelProps } from './sections/borrow-panel';
@@ -20,8 +21,8 @@ import type {
     FacilityBooking,
     FacilityScheduleData,
 } from './types';
-import { addCalendarDays, clearDraft, draftDiffersFromExisting, getTodayStart, loadDraft, minutesToTime, saveDraft, timeToMinutes } from './utils';
-import { ALLOWED_TYPES, MAX_FILE_SIZE } from './utils';
+import { addCalendarDays, clearDraft, draftDiffersFromExisting, formatMaxFileSize, getTodayStart, loadDraft, maxFileSizeBytes, minutesToTime, saveDraft, timeToMinutes } from './utils';
+import { ALLOWED_TYPES } from './utils';
 
 export function useCreateRequest({ facilities, existingRequest }: Pick<CreateRequestProps, 'facilities' | 'existingRequest'>) {
     const isEditing = !!existingRequest;
@@ -78,6 +79,12 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
     // Edit-in-place state
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [originalBookingData, setOriginalBookingData] = useState<FacilityBooking | null>(null);
+
+    // Alternatives for FOR_RESCHEDULE requests
+    const [alternatives, setAlternatives] = useState<Record<number, AlternativeSlot[]>>({});
+    const [alternativesLoading, setAlternativesLoading] = useState(false);
+    const [alternativesError, setAlternativesError] = useState<string | null>(null);
+    const [includeEquipmentFilter, setIncludeEquipmentFilter] = useState(false);
 
     // Borrow panel: search, sort, filter
     const [borrowSearch, setBorrowSearch] = useState('');
@@ -251,6 +258,56 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
     const loadSchedule = async (facilityId: number, date: Date) => {
         setFacilitySchedule(await loadFacilitySchedule(facilityId, date));
     };
+
+    // Fetch alternatives for FOR_RESCHEDULE requests
+    useEffect(() => {
+        if (!isEditing || existingRequest?.status !== 'For Reschedule') {
+            setAlternatives({});
+            return;
+        }
+
+        const fetchAlternatives = async () => {
+            setAlternativesLoading(true);
+            setAlternativesError(null);
+            try {
+                const params = new URLSearchParams({
+                    include_equipment: String(includeEquipmentFilter),
+                    max_results: '10',
+                });
+                const res = await fetch(`/requests/${existingRequest.id}/alternatives?${params.toString()}`, {
+                    headers: { Accept: 'application/json' },
+                });
+                if (!res.ok) throw new Error('Failed to fetch alternatives');
+                const json = await res.json();
+                setAlternatives(json.alternatives ?? {});
+            } catch (e) {
+                setAlternativesError(e instanceof Error ? e.message : 'Failed to load alternatives');
+            } finally {
+                setAlternativesLoading(false);
+            }
+        };
+
+        fetchAlternatives();
+    }, [isEditing, existingRequest?.id, existingRequest?.status, includeEquipmentFilter]);
+
+    function applyAlternative(slot: AlternativeSlot) {
+        const facility = facilities.find((f) => f.id === slot.facility_id);
+        if (!facility) return;
+
+        setSelectedFacility(slot.facility_id);
+        setSelectedDates([new Date(slot.date)]);
+        setCurrentTimeStart(slot.time_start.slice(0, 5));
+        setCurrentTimeEnd(slot.time_end.slice(0, 5));
+        setExpectedCapacity('');
+        setHasOutsiders(false);
+        setSelectedEquipment([]);
+        setSelectedBorrowedEquipment([]);
+        setExternalEquipment([]);
+        setEquipmentConflicts({});
+        setScheduleConflicts([]);
+
+        loadSchedule(slot.facility_id, new Date(slot.date));
+    }
 
     function editBooking(index: number) {
         const booking = data.facility_bookings[index];
@@ -505,10 +562,12 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         const selected = Array.from(e.target.files ?? []);
         const rejected: string[] = [];
         const accepted: AttachedFile[] = [];
+        const maxBytes = maxFileSizeBytes(requestOptions.max_file_size_mb);
+        const limitLabel = formatMaxFileSize(requestOptions.max_file_size_mb);
 
         for (const file of selected) {
-            if (file.size > MAX_FILE_SIZE) {
-                rejected.push(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)}MB — max is 10MB`);
+            if (maxBytes !== null && file.size > maxBytes) {
+                rejected.push(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)}MB — max is ${limitLabel}`);
                 continue;
             }
             if (!ALLOWED_TYPES.includes(file.type)) {
@@ -632,6 +691,14 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         equipmentConflicts,
         equipmentAvailability,
         editingIndex,
+
+        // alternatives
+        alternatives,
+        alternativesLoading,
+        alternativesError,
+        includeEquipmentFilter,
+        setIncludeEquipmentFilter,
+        applyAlternative,
 
         // grouped panels
         externalEquipmentProps,

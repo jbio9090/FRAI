@@ -11,6 +11,7 @@ use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\User;
+use App\Services\AlternativeRecommendationService;
 use App\Services\AuditLogger;
 use App\Services\NotificationService;
 use App\Services\RequestService;
@@ -24,6 +25,7 @@ class RequestController extends Controller
         protected RequestService $service,
         protected NotificationService $notification,
         protected AuditLogger $auditLogger,
+        protected AlternativeRecommendationService $alternativeService,
     ) {}
 
     public function index(Request $request)
@@ -210,6 +212,31 @@ class RequestController extends Controller
                 ->latest()
                 ->paginate(10)
         );
+    }
+
+    public function getAlternatives(Request $httpRequest, int $id)
+    {
+        $request = FacilityRequest::with([
+            'requestFacilities.facility',
+            'equipment',
+            'requestFacilities.externalEquipments',
+        ])->findOrFail($id);
+
+        abort_unless(
+            $request->user_id === auth()->id() || auth()->user()->can('approve requests'),
+            403
+        );
+
+        abort_unless($request->status === RequestStatus::FOR_RESCHEDULE, 400);
+
+        $options = $httpRequest->validate([
+            'include_equipment' => 'boolean',
+            'max_results' => 'integer|min:1|max:20',
+        ]);
+
+        $alternatives = $this->alternativeService->findAlternatives($request, $options);
+
+        return response()->json($alternatives);
     }
 
     public function store(FacilityFormRequest $request)

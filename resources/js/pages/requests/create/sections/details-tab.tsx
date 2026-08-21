@@ -12,6 +12,7 @@ import { PRIORITY_LABELS } from '@/types/request';
 import type { RequestOptions } from '@/types/request';
 import { PriorityLozenge } from '../priority-lozenge';
 import type { AttachedFile, CreateRequestFormData, ExistingFile } from '../types';
+import { formatMaxFileSize } from '../utils';
 
 interface DetailsTabProps {
     data: CreateRequestFormData;
@@ -136,7 +137,7 @@ export function DetailsTab({
                     <span className="ads-eyebrow">Attachments</span>
                 </div>
                 <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">Attach supporting documents, images, or files (max 10MB each).</p>
+                    <p className="text-xs text-muted-foreground">Attach supporting documents, images, or files ({requestOptions.max_file_size_mb !== null ? `max ${formatMaxFileSize(requestOptions.max_file_size_mb)} each` : 'no strict limit'}).</p>
 
                     <label
                         htmlFor="file-upload"
@@ -144,7 +145,7 @@ export function DetailsTab({
                     >
                         <Paperclip size={20} className="mb-2 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Click to attach files</span>
-                        <span className="mt-1 text-xs text-muted-foreground">JPG, PNG, PDF, DOC, XLSX, PPTX up to 10MB</span>
+                        <span className="mt-1 text-xs text-muted-foreground">JPG, PNG, PDF, DOC, XLSX, PPTX {requestOptions.max_file_size_mb !== null ? `up to ${formatMaxFileSize(requestOptions.max_file_size_mb)}` : ''}</span>
                         <input
                             id="file-upload"
                             type="file"

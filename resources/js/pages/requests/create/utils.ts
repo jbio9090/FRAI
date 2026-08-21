@@ -2,8 +2,6 @@ import type { DraftData, ExistingRequest } from './types';
 
 export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
 export const ALLOWED_TYPES = [
     'image/jpeg',
     'image/png',
@@ -13,6 +11,15 @@ export const ALLOWED_TYPES = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ];
+
+export function maxFileSizeBytes(maxFileSizeMb: number | null): number | null {
+    return maxFileSizeMb === null ? null : maxFileSizeMb * 1024 * 1024;
+}
+
+export function formatMaxFileSize(maxFileSizeMb: number | null): string {
+    if (maxFileSizeMb === null) return 'No limit';
+    return maxFileSizeMb % 1 === 0 ? `${maxFileSizeMb}MB` : `${maxFileSizeMb}MB`;
+}
 
 export function getTodayStart(): Date {
     const today = new Date();

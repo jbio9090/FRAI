@@ -43,6 +43,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(['throttle:60,1']);
     Route::post('requests/{id}/comment', [RequestController::class, 'addComment'])->name('requests.comment');
     Route::get('/requests/{id}/audit-logs', [RequestController::class, 'auditLogs']);
+    Route::get('/requests/{request}/alternatives', [RequestController::class, 'getAlternatives'])
+        ->name('requests.alternatives');
 
     // Admin only routes
     Route::middleware(['permission:approve requests'])->group(function () {

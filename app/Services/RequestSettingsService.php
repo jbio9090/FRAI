@@ -38,15 +38,65 @@ class RequestSettingsService
      */
     public static function all(): array
     {
-        return Cache::rememberForever(self::CACHE_KEY, function () {
-            $rows = Setting::query()->pluck('value', 'key');
+        return array_merge(
+            Cache::rememberForever(self::CACHE_KEY, function () {
+                $rows = Setting::query()->pluck('value', 'key');
 
-            return [
-                'approvers' => $rows->get('request.approvers', self::DEFAULT_APPROVERS),
-                'booking_window' => array_replace(self::DEFAULT_BOOKING_WINDOW, $rows->get('request.booking_window', [])),
-                'min_advance_days' => $rows->get('request.min_advance_days', self::DEFAULT_MIN_ADVANCE_DAYS),
-            ];
-        });
+                return [
+                    'approvers' => $rows->get('request.approvers', self::DEFAULT_APPROVERS),
+                    'booking_window' => array_replace(self::DEFAULT_BOOKING_WINDOW, $rows->get('request.booking_window', [])),
+                    'min_advance_days' => $rows->get('request.min_advance_days', self::DEFAULT_MIN_ADVANCE_DAYS),
+                ];
+            }),
+            [
+                'max_file_size_mb' => self::maxFileSizeMb(),
+            ]
+        );
+    }
+
+    /**
+     * Get the maximum file upload size in megabytes from PHP configuration.
+     * Returns null if unlimited or not configured.
+     */
+    public static function maxFileSizeMb(): ?float
+    {
+        $value = ini_get('upload_max_filesize');
+        if ($value === false || $value === '' || trim($value) === '-1') {
+            return null;
+        }
+
+        return self::parseIniSize($value);
+    }
+
+    /**
+     * Get the maximum file upload size in kilobytes (for Laravel validation rules).
+     * Returns null if unlimited or not configured.
+     */
+    public static function maxFileSizeKb(): ?int
+    {
+        $mb = self::maxFileSizeMb();
+        if ($mb === null) {
+            return null;
+        }
+
+        return (int) round($mb * 1024);
+    }
+
+    /**
+     * Parse a PHP ini size string (e.g., "10M", "512K", "1G") into megabytes as float.
+     */
+    private static function parseIniSize(string $value): float
+    {
+        $value = trim($value);
+        $lastChar = strtolower($value[-1]);
+        $num = (float) substr($value, 0, -1);
+
+        return match ($lastChar) {
+            'k' => $num / 1024,
+            'm' => $num,
+            'g' => $num * 1024,
+            default => (float) $value / (1024 * 1024),
+        };
     }
 
     /**

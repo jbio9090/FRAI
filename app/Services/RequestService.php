@@ -1097,4 +1097,19 @@ class RequestService
             );
         }
     }
+
+    public function isSlotAvailable(int $facilityId, string $date, string $start, string $end): bool
+    {
+        $conflicts = $this->checkForConflicts(
+            [[
+                'facility_id' => $facilityId,
+                'date' => $date,
+                'time_start' => $start,
+                'time_end' => $end,
+            ]],
+            [RequestStatus::PENDING, RequestStatus::APPROVED],
+            null
+        );
+        return empty($conflicts);
+    }
 }
