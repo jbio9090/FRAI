@@ -14,6 +14,9 @@ import { defineConfig, loadEnv } from 'vite';
  * matching local certificate for APP_URL's host so dev HMR works over
  * `https://gso.test`. If no certificate exists (no Herd/Valet), fall back
  * to plain HTTP dev with no detectTls.
+ *
+ * TLS is now opt-in via VITE_HMR_TLS=true (default: false) to avoid
+ * WebSocket failures on machines with certs that browsers don't trust.
  */
 function resolveTlsHost(env: Record<string, string>): string | undefined {
     if (!env.APP_URL) return undefined;
@@ -37,6 +40,7 @@ function resolveTlsHost(env: Record<string, string>): string | undefined {
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
     const detectTls = resolveTlsHost(env);
+    const hmrTls = env.VITE_HMR_TLS === 'true' && detectTls;
 
     return {
         plugins: [
@@ -44,7 +48,7 @@ export default defineConfig(({ mode }) => {
                 input: ['resources/css/app.css', 'resources/js/app.tsx'],
                 ssr: 'resources/js/ssr.tsx',
                 refresh: true,
-                detectTls,
+                detectTls: hmrTls,
             }),
             react({
                 babel: {
