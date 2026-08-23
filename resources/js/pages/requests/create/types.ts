@@ -64,6 +64,7 @@ export interface ExistingRequest {
     facility_bookings: FacilityBooking[];
     existing_files: ExistingFile[];
     approved_by: string[];
+    status: string;
 }
 
 export interface ExistingFile {

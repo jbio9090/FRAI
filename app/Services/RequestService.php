@@ -840,6 +840,7 @@ class RequestService
             'description' => $detail->description,
             'priority_level' => $detail->priority_level,
             'priority_reason' => $detail->priority_reason,
+            'status' => $detail->status->value,
             'approved_by' => $detail->approved_by ?? [],
             'existing_files' => $detail->files->map(fn ($f) => [
                 'id' => $f->id,

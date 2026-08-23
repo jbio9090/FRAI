@@ -44,17 +44,11 @@ function getCapacityBadge(fit: AlternativeSlot['capacity_fit']) {
 }
 
 export function RecommendationPanel({ request, isLoading, variant = 'card' }: RecommendationPanelProps) {
-    const [includeEquipment, setIncludeEquipment] = useState(false);
-    const { alternatives, loading: altLoading, error: altError, refetch, setIncludeEquipment: setIncludeEquipmentHook } = useAlternatives({
+    const { alternatives, loading: altLoading, error: altError, refetch, includeEquipment, setIncludeEquipment } = useAlternatives({
         requestId: request.id,
-        includeEquipment,
+        includeEquipment: false,
         enabled: request.status === 'For Reschedule',
     });
-
-    const handleEquipmentToggle = (value: boolean) => {
-        setIncludeEquipment(value);
-        setIncludeEquipmentHook(value);
-    };
 
     return (
         <div className="flex flex-col gap-3">

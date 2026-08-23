@@ -1,5 +1,7 @@
 import { AlertCircleIcon, LayoutGrid, Filter, ChevronDown, Check, Loader2, Clock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import moment from 'moment';
+import { useState } from 'react';
 import { FacilityInfo } from '@/components/create-page/facility-info';
 import { BookingCardList } from '@/components/request/create/booking-card-list';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -99,6 +101,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         canSaveFacilityBooking,
         availableEquipment,
     } = useCreateRequest({ facilities, existingRequest });
+
+    const [selectedAlternative, setSelectedAlternative] = useState<string | null>(null);
 
     return (
         <DefaultLayout>
@@ -223,7 +227,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     <FacilityInfo facilities={facilities} isForSidebar={true} />
 
                                     {/* ── Alternatives for FOR_RESCHEDULE ── */}
-                                    {isEditing && existingRequest?.status === 'For Reschedule' && (
+                                    {isEditing && existingRequest?.status === 'For Reschedule' && editingIndex !== null && (
                                         <div className="mt-6 border-t border-border pt-6">
                                             <div className="flex items-center justify-between mb-3">
                                                 <div className="flex items-center gap-2">
@@ -256,78 +260,89 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                                 </div>
                                             )}
 
-                                            {!alternativesLoading && !alternativesError && Object.keys(alternatives).length > 0 && (
-                                                <div className="space-y-4 max-h-[50vh] overflow-y-auto">
-                                                    {Object.entries(alternatives).map(([facilityId, slots]) => {
-                                                        if (!slots.length) return null;
+{!alternativesLoading && !alternativesError && Object.keys(alternatives).length > 0 && (
+                                                    <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+                                                        {Object.entries(alternatives).map(([facilityId, slots]) => {
+                                                            if (!slots.length) return null;
 
-                                                        const facility = facilities.find((f) => f.id === Number(facilityId));
-                                                        const facilityName = facility?.name ?? `Facility #${facilityId}`;
+                                                            const facility = facilities.find((f) => f.id === Number(facilityId));
+                                                            const facilityName = facility?.name ?? `Facility #${facilityId}`;
 
-                                                        const grouped = slots.reduce((acc: Record<string, typeof slots>, slot) => {
-                                                            if (!acc[slot.type]) acc[slot.type] = [];
-                                                            acc[slot.type].push(slot);
-                                                            return acc;
-                                                        }, {});
+                                                            const grouped = slots.reduce((acc: Record<string, typeof slots>, slot) => {
+                                                                if (!acc[slot.type]) acc[slot.type] = [];
+                                                                acc[slot.type].push(slot);
+                                                                return acc;
+                                                            }, {});
 
-                                                        const typeOrder = ['same_facility_time', 'same_facility_date', 'different_facility', 'different_facility_date'] as const;
+                                                            const typeOrder = ['same_facility_time', 'same_facility_date', 'different_facility', 'different_facility_date'] as const;
 
-                                                        function getTypeLabel(type: string) {
-                                                            switch (type) {
-                                                                case 'same_facility_time': return 'Same Facility - Different Times';
-                                                                case 'same_facility_date': return 'Same Facility - Nearby Dates';
-                                                                case 'different_facility': return 'Other Facilities - Same Date/Time';
-                                                                case 'different_facility_date': return 'Other Facilities - Nearby Dates';
-                                                                default: return type;
+                                                            function getTypeLabel(type: string) {
+                                                                switch (type) {
+                                                                    case 'same_facility_time': return 'Same Facility - Different Times';
+                                                                    case 'same_facility_date': return 'Same Facility - Nearby Dates';
+                                                                    case 'different_facility': return 'Other Facilities - Same Date/Time';
+                                                                    case 'different_facility_date': return 'Other Facilities - Nearby Dates';
+                                                                    default: return type;
+                                                                }
                                                             }
-                                                        }
 
-                                                        return (
-                                                            <div key={facilityId} className="space-y-3">
-                                                                <h5 className="text-xs font-medium text-foreground">{facilityName}</h5>
-                                                                <div className="space-y-2">
-                                                                    {typeOrder.map((type) => {
-                                                                        const typeSlots = grouped[type];
-                                                                        if (!typeSlots?.length) return null;
+                                                            return (
+                                                                <div key={facilityId} className="space-y-3">
+                                                                    <h5 className="text-xs font-medium text-foreground uppercase tracking-wide text-muted-foreground">{facilityName}</h5>
+                                                                    <div className="space-y-3">
+                                                                        {typeOrder.map((type) => {
+                                                                            const typeSlots = grouped[type];
+                                                                            if (!typeSlots?.length) return null;
 
-                                                                        return (
-                                                                            <div key={type} className="space-y-1">
-                                                                                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{getTypeLabel(type)}</span>
-                                                                                <div className="grid gap-1.5 sm:grid-cols-2">
-                                                                                    {typeSlots.map((slot) => (
-                                                                                        <button
-                                                                                            key={`${slot.facility_id}-${slot.date}-${slot.time_start}`}
-                                                                                            type="button"
-                                                                                            onClick={() => applyAlternative(slot)}
-                                                                                            className="ads-card p-2 text-left hover:border-primary/50 transition-colors text-xs"
-                                                                                        >
-                                                                                            <div className="flex items-center justify-between gap-1 mb-1">
-                                                                                                <span className="font-medium truncate">{moment(slot.date).format('MMM D')}</span>
-                                                                                                <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                                                                                                    <Clock size={10} />
-                                                                                                    {moment(slot.time_start, 'HH:mm:ss').format('h:mm A')} – {moment(slot.time_end, 'HH:mm:ss').format('h:mm A')}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                            <div className="flex flex-wrap items-center gap-1 text-[10px]">
-                                                                                                <span className={`px-1 py-0.5 rounded [4px] ${slot.capacity_fit === 'exact' ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]' : slot.capacity_fit === 'larger' ? 'bg-[var(--ads-info-bg)] text-[var(--ads-info)]' : 'bg-[var(--ads-warning-bg)] text-[var(--ads-warning)]'}`}>
-                                                                                                    {slot.capacity_fit}
-                                                                                                </span>
-                                                                                                <span className={`px-1 py-0.5 rounded [4px] ${slot.equipment_available ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]' : 'bg-[var(--ads-muted-bg)] text-[var(--ads-muted)]'}`}>
-                                                                                                    {slot.equipment_available ? 'Eq ✓' : 'Eq ✗'}
-                                                                                                </span>
-                                                                                            </div>
-                                                                                        </button>
-                                                                                    ))}
+                                                                            return (
+                                                                                <div key={type} className="space-y-2">
+                                                                                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{getTypeLabel(type)}</span>
+                                                                                    <div className="grid gap-1.5 sm:grid-cols-2">
+                                                                                        {typeSlots.map((slot) => {
+                                                                                            const slotKey = `${slot.facility_id}-${slot.date}-${slot.time_start}`;
+                                                                                            const isSelected = selectedAlternative === slotKey;
+                                                                                            return (
+                                                                                                <button
+                                                                                                    key={slotKey}
+                                                                                                    type="button"
+                                                                                                    onClick={() => {
+                                                                                                        setSelectedAlternative(slotKey);
+                                                                                                        applyAlternative(slot);
+                                                                                                    }}
+                                                                                                    className={`group relative flex flex-col p-3 text-left transition-all duration-150 text-xs ${
+                                                                                                        isSelected
+                                                                                                            ? 'ads-card border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm'
+                                                                                                            : 'ads-card hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm'
+                                                                                                    }`}
+                                                                                                >
+                                                                                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                                                                                        <span className="font-medium text-foreground truncate">{moment(slot.date).format('MMM D')}</span>
+                                                                                                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+                                                                                                            <Clock size={10} />
+                                                                                                            {moment(slot.time_start, 'HH:mm:ss').format('h:mm A')} – {moment(slot.time_end, 'HH:mm:ss').format('h:mm A')}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                                                                        <Badge variant={slot.capacity_fit === 'exact' ? 'default' : slot.capacity_fit === 'larger' ? 'secondary' : 'outline'} className="text-[10px] px-2 py-0.5">
+                                                                                                            {slot.capacity_fit}
+                                                                                                        </Badge>
+                                                                                                        <Badge variant={slot.equipment_available ? 'default' : 'outline'} className="text-[10px] px-2 py-0.5">
+                                                                                                            {slot.equipment_available ? 'Equipment Available' : 'Equipment Unavailable'}
+                                                                                                        </Badge>
+                                                                                                    </div>
+                                                                                                </button>
+                                                                                            );
+                                                                                        })}
+                                                                                    </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
+                                                                            );
+                                                                        })}
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
 
                                             {!alternativesLoading && !alternativesError && Object.keys(alternatives).length === 0 && (
                                                 <div className="text-center text-sm text-muted-foreground py-4">

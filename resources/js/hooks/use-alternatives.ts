@@ -9,10 +9,11 @@ interface UseAlternativesOptions {
     enabled?: boolean;
 }
 
-export function useAlternatives({ requestId, includeEquipment = false, maxResults = 5, enabled = true }: UseAlternativesOptions) {
+export function useAlternatives({ requestId, includeEquipment: initialIncludeEquipment = false, maxResults = 5, enabled = true }: UseAlternativesOptions) {
     const [data, setData] = useState<AlternativesResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [includeEquipment, setIncludeEquipmentState] = useState(initialIncludeEquipment);
 
     const fetchAlternatives = useCallback(async () => {
         if (!enabled) return;
@@ -40,5 +41,9 @@ export function useAlternatives({ requestId, includeEquipment = false, maxResult
         fetchAlternatives();
     }, [fetchAlternatives]);
 
-    return { alternatives: data, loading, error, refetch: fetchAlternatives, setIncludeEquipment: (v: boolean) => { includeEquipment = v; fetchAlternatives(); } };
+    const setIncludeEquipment = (value: boolean) => {
+        setIncludeEquipmentState(value);
+    };
+
+    return { alternatives: data, loading, error, refetch: fetchAlternatives, includeEquipment, setIncludeEquipment };
 }

@@ -214,13 +214,13 @@ class RequestController extends Controller
         );
     }
 
-    public function getAlternatives(Request $httpRequest, int $id)
+    public function getAlternatives(Request $httpRequest, int $request_id)
     {
         $request = FacilityRequest::with([
             'requestFacilities.facility',
             'equipment',
             'requestFacilities.externalEquipments',
-        ])->findOrFail($id);
+        ])->findOrFail($request_id);
 
         abort_unless(
             $request->user_id === auth()->id() || auth()->user()->can('approve requests'),
@@ -230,9 +230,11 @@ class RequestController extends Controller
         abort_unless($request->status === RequestStatus::FOR_RESCHEDULE, 400);
 
         $options = $httpRequest->validate([
-            'include_equipment' => 'boolean',
+            'include_equipment' => 'sometimes|in:true,false,1,0',
             'max_results' => 'integer|min:1|max:20',
         ]);
+
+        $options['include_equipment'] = filter_var($httpRequest->input('include_equipment', false), FILTER_VALIDATE_BOOLEAN);
 
         $alternatives = $this->alternativeService->findAlternatives($request, $options);
 

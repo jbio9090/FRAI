@@ -245,7 +245,6 @@ class AlternativeRecommendationService
     ): array {
         $facilities = Facility::where('id', '!=', $currentFacilityId)
             ->where('capacity', '>=', $expectedCapacity)
-            ->where('is_active', true)
             ->get();
 
         $results = [];
@@ -296,7 +295,6 @@ class AlternativeRecommendationService
     ): array {
         $facilities = Facility::where('id', '!=', $currentFacilityId)
             ->where('capacity', '>=', $expectedCapacity)
-            ->where('is_active', true)
             ->get();
 
         $results = [];
