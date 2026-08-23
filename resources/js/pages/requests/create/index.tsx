@@ -15,11 +15,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DefaultLayout from '@/layout.tsx/default.';
+import { AlternativesPanel } from './components/AlternativesPanel';
 import { BookingActions } from './sections/booking-actions';
 import { DetailsTab } from './sections/details-tab';
 import { EquipmentSection } from './sections/equipment-section';
 import { ScheduleSection } from './sections/schedule-section';
-import { AlternativesPanel } from './components/AlternativesPanel';
 import type { CreateRequestProps, FacilityBooking } from './types';
 import { useCreateRequest } from './use-create-request';
 import { timeAgo } from './utils';

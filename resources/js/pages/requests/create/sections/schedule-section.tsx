@@ -9,11 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import type { BookingSchedule } from '../types';
-import { addCalendarDays, formatTime } from '../utils';
-import type { AlternativeSlot } from '../use-create-request';
-import type { Facility } from '../types';
 import { AlternativesPanel } from '../components/AlternativesPanel';
+import type { BookingSchedule } from '../types';
+import type { Facility } from '../types';
+import type { AlternativeSlot } from '../use-create-request';
+import { addCalendarDays, formatTime } from '../utils';
 
 interface ScheduleSectionProps {
     selectedDates: Date[];

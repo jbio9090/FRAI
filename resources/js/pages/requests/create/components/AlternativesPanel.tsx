@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { LayoutGrid, Filter, Loader2, Clock, Calendar } from 'lucide-react';
 import moment from 'moment';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import type { AlternativeSlot } from '../use-create-request';
 import type { Facility } from '@/pages/requests/create/types';
+import type { AlternativeSlot } from '../use-create-request';
 
 interface AlternativesPanelProps {
     alternatives: Record<number, AlternativeSlot[]>;

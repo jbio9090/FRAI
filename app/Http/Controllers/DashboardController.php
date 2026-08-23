@@ -121,6 +121,14 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function pendingRequests(Request $request)
+    {
+        $filter = $request->input('filter', 'this_week');
+        $pending = $this->requestService->get([RequestStatus::PENDING], $filter);
+
+        return response()->json($pending);
+    }
+
     public function calendarEvents(Request $request)
     {
         $start = $request->input('start');

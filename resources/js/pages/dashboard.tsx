@@ -119,6 +119,21 @@ export default function Dashboard({
     const [range, setRange] = useState<'day' | 'week' | 'month' | '3months'>('week');
     const [data, setData] = useState<ChartRow[]>(chartData);
     const [loading, setLoading] = useState(false);
+
+    const [pendingFilter, setPendingFilter] = useState<'all' | 'this_week' | 'this_month'>('this_week');
+    const [pendingRequests, setPendingRequests] = useState<{ data: FacilityRequest[] }>(pending);
+    const [pendingLoading, setPendingLoading] = useState(false);
+
+    const fetchPendingRequests = async (filter: 'all' | 'this_week' | 'this_month') => {
+        setPendingLoading(true);
+        try {
+            const res = await fetch(`/dashboard/pending-requests?filter=${filter}`);
+            const data = await res.json();
+            setPendingRequests(data);
+        } finally {
+            setPendingLoading(false);
+        }
+    };
     const auth = usePage().props.auth;
     const { hasRole } = usePermission();
     const [logsLoading, setLogsLoading] = useState(false);
@@ -288,9 +303,9 @@ export default function Dashboard({
                                     {greetingFor(auth.user.name)}
                                 </h1>
                             </div>
-<div className="flex items-center gap-2">
-    <RoleBadge roles={roles} />
-    <Button size="sm" asChild>
+                            <div className="flex items-center gap-2">
+                                <RoleBadge roles={roles} />
+                                <Button size="sm" asChild>
                                     <Link href={route('request.create')}>
                                         <CirclePlus className="h-4 w-4" />
                                         New request
@@ -411,12 +426,32 @@ export default function Dashboard({
                                             </Link>
                                         </Button>
                                         <span className="text-xs text-muted-foreground">
-                                            {pending.data.length} shown
+                                            {pendingRequests.data.length} shown
                                         </span>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="p-0">
-                                    {pending.data.length === 0 ? (
+                                    <div className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-6 pb-6">
+                                        {(['All', 'Week', 'Month'] as const).map((label) => {
+                                            const filterMap: Record<string, 'all' | 'this_week' | 'this_month'> = { All: 'all', Week: 'this_week', Month: 'this_month' };
+                                            const value = filterMap[label];
+                                            return (
+                                                <Button
+                                                    key={label}
+                                                    size="sm"
+                                                    variant={pendingFilter === value ? 'default' : 'outline'}
+                                                    className="rounded-full whitespace-nowrap"
+                                                    onClick={() => {
+                                                        setPendingFilter(value);
+                                                        fetchPendingRequests(value);
+                                                    }}
+                                                >
+                                                    {label}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                    {pendingRequests.data.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
                                             <div className="flex size-10 items-center justify-center rounded-full bg-muted">
                                                 <ClipboardList className="h-5 w-5 text-muted-foreground" />
@@ -436,9 +471,15 @@ export default function Dashboard({
                                         </div>
                                     ) : (
                                         <div className="flex flex-col">
-                                            {pending.data.slice(0, 6).map((request) => (
-                                                <RequestRow key={request.id} request={request} />
-                                            ))}
+                                            {pendingLoading ? (
+                                                <div className="flex h-[200px] items-center justify-center">
+                                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                                </div>
+                                            ) : (
+                                                pendingRequests.data.slice(0, 6).map((request) => (
+                                                    <RequestRow key={request.id} request={request} />
+                                                ))
+                                            )}
                                         </div>
                                     )}
                                 </CardContent>
