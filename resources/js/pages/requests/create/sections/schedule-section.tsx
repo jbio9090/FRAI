@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { AlertCircleIcon, CalendarIcon } from 'lucide-react';
+import { AlertCircleIcon, CalendarIcon, Clock } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import type { BookingSchedule } from '../types';
 import { addCalendarDays, formatTime } from '../utils';
+import type { AlternativeSlot } from '../use-create-request';
+import type { Facility } from '../types';
+import { AlternativesPanel } from '../components/AlternativesPanel';
 
 interface ScheduleSectionProps {
     selectedDates: Date[];
@@ -29,6 +32,18 @@ interface ScheduleSectionProps {
     hasOutsiders: boolean;
     setHasOutsiders: (value: boolean) => void;
     scheduleConflicts: BookingSchedule[];
+
+    // Alternatives (for mobile/tablet inline rendering)
+    alternatives?: Record<number, AlternativeSlot[]>;
+    alternativesLoading?: boolean;
+    alternativesError?: string | null;
+    includeEquipmentFilter?: boolean;
+    setIncludeEquipmentFilter?: (v: boolean) => void;
+    applyAlternative?: (slot: AlternativeSlot) => void;
+    facilities?: Facility[];
+    isEditing?: boolean;
+    existingRequest?: { status?: string } | null;
+    editingIndex?: number | null;
 }
 
 export function ScheduleSection({
@@ -48,6 +63,16 @@ export function ScheduleSection({
     hasOutsiders,
     setHasOutsiders,
     scheduleConflicts,
+    alternatives,
+    alternativesLoading,
+    alternativesError,
+    includeEquipmentFilter,
+    setIncludeEquipmentFilter,
+    applyAlternative,
+    facilities,
+    isEditing,
+    existingRequest,
+    editingIndex,
 }: ScheduleSectionProps) {
     return (
         <section className="ads-card p-5 md:p-6">
@@ -75,8 +100,8 @@ export function ScheduleSection({
                                     {selectedDates.length === 0
                                         ? 'Pick a date'
                                         : selectedDates.length === 1
-                                          ? format(selectedDates[0], 'PPP')
-                                          : `${selectedDates.length} dates selected`}
+                                            ? format(selectedDates[0], 'PPP')
+                                            : `${selectedDates.length} dates selected`}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0">
@@ -164,7 +189,7 @@ export function ScheduleSection({
                 </div>
 
                 {scheduleConflicts.length > 0 && (
-                    <Alert className="border-[var(--ads-amber)]/50 bg-[var(--ads-amber-bg)] text-[var(--ads-amber)]">
+                    <Alert className="border-[var(--ads-amber)]/50 text-[var(--ads-amber)]">
                         <AlertCircleIcon className="text-[var(--ads-amber)]" />
                         <AlertTitle className="font-semibold text-[var(--ads-amber)]">Time Conflict Detected</AlertTitle>
                         <AlertDescription className="text-[var(--ads-amber)]">
@@ -173,15 +198,18 @@ export function ScheduleSection({
                                 {scheduleConflicts.map((c, i) => (
                                     <div
                                         key={i}
-                                        className="flex items-start gap-1.5 rounded border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/60 px-2 py-1.5 text-xs text-[var(--ads-amber)]"
+                                        className="flex items-start gap-1.5 rounded border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/40 px-2 py-1.5 text-xs text-[var(--ads-amber)]"
                                     >
-                                        <AlertCircleIcon size={14} className="mt-0.5 shrink-0" />
                                         <span>
                                             <strong>{c.request_title}</strong> <br />
-                                            Time: {formatTime(c.time_start)} - {formatTime(c.time_end)} —{' '}
-                                            <span className={c.status === 'Approved' ? 'font-semibold text-[var(--ads-danger)]' : 'font-semibold'}>
-                                                {c.status}
+                                            <span className="flex gap-1 items-center">
+                                                <Clock size={10} className='font-semibold'/>
+                                                {formatTime(c.time_start)} - {formatTime(c.time_end)} —{' '}
+                                                <span className={c.status === 'Approved' ? 'font-semibold text-[var(--ads-danger)]' : 'font-semibold'}>
+                                                    {c.status}
+                                                </span>
                                             </span>
+
                                         </span>
                                     </div>
                                 ))}
@@ -189,6 +217,22 @@ export function ScheduleSection({
                         </AlertDescription>
                     </Alert>
                 )}
+
+                {/* Mobile/Tablet: Alternatives inline */}
+                <div className="lg:hidden">
+                    <AlternativesPanel
+                        alternatives={alternatives ?? {}}
+                        alternativesLoading={alternativesLoading ?? false}
+                        alternativesError={alternativesError ?? null}
+                        includeEquipmentFilter={includeEquipmentFilter ?? false}
+                        setIncludeEquipmentFilter={setIncludeEquipmentFilter ?? (() => { })}
+                        applyAlternative={applyAlternative ?? (() => { })}
+                        facilities={facilities ?? []}
+                        isEditing={isEditing ?? false}
+                        existingRequest={existingRequest ?? null}
+                        editingIndex={editingIndex ?? null}
+                    />
+                </div>
             </div>
         </section>
     );
