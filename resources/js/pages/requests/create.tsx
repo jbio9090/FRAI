@@ -1,4 +1,4 @@
-import { AlertCircleIcon, ChevronDown, Check } from 'lucide-react';
+import { AlertCircleIcon } from 'lucide-react';
 import { FacilityInfo } from '@/components/create-page/facility-info';
 import { BookingCardList } from '@/components/request/create/booking-card-list';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -15,14 +15,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DefaultLayout from '@/layout.tsx/default.';
-import { AlternativesPanel } from './components/AlternativesPanel';
-import { BookingActions } from './sections/booking-actions';
-import { DetailsTab } from './sections/details-tab';
-import { EquipmentSection } from './sections/equipment-section';
-import { ScheduleSection } from './sections/schedule-section';
-import type { CreateRequestProps, FacilityBooking } from './types';
-import { useCreateRequest } from './use-create-request';
-import { timeAgo } from './utils';
+import { AlternativesPanel } from './create/components/AlternativesPanel';
+import { BookingActions } from './create/sections/booking-actions';
+import { DetailsTab } from './create/sections/details-tab';
+import { EquipmentSection } from './create/sections/equipment-section';
+import { ScheduleSection } from './create/sections/schedule-section';
+import type { CreateRequestProps, FacilityBooking } from './create/types';
+import { useCreateRequest } from './create/use-create-request';
+import { timeAgo } from './create/utils';
 
 export type { FacilityBooking };
 
