@@ -70,7 +70,7 @@ class OpenRouterClient
         }
 
         $message = $response->json('choices.0.message', []);
-        $content = trim((string) ($message['content'] ?? ''));
+        $content = $this->sanitizeVisibleContent((string) ($message['content'] ?? ''));
         $toolCalls = $this->normalizeToolCalls($message['tool_calls'] ?? []);
 
         if ($content === '' && empty($toolCalls)) {
@@ -133,6 +133,74 @@ class OpenRouterClient
             'model' => $response['model'],
             'tool_calls' => $response['tool_calls'],
         ];
+    }
+
+    private function sanitizeVisibleContent(string $content): string
+    {
+        $sanitized = preg_replace('/<\s*think\b[^>]*>.*?<\s*\/\s*think\s*>/is', '', $content);
+        if ($sanitized === null) {
+            return trim($content);
+        }
+
+        $sanitized = preg_replace('/<\s*think\b[^>]*>.*$/is', '', $sanitized);
+        if ($sanitized === null) {
+            return trim($content);
+        }
+
+        return trim($sanitized);
+    }
+
+    private function filterReasoningToken(string $token, bool &$inReasoningBlock): string
+    {
+        $visible = '';
+        $remaining = $token;
+
+        while ($remaining !== '') {
+            if ($inReasoningBlock) {
+                $closeTagPos = stripos($remaining, '</think');
+                if ($closeTagPos === false) {
+                    return $visible;
+                }
+
+                $tagEnd = strpos($remaining, '>', $closeTagPos);
+                if ($tagEnd === false) {
+                    return $visible;
+                }
+
+                $remaining = substr($remaining, $tagEnd + 1);
+                $inReasoningBlock = false;
+                continue;
+            }
+
+            $openTagPos = stripos($remaining, '<think');
+            $closeTagPos = stripos($remaining, '</think');
+
+            if ($openTagPos === false && $closeTagPos === false) {
+                $visible .= $remaining;
+                return $visible;
+            }
+
+            if ($closeTagPos !== false && ($openTagPos === false || $closeTagPos < $openTagPos)) {
+                $tagEnd = strpos($remaining, '>', $closeTagPos);
+                if ($tagEnd === false) {
+                    return $visible;
+                }
+
+                $remaining = substr($remaining, $tagEnd + 1);
+                continue;
+            }
+
+            $visible .= substr($remaining, 0, $openTagPos);
+            $tagEnd = strpos($remaining, '>', $openTagPos);
+            if ($tagEnd === false) {
+                return $visible;
+            }
+
+            $remaining = substr($remaining, $tagEnd + 1);
+            $inReasoningBlock = true;
+        }
+
+        return $visible;
     }
 
     private function normalizeToolCalls(mixed $toolCalls): array
@@ -210,11 +278,6 @@ class OpenRouterClient
             'Accept' => 'text/event-stream',
         ];
 
-        if ($this->providerName() === 'openrouter') {
-            $headers['HTTP-Referer'] = (string) config('app.url');
-            $headers['X-Title'] = (string) config('app.name', 'FRAI');
-        }
-
         $response = $client->post($this->endpoint('/chat/completions'), [
             'headers' => $headers,
             'http_errors' => false,
@@ -237,6 +300,7 @@ class OpenRouterClient
         $body = $response->getBody();
         $buffer = '';
         $content = '';
+        $inReasoningBlock = false;
 
         while (! $body->eof()) {
             $buffer .= $body->read(8192);
@@ -267,11 +331,17 @@ class OpenRouterClient
                     continue;
                 }
 
-                $content .= $token;
-                $onToken($token);
+                $filteredToken = $this->filterReasoningToken($token, $inReasoningBlock);
+                if ($filteredToken === '') {
+                    continue;
+                }
+
+                $content .= $filteredToken;
+                $onToken($filteredToken);
             }
         }
 
+        $content = $this->sanitizeVisibleContent($content);
         if ($content === '') {
             Log::warning('AI streaming chat returned empty content', [
                 'provider' => $this->providerName(),
@@ -290,21 +360,21 @@ class OpenRouterClient
     {
         $providerConfig = $this->providerConfig();
 
-        return trim((string) ($providerConfig['model'] ?? config('ai.openrouter.model', 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b')));
+        return trim((string) ($providerConfig['model'] ?? 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b'));
     }
 
     public function baseUrl(): string
     {
         $providerConfig = $this->providerConfig();
 
-        return rtrim((string) ($providerConfig['base_url'] ?? config('ai.openrouter.base_url', 'https://integrate.api.nvidia.com/v1')), '/');
+        return rtrim((string) ($providerConfig['base_url'] ?? 'https://integrate.api.nvidia.com/v1'), '/');
     }
 
     public function apiKey(): string
     {
         $providerConfig = $this->providerConfig();
 
-        return trim((string) ($providerConfig['api_key'] ?? config('ai.openrouter.api_key', '')));
+        return trim((string) ($providerConfig['api_key'] ?? ''));
     }
 
     public function isConfigured(): bool
@@ -325,13 +395,6 @@ class OpenRouterClient
         $nvidiaApiKey = trim((string) ($config['api_key'] ?? ''));
         if ($nvidiaApiKey !== '') {
             return $config;
-        }
-
-        $openrouterConfig = is_array(config('ai.openrouter')) ? config('ai.openrouter') : [];
-        $openrouterApiKey = trim((string) ($openrouterConfig['api_key'] ?? ''));
-
-        if ($openrouterApiKey !== '') {
-            return $openrouterConfig;
         }
 
         return $config;

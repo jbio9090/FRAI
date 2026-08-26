@@ -1,0 +1,20 @@
+[
+  {
+    "file": "app/Http/Controllers/ChatController.php",
+    "line": 1698,
+    "summary": "Unused $searchResult from FAQ database search in handleFaqModeConversation",
+    "failure_scenario": "When the semantic matching service returns a weak match (similarity < 0.6) or no near match, the code invokes FaqSearchTool::search() to query the rules table directly, but the $searchResult variable is never referenced in any subsequent code path (clarification branch or no-match branch). Users receive clarification prompts or 'no match' responses even though relevant FAQ entries exist in the database within the search threshold, providing zero benefit from the database query."
+  },
+  {
+    "file": "app/Http/Controllers/ChatController.php",
+    "line": 1465,
+    "summary": "Dead $primaryHint computation in generateFaqConversationalAnswer",
+    "failure_scenario": "The $primaryHint variable is computed based on \$primaryMatch['question'] but is no longer included in the 'FAQ SNIPPETS:' system prompt passed to the LLM. The old code had '.FAQ SNIPPETS:\n{$knowledgeBlock}{$primaryHint}', new code has just '.FAQ SNIPPETS:\n{$knowledgeBlock}'. The 'Likely primary FAQ for this turn' hint is silently dropped, so the LLM never receives directional guidance to focus on the primary matched FAQ, potentially leading to less precise or redundant answers."
+  },
+  {
+    "file": "app/Http/Controllers/ChatController.php",
+    "line": 1466,
+    "summary": "Missing null guard before array_key_exists in generateFaqConversationalAnswer",
+    "failure_scenario": "The function signature accepts ?array $primaryMatch = null, and line 1466 calls array_key_exists('question', $primaryMatch) without first checking if $primaryMatch is null. If the function is called directly without the 4th argument, a PHP warning is triggered: 'array_key_exists(): Argument #1 ($array) must be of type array|object, null given'. While the warning does not cause a crash, it pollutes logs and indicates poor defensive coding at the point of use."
+  }
+]

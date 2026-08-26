@@ -1,8 +1,6 @@
 <?php
 
 use App\Http\Controllers\AccountController;
-use App\Http\Controllers\ChatbotLogController;
-use App\Http\Controllers\ChatController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\FacilityController;
@@ -147,10 +145,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');
     Route::post('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'update'])->name('password.force.update');
 
-    Route::middleware('permission:view chatbot logs')->group(function () {
-        Route::get('/chatbot-logs', [ChatbotLogController::class, 'index'])->name('chatbot.logs.index');
-    });
-
     Route::middleware('permission:manage facilities')->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
         Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
@@ -162,26 +156,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/buildings/{building}', [FacilityController::class, 'destroyBuilding'])->name('buildings.destroy');
         Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
-    // chatbot
-    Route::get('/chatbot', function () {
-        return Inertia::render('chatbot/chatbot');
-    })->name('chatbot');
-
-    Route::prefix('/chat')->group(function () {
-        Route::post('/', [ChatController::class, 'chat'])->name('api.chat')->middleware(['throttle:60,1']);
-        Route::get('/test', [ChatController::class, 'testCsrf'])->name('chat.test');
-        Route::get('/models', [ChatController::class, 'models'])->name('chat.models');
-        Route::get('/requests', [ChatController::class, 'latestRequests'])->name('chat.requests');
-        Route::get('/rules', [ChatController::class, 'rulesList'])->name('chat.rules');
-        Route::get('/facilities', [ChatController::class, 'facilitiesList'])->name('chat.facilities');
-        Route::get('/equipment', [ChatController::class, 'equipmentList'])->name('chat.equipment');
-        Route::post('/upload', [ChatController::class, 'uploadFile'])->name('chat.upload')->middleware(['throttle:60,1']);
-        Route::post('/create-request', [ChatController::class, 'createRequestApi'])->name('api.db.create.request')->middleware(['throttle:10,1']);
-        Route::post('/stream', [ChatController::class, 'stream'])->name('chat.stream')->middleware(['throttle:60,1']);
-        Route::get('/session', [ChatController::class, 'getSession'])->name('chat.session.get');
-        Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
-});
 
 
 Route::get('/files/{file}/stream', [FileController::class, 'stream'])

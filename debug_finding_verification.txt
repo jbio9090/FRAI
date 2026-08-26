@@ -1,0 +1,11 @@
+Verification result: CONFIRMED
+
+File: app/Services/AI/OpenRouterClient.php
+Line: 363
+
+Actual code:
+    return trim((string) ($providerConfig['model'] ?? 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b'));
+
+The method hardcodes 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b' as the ultimate fallback. The providerConfig() method resolves to the 'nvidia' config section by default (via providerName() returning 'nvidia' from config('ai.provider', 'nvidia')). The nvidia config's model value itself defaults to the same hardcoded string via env('NVIDIA_MODEL', env('OPENROUTER_MODEL', 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b')).
+
+Any openrouter custom model configuration (config('ai.openrouter.model')) is never consulted because the provider is already resolved to 'nvidia' before model() is called. The method always uses the NVIDIA default, ignoring any OpenRouter custom model setting.
