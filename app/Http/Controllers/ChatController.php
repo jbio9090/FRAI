@@ -9,6 +9,7 @@ use App\Models\Equipment;
 use App\Models\Facility;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
+use App\Services\AI\FaqSearchTool;
 use App\Services\AI\OpenRouterClient;
 use App\Services\ChatbotLogService;
 use App\Services\RAG\FaqMatchingService;
@@ -32,7 +33,8 @@ class ChatController extends Controller
     public function __construct(
         protected ChatbotLogService $chatbotLogService,
         protected FaqMatchingService $faqMatchingService,
-        protected OpenRouterClient $ai
+        protected OpenRouterClient $ai,
+        protected FaqSearchTool $faqSearchTool
     ) {}
 
     private function sessionCacheKey(): string
@@ -1368,6 +1370,21 @@ class ChatController extends Controller
         return array_slice($conversation, -$limit);
     }
 
+    /**
+     * Search the FAQ database using the dedicated tool.
+     *
+     * This method queries the rules table directly and returns matching FAQ entries.
+     * The LLM can use this to find relevant FAQ answers when the user asks a question,
+     * providing grounded responses instead of hallucinating.
+     *
+     * @param string $question The user's question to search for
+     * @return array ['matches' => [...], 'query' => string, 'count' => int]
+     */
+    private function searchFaqDatabase(string $question): array
+    {
+        return $this->faqSearchTool->search($question);
+    }
+
     private function buildFaqKnowledgeBlock(array $retrievedFaqs): string
     {
         if (empty($retrievedFaqs)) {
@@ -1443,12 +1460,12 @@ class ChatController extends Controller
         }
 
         $knowledgeBlock = $this->buildFaqKnowledgeBlock($retrievedFaqs);
+
+        // Include search tool results if available (for when matching service didn't find good matches)
+        $searchHint = '';
         $primaryHint = '';
-        if ($primaryMatch) {
-            $primaryQuestion = trim((string) ($primaryMatch['question'] ?? ''));
-            if ($primaryQuestion !== '') {
-                $primaryHint = "\nLikely primary FAQ for this turn: {$primaryQuestion}";
-            }
+        if ($primaryMatch !== null && array_key_exists('question', $primaryMatch) && $primaryMatch['question'] !== '') {
+            $primaryHint = "\nLikely primary FAQ for this turn: {$primaryMatch['question']}";
         }
 
         $faqConversationMessages = $this->getFaqConversationMessages($messages);
@@ -1679,8 +1696,26 @@ class ChatController extends Controller
         $clarifierAlreadyAsked = (bool) ($faqState['clarifier_asked'] ?? false)
             && ((string) ($faqState['anchor_key'] ?? '') === $anchorKey);
 
+        // Try searching the FAQ database using the dedicated search tool
+        // when the matching service doesn't return a strong match.
+        $searchResult = [];
+        if (! $nearMatch || (isset($nearMatch['similarity']) && (float) $nearMatch['similarity'] < 0.6)) {
+            $searchResult = $this->searchFaqDatabase($latestUserMessage);
+        }
+
+        // Build enhanced knowledge block including search results if available
+        $enhancedFaqs = $retrievedFaqs;
+        if (! empty($searchResult['matches'])) {
+            // Prepend search results to the FAQ knowledge block
+            $searchKnowledge = $this->buildFaqKnowledgeBlock($searchResult['matches']);
+            $enhancedFaqs = array_merge($searchResult['matches'], $retrievedFaqs);
+            $knowledgeBlock = $this->buildFaqKnowledgeBlock($enhancedFaqs);
+        } else {
+            $knowledgeBlock = $this->buildFaqKnowledgeBlock($retrievedFaqs);
+        }
+
         if (! $clarifierAlreadyAsked) {
-            $content = $this->generateFaqClarifyingResponse($messages, $latestUserMessage, $retrievedFaqs, $nearMatch);
+            $content = $this->generateFaqClarifyingResponse($messages, $latestUserMessage, $enhancedFaqs, $nearMatch);
             $this->saveFaqState([
                 'clarifier_asked' => true,
                 'anchor_key' => $anchorKey,
