@@ -14,6 +14,7 @@ use App\Services\AI\OpenRouterClient;
 use App\Services\ChatbotLogService;
 use App\Services\RAG\FaqMatchingService;
 use App\Services\RequestSettingsService;
+use App\Services\Chat\ChatHelperService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -34,7 +35,8 @@ class ChatController extends Controller
         protected ChatbotLogService $chatbotLogService,
         protected FaqMatchingService $faqMatchingService,
         protected OpenRouterClient $ai,
-        protected FaqSearchTool $faqSearchTool
+        protected FaqSearchTool $faqSearchTool,
+        protected ChatHelperService $chatHelpers
     ) {}
 
     private function sessionCacheKey(): string
@@ -104,26 +106,7 @@ class ChatController extends Controller
 
     private function normalizePositiveIntValue(mixed $value): ?int
     {
-        if (is_int($value) && $value > 0) {
-            return $value;
-        }
-
-        if (is_string($value)) {
-            $candidate = trim($value);
-            if ($candidate !== '' && ctype_digit($candidate)) {
-                $parsed = (int) $candidate;
-
-                return $parsed > 0 ? $parsed : null;
-            }
-        }
-
-        if (is_numeric($value)) {
-            $parsed = (int) $value;
-
-            return $parsed > 0 ? $parsed : null;
-        }
-
-        return null;
+        return $this->chatHelpers->normalizePositiveIntValue($value);
     }
 
     private function validateFacilityParticipantCapacity(array $facilityBookings, ?int $globalParticipantCount = null): array
@@ -171,13 +154,7 @@ class ChatController extends Controller
 
     private function getLatestUserMessageContent(array $messages): ?string
     {
-        for ($i = count($messages) - 1; $i >= 0; $i--) {
-            if (($messages[$i]['role'] ?? null) === 'user') {
-                return trim((string) ($messages[$i]['content'] ?? ''));
-            }
-        }
-
-        return null;
+        return $this->chatHelpers->getLatestUserMessageContent($messages);
     }
 
     private function extractFacilityAndDateFromMessage(?string $message, $facilities): array
@@ -260,89 +237,22 @@ class ChatController extends Controller
 
     private function normalizeDateValue(mixed $value): mixed
     {
-        if (! is_string($value)) {
-            return $value;
-        }
-
-        $candidate = trim($value);
-        if ($candidate === '') {
-            return $value;
-        }
-
-        try {
-            return Carbon::parse($candidate)->format('Y-m-d');
-        } catch (\Exception) {
-            return $value;
-        }
+        return $this->chatHelpers->normalizeDateValue($value);
     }
 
     private function normalizeTimeValue(mixed $value): mixed
     {
-        if (! is_string($value)) {
-            return $value;
-        }
-
-        $candidate = trim($value);
-        if ($candidate === '') {
-            return $value;
-        }
-
-        if (preg_match('/^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $candidate, $matches)) {
-            return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
-        }
-
-        $normalizedMeridian = strtoupper(preg_replace('/\s+/', ' ', $candidate));
-        foreach (['g:i A', 'g:iA', 'g A', 'gA', 'h:i A', 'h:iA', 'h A', 'hA'] as $format) {
-            try {
-                return Carbon::createFromFormat($format, $normalizedMeridian)->format('H:i');
-            } catch (\Exception) {
-                continue;
-            }
-        }
-
-        return $value;
+        return $this->chatHelpers->normalizeTimeValue($value);
     }
 
     private function toMinuteOfDay(string $time): ?int
     {
-        $normalized = $this->normalizeTimeValue($time);
-        if (! is_string($normalized) || ! preg_match('/^\d{2}:\d{2}$/', $normalized)) {
-            return null;
-        }
-
-        [$hour, $minute] = array_map('intval', explode(':', $normalized));
-
-        return ($hour * 60) + $minute;
+        return $this->chatHelpers->toMinuteOfDay($time);
     }
 
     private function extractTimeRangeFromMessage(?string $message): array
     {
-        if (! $message) {
-            return ['time_start' => null, 'time_end' => null];
-        }
-
-        $timePattern = '(?:[0-9]{1,2}:[0-9]{2}\s*(?:am|pm)?|[0-9]{1,2}\s*(?:am|pm))';
-        $patterns = [
-            "/\bfrom\s+($timePattern)\s*(?:to|until|-)\s*($timePattern)\b/i",
-            "/\b($timePattern)\s+to\s+($timePattern)\b/i",
-            "/\b($timePattern)\s*-\s*($timePattern)\b/i",
-        ];
-
-        foreach ($patterns as $pattern) {
-            if (! preg_match($pattern, $message, $matches)) {
-                continue;
-            }
-
-            $start = $this->normalizeTimeValue($matches[1] ?? null);
-            $end = $this->normalizeTimeValue($matches[2] ?? null);
-
-            return [
-                'time_start' => is_string($start) ? $start : null,
-                'time_end' => is_string($end) ? $end : null,
-            ];
-        }
-
-        return ['time_start' => null, 'time_end' => null];
+        return $this->chatHelpers->extractTimeRangeFromMessage($message);
     }
 
     private function getEquipmentContextRows(int $limit = 50): array
@@ -382,32 +292,7 @@ class ChatController extends Controller
 
     private function resolveFacilityIdFromValue(mixed $facilityValue): mixed
     {
-        if (is_int($facilityValue) || (is_string($facilityValue) && ctype_digit(trim($facilityValue)))) {
-            return (int) $facilityValue;
-        }
-
-        if (! is_string($facilityValue) || trim($facilityValue) === '') {
-            return $facilityValue;
-        }
-
-        $normalizedValue = trim($facilityValue);
-
-        if (preg_match('/\b(?:facility\s*)?id\s*(\d+)\b/i', $normalizedValue, $matches)) {
-            return (int) $matches[1];
-        }
-
-        $facility = Facility::query()
-            ->orderByRaw('LENGTH(name) DESC')
-            ->get(['id', 'name'])
-            ->first(function ($facility) use ($normalizedValue) {
-                $facilityName = (string) $facility->name;
-
-                return strcasecmp($facilityName, $normalizedValue) === 0
-                    || stripos($facilityName, $normalizedValue) !== false
-                    || stripos($normalizedValue, $facilityName) !== false;
-            });
-
-        return $facility?->id ?? $facilityValue;
+        return $this->chatHelpers->resolveFacilityIdFromValue($facilityValue);
     }
 
     private function resolveEquipmentIdFromValue(mixed $equipmentValue, ?int $facilityId = null): mixed
@@ -700,136 +585,12 @@ class ChatController extends Controller
 
     private function normalizeEquipmentSelections(array $equipmentSelections, ?int $facilityId = null): array
     {
-        $normalized = [];
-
-        foreach ($equipmentSelections as $equipmentKey => $equipmentValue) {
-            if (is_array($equipmentValue)) {
-                if (! isset($equipmentValue['equipment_id']) && isset($equipmentValue['id'])) {
-                    $equipmentValue['equipment_id'] = $equipmentValue['id'];
-                }
-
-                if (! isset($equipmentValue['quantity_needed']) && isset($equipmentValue['quantity'])) {
-                    $equipmentValue['quantity_needed'] = $equipmentValue['quantity'];
-                }
-
-                $resolvedEquipmentId = $this->resolveEquipmentIdFromValue(
-                    $equipmentValue['equipment_id'] ?? null,
-                    $facilityId
-                );
-                $quantityNeeded = isset($equipmentValue['quantity_needed'])
-                    ? (int) $equipmentValue['quantity_needed']
-                    : 0;
-                $sourceFacilityId = null;
-                if (isset($equipmentValue['source_facility_id'])) {
-                    $resolvedSourceFacilityId = $this->resolveFacilityIdFromValue($equipmentValue['source_facility_id']);
-                    $sourceFacilityId = is_numeric($resolvedSourceFacilityId) ? (int) $resolvedSourceFacilityId : null;
-                } elseif (isset($equipmentValue['facility_id'])) {
-                    $resolvedSelectionFacilityId = $this->resolveFacilityIdFromValue($equipmentValue['facility_id']);
-                    $sourceFacilityId = is_numeric($resolvedSelectionFacilityId) ? (int) $resolvedSelectionFacilityId : null;
-                }
-
-                $isBorrowed = false;
-                if ($sourceFacilityId && (! $facilityId || $sourceFacilityId !== $facilityId)) {
-                    $isBorrowed = true;
-                } elseif (array_key_exists('is_borrowed', $equipmentValue)) {
-                    $parsedBorrowed = filter_var($equipmentValue['is_borrowed'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-                    $isBorrowed = $parsedBorrowed === true;
-                }
-
-                if (is_numeric($resolvedEquipmentId) && $quantityNeeded > 0) {
-                    $normalizedItem = [
-                        'equipment_id' => (int) $resolvedEquipmentId,
-                        'quantity_needed' => $quantityNeeded,
-                    ];
-
-                    if ($isBorrowed && $sourceFacilityId && (! $facilityId || $sourceFacilityId !== $facilityId)) {
-                        $normalizedItem['is_borrowed'] = true;
-                        $normalizedItem['source_facility_id'] = $sourceFacilityId;
-                    }
-
-                    $normalized[] = $normalizedItem;
-                }
-
-                continue;
-            }
-
-            if (! is_numeric($equipmentKey) || ! is_numeric($equipmentValue)) {
-                continue;
-            }
-
-            $quantityNeeded = (int) $equipmentValue;
-            if ($quantityNeeded <= 0) {
-                continue;
-            }
-
-            $resolvedEquipmentId = $this->resolveEquipmentIdFromValue((int) $equipmentKey, $facilityId);
-            if (! is_numeric($resolvedEquipmentId)) {
-                continue;
-            }
-
-            $normalized[] = [
-                'equipment_id' => (int) $resolvedEquipmentId,
-                'quantity_needed' => $quantityNeeded,
-            ];
-        }
-
-        return $this->mergeNormalizedEquipment([], $normalized);
+        return $this->chatHelpers->normalizeEquipmentSelections($equipmentSelections, $facilityId);
     }
 
     private function mergeNormalizedEquipment(array $base, array $extra): array
     {
-        $totals = [];
-        $meta = [];
-
-        foreach (array_merge($base, $extra) as $selection) {
-            if (! is_array($selection)) {
-                continue;
-            }
-
-            $equipmentId = isset($selection['equipment_id']) ? (int) $selection['equipment_id'] : 0;
-            $quantityNeeded = isset($selection['quantity_needed']) ? (int) $selection['quantity_needed'] : 0;
-            $sourceFacilityId = isset($selection['source_facility_id']) ? (int) $selection['source_facility_id'] : 0;
-            $isBorrowed = isset($selection['is_borrowed'])
-                ? (bool) $selection['is_borrowed']
-                : ($sourceFacilityId > 0);
-
-            if ($equipmentId <= 0 || $quantityNeeded <= 0) {
-                continue;
-            }
-
-            if ($isBorrowed && $sourceFacilityId <= 0) {
-                continue;
-            }
-
-            $bucketKey = $equipmentId.':'.(($isBorrowed && $sourceFacilityId > 0) ? $sourceFacilityId : 0);
-            $totals[$bucketKey] = ($totals[$bucketKey] ?? 0) + $quantityNeeded;
-            $meta[$bucketKey] = [
-                'equipment_id' => $equipmentId,
-                'is_borrowed' => $isBorrowed && $sourceFacilityId > 0,
-                'source_facility_id' => $sourceFacilityId > 0 ? $sourceFacilityId : null,
-            ];
-        }
-
-        $merged = [];
-        foreach ($totals as $bucketKey => $quantityNeeded) {
-            $equipmentId = (int) ($meta[$bucketKey]['equipment_id'] ?? 0);
-            $isBorrowed = (bool) ($meta[$bucketKey]['is_borrowed'] ?? false);
-            $sourceFacilityId = $meta[$bucketKey]['source_facility_id'] ?? null;
-
-            $mergedItem = [
-                'equipment_id' => $equipmentId,
-                'quantity_needed' => (int) $quantityNeeded,
-            ];
-
-            if ($isBorrowed && is_numeric($sourceFacilityId)) {
-                $mergedItem['is_borrowed'] = true;
-                $mergedItem['source_facility_id'] = (int) $sourceFacilityId;
-            }
-
-            $merged[] = $mergedItem;
-        }
-
-        return $merged;
+        return $this->chatHelpers->mergeNormalizedEquipment($base, $extra);
     }
 
     private function normalizeCreateRequestPayload(array $input): array
@@ -1465,6 +1226,264 @@ class ChatController extends Controller
                     ],
                     'required' => ['question'],
                 ],
+            ],
+        ];
+    }
+
+    private function shouldUseGuidedBookingTool(?string $bookingContext): bool
+    {
+        if (! is_string($bookingContext)) {
+            return false;
+        }
+
+        $contextText = trim($bookingContext);
+        if ($contextText === '') {
+            return false;
+        }
+
+        $lowerContext = Str::lower($contextText);
+        $isAvailabilityOnly = preg_match('/\b(guided\s+availability|availability\s+check|availability\s+flow)\b/i', $contextText) === 1;
+        $hasBookingSignals = preg_match('/\b(guided\s+booking|booking\s+flow|participant\s+count|event\s+type|facility\s+id|time\s+window|start\s+time|end\s+time|booking\s+details|selected\s+facility|selected\s+date)\b/i', $contextText) === 1;
+
+        return $hasBookingSignals && ! $isAvailabilityOnly;
+    }
+
+    private function buildGuidedBookingPlanToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'guided_booking_plan',
+                'description' => 'Validate and normalize a guided booking plan before final response generation.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'facility_id' => ['type' => 'integer', 'description' => 'Numeric facility ID for the booking.'],
+                        'date' => ['type' => 'string', 'description' => 'Requested booking date in YYYY-MM-DD format.'],
+                        'time_start' => ['type' => 'string', 'description' => 'Requested start time in HH:MM or AM/PM format.'],
+                        'time_end' => ['type' => 'string', 'description' => 'Requested end time in HH:MM or AM/PM format.'],
+                        'participant_count' => ['type' => 'integer', 'description' => 'Optional participant count.'],
+                        'event_type' => ['type' => 'integer', 'description' => 'Optional event type: 0=Academic, 1=Organizational, 2=University, 3=Government.'],
+                        'equipment' => ['type' => 'array', 'description' => 'Optional equipment selections as objects with equipment_id and quantity_needed.'],
+                        'title' => ['type' => 'string', 'description' => 'Optional booking title.'],
+                        'description' => ['type' => 'string', 'description' => 'Optional description for the booking.'],
+                    ],
+                    'required' => ['facility_id', 'date', 'time_start', 'time_end'],
+                ],
+            ],
+        ];
+    }
+
+    private function normalizeGuidedBookingPlan(array $plan): array
+    {
+        $missingFields = [];
+        $errors = [];
+        $warnings = [];
+        $required = ['facility_id', 'date', 'time_start', 'time_end'];
+
+        foreach ($required as $field) {
+            $value = $plan[$field] ?? null;
+            if ($value === null || (is_string($value) && trim($value) === '') || (is_array($value) && empty($value))) {
+                $missingFields[] = $field;
+            }
+        }
+
+        $facilityId = $this->resolveFacilityIdFromValue($plan['facility_id'] ?? null);
+        $date = $this->normalizeDateValue($plan['date'] ?? null);
+        $timeStart = $this->normalizeTimeValue($plan['time_start'] ?? null);
+        $timeEnd = $this->normalizeTimeValue($plan['time_end'] ?? null);
+        $participantCount = $this->normalizePositiveIntValue($plan['participant_count'] ?? null);
+        $eventType = $this->normalizePositiveIntValue($plan['event_type'] ?? null);
+        $title = trim((string) ($plan['title'] ?? ''));
+        $description = trim((string) ($plan['description'] ?? ''));
+        $equipment = is_array($plan['equipment'] ?? null) ? $plan['equipment'] : [];
+
+        if ($facilityId === null || ! is_numeric($facilityId) || ((int) $facilityId) <= 0) {
+            $errors[] = 'facility_id must be a valid numeric facility ID.';
+        }
+
+        if (! is_string($date) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $errors[] = 'date must be a valid YYYY-MM-DD value.';
+        }
+
+        if (! is_string($timeStart) || ! preg_match('/^\d{2}:\d{2}$/', $timeStart)) {
+            $errors[] = 'time_start must be a valid HH:MM time.';
+        }
+
+        if (! is_string($timeEnd) || ! preg_match('/^\d{2}:\d{2}$/', $timeEnd)) {
+            $errors[] = 'time_end must be a valid HH:MM time.';
+        }
+
+        if (is_string($timeStart) && is_string($timeEnd) && preg_match('/^\d{2}:\d{2}$/', $timeStart) && preg_match('/^\d{2}:\d{2}$/', $timeEnd)) {
+            $startMinutes = $this->toMinuteOfDay($timeStart);
+            $endMinutes = $this->toMinuteOfDay($timeEnd);
+            if ($startMinutes !== null && $endMinutes !== null && $endMinutes <= $startMinutes) {
+                $errors[] = 'time_end must be later than time_start.';
+            }
+        }
+
+        if ($participantCount !== null && $participantCount <= 0) {
+            $warnings[] = 'participant_count was provided but is not positive; it will be ignored.';
+        }
+
+        if ($eventType !== null && ! in_array($eventType, [0, 1, 2, 3], true)) {
+            $errors[] = 'event_type must be one of 0, 1, 2, or 3.';
+        }
+
+        if ($title === '') {
+            $warnings[] = 'title is optional; a default title may be used.';
+        }
+
+        if ($description === '') {
+            $warnings[] = 'description is optional; leaving it blank is acceptable.';
+        }
+
+        if ($facilityId !== null && is_numeric($facilityId) && (int) $facilityId > 0) {
+            $facility = Facility::query()->find((int) $facilityId);
+            if ($facility && $participantCount !== null && $participantCount > (int) $facility->capacity) {
+                $warnings[] = 'participant_count exceeds the selected facility capacity; backend validation will decide final acceptance.';
+            }
+        }
+
+        $requestPayload = [
+            'title' => $title !== '' ? $title : 'Guided booking request',
+            'description' => $description,
+            'facility_bookings' => [[
+                'facility_id' => is_numeric($facilityId) ? (int) $facilityId : null,
+                'date' => $date,
+                'time_start' => $timeStart,
+                'time_end' => $timeEnd,
+            ]],
+        ];
+
+        if ($participantCount !== null && $participantCount > 0) {
+            $requestPayload['participant_count'] = $participantCount;
+            $requestPayload['facility_bookings'][0]['expected_capacity'] = $participantCount;
+        }
+
+        if ($eventType !== null && in_array($eventType, [0, 1, 2, 3], true)) {
+            $requestPayload['priority_level'] = match ($eventType) {
+                0 => 0,
+                1 => 1,
+                2 => 1,
+                3 => 2,
+                default => 0,
+            };
+        }
+
+        if (! empty($equipment) && is_array($equipment)) {
+            $requestPayload['facility_bookings'][0]['equipment'] = $this->normalizeEquipmentSelections($equipment, is_numeric($facilityId) ? (int) $facilityId : null);
+        }
+
+        $normalizedPayload = $this->normalizeCreateRequestPayload($requestPayload);
+
+        return [
+            'is_valid' => empty($missingFields) && empty($errors),
+            'missing_fields' => array_values(array_unique($missingFields)),
+            'warnings' => array_values(array_unique($warnings)),
+            'errors' => array_values(array_unique($errors)),
+            'request' => $normalizedPayload,
+        ];
+    }
+
+    private function tryGuidedBookingPlanToolCall(array $messages, ?string $latestUserMessage, ?string $bookingContext): ?array
+    {
+        if (! $this->shouldUseGuidedBookingTool($bookingContext)) {
+            return null;
+        }
+
+        $conversation = array_values(array_filter($messages, function (array $message) {
+            $role = (string) ($message['role'] ?? '');
+            $content = trim((string) ($message['content'] ?? ''));
+
+            return in_array($role, ['user', 'assistant', 'system'], true) && $content !== '';
+        }));
+
+        try {
+            $toolResponse = $this->ai->chatWithTools(
+                $conversation,
+                [$this->buildGuidedBookingPlanToolDefinition()],
+                ['timeout' => 60, 'tool_choice' => 'auto']
+            );
+        } catch (\Throwable $exception) {
+            \Log::warning('Guided booking tool call failed: '.$exception->getMessage());
+
+            return null;
+        }
+
+        $toolCalls = $toolResponse['tool_calls'] ?? [];
+        if (empty($toolCalls)) {
+            return null;
+        }
+
+        $toolCall = $toolCalls[0];
+        $toolName = trim((string) ($toolCall['name'] ?? ''));
+        if ($toolName !== 'guided_booking_plan') {
+            return null;
+        }
+
+        $arguments = is_array($toolCall['arguments'] ?? null) ? $toolCall['arguments'] : [];
+        $planResult = $this->normalizeGuidedBookingPlan($arguments);
+        $toolCallId = (string) ($toolCall['id'] ?? 'guided_booking_plan_call');
+        $toolResultContent = json_encode([
+            'tool' => 'guided_booking_plan',
+            'result' => $planResult,
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        $assistantToolCallMessage = [
+            'role' => 'assistant',
+            'content' => null,
+            'tool_calls' => [[
+                'id' => $toolCallId,
+                'type' => 'function',
+                'function' => [
+                    'name' => 'guided_booking_plan',
+                    'arguments' => json_encode($arguments, JSON_UNESCAPED_SLASHES),
+                ],
+            ]],
+        ];
+
+        $toolResultMessage = [
+            'role' => 'tool',
+            'tool_call_id' => $toolCallId,
+            'name' => 'guided_booking_plan',
+            'content' => $toolResultContent !== false ? $toolResultContent : '{}',
+        ];
+
+        $followUpMessages = array_merge($conversation, [$assistantToolCallMessage, $toolResultMessage]);
+        $finalMessages = [[
+            'role' => 'system',
+            'content' => "You are helping a user through a guided booking flow. Use the guided_booking_plan tool result to validate and normalize the booking plan. Keep the answer concise, confirm missing details if needed, and avoid unnecessary explanations. If the plan is invalid, tell the user what is missing or incorrect. If valid, summarize the normalized request for confirmation.",
+        ]];
+        $finalMessages = array_merge($finalMessages, $followUpMessages);
+
+        try {
+            $finalAnswer = trim((string) $this->ai->chat($finalMessages, ['timeout' => 120]));
+        } catch (\Throwable $exception) {
+            \Log::warning('Guided booking tool follow-up response failed: '.$exception->getMessage());
+
+            return null;
+        }
+
+        if ($finalAnswer === '') {
+            return null;
+        }
+
+        return [
+            'message' => [
+                'role' => 'assistant',
+                'content' => $finalAnswer,
+            ],
+            'deterministic' => [
+                'source' => 'guided_booking_tool',
+                'check' => 'booking_plan',
+                'status' => $planResult['is_valid'] ? 'validated' : 'needs_attention',
+                'reason' => 'guided_booking_plan',
+                'faq_mode' => false,
+                'missing_fields' => $planResult['missing_fields'],
+                'warnings' => $planResult['warnings'],
+                'errors' => $planResult['errors'],
+                'request' => $planResult['request'],
             ],
         ];
     }
@@ -2392,6 +2411,48 @@ class ChatController extends Controller
                                     'content' => $content,
                                 ],
                                 'deterministic' => $faqResult['deterministic'],
+                            ]);
+                        }
+                    }
+
+                    if (! $faqMode && $this->shouldUseGuidedBookingTool($bookingContext)) {
+                        $guidedBookingToolResult = $this->tryGuidedBookingPlanToolCall($messages, $latestUserMessage, $bookingContext);
+                        if ($guidedBookingToolResult !== null) {
+                            $content = (string) ($guidedBookingToolResult['message']['content'] ?? '');
+                            $this->storeAssistantReply($incomingMessages, $content);
+                            $this->chatbotLogService->logAssistantReply(
+                                $latestUserMessage,
+                                $content,
+                                $this->buildLogContext(
+                                    $latestUserMessage,
+                                    $participantCount,
+                                    $bookingContext,
+                                    $allRequests,
+                                    $allFacilities,
+                                    $equipmentCount,
+                                    count($rules),
+                                    $rulesInjected,
+                                    $approvedBookingContextInjected,
+                                    $deterministicAvailabilityInjected,
+                                    $facilityFilterApplied,
+                                    array_merge(['faq_mode' => false], $guidedBookingToolResult['deterministic'] ?? [])
+                                ),
+                                $sessionId,
+                                'guided_booking_plan',
+                                'guided_booking'
+                            );
+
+                            return response()->json([
+                                'message' => [
+                                    'role' => 'assistant',
+                                    'content' => $content,
+                                ],
+                                'deterministic' => $guidedBookingToolResult['deterministic'] ?? [
+                                    'source' => 'guided_booking_tool',
+                                    'check' => 'booking_plan',
+                                    'status' => 'needs_attention',
+                                    'faq_mode' => false,
+                                ],
                             ]);
                         }
                     }
