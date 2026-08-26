@@ -11,15 +11,15 @@ class OpenRouterClient
 {
     public function chat(array $messages, array $options = []): string
     {
-        $apiKey = (string) config('ai.openrouter.api_key', '');
+        $apiKey = $this->apiKey();
         $model = $this->model();
 
         if (trim($apiKey) === '') {
-            throw new RuntimeException('OpenRouter API key is not configured.');
+            throw new RuntimeException('AI API key is not configured.');
         }
 
         if (trim($model) === '') {
-            throw new RuntimeException('OpenRouter model is not configured.');
+            throw new RuntimeException('AI model is not configured.');
         }
 
         $timeout = (int) ($options['timeout'] ?? config('ai.generate.timeout', 60));
@@ -31,32 +31,36 @@ class OpenRouterClient
             'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
         ];
 
-        $response = Http::timeout($timeout)
+        $request = Http::timeout($timeout)
             ->withToken($apiKey)
-            ->withHeaders([
+            ->withHeaders(array_filter([
                 'Content-Type' => 'application/json',
-                'HTTP-Referer' => (string) config('app.url'),
-                'X-Title' => (string) config('app.name', 'FRAI'),
-            ])
-            ->post($this->endpoint('/chat/completions'), $payload);
+                'HTTP-Referer' => $this->providerName() === 'openrouter' ? (string) config('app.url') : null,
+                'X-Title' => $this->providerName() === 'openrouter' ? (string) config('app.name', 'FRAI') : null,
+            ], fn ($value) => $value !== null && $value !== ''));
 
-        Log::debug('OpenRouter chat response', [
+        $response = $request->post($this->endpoint('/chat/completions'), $payload);
+
+        Log::debug('AI chat response', [
+            'provider' => $this->providerName(),
             'status' => $response->status(),
             'body' => substr($response->body(), 0, 500),
         ]);
 
         if (! $response->successful()) {
-            Log::warning('OpenRouter chat failed', [
+            Log::warning('AI chat failed', [
+                'provider' => $this->providerName(),
                 'status' => $response->status(),
                 'body' => substr($response->body(), 0, 1000),
             ]);
 
-            throw new RuntimeException('OpenRouter chat request failed with status '.$response->status().'.');
+            throw new RuntimeException('AI chat request failed with status '.$response->status().'.');
         }
 
         $content = trim((string) $response->json('choices.0.message.content', ''));
         if ($content === '') {
-            Log::warning('OpenRouter chat returned empty content', [
+            Log::warning('AI chat returned empty content', [
+                'provider' => $this->providerName(),
                 'body' => substr($response->body(), 0, 1000),
             ]);
         }
@@ -77,15 +81,15 @@ class OpenRouterClient
 
     public function streamChat(array $messages, callable $onToken, array $options = []): string
     {
-        $apiKey = (string) config('ai.openrouter.api_key', '');
+        $apiKey = $this->apiKey();
         $model = $this->model();
 
         if (trim($apiKey) === '') {
-            throw new RuntimeException('OpenRouter API key is not configured.');
+            throw new RuntimeException('AI API key is not configured.');
         }
 
         if (trim($model) === '') {
-            throw new RuntimeException('OpenRouter model is not configured.');
+            throw new RuntimeException('AI model is not configured.');
         }
 
         $timeout = (int) ($options['timeout'] ?? config('ai.generate.timeout', 60));
@@ -102,14 +106,19 @@ class OpenRouterClient
             'connect_timeout' => 15,
         ]);
 
+        $headers = [
+            'Authorization' => 'Bearer '.$apiKey,
+            'Content-Type' => 'application/json',
+            'Accept' => 'text/event-stream',
+        ];
+
+        if ($this->providerName() === 'openrouter') {
+            $headers['HTTP-Referer'] = (string) config('app.url');
+            $headers['X-Title'] = (string) config('app.name', 'FRAI');
+        }
+
         $response = $client->post($this->endpoint('/chat/completions'), [
-            'headers' => [
-                'Authorization' => 'Bearer '.$apiKey,
-                'Content-Type' => 'application/json',
-                'Accept' => 'text/event-stream',
-                'HTTP-Referer' => (string) config('app.url'),
-                'X-Title' => (string) config('app.name', 'FRAI'),
-            ],
+            'headers' => $headers,
             'http_errors' => false,
             'json' => $payload,
             'stream' => true,
@@ -118,12 +127,13 @@ class OpenRouterClient
         $status = $response->getStatusCode();
         if ($status < 200 || $status >= 300) {
             $body = substr((string) $response->getBody(), 0, 1000);
-            Log::warning('OpenRouter streaming chat failed', [
+            Log::warning('AI streaming chat failed', [
+                'provider' => $this->providerName(),
                 'status' => $status,
                 'body' => $body,
             ]);
 
-            throw new RuntimeException('OpenRouter streaming chat request failed with status '.$status.'.');
+            throw new RuntimeException('AI streaming chat request failed with status '.$status.'.');
         }
 
         $body = $response->getBody();
@@ -165,26 +175,68 @@ class OpenRouterClient
         }
 
         if ($content === '') {
-            Log::warning('OpenRouter streaming chat returned empty content');
+            Log::warning('AI streaming chat returned empty content', [
+                'provider' => $this->providerName(),
+            ]);
         }
 
         return trim($content);
     }
 
+    public function providerName(): string
+    {
+        return strtolower((string) config('ai.provider', 'nvidia')) ?: 'nvidia';
+    }
+
     public function model(): string
     {
-        return (string) config('ai.openrouter.model', '');
+        $providerConfig = $this->providerConfig();
+
+        return trim((string) ($providerConfig['model'] ?? config('ai.openrouter.model', 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b')));
     }
 
     public function baseUrl(): string
     {
-        return rtrim((string) config('ai.openrouter.base_url', 'https://openrouter.ai/api/v1'), '/');
+        $providerConfig = $this->providerConfig();
+
+        return rtrim((string) ($providerConfig['base_url'] ?? config('ai.openrouter.base_url', 'https://integrate.api.nvidia.com/v1')), '/');
+    }
+
+    public function apiKey(): string
+    {
+        $providerConfig = $this->providerConfig();
+
+        return trim((string) ($providerConfig['api_key'] ?? config('ai.openrouter.api_key', '')));
     }
 
     public function isConfigured(): bool
     {
-        return trim((string) config('ai.openrouter.api_key', '')) !== ''
+        return $this->apiKey() !== ''
             && trim($this->model()) !== '';
+    }
+
+    private function providerConfig(): array
+    {
+        $provider = $this->providerName();
+        $config = config('ai.'.$provider, []);
+
+        if (is_array($config) && $provider !== 'nvidia') {
+            return $config;
+        }
+
+        $nvidiaApiKey = trim((string) ($config['api_key'] ?? ''));
+        if ($nvidiaApiKey !== '') {
+            return $config;
+        }
+
+        $openrouterConfig = is_array(config('ai.openrouter')) ? config('ai.openrouter') : [];
+        $openrouterApiKey = trim((string) ($openrouterConfig['api_key'] ?? ''));
+
+        if ($openrouterApiKey !== '') {
+            return $openrouterConfig;
+        }
+
+        return $config;
     }
 
     private function endpoint(string $path): string

@@ -98,21 +98,22 @@ DB_PASSWORD=your_password
 
 ---
 
-### 2. OpenRouter & Models
-OpenRouter provides the hosted LLM used by the chatbot and AI recommendations.
+### 2. NVIDIA NIM & Models
+NVIDIA NIM provides the hosted LLM used by the chatbot and AI recommendations.
 
-1.  Create an OpenRouter API key from your OpenRouter account.
-2.  Choose the model slug you want to use, for example `openai/gpt-4o-mini` or another OpenRouter-supported chat model.
+1.  Create a NVIDIA API key from your NVIDIA account.
+2.  Use the model slug `nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b` or another NVIDIA-hosted chat model.
 
 ---
 
 ### 3. Application Configuration
-Configure the application to communicate with OpenRouter:
+Configure the application to communicate with NVIDIA NIM:
 
 ```env
-OPENROUTER_API_KEY=your_openrouter_key
-OPENROUTER_MODEL=your/model-name
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+AI_PROVIDER=nvidia
+NVIDIA_API_KEY=your_nvidia_key
+NVIDIA_MODEL=nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 
 AI_GENERATE_TIMEOUT=60
 AI_GENERATE_TEMPERATURE=0.1

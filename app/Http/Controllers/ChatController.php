@@ -2299,7 +2299,7 @@ class ChatController extends Controller
             );
 
             return response()->json([
-                'error' => 'Failed to connect to OpenRouter',
+                'error' => 'Failed to connect to the configured AI provider',
                 'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
             ], 500);
         } catch (\Exception $e) {
@@ -2688,11 +2688,11 @@ class ChatController extends Controller
     {
         return response()->json([
             'message' => $this->ai->isConfigured()
-                ? 'OpenRouter is configured'
-                : 'OpenRouter is not fully configured',
+                ? 'NVIDIA is configured'
+                : 'NVIDIA is not fully configured',
             'configured_model' => $this->ai->model(),
             'resolved_model' => $this->ai->model(),
-            'provider' => 'openrouter',
+            'provider' => $this->ai->providerName(),
             'base_url' => $this->ai->baseUrl(),
             'timestamp' => now(),
         ], $this->ai->isConfigured() ? 200 : 500);
@@ -2706,7 +2706,7 @@ class ChatController extends Controller
             'models' => array_filter([
                 $this->ai->model() !== '' ? ['name' => $this->ai->model()] : null,
             ]),
-            'provider' => 'openrouter',
+            'provider' => $this->ai->providerName(),
         ]);
     }
 

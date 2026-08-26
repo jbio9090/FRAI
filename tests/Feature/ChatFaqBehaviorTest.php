@@ -22,9 +22,10 @@ class ChatFaqBehaviorTest extends TestCase
         parent::setUp();
 
         config([
-            'ai.openrouter.api_key' => 'test-openrouter-key',
-            'ai.openrouter.model' => 'test/model',
-            'ai.openrouter.base_url' => 'https://openrouter.test/api/v1',
+            'ai.provider' => 'nvidia',
+            'ai.nvidia.api_key' => 'test-nvidia-key',
+            'ai.nvidia.model' => 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b',
+            'ai.nvidia.base_url' => 'https://integrate.api.nvidia.com/v1',
         ]);
     }
 
@@ -144,7 +145,7 @@ class ChatFaqBehaviorTest extends TestCase
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
         Http::fake([
-            'https://openrouter.test/api/v1/chat/completions' => Http::response([
+            'https://integrate.api.nvidia.com/v1/chat/completions' => Http::response([
                 'choices' => [[
                     'message' => [
                         'role' => 'assistant',
@@ -260,7 +261,7 @@ class ChatFaqBehaviorTest extends TestCase
             ]);
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
-        Http::fakeSequence('https://openrouter.test/api/v1/chat/completions')
+        Http::fakeSequence('https://integrate.api.nvidia.com/v1/chat/completions')
             ->push([
                 'choices' => [[
                     'message' => ['role' => 'assistant', 'content' => '{"intent":"confirm_suggestion"}'],
@@ -300,7 +301,7 @@ class ChatFaqBehaviorTest extends TestCase
         $this->app->instance(FaqMatchingService::class, $faqMatcher);
 
         Http::fake([
-            'https://openrouter.test/api/v1/chat/completions' => Http::response([
+            'https://integrate.api.nvidia.com/v1/chat/completions' => Http::response([
                 'choices' => [[
                     'message' => [
                         'role' => 'assistant',
