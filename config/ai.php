@@ -5,7 +5,7 @@ return [
 
     'nvidia' => [
         'api_key' => env('NVIDIA_API_KEY', env('OPENROUTER_API_KEY')),
-        'model' => env('NVIDIA_MODEL', env('OPENROUTER_MODEL', 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b')),
+        'model' => env('NVIDIA_MODEL', env('OPENROUTER_MODEL', 'nvidia/nemotron-3.5-lightning-30b-a3b')),
         'base_url' => rtrim(env('NVIDIA_BASE_URL', env('OPENROUTER_BASE_URL', 'https://integrate.api.nvidia.com/v1')), '/'),
     ],
 
