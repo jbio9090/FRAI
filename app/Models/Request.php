@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\Models\User;
@@ -134,6 +135,19 @@ class Request extends Model
                     });
             })
             ->whereIn('status', ['Pending', 'Approved']);
+    }
+
+    protected static function booted()
+    {
+        static::updated(function (Request $request) {
+            // If the parent request was changed to APPROVED, ensure child request facilities are approved too
+            if ($request->wasChanged('status') && $request->status === RequestStatus::APPROVED) {
+                // Update any child facility rows that are not explicitly denied
+                $request->requestFacilities()->where('status', '!=', RequestStatus::DENIED)->update([
+                    'status' => RequestStatus::APPROVED,
+                ]);
+            }
+        });
     }
 
     /* =========================================

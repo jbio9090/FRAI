@@ -1,3 +1,5 @@
+import type { EquipmentConflict } from '@/types/equipment';
+
 export interface Request {
     id: number;
     title: string;
@@ -18,16 +20,16 @@ export interface Request {
     updated_at: string;
     files: [
         {
-            path: string
-        }
-    ]
+            path: string;
+        },
+    ];
     pending_conflict_rf_ids: number[] | null;
     approved_conflict_rf_ids: number[] | null;
     pending_conflicts?: ConflictingBooking[];
     approved_conflicts?: ConflictingBooking[];
-    processed_by?: User,
-    processed_at?: string,
-    approved_by: string[],
+    processed_by?: User;
+    processed_at?: string;
+    approved_by: string[];
 }
 
 export interface Comment {
@@ -61,6 +63,44 @@ export const PRIORITY_LABELS: Record<0 | 1 | 2 | 3, string> = {
     3: 'Government',
 };
 
+export const PRIORITY_ACCENT: Record<number, { fill: string; ink: string }> = {
+    0: { fill: 'var(--ads-ac-academic)', ink: 'var(--ads-ac-ink-academic)' },
+    1: { fill: 'var(--ads-ac-community)', ink: 'var(--ads-ac-ink-community)' },
+    2: { fill: 'var(--ads-ac-university)', ink: 'var(--ads-ac-ink-university)' },
+    3: { fill: 'var(--ads-ac-department)', ink: 'var(--ads-ac-ink-department)' },
+};
+
+export interface BookingWindow {
+    start_time: string;
+    end_time: string;
+    days_of_week: number[];
+    step_minutes: number;
+}
+
+export interface RequestOptions {
+    approvers: string[];
+    booking_window: BookingWindow;
+    min_advance_days: number;
+    max_file_size_mb: number | null;
+}
+
+interface FacilityEquipmentItem {
+    equipment_id: number;
+    equipment_name: string;
+    quantity_needed: number;
+    max_quantity: number;
+    conflicts?: EquipmentConflict[];
+}
+
+interface BorrowedEquipmentItem {
+    equipment_id: number;
+    equipment_name: string;
+    source_facility_id: number;
+    source_facility_name: string;
+    quantity_needed: number;
+    max_quantity: number;
+}
+
 interface RequestFacility {
     id: number;
     request_id: number;
@@ -72,15 +112,18 @@ interface RequestFacility {
     external_equipments: { id: number; name: string }[];
     has_outsiders: boolean;
     status: string;
-    ai_recommended_status: string | null; 
-    ai_recommendation_reason: string | null; 
+    ai_recommended_status: string | null;
+    ai_recommendation_reason: string | null;
+    equipment?: FacilityEquipmentItem[];
+    borrowed_equipment?: BorrowedEquipmentItem[];
+    equipment_conflicts?: Record<number, EquipmentConflict[]>;
 }
 
 export interface Facility {
     id: number;
     name: string;
     building: string;
-    capacity: number
+    capacity: number;
 }
 
 export interface RequestsPageProps {
@@ -104,5 +147,27 @@ export interface ConflictingBooking {
     facility: {
         id: number;
         name: string;
+    };
+}
+
+export interface AlternativeSlot {
+    facility_id: number;
+    facility_name: string;
+    facility_capacity: number;
+    date: string;
+    time_start: string;
+    time_end: string;
+    type: 'same_facility_time' | 'same_facility_date' | 'different_facility' | 'different_facility_date';
+    equipment_available: boolean;
+    capacity_fit: 'exact' | 'larger' | 'smaller';
+}
+
+export interface AlternativesResponse {
+    alternatives: Record<number, AlternativeSlot[]>;
+    metadata: {
+        include_equipment: boolean;
+        max_results: number;
+        date_range_days: number;
+        per_facility: boolean;
     };
 }

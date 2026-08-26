@@ -37,11 +37,10 @@ class EquipmentSeeder extends Seeder
         ];
 
         foreach ($equipments as $eq) {
-            DB::table('equipments')->insert([
-                ...$eq,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            Equipment::updateOrCreate(
+                ['name' => $eq['name']],
+                ['quantity' => $eq['quantity']]
+            );
         }
 
         // --- FACILITY EQUIPMENT PIVOT ---
@@ -91,13 +90,28 @@ class EquipmentSeeder extends Seeder
         ];
 
         foreach ($pivot as [$facilityId, $equipmentId, $quantity]) {
-            DB::table('facility_equipment')->insert([
-                'facility_id'  => $facilityId,
-                'equipment_id' => $equipmentId,
-                'quantity'     => $quantity,
-                'created_at'   => now(),
-                'updated_at'   => now(),
-            ]);
+            $exists = DB::table('facility_equipment')
+                ->where('facility_id', $facilityId)
+                ->where('equipment_id', $equipmentId)
+                ->exists();
+
+            if ($exists) {
+                DB::table('facility_equipment')
+                    ->where('facility_id', $facilityId)
+                    ->where('equipment_id', $equipmentId)
+                    ->update([
+                        'quantity' => $quantity,
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                DB::table('facility_equipment')->insert([
+                    'facility_id'  => $facilityId,
+                    'equipment_id' => $equipmentId,
+                    'quantity'     => $quantity,
+                    'created_at'   => now(),
+                    'updated_at'   => now(),
+                ]);
+            }
         }
     }
 }

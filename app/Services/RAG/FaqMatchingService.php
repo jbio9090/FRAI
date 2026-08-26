@@ -7,8 +7,6 @@ use Illuminate\Support\Str;
 
 class FaqMatchingService
 {
-    public function __construct(protected OllamaService $ollama) {}
-
     public function retrieveCandidates(?string $question, ?int $topK = null): array
     {
         $queryText = trim((string) $question);
@@ -16,10 +14,10 @@ class FaqMatchingService
             return [];
         }
 
-        $resolvedTopK = $topK ?? (int) config('ollama-laravel.faq_mode_top_k', 5);
+        $resolvedTopK = $topK ?? (int) config('ai.faq.top_k', 5);
         $resolvedTopK = max(1, min(20, $resolvedTopK));
 
-        return $this->getSemanticCandidates($queryText, $resolvedTopK);
+        return $this->getLexicalCandidates($queryText, $resolvedTopK);
     }
 
     public function findByQuestion(string $question): ?array
@@ -37,7 +35,7 @@ class FaqMatchingService
             ->select('id as rule_id', 'rule as faq_question', 'faq_answer')
             ->first();
 
-        if (!$row) {
+        if (! $row) {
             return null;
         }
 
@@ -53,7 +51,7 @@ class FaqMatchingService
     public function match(?string $question): ?array
     {
         $evaluation = $this->evaluate($question);
-        if (!$evaluation || !$evaluation['is_match']) {
+        if (! $evaluation || ! $evaluation['is_match']) {
             return null;
         }
 
@@ -67,10 +65,10 @@ class FaqMatchingService
     {
         $evaluation = $this->evaluate($question);
         if (
-            !$evaluation
+            ! $evaluation
             || $evaluation['is_match']
             || empty($evaluation['candidate'])
-            || !is_array($evaluation['candidate'])
+            || ! is_array($evaluation['candidate'])
         ) {
             return null;
         }
@@ -82,7 +80,7 @@ class FaqMatchingService
         }
 
         $ratio = $score / $threshold;
-        $nearRatioMin = (float) config('ollama-laravel.faq_near_match_ratio_min', 0.8);
+        $nearRatioMin = (float) config('ai.faq.near_match_ratio_min', 0.8);
         if ($ratio < $nearRatioMin) {
             return null;
         }
@@ -107,25 +105,10 @@ class FaqMatchingService
             return null;
         }
 
-        $semanticThreshold = (float) config('ollama-laravel.faq_similarity_threshold', 0.65);
-        $lexicalThreshold = (float) config('ollama-laravel.faq_lexical_threshold', 0.5);
-        $topK = max(1, min(10, (int) config('ollama-laravel.faq_top_k', 3)));
+        $lexicalThreshold = (float) config('ai.faq.lexical_threshold', 0.5);
+        $topK = max(1, min(10, (int) config('ai.faq.top_k', 5)));
 
-        $semanticCandidates = $this->getSemanticCandidates($queryText, $topK);
-        $bestSemantic = $semanticCandidates[0] ?? null;
-        $bestSemanticScore = (float) ($bestSemantic['similarity'] ?? 0);
-
-        if ($bestSemantic && $bestSemanticScore >= $semanticThreshold) {
-            return [
-                'is_match' => true,
-                'candidate' => $bestSemantic,
-                'match_type' => 'semantic',
-                'score' => $bestSemanticScore,
-                'active_threshold' => $semanticThreshold,
-            ];
-        }
-
-        $lexicalMatch = $this->getLexicalFallbackMatch($queryText, $semanticCandidates);
+        $lexicalMatch = $this->getLexicalCandidates($queryText, $topK)[0] ?? null;
         $lexicalScore = (float) ($lexicalMatch['similarity'] ?? 0);
         if ($lexicalMatch && $lexicalScore >= $lexicalThreshold) {
             return [
@@ -141,27 +124,12 @@ class FaqMatchingService
         $nearType = null;
         $nearScore = 0.0;
         $nearThreshold = 0.0;
-        $nearRatio = 0.0;
-
-        if ($bestSemantic && $bestSemanticScore > 0 && $semanticThreshold > 0) {
-            $ratio = $bestSemanticScore / $semanticThreshold;
-            if ($ratio > $nearRatio) {
-                $nearCandidate = $bestSemantic;
-                $nearType = 'semantic';
-                $nearScore = $bestSemanticScore;
-                $nearThreshold = $semanticThreshold;
-                $nearRatio = $ratio;
-            }
-        }
 
         if ($lexicalMatch && $lexicalScore > 0 && $lexicalThreshold > 0) {
-            $ratio = $lexicalScore / $lexicalThreshold;
-            if ($ratio > $nearRatio) {
-                $nearCandidate = $lexicalMatch;
-                $nearType = 'lexical';
-                $nearScore = $lexicalScore;
-                $nearThreshold = $lexicalThreshold;
-            }
+            $nearCandidate = $lexicalMatch;
+            $nearType = 'lexical';
+            $nearScore = $lexicalScore;
+            $nearThreshold = $lexicalThreshold;
         }
 
         return [
@@ -173,60 +141,9 @@ class FaqMatchingService
         ];
     }
 
-    private function getSemanticCandidates(string $question, int $topK): array
-    {
-        $embedding = $this->ollama->embed($question);
-        if (empty($embedding)) {
-            return [];
-        }
-
-        $vectorLiteral = '[' . implode(',', $embedding) . ']';
-
-        try {
-            $rows = DB::table('rule_embeddings')
-                ->join('rules', 'rules.id', '=', 'rule_embeddings.rule_id')
-                ->where('rules.forPolicy', 1)
-                ->whereNotNull('rules.faq_answer')
-                ->whereRaw("TRIM(rules.faq_answer) <> ''")
-                ->selectRaw(
-                    'rules.id as rule_id, rules.rule as faq_question, rules.faq_answer, 1 - (rule_embeddings.embedding <=> ?) AS similarity',
-                    [$vectorLiteral]
-                )
-                ->orderByRaw('rule_embeddings.embedding <=> ?', [$vectorLiteral])
-                ->limit($topK)
-                ->get();
-        } catch (\Throwable $exception) {
-            \Log::warning('FAQ semantic match failed: ' . $exception->getMessage());
-            return [];
-        }
-
-        return $rows->map(function ($row) {
-            return [
-                'rule_id' => (int) $row->rule_id,
-                'question' => (string) $row->faq_question,
-                'answer' => (string) $row->faq_answer,
-                'similarity' => (float) ($row->similarity ?? 0),
-            ];
-        })->values()->all();
-    }
-
-    private function getLexicalFallbackMatch(string $question, array $semanticCandidates): ?array
+    private function getLexicalCandidates(string $question, int $topK): array
     {
         $scored = [];
-
-        foreach ($semanticCandidates as $candidate) {
-            $score = $this->lexicalScore($question, (string) ($candidate['question'] ?? ''), (string) ($candidate['answer'] ?? ''));
-            $candidate['similarity'] = $score;
-            $scored[] = $candidate;
-        }
-
-        if (!empty($scored)) {
-            usort($scored, fn(array $a, array $b) => (float) $b['similarity'] <=> (float) $a['similarity']);
-            $bestFromSemanticSet = $scored[0];
-            if ((float) $bestFromSemanticSet['similarity'] >= 0.99) {
-                return $bestFromSemanticSet;
-            }
-        }
 
         $rows = DB::table('rules')
             ->where('forPolicy', 1)
@@ -235,17 +152,9 @@ class FaqMatchingService
             ->select('id as rule_id', 'rule as faq_question', 'faq_answer')
             ->get();
 
-        $best = null;
-        $bestScore = 0.0;
-
         foreach ($rows as $row) {
             $score = $this->lexicalScore($question, (string) $row->faq_question, (string) $row->faq_answer);
-            if ($score <= $bestScore) {
-                continue;
-            }
-
-            $bestScore = $score;
-            $best = [
+            $scored[] = [
                 'rule_id' => (int) $row->rule_id,
                 'question' => (string) $row->faq_question,
                 'answer' => (string) $row->faq_answer,
@@ -253,7 +162,9 @@ class FaqMatchingService
             ];
         }
 
-        return $best;
+        usort($scored, fn (array $a, array $b) => (float) $b['similarity'] <=> (float) $a['similarity']);
+
+        return array_slice($scored, 0, $topK);
     }
 
     private function lexicalScore(string $query, string $faqQuestion, string $faqAnswer): float
@@ -265,7 +176,7 @@ class FaqMatchingService
 
         $normalizedQuestion = $this->normalizeText($faqQuestion);
         $normalizedAnswer = $this->normalizeText($faqAnswer);
-        $combined = trim($normalizedQuestion . ' ' . $normalizedAnswer);
+        $combined = trim($normalizedQuestion.' '.$normalizedAnswer);
 
         if ($combined !== '' && Str::contains($combined, $normalizedQuery)) {
             return 1.0;
@@ -369,6 +280,7 @@ class FaqMatchingService
     {
         $normalized = strtolower(trim($value));
         $normalized = preg_replace('/[^a-z0-9\s]+/', ' ', $normalized) ?? '';
+
         return trim((string) preg_replace('/\s+/', ' ', $normalized));
     }
 
@@ -381,12 +293,12 @@ class FaqMatchingService
             'where', 'which', 'who', 'will', 'with', 'you', 'your',
         ];
 
-        $tokens = array_filter(explode(' ', $value), fn(string $token) => $token !== '');
-        $filtered = array_values(array_filter($tokens, fn(string $token) => !in_array($token, $stopWords, true)));
+        $tokens = array_filter(explode(' ', $value), fn (string $token) => $token !== '');
+        $filtered = array_values(array_filter($tokens, fn (string $token) => ! in_array($token, $stopWords, true)));
 
         return array_values(array_filter(
-            array_map(fn(string $token) => $this->stemToken($token), $filtered),
-            fn(string $token) => $token !== ''
+            array_map(fn (string $token) => $this->stemToken($token), $filtered),
+            fn (string $token) => $token !== ''
         ));
     }
 

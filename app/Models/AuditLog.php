@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\AuditEventCast;
 use App\Enums\AuditEvent; // <-- Added the Enum import
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,7 +23,7 @@ class AuditLog extends Model
 
     protected $casts = [
         'properties' => 'array',
-        'event' => AuditEvent::class,
+        'event' => AuditEventCast::class,
     ];
 
     public function user(): BelongsTo

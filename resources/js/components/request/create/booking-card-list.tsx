@@ -1,12 +1,11 @@
-import { useState } from 'react';
-import type { FacilityBooking } from '@/pages/requests/create';
-import type { Facility } from '@/types/facility';
 import { AlertCircleIcon, ArrowUpDown, Building } from 'lucide-react';
-import { BookingCard } from '@/components/booking-card';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useState } from 'react';
 import MotionChevron from '@/components/animated_icons/MotionChevron';
-import { Select, SelectContent, SelectTrigger, SelectItem, SelectGroup, SelectLabel, SelectValue } from '@/components/ui/select';
+import { BookingCard } from '@/components/booking-card';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectTrigger, SelectItem, SelectValue } from '@/components/ui/select';
+import type { FacilityBooking } from '@/pages/requests/create';
 
 /* ─────────────────────────────────────────────────────────────────────────
  | BookingCardList — sortable, filterable, collapsible list of booked slots
@@ -14,15 +13,22 @@ import { Button } from '@/components/ui/button';
 
 type BookingSortKey = 'date-asc' | 'date-desc' | 'facility-asc' | 'facility-desc' | 'time-asc' | 'time-desc';
 
+interface DraftBookingConflict {
+    index: number;
+    facility_name: string;
+    date: string;
+    time_start: string;
+    time_end: string;
+}
+
 interface BookingCardListProps {
     bookings: FacilityBooking[];
     editingIndex: number | null;
     onEdit: (index: number) => void;
     onRemove: (index: number) => void;
-    facilities: Facility[];
 }
 
-export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, facilities }: BookingCardListProps) {
+export function BookingCardList({ bookings, editingIndex, onEdit, onRemove }: BookingCardListProps) {
     const [isOpen, setIsOpen] = useState(true);
     const [sortKey, setSortKey] = useState<BookingSortKey>('date-asc');
     const [filterFacility, setFilterFacility] = useState<string>('all');
@@ -30,12 +36,52 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
 
     const uniqueFacilities = Array.from(new Map(bookings.map((b) => [b.facility_id, b.facility_name])).entries());
 
+    // Detect bookings in this draft list that overlap each other (same facility + date + time).
+    // Must run before `processed` so the filter predicate can use it.
+    const draftConflictsByIndex = new Map<number, DraftBookingConflict[]>();
+    const addDraftConflict = (sourceIndex: number, conflictingIndex: number) => {
+        const conflictingBooking = bookings[conflictingIndex];
+        const existing = draftConflictsByIndex.get(sourceIndex) ?? [];
+        existing.push({
+            index: conflictingIndex,
+            facility_name: conflictingBooking.facility_name,
+            date: conflictingBooking.date,
+            time_start: conflictingBooking.time_start,
+            time_end: conflictingBooking.time_end,
+        });
+        draftConflictsByIndex.set(sourceIndex, existing);
+    };
+
+    // Normalize HH:MM:SS (existing bookings) and HH:MM (freshly added) to minutes so
+    // adjacent slots that only touch at a boundary are not treated as overlapping.
+    const toMinutes = (time: string): number => {
+        const [hours, minutes] = time.split(':').map(Number);
+        return hours * 60 + minutes;
+    };
+
+    for (let i = 0; i < bookings.length; i++) {
+        for (let j = i + 1; j < bookings.length; j++) {
+            const a = bookings[i];
+            const b = bookings[j];
+            if (a.facility_id === b.facility_id && a.date === b.date) {
+                const aStart = toMinutes(a.time_start);
+                const aEnd = toMinutes(a.time_end);
+                const bStart = toMinutes(b.time_start);
+                const bEnd = toMinutes(b.time_end);
+                if (aStart < bEnd && aEnd > bStart) {
+                    addDraftConflict(i, j);
+                    addDraftConflict(j, i);
+                }
+            }
+        }
+    }
+
     // Build a sorted+filtered index map so we can pass the original index to onEdit/onRemove
     const processed = bookings
         .map((b, originalIndex) => ({ b, originalIndex }))
-        .filter(({ b }) => {
+        .filter(({ b, originalIndex }) => {
             if (filterFacility !== 'all' && b.facility_id !== Number(filterFacility)) return false;
-            if (filterConflicts && b.conflicts.length === 0) return false;
+            if (filterConflicts && b.conflicts.length === 0 && !draftConflictsByIndex.has(originalIndex)) return false;
             return true;
         })
         .sort((x, y) => {
@@ -59,7 +105,14 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
             }
         });
 
-    const hasConflicts = bookings.some((b) => b.conflicts.length > 0);
+    const hasConflicts = bookings.some((b) => b.conflicts.length > 0) || draftConflictsByIndex.size > 0;
+    const draftConflictFacilities = Array.from(
+        new Set(
+            Array.from(draftConflictsByIndex.values())
+                .flat()
+                .map((conflict) => conflict.facility_name),
+        ),
+    );
 
     return (
         <div className="mt-9">
@@ -73,7 +126,7 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
                         >
                             <h2 className="flex items-center gap-2 font-semibold tracking-tight">
                                 Facility Bookings
-                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-background">
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-[4px] bg-primary px-1 text-xs font-medium text-background">
                                     {bookings.length}
                                 </span>
                             </h2>
@@ -125,13 +178,19 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
                                 variant={filterConflicts ? 'destructive' : 'outline'}
                                 className="h-8 gap-1.5 text-sm"
                                 onClick={() => setFilterConflicts((v) => !v)}
-                                disabled={hasConflicts}
+                                disabled={!hasConflicts}
                             >
                                 <AlertCircleIcon size={16} />
                                 Conflicts only
                             </Button>
                         </div>
                     </div>
+                    {draftConflictsByIndex.size > 0 && (
+                        <p className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-1.5 text-xs font-medium text-destructive">
+                            <AlertCircleIcon size={12} className="shrink-0" />
+                            Duplicate facility/time booking detected for {draftConflictFacilities.join(', ')}.
+                        </p>
+                    )}
                     {processed.length === 0 ? (
                         <p className="py-3 text-center text-xs text-muted-foreground">No bookings match the current filter.</p>
                     ) : (
@@ -144,6 +203,7 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove, faci
                                 onRemove={editingIndex === originalIndex ? undefined : onRemove}
                                 showActions={false}
                                 isEditing={editingIndex === originalIndex}
+                                draftConflicts={draftConflictsByIndex.get(originalIndex) ?? []}
                             />
                         ))
                     )}

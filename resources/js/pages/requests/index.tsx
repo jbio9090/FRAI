@@ -1,5 +1,4 @@
-import { router } from '@inertiajs/react';
-import { Deferred } from '@inertiajs/react';
+import { router, Link } from '@inertiajs/react';
 import {
     CheckLine,
     MessageCirclePlus,
@@ -15,6 +14,8 @@ import {
     ArrowUp,
     Download,
     FolderOpen,
+    IterationCw,
+    CirclePlus,
 } from 'lucide-react';
 import moment from 'moment';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,17 +25,18 @@ import RequestCard from '@/components/request-card';
 import RequestsSkeleton from '@/components/skeleton/RequestIndexSkeleton';
 import SmartPagination from '@/components/SmartPagination';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldDescription } from '@/components/ui/field';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Textarea } from '@/components/ui/textarea';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { downloadRequestsCSV } from '@/lib/downloadCSV';
 import { cn } from '@/lib/utils';
 import type { Facility } from '@/types/facility';
-import { Request } from '@/types/request';
-import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
-import { Field, FieldDescription } from '@/components/ui/field';
-import { Textarea } from '@/components/ui/textarea';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import type { Request } from '@/types/request';
 
 export interface PaginatedRequests {
     data: Request[];
@@ -72,6 +74,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
     const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string[]>([]);
+    const [pendingConflictFilter, setPendingConflictFilter] = useState(false);
+    const [approvedConflictFilter, setApprovedConflictFilter] = useState(false);
     const hasLoadedOnce = useRef(false);
     const staleRequests = useRef<PaginatedRequests | null>(null);
 
@@ -84,7 +88,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const isInitialLoad = !hasLoadedOnce.current;
 
     const { hasRole } = usePermission();
-    const isAdmin = hasRole('admin');
+    const isAdmin = hasRole('admin') || hasRole('Super Admin');
 
     const statusOptions = [
         { label: 'Pending', value: 'pending' },
@@ -145,6 +149,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
         ...(requesterFilter.length && { requester: requesterFilter.join(',') }),
         ...(facilityFilter.length && { facility: facilityFilter.join(',') }),
         ...(externalEquipmentFilter && { has_external_equipment: externalEquipmentFilter }),
+        ...(pendingConflictFilter && { has_pending_conflicts: '1' }),
+        ...(approvedConflictFilter && { has_approved_conflicts: '1' }),
         ...overrides,
     });
 
@@ -218,6 +224,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                     setSelectState(false);
                     setBulkComment('');
                     setIsBulkCommentOpen(false);
+                    router.reload();
                 },
             },
         );
@@ -226,10 +233,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
     return (
         <DefaultLayout hasPadding={false}>
             <div className="mx-auto w-full max-w-7xl">
-                <h1 className="mb-6 px-4 pt-4 text-xl font-bold md:px-8 md:pt-8 pb-2">{page_title} Requests</h1>
-
-                <div className="mt-4 flex w-full flex-col flex-wrap justify-center gap-4 px-4 md:px-8">
-                    <div className="flex gap-2">
+                <div className="flex w-full flex-col flex-wrap gap-4 px-4 pt-4 md:px-8 md:pt-8">
+                    <div className="flex flex-wrap items-center gap-2">
                         <InputGroup className="max-w-xs sm:max-w-sm md:max-w-md">
                             <InputGroupAddon>
                                 <Search />
@@ -280,19 +285,28 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                     <Button
                                         variant="outline"
                                         className={cn(
-                                            (requesterFilter.length || facilityFilter.length || externalEquipmentFilter || statusFilter.length) &&
+                                            (requesterFilter.length || facilityFilter.length || externalEquipmentFilter || statusFilter.length ||
+                                                pendingConflictFilter ||
+                                                approvedConflictFilter) &&
                                                 'border-primary bg-primary/5 text-primary',
                                         )}
                                     >
                                         <ListFilter size={16} />
                                         <span>Filters</span>
-                                        {requesterFilter.length + facilityFilter.length + (externalEquipmentFilter ? 1 : 0) + statusFilter.length >
+                                        {requesterFilter.length +
+                                            facilityFilter.length +
+                                            (externalEquipmentFilter ? 1 : 0) +
+                                            statusFilter.length +
+                                            (pendingConflictFilter ? 1 : 0) +
+                                            (approvedConflictFilter ? 1 : 0) >
                                             0 && (
-                                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/12 px-1 text-[10px] font-medium text-primary">
+                                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-[4px] bg-primary/12 px-1 text-[10px] font-medium text-primary">
                                                 {requesterFilter.length +
                                                     facilityFilter.length +
                                                     (externalEquipmentFilter ? 1 : 0) +
-                                                    statusFilter.length}
+                                                    statusFilter.length +
+                                                    (pendingConflictFilter ? 1 : 0) +
+                                                    (approvedConflictFilter ? 1 : 0)}
                                             </span>
                                         )}
                                     </Button>
@@ -321,11 +335,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={f.id}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={facilityFilter.includes(String(f.id))}
-                                                            onChange={() => toggleFacility(String(f.id))}
+                                                            onCheckedChange={() => toggleFacility(String(f.id))}
                                                         />
                                                         {f.name}
                                                     </label>
@@ -355,11 +367,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={opt.value}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={statusFilter.includes(opt.value)}
-                                                            onChange={() => toggleStatus(opt.value)}
+                                                            onCheckedChange={() => toggleStatus(opt.value)}
                                                         />
                                                         {opt.label}
                                                     </label>
@@ -389,11 +399,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={r.id}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={requesterFilter.includes(String(r.id))}
-                                                            onChange={() => toggleRequester(String(r.id))}
+                                                            onCheckedChange={() => toggleRequester(String(r.id))}
                                                         />
                                                         {r.name}
                                                     </label>
@@ -412,17 +420,35 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                         key={opt.value}
                                                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                     >
-                                                        <input
-                                                            type="checkbox"
-                                                            className="accent-primary"
+                                                        <Checkbox
                                                             checked={externalEquipmentFilter === opt.value}
-                                                            onChange={() =>
+                                                            onCheckedChange={() =>
                                                                 setExternalEquipmentFilter((prev) => (prev === opt.value ? '' : opt.value))
                                                             }
                                                         />
                                                         {opt.label}
                                                     </label>
                                                 ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs font-semibold text-muted-foreground">Conflicts</p>
+                                            <div className="flex flex-col gap-1">
+                                                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                    <Checkbox
+                                                        checked={pendingConflictFilter}
+                                                        onCheckedChange={() => setPendingConflictFilter((prev) => !prev)}
+                                                    />
+                                                    Has pending conflicts
+                                                </label>
+                                                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                    <Checkbox
+                                                        checked={approvedConflictFilter}
+                                                        onCheckedChange={() => setApprovedConflictFilter((prev) => !prev)}
+                                                    />
+                                                    Has approved conflicts
+                                                </label>
                                             </div>
                                         </div>
                                     </div>
@@ -439,6 +465,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 setRequesterFilter([]);
                                                 setFacilityFilter([]);
                                                 setExternalEquipmentFilter('');
+                                                setStatusFilter([]);
+                                                setPendingConflictFilter(false);
+                                                setApprovedConflictFilter(false);
                                                 router.get(
                                                     route(route().current(), { status: route().params.status }),
                                                     { filter: filterMap[currentActiveFitler], search: searchQuery },
@@ -551,11 +580,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={opt.value}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={statusFilter.includes(opt.value)}
-                                                        onChange={() => toggleStatus(opt.value)}
+                                                        onCheckedChange={() => toggleStatus(opt.value)}
                                                     />
                                                     {opt.label}
                                                 </label>
@@ -585,11 +612,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={f.id}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={facilityFilter.includes(String(f.id))}
-                                                        onChange={() => toggleFacility(String(f.id))}
+                                                        onCheckedChange={() => toggleFacility(String(f.id))}
                                                     />
                                                     {f.name}
                                                 </label>
@@ -619,11 +644,9 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={r.id}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={requesterFilter.includes(String(r.id))}
-                                                        onChange={() => toggleRequester(String(r.id))}
+                                                        onCheckedChange={() => toggleRequester(String(r.id))}
                                                     />
                                                     {r.name}
                                                 </label>
@@ -642,15 +665,35 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                     key={opt.value}
                                                     className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                                                 >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="accent-primary"
+                                                    <Checkbox
                                                         checked={externalEquipmentFilter === opt.value}
-                                                        onChange={() => setExternalEquipmentFilter((prev) => (prev === opt.value ? '' : opt.value))}
+                                                        onCheckedChange={() =>
+                                                            setExternalEquipmentFilter((prev) => (prev === opt.value ? '' : opt.value))
+                                                        }
                                                     />
                                                     {opt.label}
                                                 </label>
                                             ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-2">
+                                        <p className="pt-4 text-xs font-semibold text-muted-foreground">Conflicts</p>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                <Checkbox
+                                                    checked={pendingConflictFilter}
+                                                    onCheckedChange={() => setPendingConflictFilter((prev) => !prev)}
+                                                />
+                                                Has pending conflicts
+                                            </label>
+                                            <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                                                <Checkbox
+                                                    checked={approvedConflictFilter}
+                                                    onCheckedChange={() => setApprovedConflictFilter((prev) => !prev)}
+                                                />
+                                                Has approved conflicts
+                                            </label>
                                         </div>
                                     </div>
 
@@ -669,6 +712,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                                 setFacilityFilter([]);
                                                 setExternalEquipmentFilter('');
                                                 setStatusFilter([]);
+                                                setPendingConflictFilter(false);
+                                                setApprovedConflictFilter(false);
                                                 router.get(
                                                     route(route().current(), { status: route().params.status }),
                                                     { filter: filterMap[currentActiveFitler], search: searchQuery },
@@ -684,7 +729,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         </Sheet>
                     </div>
 
-                    <div className="flex max-w-full gap-2 overflow-x-scroll [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div className="flex max-w-full gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         {commonFilterOptions.map((filter) => (
                             <Button
                                 className="rounded-full"
@@ -792,11 +837,21 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         initial={{ opacity: 0, scale: 0 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ duration: 0.4, scale: { type: 'tween', visualDuration: 0.4, bounce: 0.5 } }}
-                                        className="col-span-full m-auto mt-8 flex flex-col items-center gap-2 text-center"
+                                        className="col-span-full m-auto mt-8 flex flex-col items-center gap-3 text-center"
                                     >
-                                        <FolderOpen size={32} />
-                                        <h1 className="text-2xl font-bold">No Requests</h1>
-                                        <p>Nothing to see here...</p>
+                                        <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+                                            <FolderOpen className="h-5 w-5 text-muted-foreground" />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <p className="text-sm font-semibold">No requests</p>
+                                            <p className="text-sm text-muted-foreground">Nothing to see here...</p>
+                                        </div>
+                                        <Link href={route('request.create')}>
+                                            <Button size="sm" variant="outline" className="mt-1 gap-2">
+                                                <CirclePlus className="h-4 w-4" />
+                                                Create Request
+                                            </Button>
+                                        </Link>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -827,7 +882,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 80, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-                        className="fixed right-0 bottom-0 left-0 z-50 flex flex-wrap items-center gap-2 border-t bg-secondary px-4 py-3 backdrop-blur-sm md:justify-center"
+                        className="fixed right-0 bottom-0 left-0 z-50 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-4 py-3 shadow-md backdrop-blur-sm md:justify-center"
                     >
                         <Button size="sm" variant="outline" onClick={clearAllSelection} className="flex items-center gap-1.5 hover:text-primary">
                             <span className="text-sm font-medium">{selected.length} selected</span>
@@ -839,7 +894,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         <Button
                             size="sm"
                             variant="outline"
-                            className="hover:text-green-500 dark:hover:text-green-500"
+                            className="hover:text-[var(--ads-ok)] dark:hover:text-[var(--ads-ok)]"
                             onClick={() => bulkAction('approve')}
                         >
                             <Check size={14} />
@@ -859,6 +914,16 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         <Button size="sm" variant="outline" onClick={() => bulkAction('conditionally_approve')}>
                             <CheckLine size={14} />
                             <span>Conditionally Approve</span>
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="hover:text-[var(--ads-amber)] dark:hover:text-[var(--ads-amber)]"
+                            onClick={() => bulkAction('for_reschedule')}
+                        >
+                            <IterationCw size={14} />
+                            <span>For Reschedule</span>
                         </Button>
 
                         <Button

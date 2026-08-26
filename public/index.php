@@ -1,5 +1,7 @@
 <?php
 
+set_time_limit(120);
+
 use Illuminate\Foundation\Application;
 use Illuminate\Http\Request;
 

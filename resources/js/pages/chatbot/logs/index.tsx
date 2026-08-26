@@ -256,7 +256,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Timestamp</TableHead>
-                                    <TableHead>User</TableHead>
+                                    <TableHead className="w-48">User</TableHead>
                                     <TableHead>Intent</TableHead>
                                     <TableHead>User Message</TableHead>
                                     <TableHead>Assistant Reply</TableHead>
@@ -277,9 +277,13 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                                         <TableCell className="text-sm text-muted-foreground">
                                             {new Date(log.created_at).toLocaleString()}
                                         </TableCell>
-                                        <TableCell>
-                                            <div className="font-medium">{log.user?.name ?? 'Guest / Unknown'}</div>
-                                            <div className="text-xs text-muted-foreground">{log.session_id ?? 'No session'}</div>
+                                        <TableCell className="w-48 whitespace-normal">
+                                            <div className="min-w-0 break-words font-medium [overflow-wrap:anywhere]">
+                                                {log.user?.name ?? 'Guest / Unknown'}
+                                            </div>
+                                            <div className="min-w-0 break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                                                {log.session_id ?? 'No session'}
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             <div className="font-medium">{log.intent ?? log.interaction_type ?? '-'}</div>
@@ -379,4 +383,3 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
         </DefaultLayout>
     );
 }
-

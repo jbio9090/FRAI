@@ -22,6 +22,10 @@ class AccountController extends Controller
         $perPage = (int) $request->input('per_page', 10);
 
         $query = User::with('roles');
+        $archived = $request->boolean('archived');
+        if ($archived) {
+            $query = $query->onlyTrashed();
+        }
 
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
@@ -44,16 +48,20 @@ class AccountController extends Controller
 
         // Transform collection items for the frontend
         $users->getCollection()->transform(fn($user) => [
-            'id'      => $user->id,
-            'name'    => $user->name,
-            'email'   => $user->email,
-            'role'    => $user->roles->first()?->name,
-            'profile' => $user->profile,
+            'id'        => $user->id,
+            'name'      => $user->name,
+            'email'     => $user->email,
+            'role'      => $user->roles->first()?->name,
+            'profile'   => $user->profile,
+            'is_active' => $user->is_active,
+            'created_at' => $user->created_at,
+            'deleted_at' => $user->deleted_at,
         ]);
 
         return Inertia::render('accounts/index', [
             'users' => $users,
             'roles' => Role::pluck('name')->map(fn($role) => strtolower($role)),
+            'archived' => $archived,
         ]);
     }
 
@@ -62,13 +70,33 @@ class AccountController extends Controller
         $validated = $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
-            'role'     => 'required|string|exists:roles,name',
+            'role'     => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                        $fail("The selected role {$value} is invalid.");
+                    }
+                },
+            ],
             'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
+        $actor = $request->user();
+
+        // Resolve canonical role name (case-insensitive)
+        $role = Role::where('name', 'ILIKE', $validated['role'])->first();
+        if (! $role) {
+            return back()->withErrors(['role' => 'Selected role is invalid.'])->withInput();
+        }
+
+        if ($msg = $this->canAssignRole($actor, $role->name)) {
+            return back()->withErrors(['role' => $msg])->withInput();
+        }
+
         if ($request->hasFile('profile')) {
-            $path = $request->file('profile')->store('profiles', 'public');
-            $validated['profile'] = basename($path);
+            $stored = app(\App\Services\StorageService::class)->uploadProfileFromUploadedFile($request->file('profile'));
+            $validated['profile'] = $stored;
         }
 
         $tempPassword = Str::random(10);
@@ -76,7 +104,7 @@ class AccountController extends Controller
         $validated['force_password_change'] = true;
 
         $user = User::create($validated);
-        $user->assignRole($validated['role']);
+        $user->assignRole($role->name);
 
         return redirect()->route("accounts.index")
             ->with('temp_password_reset', [
@@ -116,6 +144,8 @@ class AccountController extends Controller
         $created = [];
         $failed  = [];
 
+        $actor = $request->user();
+
         foreach ($request->accounts as $index => $account) {
             $rowNumber = $index + 1;
             $role = Role::where('name', 'ILIKE', $account['role'])->first();
@@ -145,6 +175,17 @@ class AccountController extends Controller
                 continue;
             }
 
+            // role permission check (per-row)
+            if ($msg = $this->canAssignRole($actor, $role->name)) {
+                $failed[] = [
+                    'row'    => $rowNumber,
+                    'name'   => $account['name'],
+                    'email'  => $account['email'],
+                    'reason' => $msg,
+                ];
+                continue;
+            }
+
             try {
                 $tempPassword = Str::random(10);
 
@@ -157,7 +198,7 @@ class AccountController extends Controller
                     ]);
 
                     if ($role) {
-                        $user->assignRole($role);
+                        $user->assignRole($role->name);
                     }
 
                     return $user;
@@ -189,18 +230,44 @@ class AccountController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:8',
-            'role'     => 'required|string|exists:roles,name',
+            'role'     => [
+                'required',
+                'string',
+                function ($attribute, $value, $fail) {
+                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                        $fail("The selected role {$value} is invalid.");
+                    }
+                },
+            ],
             'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
-        if ($request->hasFile('profile')) {
+        $actor = $request->user();
 
+        if ($msg = $this->canEditUser($actor, $user)) {
+            return back()->withErrors(['error' => $msg])->withInput();
+        }
+
+        $role = Role::where('name', 'ILIKE', $validated['role'])->first();
+        if (! $role) {
+            return back()->withErrors(['role' => 'Selected role is invalid.'])->withInput();
+        }
+
+        if ($msg = $this->canAssignRole($actor, $role->name)) {
+            return back()->withErrors(['role' => $msg])->withInput();
+        }
+
+        if ($request->hasFile('profile')) {
             if ($user->profile && $user->profile !== 'default.png') {
-                Storage::disk('public')->delete('profiles/' . $user->profile);
+                try {
+                    app(\App\Services\StorageService::class)->deleteByPath($user->profile);
+                } catch (\Throwable $e) {
+                    // ignore
+                }
             }
 
-            $path = $request->file('profile')->store('profiles', 'public');
-            $user->profile = basename($path);
+            $stored = app(\App\Services\StorageService::class)->uploadProfileFromUploadedFile($request->file('profile'));
+            $user->profile = $stored;
         }
 
         $updateData = [
@@ -213,20 +280,146 @@ class AccountController extends Controller
         }
 
         $user->update($updateData);
-        $user->syncRoles([$validated['role']]);
+        $user->syncRoles([$role->name]);
 
         return redirect()->route('accounts.index');
     }
 
-    public function destroy(User $user): RedirectResponse
+    /**
+     * Toggle the active/inactive status of a user account.
+     *
+     * Rules:
+     *  - Super Admins can toggle anyone except themselves.
+     *  - Admins can only toggle Department Heads.
+     *  - No one can toggle a Super Admin account.
+     */
+    public function toggleStatus(Request $request, User $user): RedirectResponse
     {
-        if ($user->profile && $user->profile !== 'default.png') {
-            Storage::disk('public')->delete('profiles/' . $user->profile);
+        $actor = $request->user();
+
+        if ($msg = $this->canToggleStatus($actor, $user)) {
+            return back()->withErrors(['error' => $msg]);
         }
 
+        $user->update(['is_active' => ! $user->is_active]);
+
+        return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Check whether an actor may toggle a target user's status.
+     *
+     * Returns null when allowed, otherwise returns an error message string.
+     */
+    private function canToggleStatus(User $actor, User $target): ?string
+    {
+        // Nobody can toggle a Super Admin
+        if ($target->hasRole('Super Admin')) {
+            return 'The status of a Super Admin account cannot be changed.';
+        }
+
+        // Super Admins can toggle anyone except themselves
+        if ($actor->hasRole('Super Admin')) {
+            if ($actor->id === $target->id) {
+                return 'You cannot deactivate your own account.';
+            }
+            return null;
+        }
+
+        // Admins can only toggle Department Heads
+        if ($actor->hasRole('admin')) {
+            if ($target->hasRole('Department Head')) {
+                return null;
+            }
+            return 'Admins may only change the status of Department Head accounts.';
+        }
+
+        return 'You are not authorized to change account status.';
+    }
+
+    /**
+     * Check whether an actor may assign a role.
+     *
+     * Returns null when allowed, otherwise returns error message string.
+     */
+    private function canAssignRole(User $actor, string $roleName): ?string
+    {
+        $normalized = strtolower($roleName);
+
+        // Disallow assigning Super Admin through the UI
+        if ($normalized === 'super admin') {
+            return 'Assigning the Super Admin role is not allowed through the account management interface.';
+        }
+
+        // Super Admins may create 'admin' and 'department head' accounts.
+        if ($actor->hasRole('Super Admin')) {
+            if (! in_array($normalized, ['admin', 'department head'], true)) {
+                return 'Super Admins may only create admin and Department Head accounts.';
+            }
+        } elseif ($actor->hasRole('admin')) {
+            // Regular admins may only create 'department head' accounts.
+            if ($normalized !== 'department head') {
+                return 'Admins may only create Department Head accounts.';
+            }
+        } else {
+            return 'You are not authorized to assign roles.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Check whether an actor may edit a target user.
+     *
+     * Returns null when allowed, otherwise returns an error message string.
+     */
+    private function canEditUser(User $actor, User $target): ?string
+    {
+        // Allow self-edit
+        if ($actor->id === $target->id) {
+            return null;
+        }
+
+        // Super Admins may edit everyone
+        if ($actor->hasRole('Super Admin')) {
+            return null;
+        }
+
+        // Admins may only edit Department Head users (not other Admins — that requires Super Admin)
+        if ($actor->hasRole('admin')) {
+            $targetRoles = $target->roles->pluck('name')->map(fn($r) => strtolower($r))->toArray();
+            if (in_array('department head', $targetRoles, true)) {
+                return null;
+            }
+            return 'Admins may only edit Department Head accounts. Editing Admin accounts requires Super Admin privileges.';
+        }
+
+        return 'You are not authorized to edit accounts.';
+    }
+
+    public function destroy(User $user): RedirectResponse
+    {
+        // Soft-delete (archive) the user. Do not remove profile files when archiving.
         $user->delete();
 
         return redirect()->route('accounts.index');
+    }
+
+    /**
+     * Restore a soft-deleted (archived) user.
+     */
+    public function restore(Request $request, $id): RedirectResponse
+    {
+        $actor = $request->user();
+        $user = User::withTrashed()->with('roles')->findOrFail($id);
+
+        if ($msg = $this->canEditUser($actor, $user)) {
+            return back()->withErrors(['error' => $msg]);
+        }
+
+        $user->restore();
+
+        return redirect()->route('accounts.index')->with('success', 'Account restored.');
     }
 
     public function resetPassword(Request $request, User $user): RedirectResponse

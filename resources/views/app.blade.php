@@ -10,10 +10,17 @@
 
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/FRAI.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="/FRAI.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0C66E4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="GSO">
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
+    <link href="https://fonts.bunny.net/css?family=sora:100,200,300,400,500,600,700,800" rel="stylesheet" />
+    <link href="https://fonts.bunny.net/css?family=plus-jakarta-sans:200,300,400,500,600,700,800" rel="stylesheet" />
 
     @routes
     @viteReactRefresh
@@ -23,15 +30,6 @@
 
 <body class="font-sans antialiased">
     @inertia
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/serviceWorker.js')
-                    .then(reg => console.log('Service Worker registered'))
-                    .catch(err => console.error('Service Worker registration failed:', err));
-            });
-        }
-    </script>
 </body>
 
 </html>

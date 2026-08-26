@@ -1,0 +1,95 @@
+# ==========================================
+# Stage 1: Install PHP Dependencies
+# ==========================================
+FROM composer:2.7 AS vendor
+WORKDIR /app
+COPY composer.json composer.lock ./
+# --no-scripts prevents Artisan from running before the full source is present
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs --no-scripts
+COPY . .
+
+# ==========================================
+# Stage 2: Build Frontend Assets (Vite + React)
+# ==========================================
+# Uses a PHP CLI image so Wayfinder can call `php artisan` during the Vite build
+FROM php:8.4-cli-alpine AS frontend
+
+RUN apk add --no-cache nodejs npm
+
+WORKDIR /app
+
+# Copy the full source so Wayfinder and npm can find package.json and artisan
+COPY . .
+
+# Bring vendor dir from Stage 1 so Artisan can boot
+COPY --from=vendor /app/vendor /app/vendor
+
+RUN npm ci
+RUN npm run build
+
+# ==========================================
+# Stage 3: Final Production Image (Render — single container)
+# ==========================================
+FROM php:8.4-fpm-alpine
+
+# Install Nginx, Supervisor, and system dependencies
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    postgresql-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libwebp-dev \
+    gmp-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j$(nproc) gd pdo_pgsql gmp bcmath \
+    && apk add --no-cache shadow \
+    && addgroup -g 1000 runner \
+    && usermod -a -G runner www-data
+
+WORKDIR /var/www/html
+
+# Copy application source + compiled assets from previous stages
+COPY --from=vendor /app /var/www/html
+COPY --from=frontend /app/public/build /var/www/html/public/build
+
+# Remove any local .env that got baked in from the vendor stage
+RUN rm -f /var/www/html/.env
+
+# ── Laravel storage structure ────────────────────────────────────
+# storage/ is gitignored so it won't exist in the image — create it manually
+RUN mkdir -p \
+        /var/www/html/storage/logs \
+        /var/www/html/storage/framework/cache/data \
+        /var/www/html/storage/framework/sessions \
+        /var/www/html/storage/framework/views \
+        /var/www/html/storage/app/public \
+        /var/www/html/bootstrap/cache \
+        /var/log/supervisor
+
+# ── Nginx ────────────────────────────────────────────────────────
+COPY nginx.conf /etc/nginx/http.d/default.conf
+
+# ── Supervisor ───────────────────────────────────────────────────
+COPY supervisord.conf /etc/supervisord.conf
+
+# ── PHP-FPM pool config ───────────────────────────────────────────
+COPY php-fpm-pool.conf /usr/local/etc/php-fpm.d/www.conf
+
+# ── Entrypoint ───────────────────────────────────────────────────
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# ── Permissions (single RUN to keep layers minimal) ─────────────
+RUN chown -R www-data:www-data \
+        /var/www/html/storage \
+        /var/www/html/bootstrap/cache \
+    && chmod -R 775 \
+        /var/www/html/storage \
+        /var/www/html/bootstrap/cache
+
+# Render expects web services to listen on port 80
+EXPOSE 80
+
+CMD ["/usr/local/bin/entrypoint.sh"]

@@ -3,12 +3,14 @@
 namespace App\Notifications;
 
 use App\Enums\RequestStatus;
+use App\Notifications\Channels\LoggableFcmChannel;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
-use NotificationChannels\WebPush\WebPushChannel;
-use NotificationChannels\WebPush\WebPushMessage;
+use Illuminate\Support\Facades\URL;
+use NotificationChannels\Fcm\FcmMessage;
+use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
 class Reschedule extends Notification implements ShouldQueue
 {
@@ -23,29 +25,23 @@ class Reschedule extends Notification implements ShouldQueue
         protected string $time,
     ) {}
 
-    public function via($notifiable)
+    public function via($notifiable): array
     {
-        return ['database', WebPushChannel::class];
+        return ['database', LoggableFcmChannel::class];
     }
 
-    public function toWebPush($notifiable, $notification): WebPushMessage
+    public function toFcm($notifiable): FcmMessage
     {
-        return (new WebPushMessage)
-            ->title($this->title())
-            ->icon('/FRAI.png')
-            ->body($this->body())
-            ->action('View your request', 'view_request')
-            ->options(['TTL' => 1000])
-            ->data(['url' => $this->url])
-            ->tag("{$this->status->value}-".$this->request_title.Date::now()->toString());
-        // ->vibrate();
-        // ->data(['id' => $notification->id])
-        // ->badge()
-        // ->dir()
-        // ->image()
-        // ->lang()
-        // ->renotify()
-        // ->requireInteraction()
+        return (new FcmMessage(
+            notification: new FcmNotification(
+                title: $this->title(),
+                body: $this->body(),
+                image: URL::to('/FRAI.png'),
+            )
+        ))->data([
+            'url' => $this->url,
+            'tag' => "{$this->status->value}-".$this->request_title.Date::now()->toString(),
+        ]);
     }
 
     public function toDatabase($notifiable): array

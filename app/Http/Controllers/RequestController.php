@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RequestStatus;
 use App\Http\Requests\FacilityFormRequest;
+use App\Jobs\ProcessRequestConflicts;
 use App\Jobs\ProcessRequestRecommendation;
 use App\Models\AuditLog;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
+use App\Models\RequestFacility;
 use App\Models\User;
-use App\Enums\RequestStatus;
+use App\Services\AlternativeRecommendationService;
 use App\Services\AuditLogger;
 use App\Services\NotificationService;
 use App\Services\RequestService;
@@ -22,6 +25,7 @@ class RequestController extends Controller
         protected RequestService $service,
         protected NotificationService $notification,
         protected AuditLogger $auditLogger,
+        protected AlternativeRecommendationService $alternativeService,
     ) {}
 
     public function index(Request $request)
@@ -30,18 +34,18 @@ class RequestController extends Controller
 
         $statusValues = $statusParam
             ? collect(explode(',', $statusParam))
-            ->map(fn($s) => collect(RequestStatus::cases())
-                ->firstWhere(fn($case) => strtolower($case->name) === strtolower(trim($s))))
-            ->filter()
-            ->values()
+                ->map(fn ($s) => collect(RequestStatus::cases())
+                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s))))
+                ->filter()
+                ->values()
             : collect();
 
         $pageTitle = $statusValues->isNotEmpty()
-            ? $statusValues->map(fn($s) => $s->value)->join(', ')
+            ? $statusValues->map(fn ($s) => $s->value)->join(', ')
             : 'All Requests';
 
         return Inertia::render('requests/index', [
-            'requests' => Inertia::defer(fn() => $this->service->get(
+            'requests' => Inertia::defer(fn () => $this->service->get(
                 $statusValues->isNotEmpty() ? $statusValues->all() : null,
                 $request->input('filter', 'this_week'),
                 $request->input('search'),
@@ -50,6 +54,8 @@ class RequestController extends Controller
                 $request->input('requester'),
                 $request->input('facility'),
                 $request->input('has_external_equipment'),
+                $request->boolean('has_pending_conflicts'),
+                $request->boolean('has_approved_conflicts'),
             )),
             'page_title' => $pageTitle,
             'filters' => ['status' => $statusParam],
@@ -115,7 +121,7 @@ class RequestController extends Controller
 
         $this->notification->notifyUser($facilityRequest);
 
-        return back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' successful');
+        return back()->with('success', ucfirst(str_replace('_', ' ', $action)).' successful');
     }
 
     public function approve(Request $request, $id)
@@ -174,7 +180,7 @@ class RequestController extends Controller
     {
         return Inertia::render('requests/create', [
             'facilities' => Facility::with([
-                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name'),
             ])->select('id', 'name', 'capacity', 'building')->get(),
         ]);
@@ -187,7 +193,7 @@ class RequestController extends Controller
         return Inertia::render('requests/detail', [
             'labeledBreadcrumb' => $requestModel->title,
             'request' => $this->service->getDetail($request_id),
-            'auditLogs' => Inertia::defer(fn() => AuditLog::query()
+            'auditLogs' => Inertia::defer(fn () => AuditLog::query()
                 ->forSubject($requestModel)
                 ->with('user')
                 ->latest()
@@ -208,6 +214,33 @@ class RequestController extends Controller
         );
     }
 
+    public function getAlternatives(Request $httpRequest, int $request_id)
+    {
+        $request = FacilityRequest::with([
+            'requestFacilities.facility',
+            'equipment',
+            'requestFacilities.externalEquipments',
+        ])->findOrFail($request_id);
+
+        abort_unless(
+            $request->user_id === auth()->id() || auth()->user()->can('approve requests'),
+            403
+        );
+
+        abort_unless($request->status === RequestStatus::FOR_RESCHEDULE, 400);
+
+        $options = $httpRequest->validate([
+            'include_equipment' => 'sometimes|in:true,false,1,0',
+            'max_results' => 'integer|min:1|max:20',
+        ]);
+
+        $options['include_equipment'] = filter_var($httpRequest->input('include_equipment', false), FILTER_VALIDATE_BOOLEAN);
+
+        $alternatives = $this->alternativeService->findAlternatives($request, $options);
+
+        return response()->json($alternatives);
+    }
+
     public function store(FacilityFormRequest $request)
     {
         $validated = $request->validated();
@@ -215,8 +248,7 @@ class RequestController extends Controller
         $saved_request = $this->service->create($validated);
 
         ProcessRequestRecommendation::dispatch($saved_request);
-
-        $this->notification->notifyAdmin($saved_request->title, $request->user()->name, $saved_request->id);
+        ProcessRequestConflicts::dispatch($saved_request);
 
         return redirect()->route('requests.index', ['status' => strtolower(RequestStatus::PENDING->name)])
             ->with('success', 'Request created successfully');
@@ -286,7 +318,7 @@ class RequestController extends Controller
             $this->notification->notifyUser($facilityRequest);
         }
 
-        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)) . ' applied to ' . count($facilityRequests) . ' request(s).');
+        return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)).' applied to '.count($facilityRequests).' request(s).');
     }
 
     public function edit(FacilityRequest $request)
@@ -296,10 +328,11 @@ class RequestController extends Controller
 
         return Inertia::render('requests/create', [
             'facilities' => Facility::with([
-                'equipment' => fn($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
+                'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name'),
             ])->select('id', 'name', 'capacity', 'building')->get(),
             'existingRequest' => $this->service->getEditData($request->id),
+            'labeledBreadcrumb' => 'Edit Request',
         ]);
     }
 
@@ -313,6 +346,7 @@ class RequestController extends Controller
         $updated = $this->service->update($validated, $request->id);
 
         ProcessRequestRecommendation::dispatch($updated);
+        ProcessRequestConflicts::dispatch($updated);
 
         return redirect()->route('requests.detail', $request->id);
     }
@@ -359,38 +393,53 @@ class RequestController extends Controller
         ]);
 
         $statusMap = [
-            'approve'               => RequestStatus::APPROVED,
-            'reject'                => RequestStatus::DENIED,
+            'approve' => RequestStatus::APPROVED,
+            'reject' => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
-            'for_reschedule'        => RequestStatus::FOR_RESCHEDULE,
+            'for_reschedule' => RequestStatus::FOR_RESCHEDULE,
         ];
 
-        $facilityRequest = FacilityRequest::findOrFail($requestId);
+        // $facilityId here is actually the request_facility id (the booking row id).
+        $rf = RequestFacility::findOrFail($facilityId);
 
-        $facilityRequest->requestFacilities()
-            ->where('facility_id', $facilityId)
-            ->update(['status' => $statusMap[$validated['action']]]);
+        // Ensure the request_facility belongs to the supplied request id
+        if ($rf->request_id != $requestId) {
+            abort(403);
+        }
 
-        $allFacilityStatuses = $facilityRequest->requestFacilities()->pluck('status');
-        $uniqueStatuses = $allFacilityStatuses->unique();
-        $totalFacilities = $allFacilityStatuses->count();
+        // Approve uses the service which handles conflicts + parent sync
+        if ($validated['action'] === 'approve') {
+            $approvedRf = $this->service->approveFacility($rf->id);
+            $facilityRequest = FacilityRequest::findOrFail($requestId);
 
-        if ($uniqueStatuses->count() === 1) {
-            $facilityRequest->update([
-                'status' => $uniqueStatuses->first()
-            ]);
+            // Notify the request owner about the facility-level decision
+            $this->notification->notifyUserFacilityDecision($facilityRequest, $approvedRf);
         } else {
-            $hasApproved = $allFacilityStatuses->contains(fn($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
+            $rf->update(['status' => $statusMap[$validated['action']]]);
 
-            if ($hasApproved && $totalFacilities >= 2) {
+            $facilityRequest = FacilityRequest::findOrFail($requestId);
+
+            $allFacilityStatuses = $facilityRequest->requestFacilities()->pluck('status');
+            $uniqueStatuses = $allFacilityStatuses->unique();
+            $totalFacilities = $allFacilityStatuses->count();
+
+            if ($uniqueStatuses->count() === 1) {
                 $facilityRequest->update([
-                    'status' => RequestStatus::PARTIALLY_APPROVED
+                    'status' => $uniqueStatuses->first(),
                 ]);
+            } else {
+                $hasApproved = $allFacilityStatuses->contains(fn ($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
+
+                if ($hasApproved && $totalFacilities >= 2) {
+                    $facilityRequest->update([
+                        'status' => RequestStatus::PARTIALLY_APPROVED,
+                    ]);
+                }
             }
         }
 
         $facilityRequest->comments()->create([
-            'body'    => "Facility decision updated to: " . ucfirst(str_replace('_', ' ', $validated['action'])),
+            'body' => 'Facility decision updated to: '.ucfirst(str_replace('_', ' ', $validated['action'])),
             'user_id' => auth()->id(),
         ]);
 
@@ -402,7 +451,7 @@ class RequestController extends Controller
         abort_unless(in_array($action, ['approve', 'for_reschedule'], true), 404);
 
         $admin = User::find($request->integer('admin_id'));
-        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+        abort_unless($admin && $admin->hasRole(['admin', 'Super Admin']) && $admin->can('approve requests'), 403);
         abort_unless(auth()->onceUsingId($admin->id), 403);
 
         $facilityRequest = FacilityRequest::findOrFail($id);
@@ -465,9 +514,8 @@ class RequestController extends Controller
         abort_unless(in_array($action, ['approve', 'reject', 'conditionally_approve', 'for_reschedule'], true), 404);
 
         $admin = User::find($request->integer('admin_id'));
-        abort_unless($admin && $admin->hasRole('admin') && $admin->can('approve requests'), 403);
+        abort_unless($admin && $admin->hasRole(['admin', 'Super Admin']) && $admin->can('approve requests'), 403);
 
-        
         abort_unless(auth()->onceUsingId($admin->id), 403);
 
         $facilityRequest = \App\Models\Request::findOrFail($id);

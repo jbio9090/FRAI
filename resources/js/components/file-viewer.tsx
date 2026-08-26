@@ -1,5 +1,5 @@
-import { X, Download, FileText, ImageIcon, File, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { X, Download, FileText, File, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -24,10 +24,33 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
     const isImage = current.mime_type.startsWith('image/');
     const isPdf = current.mime_type === 'application/pdf';
 
+    const [brokenPreview, setBrokenPreview] = useState(false);
+
+    // Reset per-file state when navigating between files.
+    useEffect(() => {
+        setBrokenPreview(false);
+    }, [currentIndex]);
+
+    // Compute a preview-friendly URL for images hosted on Cloudinary.
+    function computePreviewUrl(url: string, mimeType?: string) {
+        try {
+            if (mimeType === 'application/pdf' || /\.pdf($|\?)/i.test(url)) return url;
+            if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+                if (!url.includes('/upload/f_') && !url.includes('/upload/f_auto')) {
+                    return url.replace('/upload/', '/upload/f_auto,q_auto/');
+                }
+            }
+            return url;
+        } catch {
+            return url;
+        }
+    }
+
+    const previewUrl = computePreviewUrl(current.url, current.mime_type);
+
     function prev() { setCurrentIndex(i => Math.max(0, i - 1)); }
     function next() { setCurrentIndex(i => Math.min(files.length - 1, i + 1)); }
 
-    // Keyboard nav
     function handleKey(e: React.KeyboardEvent) {
         if (e.key === 'ArrowLeft') prev();
         if (e.key === 'ArrowRight') next();
@@ -52,11 +75,18 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                             {currentIndex + 1} / {files.length}
                         </span>
                     )}
-                    <span className="text-sm font-medium truncate text-background">{current.original_name}</span>
+                    <span className="text-sm font-medium truncate">{current.original_name}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
+                    {isPdf && (
+                        <a href={current.url} target="_blank" rel="noreferrer">
+                            <Button variant="ghost" size="sm" title="Open PDF in new tab">
+                                <ExternalLink size={16} />
+                            </Button>
+                        </a>
+                    )}
                     <a href={current.url} download={current.name} target="_blank" rel="noreferrer">
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" title="Download">
                             <Download size={16} />
                         </Button>
                     </a>
@@ -81,33 +111,60 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                     </button>
                 )}
 
-                {/* File display */}
-                {isImage && (
+                {/* Image */}
+                {isImage && !brokenPreview && (
                     <img
-                        src={current.url}
+                        src={encodeURI(previewUrl)}
                         alt={current.name}
                         className="max-h-full max-w-full object-contain select-none"
+                        onError={() => setBrokenPreview(true)}
                     />
                 )}
 
-                {isPdf && (
-                    <iframe
-                        src={current.url}
-                        className="w-full h-full"
-                        title={current.name}
-                    />
+                {/* PDF — the streaming route authenticates the request and redirects to
+                    the Cloudinary delivery URL. Iframes follow redirects natively and
+                    are not subject to the CORS restrictions that fetch() faces on
+                    cross-origin redirects, so this just works. */}
+                {isPdf && !brokenPreview && (
+                    <div className="w-full h-full bg-muted">
+                        <iframe
+                            src={current.url}
+                            title={current.name}
+                            className="w-full h-full border-0"
+                            onError={() => setBrokenPreview(true)}
+                        />
+                    </div>
                 )}
 
-                {!isImage && !isPdf && (
+                {/* Fallback: unsupported type, broken image, or failed PDF fetch */}
+                {(brokenPreview || (!isImage && !isPdf)) && (
                     <div className="flex flex-col items-center gap-4 text-center p-8">
-                        <File size={48} className="text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">Preview not available for this file type.</p>
-                        <a href={current.url} download={current.name} target="_blank" rel="noreferrer">
-                            <Button variant="secondary">
-                                <Download size={16} className="mr-2" />
-                                Download {current.name}
-                            </Button>
-                        </a>
+                        {isPdf
+                            ? <FileText size={48} className="text-red-400" />
+                            : <File size={48} className="text-muted-foreground" />
+                        }
+                        <p className="text-sm text-muted-foreground">
+                            {isPdf
+                                ? 'Unable to preview this PDF in the browser.'
+                                : 'Preview not available for this file type.'
+                            }
+                        </p>
+                        <div className="flex gap-3">
+                            {isPdf && (
+                                <a href={current.url} target="_blank" rel="noreferrer">
+                                    <Button variant="outline">
+                                        <ExternalLink size={16} className="mr-2" />
+                                        Open in new tab
+                                    </Button>
+                                </a>
+                            )}
+                            <a href={current.url} download={current.name} target="_blank" rel="noreferrer">
+                                <Button variant="secondary">
+                                    <Download size={16} className="mr-2" />
+                                    Download
+                                </Button>
+                            </a>
+                        </div>
                     </div>
                 )}
 
@@ -122,7 +179,7 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                 )}
             </div>
 
-            {/* Thumbnail strip — shown when multiple files */}
+            {/* Thumbnail strip */}
             {files.length > 1 && (
                 <div
                     className="flex gap-2 px-4 py-3 bg-foreground/90 text-background/90 dark:bg-background/90 dark:text-foreground/90 backdrop-blur border-t overflow-x-auto flex-shrink-0"
@@ -138,7 +195,12 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
                             )}
                         >
                             {f.mime_type.startsWith('image/') ? (
-                                <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
+                                <img
+                                    src={encodeURI(computePreviewUrl(f.url, f.mime_type))}
+                                    alt={f.name}
+                                    className="w-full h-full object-cover"
+                                    onError={e => { (e.currentTarget as HTMLImageElement).src = f.url; }}
+                                />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-muted">
                                     {f.mime_type === 'application/pdf'
@@ -153,4 +215,4 @@ export function FileViewer({ files, initialIndex = 0, onClose }: FileViewerProps
             )}
         </div>
     );
-} 
+}

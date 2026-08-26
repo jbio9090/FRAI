@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use App\Models\Facility;
 
 class FacilitySeeder extends Seeder
 {
@@ -105,7 +106,10 @@ class FacilitySeeder extends Seeder
             $facility['campus_id'] = $mainCampusId;
             $facility['building_id'] = $buildingId;
 
-            DB::table('facilities')->insert($facility);
+            Facility::updateOrCreate(
+                ['name' => $facility['name'], 'building_id' => $buildingId],
+                ['campus_id' => $mainCampusId, 'building' => $facility['building'], 'capacity' => $facility['capacity']]
+            );
         }
     }
 }

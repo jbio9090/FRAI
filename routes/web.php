@@ -9,8 +9,10 @@ use App\Http\Controllers\FacilityController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\RequestController;
+use App\Http\Controllers\RequestSettingsController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\FileController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -29,6 +31,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/calendar', [DashboardController::class, 'calendarEvents'])->name('dashboard.calendar');
     Route::get('/dashboard/chart-data', [DashboardController::class, 'chartData'])->name('dashboard.chart-data');
     Route::get('/dashboard/audit-logs', [DashboardController::class, 'auditLogs']);
+    Route::get('/dashboard/pending-requests', [DashboardController::class, 'pendingRequests'])->name('dashboard.pending-requests');
     Route::post('/dashboard/notifications/mark-read', [DashboardController::class, 'markNotificationsRead'])
         ->name('dashboard.notifications.mark-read');
 
@@ -41,6 +44,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(['throttle:60,1']);
     Route::post('requests/{id}/comment', [RequestController::class, 'addComment'])->name('requests.comment');
     Route::get('/requests/{id}/audit-logs', [RequestController::class, 'auditLogs']);
+    Route::get('/requests/{request_id}/alternatives', [RequestController::class, 'getAlternatives'])
+        ->name('requests.alternatives');
 
     // Admin only routes
     Route::middleware(['permission:approve requests'])->group(function () {
@@ -63,7 +68,7 @@ Route::middleware('auth')->group(function () {
             'recommended_action' => $request->getRawOriginal('recommended_action'),
             'recommended_action_reason' => $request->recommended_action_reason,
             'request_status' => $request->getRawOriginal('status'),
-            'request_facilities' => $request->requestFacilities->map(fn ($rf) => [
+            'request_facilities' => $request->requestFacilities->map(fn($rf) => [
                 'id' => $rf->id,
                 'facility_id' => $rf->facility_id,
                 'status' => $rf->getRawOriginal('status'),
@@ -92,9 +97,16 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::post('/settings/change-password', [SettingsController::class, 'changePassword'])->name('settings.change-password');
+    Route::post('/settings/change-own-account-details/{user}', [SettingsController::class, 'updateOwnAccountDetails'])->name('settings.update-details');
     Route::post('/settings/admin-email-notifications', [SettingsController::class, 'updateAdminEmailNotifications'])
-        ->middleware(['role:admin', 'permission:approve requests'])
+        ->middleware(['role:admin|Super Admin', 'permission:approve requests'])
         ->name('settings.admin-email-notifications');
+
+    // Admin-only request options (approvers, booking window, min advance days)
+    Route::middleware('permission:manage request options')->group(function () {
+        Route::get('/request-options', [RequestSettingsController::class, 'index'])->name('request-options');
+        Route::post('/request-options', [RequestSettingsController::class, 'update'])->name('request-options.update');
+    });
 
     Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');
     Route::post('/equipment/check-conflicts', [EquipmentController::class, 'checkConflicts'])
@@ -115,6 +127,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/subscribe', [NotificationController::class, 'subscribe'])->name('notification.subscribe');
         Route::post('/unsubscribe', [NotificationController::class, 'unsubscribe'])->name('notification.unsubscribe');
         Route::post('/send', [NotificationController::class, 'send'])->name('notification.send');
+        Route::post('/register-token', [NotificationController::class, 'subscribe'])->name('notification.register-token');
     });
 
     Route::middleware('permission:manage users')->group(function () {
@@ -122,10 +135,13 @@ Route::middleware('auth')->group(function () {
         Route::post('/accounts/create', [AccountController::class, 'store'])->name('accounts.store');
         Route::put('/accounts/{user}', [AccountController::class, 'update'])->name('accounts.update');
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
+        Route::post('/accounts/{id}/restore', [AccountController::class, 'restore'])->name('accounts.restore');
         Route::middleware(['auth'])->group(function () {
             Route::post('/accounts/{user}/reset-password', [\App\Http\Controllers\AccountController::class, 'resetPassword'])->name('accounts.reset-password');
         });
         Route::post('/accounts/batch', [AccountController::class, 'batchStore'])->name('accounts.batch-store');
+        Route::patch('accounts/{user}/toggle-status', [AccountController::class, 'toggleStatus'])
+            ->name('accounts.toggle-status');
     });
 
     Route::get('/reset-required', [\App\Http\Controllers\ForcePasswordChangeController::class, 'edit'])->name('password.force.edit');
@@ -150,6 +166,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/chatbot', function () {
         return Inertia::render('chatbot/chatbot');
     })->name('chatbot');
+
     Route::prefix('/chat')->group(function () {
         Route::post('/', [ChatController::class, 'chat'])->name('api.chat')->middleware(['throttle:60,1']);
         Route::get('/test', [ChatController::class, 'testCsrf'])->name('chat.test');
@@ -165,6 +182,11 @@ Route::middleware('auth')->group(function () {
         Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
 });
+
+
+Route::get('/files/{file}/stream', [FileController::class, 'stream'])
+    ->middleware('auth')
+    ->name('files.stream');
 
 Route::prefix('/login')->group(function () {
     Route::get('/', [LoginController::class, 'show'])->name('login.show');

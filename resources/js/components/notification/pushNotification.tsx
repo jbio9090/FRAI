@@ -1,77 +1,160 @@
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 export default function PushNotifications() {
-    const [permission, setPermission] = useState(Notification.permission);
-    const [subscription, setSubscription] = useState(null);
-    const [isSupported, setIsSupported] = useState(false);
+    const { firebaseConfig } = usePage().props as any;
+    const [permission, setPermission] = useState<NotificationPermission>('default');
+    const [isRegistered, setIsRegistered] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
+    const [isSupported, setIsSupported] = useState(false);
+    const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
 
     useEffect(() => {
-        // Check if push notifications are supported
-        if ('serviceWorker' in navigator && 'PushManager' in window) {
-            setIsSupported(true);
-            checkSubscription();
-        }
+        checkSupport();
     }, []);
 
-    const checkSubscription = async () => {
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            const sub = await registration.pushManager.getSubscription();
-            setSubscription(sub);
-        } catch (err) {
-            console.error('Error checking subscription:', err);
+    const checkSupport = async () => {
+        if (isNativePlatform()) {
+            setIsSupported(true);
+            await checkNativeRegistration();
+        } else if ('serviceWorker' in navigator && 'PushManager' in window) {
+            setIsSupported(true);
+            await checkWebRegistration();
         }
     };
 
-    const requestPermission = async () => {
-        try {
-            const result = await Notification.requestPermission();
-            setPermission(result);
+    const isNativePlatform = (): boolean => {
+        return typeof (window as any).Capacitor !== 'undefined';
+    };
 
-            if (result === 'granted') {
-                await subscribeToPush();
+    const checkNativeRegistration = async () => {
+        try {
+            const { PushNotifications } = await import('@capacitor/push-notifications');
+            const permission = await PushNotifications.checkPermissions();
+            setPermission(permission.receive as NotificationPermission);
+
+            if (permission.receive === 'granted') {
+                const token = await PushNotifications.getRegistration();
+                setIsRegistered(!!token?.token);
             }
         } catch (err) {
-            setError('Failed to request permission');
-            console.error(err);
+            console.error('Error checking native registration:', err);
         }
     };
 
-    const subscribeToPush = async () => {
+    const getFirebaseApp = async () => {
+        const { getApps, initializeApp } = await import('firebase/app');
+        return getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    };
+
+    const checkWebRegistration = async () => {
+        try {
+            const { getMessaging, getToken } = await import('firebase/messaging');
+
+            const app = await getFirebaseApp();
+            const messaging = getMessaging(app);
+            const token = await getToken(messaging, {
+                vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+            });
+
+            if (token) {
+                setIsRegistered(true);
+            }
+        } catch (err) {
+            console.error('Error checking web registration:', err);
+        }
+    };
+
+    const requestPermissionAndRegister = async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const registration = await navigator.serviceWorker.ready;
-            const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-            const subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-            });
-
-            await router.post('/push/subscribe', {
-                subscription: subscription.toJSON()
-            }, {
-                preserveState: true,
-                preserveScroll: true,
-                onSuccess: () => {
-                    setSubscription(subscription);
-                },
-                onError: (errors) => {
-                    setError('Failed to save subscription');
-                    console.log(errors);
-                }
-            });
+            if (isNativePlatform()) {
+                await registerNative();
+            } else {
+                await registerWeb();
+            }
         } catch (err) {
-            setError('Failed to subscribe to push notifications');
+            setError('Failed to enable push notifications');
             console.error(err);
         } finally {
             setLoading(false);
         }
+    };
+
+    const registerNative = async () => {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        const { FCM } = await import('@capacitor-community/fcm');
+
+        const permission = await PushNotifications.requestPermissions();
+        setPermission(permission.receive as NotificationPermission);
+
+        if (permission.receive !== 'granted') {
+            setError('Notification permission denied');
+            return;
+        }
+
+        await PushNotifications.register();
+
+        PushNotifications.addListener('registration', async (token) => {
+            try {
+                const fcmToken = await FCM.getToken();
+                await sendTokenToServer(fcmToken.token, await getPlatform());
+                setIsRegistered(true);
+            } catch (err) {
+                console.error('Error getting FCM token:', err);
+                setError('Failed to register device');
+            }
+        });
+
+        PushNotifications.addListener('registrationError', (err) => {
+            console.error('Registration error:', err);
+            setError('Failed to register for push notifications');
+        });
+    };
+
+    const registerWeb = async () => {
+        const result = await Notification.requestPermission();
+        setPermission(result);
+
+        if (result !== 'granted') {
+            setError('Notification permission denied');
+            return;
+        }
+
+        const { getMessaging, getToken } = await import('firebase/messaging');
+
+        const app = await getFirebaseApp();
+        const messaging = getMessaging(app);
+        const token = await getToken(messaging, {
+            vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+        });
+
+        if (token) {
+            await sendTokenToServer(token, 'web');
+            setIsRegistered(true);
+        }
+    };
+
+    const isIOS = (): boolean => {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    };
+
+    const isSafari = (): boolean => {
+        return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    };
+
+    const isStandalone = (): boolean => {
+        return window.matchMedia('(display-mode: standalone)').matches || 
+               (window.navigator as any).standalone === true;
+    };
+
+    const showIOSInstallPrompt = (): boolean => {
+        return isIOS() && isSafari() && !isStandalone();
     };
 
     const unsubscribe = async () => {
@@ -79,17 +162,41 @@ export default function PushNotifications() {
         setError(null);
 
         try {
-            if (subscription) {
+            if (isNativePlatform()) {
+                const { PushNotifications } = await import('@capacitor/push-notifications');
+                const { FCM } = await import('@capacitor-community/fcm');
+
+                const fcmToken = await FCM.getToken();
                 await router.post('/push/unsubscribe', {
-                    subscription: subscription.toJSON()
+                    token: fcmToken.token,
                 }, {
                     preserveState: true,
                     preserveScroll: true,
                 });
 
-                await subscription.unsubscribe();
-                setSubscription(null);
+                await PushNotifications.unregister();
+            } else {
+                const { getMessaging, getToken, deleteToken } = await import('firebase/messaging');
+
+                const app = await getFirebaseApp();
+                const messaging = getMessaging(app);
+                const token = await getToken(messaging, {
+                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                });
+
+                if (token) {
+                    await router.post('/push/unsubscribe', {
+                        token,
+                    }, {
+                        preserveState: true,
+                        preserveScroll: true,
+                    });
+                }
+
+                await deleteToken(messaging);
             }
+
+            setIsRegistered(false);
         } catch (err) {
             setError('Failed to unsubscribe');
             console.error(err);
@@ -98,27 +205,30 @@ export default function PushNotifications() {
         }
     };
 
-    // Helper function to convert VAPID key
-    const urlBase64ToUint8Array = (base64String: string) => {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding)
-            .replace(/-/g, '+')
-            .replace(/_/g, '/');
+    const getPlatform = async (): Promise<string> => {
+        const { Capacitor } = await import('@capacitor/core');
+        return Capacitor.getPlatform();
+    };
 
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
+    const sendTokenToServer = async (token: string, platform: string) => {
+        await router.post('/push/subscribe', {
+            token,
+            platform,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            onError: (errors) => {
+                setError('Failed to save device token');
+                console.error(errors);
+            },
+        });
     };
 
     if (!isSupported) {
         return (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <p className="text-yellow-800">
-                    Push notifications are not supported in your browser.
+                    Push notifications are not supported on this device/browser.
                 </p>
             </div>
         );
@@ -133,47 +243,64 @@ export default function PushNotifications() {
                     <p className="text-red-800 text-sm">{error}</p>
                 </div>
             )}
-            {permission === 'default' && (
+
+            {isSupported && isIOS() && isSafari() && !isStandalone() && (
+                <button
+                    type="button"
+                    onClick={() => setShowIOSInstallModal(true)}
+                    className="text-blue-600 underline text-sm font-medium"
+                >
+                    Install on iPhone
+                </button>
+            )}
+
+            {isSupported && isIOS() && isSafari() && isStandalone() && isRegistered && (
+                <p className="text-sm text-blue-600 text-center">
+                    Open from Home Screen for push notifications to work. How to install? {" "}
+                    <button
+                        type="button"
+                        onClick={() => setShowIOSInstallModal(true)}
+                        className="underline hover:text-blue-800"
+                    >
+                        How to install
+                    </button>
+                </p>
+            )}
+
+            {isSupported && !isIOS() && isRegistered && (
+                <p className="text-sm text-green-600 text-center">
+                    Push notifications are active on this device.
+                </p>
+            )}
+
+            {!isRegistered && !showIOSInstallPrompt() && (
                 <Button
-                    onClick={requestPermission}
+                    onClick={requestPermissionAndRegister}
                     disabled={loading}
                     size={"sm"}
                     variant={"outline"}
                 >
                     <span className='text-sm'>
-                        Enable Browser Notifications
+                        {loading ? 'Enabling...' : 'Enable Push Notifications'}
                     </span>
                 </Button>
             )}
 
-            {permission === 'granted' && !subscription && (
-                <Button
-                    onClick={subscribeToPush}
-                    disabled={loading}
-                    size={"sm"}
-                    variant={"outline"}
-                >
-                    <span className='text-sm'>
-                        {loading ? 'Subscribing...' : 'Subscribe to Notifications'}
-                    </span>
-                </Button>
-            )}
-
-            {permission === 'granted' && subscription && (
+            {isRegistered && (
                 <Button
                     onClick={unsubscribe}
                     disabled={loading}
                     size={"sm"}
                 >
                     <span className='text-sm'>
-                        {loading ? 'Unsubscribing...' : 'Unsubscribe'}
+                        {loading ? 'Disabling...' : 'Disable Push Notifications'}
                     </span>
                 </Button>
             )}
 
             {permission === 'denied' && (
                 <p className="text-sm text-gray-600 text-center">
-                    Notifications are blocked. Please enable them in your browser settings.
+                    Notifications are blocked. Please enable them in your device/browser settings.
                 </p>
             )}
         </div>

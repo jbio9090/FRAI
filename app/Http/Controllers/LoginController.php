@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
+use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 class LoginController extends Controller
 {
@@ -31,6 +33,13 @@ class LoginController extends Controller
             'password' => ['required'],
         ]);
 
+        $user = User::where('email', $credentials['email'])->first();
+
+        if ($user && !$user->is_active) {
+            throw ValidationException::withMessages([
+                'email' => 'Your account is inactive. Please contact support.',
+            ]);
+        }
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
@@ -40,7 +49,7 @@ class LoginController extends Controller
 
         $this->auditLogger::loginFailed($credentials['email']);
         return back()->withErrors([
-            'email' => 'Email or password do not match',
+            'email' => 'Authentication failed. Please check your credentials',
         ])->onlyInput('email');
     }
 

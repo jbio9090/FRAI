@@ -1,12 +1,14 @@
+import { usePage } from '@inertiajs/react';
 import React, { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Equipment } from '@/types/equipment';
-import ChatInput from './components/ChatInput';
-import BookingFlow from './components/BookingFlow';
+import type { RequestOptions } from '@/types/request';
 import AvailabilityQuickFlow from './components/AvailabilityQuickFlow';
+import BookingFlow from './components/BookingFlow';
+import ChatInput from './components/ChatInput';
 import DatePicker from './components/DatePicker';
 import LoadingIndicator from './components/LoadingIndicator';
 import MessageList from './components/MessageList';
@@ -69,7 +71,36 @@ type AvailabilityFollowUpState = {
 
 type GuidedIntentRoute = 'booking' | 'availability' | 'equipment' | null;
 
-const GUIDED_TIME_OPTIONS = ['8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
+const SHORT_NOTICE_WARNING_TITLE = 'Short Notice Schedule';
+const SHORT_NOTICE_WARNING_MESSAGE = 'This selected date is close to the minimum lead time. Please make sure all requirements can be prepared before submitting.';
+
+const minutesToAmPm = (totalMinutes: number): string => {
+    const h24 = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const modifier = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${modifier}`;
+};
+
+/**
+ * Hourly quick-reply chips within the admin-configured booking window.
+ * Bounds are rounded to the nearest whole hour to keep the chip list sane.
+ */
+const buildHourlyTimeOptions = (startTime: string, endTime: string): string[] => {
+    const startMinutes = toMinutes(startTime);
+    const endMinutes = toMinutes(endTime);
+    if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes)) return [];
+
+    const firstSlot = Math.ceil(startMinutes / 60) * 60;
+    const lastSlot = Math.floor(endMinutes / 60) * 60;
+
+    const options: string[] = [];
+    for (let slot = firstSlot; slot <= lastSlot; slot += 60) {
+        options.push(minutesToAmPm(slot));
+    }
+
+    return options;
+};
 
 const INITIAL_GUIDED_FLOW: GuidedFlowState = {
     mode: 'none',
@@ -342,6 +373,48 @@ const formatDateYmd = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+const getTodayStart = (): Date => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+};
+
+const addCalendarDays = (date: Date, days: number): Date => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    next.setHours(0, 0, 0, 0);
+    return next;
+};
+
+const parseDateYmd = (date: string): Date | null => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!match) return null;
+
+    const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
+};
+
+const isGuidedBookingDateSelectable = (date: string, minAdvanceDays: number): boolean => {
+    const parsed = parseDateYmd(date);
+    if (!parsed) return false;
+
+    return parsed >= addCalendarDays(getTodayStart(), minAdvanceDays);
+};
+
+const isGuidedBookingShortNoticeDate = (date: string | null, minAdvanceDays: number, warningAdvanceDays: number): boolean => {
+    if (!date) return false;
+
+    const parsed = parseDateYmd(date);
+    if (!parsed) return false;
+
+    const today = getTodayStart();
+    return (
+        parsed >= addCalendarDays(today, minAdvanceDays) &&
+        parsed <= addCalendarDays(today, warningAdvanceDays)
+    );
+};
+
 const getAvailabilityStatus = (content: string): 'available' | 'unavailable' | null => {
     if (/\bis not available on\b/i.test(content) || /\bNOT available on\b/.test(content)) {
         return 'unavailable';
@@ -389,7 +462,14 @@ export default function Chatbot() {
 
     const { messages, addMessage, addMessages, setMessages, getMessagesText } = useMessages();
     const { participantCount: trackedParticipantCount, setParticipantCount, extractAndSet, getCurrentCount } = useParticipantCount();
-    const bookingFlow = useBookingFlow(facilities, baseEquipmentOptions);
+    const { requestOptions } = usePage<{ requestOptions: RequestOptions }>().props;
+    const guidedMinAdvanceDays = requestOptions.min_advance_days;
+    const guidedWarningAdvanceDays = guidedMinAdvanceDays + 2;
+    const guidedTimeOptions = buildHourlyTimeOptions(
+        requestOptions.booking_window.start_time,
+        requestOptions.booking_window.end_time,
+    );
+    const bookingFlow = useBookingFlow(facilities, baseEquipmentOptions, requestOptions);
     const { isLoading, sendMessage, submitRequest } = useChatAPI();
     const [pendingPayload, setPendingPayload] = useState<CreateRequestPayload | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFileInfo[]>([]);
@@ -510,7 +590,7 @@ export default function Chatbot() {
     };
 
     const getGuidedEndTimeOptions = (startTime: string): string[] => {
-        return GUIDED_TIME_OPTIONS.filter((option) => toMinutes(option) > toMinutes(startTime));
+        return guidedTimeOptions.filter((option) => toMinutes(option) > toMinutes(startTime));
     };
 
     const normalizeGuidedTimeInput = (value: string): string => {
@@ -728,6 +808,14 @@ export default function Chatbot() {
     };
 
     const handleGuidedDateSelection = (date: string) => {
+        if (guidedFlow.mode === 'booking' && !isGuidedBookingDateSelectable(date, guidedMinAdvanceDays)) {
+            addMessage({
+                role: 'assistant',
+                content: `Please choose a date at least ${guidedMinAdvanceDays} days from today.`,
+            });
+            return;
+        }
+
         addMessage({ role: 'user', content: `Date: ${date}` });
         setGuidedFlow((prev) => ({
             ...prev,
@@ -736,6 +824,12 @@ export default function Chatbot() {
             timeStart: null,
             timeEnd: null,
         }));
+        if (guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(date, guidedMinAdvanceDays, guidedWarningAdvanceDays)) {
+            addMessage({
+                role: 'assistant',
+                content: `${SHORT_NOTICE_WARNING_TITLE}\n${SHORT_NOTICE_WARNING_MESSAGE}`,
+            });
+        }
         addMessage({
             role: 'assistant',
             content: 'Choose your start time.',
@@ -1243,7 +1337,17 @@ export default function Chatbot() {
                     try {
                         const payload = JSON.parse(json);
                         if (payload && payload.facility_bookings && Array.isArray(payload.facility_bookings)) {
-                            setPendingPayload(withAttachedFiles(normalizePayloadForSubmission(payload)));
+                            const normalizedPayload = withAttachedFiles(normalizePayloadForSubmission(payload));
+                            setPendingPayload(normalizedPayload);
+                            setMessages((prev) => {
+                                if (prev.length === 0) return prev;
+                                const updated = [...prev];
+                                updated[updated.length - 1] = {
+                                    role: 'assistant',
+                                    content: `Please review this request before I submit it:\n\n${buildRequestSummary(normalizedPayload)}\n\nConfirm and Submit when everything looks correct.`,
+                                };
+                                return updated;
+                            });
                         }
                     } catch (_) {}
                 },
@@ -2021,10 +2125,9 @@ export default function Chatbot() {
 
     const buildGuidedQuickReplies = (): GuidedQuickReplyOption[] => {
         const today = new Date();
-        const plusTwoDays = new Date();
-        plusTwoDays.setDate(today.getDate() + 2);
-        const plusThreeDays = new Date();
-        plusThreeDays.setDate(today.getDate() + 3);
+        const plusTwoDays = addCalendarDays(today, 2);
+        const plusThreeDays = addCalendarDays(today, 3);
+        const plusFiveDays = addCalendarDays(today, 5);
         const plusSevenDays = new Date();
         plusSevenDays.setDate(today.getDate() + 7);
 
@@ -2188,14 +2291,9 @@ export default function Chatbot() {
             if (guidedFlow.step === 'date') {
                 return [
                     {
-                        id: 'guided-date-plus2',
-                        label: `In 2 Days (${formatDateYmd(plusTwoDays)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusTwoDays)),
-                    },
-                    {
-                        id: 'guided-date-plus3',
-                        label: `In 3 Days (${formatDateYmd(plusThreeDays)})`,
-                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusThreeDays)),
+                        id: 'guided-date-plus5',
+                        label: `In 5 Days (${formatDateYmd(plusFiveDays)})`,
+                        onSelect: () => handleGuidedDateSelection(formatDateYmd(plusFiveDays)),
                     },
                     {
                         id: 'guided-date-plus7',
@@ -2209,7 +2307,7 @@ export default function Chatbot() {
 
             if (guidedFlow.step === 'time_start') {
                 return [
-                    ...GUIDED_TIME_OPTIONS.filter((option) => option !== GUIDED_TIME_OPTIONS[GUIDED_TIME_OPTIONS.length - 1]).map((time) => ({
+                    ...guidedTimeOptions.filter((option) => option !== guidedTimeOptions[guidedTimeOptions.length - 1]).map((time) => ({
                         id: `guided-start-${time}`,
                         label: time,
                         onSelect: () => handleGuidedStartTimeSelection(time),
@@ -2320,7 +2418,7 @@ export default function Chatbot() {
 
             if (guidedFlow.step === 'time_start') {
                 return [
-                    ...GUIDED_TIME_OPTIONS.filter((option) => option !== GUIDED_TIME_OPTIONS[GUIDED_TIME_OPTIONS.length - 1]).map((time) => ({
+                    ...guidedTimeOptions.filter((option) => option !== guidedTimeOptions[guidedTimeOptions.length - 1]).map((time) => ({
                         id: `guided-av-start-${time}`,
                         label: time,
                         onSelect: () => handleGuidedStartTimeSelection(time),
@@ -2597,7 +2695,17 @@ export default function Chatbot() {
                     {guidedFlow.mode !== 'none' && guidedFlow.step === 'date' && (
                         <div className="mb-3 rounded-md border border-border p-3">
                             <p className="mb-2 text-xs text-muted-foreground">Custom date (calendar)</p>
-                            <DatePicker onSelect={handleGuidedDateSelection} minAdvanceDays={2} />
+                            <DatePicker
+                                onSelect={handleGuidedDateSelection}
+                                minAdvanceDays={guidedFlow.mode === 'booking' ? guidedMinAdvanceDays : 2}
+                            />
+                        </div>
+                    )}
+
+                    {guidedFlow.mode === 'booking' && isGuidedBookingShortNoticeDate(guidedFlow.date, guidedMinAdvanceDays, guidedWarningAdvanceDays) && (
+                        <div className="mb-3 rounded-md border border-amber-500 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-400">
+                            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">{SHORT_NOTICE_WARNING_TITLE}</p>
+                            <p className="mt-1 text-xs">{SHORT_NOTICE_WARNING_MESSAGE}</p>
                         </div>
                     )}
 

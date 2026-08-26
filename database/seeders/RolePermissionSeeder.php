@@ -25,6 +25,10 @@ class RolePermissionSeeder extends Seeder
         Permission::updateOrCreate(['name' => 'manage users']);
         Permission::updateOrCreate(['name' => 'modify rules']);
         Permission::updateOrCreate(['name' => 'view chatbot logs']);
+        Permission::updateOrCreate(['name' => 'reset password']);
+        Permission::updateOrCreate(['name' => 'create new admins']);
+        Permission::updateOrCreate(['name' => 'manage request options']);
+
 
         // Create roles and assign permissions
         $userRole = Role::updateOrCreate(['name' => 'Department Head']);
@@ -33,20 +37,27 @@ class RolePermissionSeeder extends Seeder
         $adminRole = Role::updateOrCreate(['name' => 'admin']);
         $adminRole->givePermissionTo(Permission::all());
 
+        $superAdminRole = Role::updateOrCreate(['name' => 'Super Admin']);
+        $superAdminRole->givePermissionTo(Permission::all());
+
+        $superAdmin = User::firstOrCreate(
+            ['email' => 'gso@example.com'],
+            ['name' => 'GSO', 'password' => Hash::make('password')]
+        );
+        $superAdmin->assignRole('Super Admin');
+
         // Create admin user
-        $admin = User::updateOrCreate([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $admin->assignRole('admin');
+        $adminUser = User::firstOrCreate(
+            ['email' => 'admin@example.com'],
+            ['name' => 'Admin User', 'password' => Hash::make('password')]
+        );
+        $adminUser->assignRole('admin');
 
         // Create regular user
-        $user = User::updateOrCreate([
-            'name' => 'Regular User',
-            'email' => 'user@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $user->assignRole('Department Head');
+        $regularUser = User::firstOrCreate(
+            ['email' => 'user@example.com'],
+            ['name' => 'Regular User', 'password' => Hash::make('password')]
+        );
+        $regularUser->assignRole('Department Head');
     }
 }

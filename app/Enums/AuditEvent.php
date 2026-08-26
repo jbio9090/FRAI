@@ -20,6 +20,10 @@ enum AuditEvent: string
     case RequestFileUploaded = 'request.file_uploaded';
     case RequestFileRemoved  = 'request.file_removed';
 
+    case SettingsUpdated             = 'settings.updated';
+
+    case Unknown                     = 'unknown';
+
     case AuthPasswordResetInitiated = 'auth.password_reset_initiated';
     case AuthPasswordSelfUpdated    = 'auth.password_self_updated';
 
@@ -41,6 +45,8 @@ enum AuditEvent: string
             self::RequestFileRemoved  => 'File Removed',
             self::AuthPasswordResetInitiated => 'Password Reset (Admin)',
             self::AuthPasswordSelfUpdated    => 'Password Updated',
+            self::SettingsUpdated            => 'Settings Updated',
+            self::Unknown                    => 'Unknown',
         };
     }
 }

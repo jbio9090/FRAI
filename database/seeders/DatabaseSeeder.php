@@ -15,23 +15,10 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             RolePermissionSeeder::class,
+            SettingSeeder::class,
             FacilitySeeder::class,
             EquipmentSeeder::class,
-            RequestSeeder::class
+            // RequestSeeder::class,
         ]);
-
-
-        //RULES
-        $rules = [
-            "A request with no approved by, no file attachments shall, and no schedule conflicts shall be conditionally approved",
-            "A request with external equipments shall be conditionally approved",
-        ];
-
-        for ($i = 0; $i < count($rules); $i++) {
-            Rule::create([
-                'rule' => $rules[$i],
-                'priority' => $i
-            ]);
-        }
     }
 }

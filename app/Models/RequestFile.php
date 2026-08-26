@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class RequestFile extends Model
 {
@@ -15,6 +14,8 @@ class RequestFile extends Model
         'size',
     ];
 
+    protected $appends = ['url'];
+
     public function request()
     {
         return $this->belongsTo(Request::class);
@@ -22,6 +23,6 @@ class RequestFile extends Model
 
     public function getUrlAttribute(): string
     {
-        return Storage::url($this->path);
+        return route('files.stream', $this->id);
     }
 }

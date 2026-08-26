@@ -2,105 +2,19 @@
   <img src="public/FRAIwLabelBackground.png" alt="FRAI" width="100%"/>
 </p>
 
-# Local Development Setup Guide - Laravel Herd
+###
 
-**FRAI** is an AI-powered Facility Request System that leverages large language models and vector search for intelligent, context-aware functionality.
+<b>FRAI</b> is a facility management system developed for the <b>GSO</b> office of <b>Pamantasan ng Lungsod ng Valenzuela (PLV)</b> as an alternative to their current manual process. With FRAI, facility requests can now be submitted online. The system also includes a variety of features designed to further streamline and improve the request management process which includes AI for generating requests and recommendations.
 
----
+This was made using Laravel, React, PostgreSQL, and OpenRouter for the AI models.
 
-## 1. Database Setup
-Since you are using the free version of Herd, you must ensure PostgreSQL is installed and running on your machine independently.
+### Primary Features
 
-### Install & Connect
-1.  Ensure **PostgreSQL** is installed (via Homebrew, Postgres.app, or direct installer).
-2.  Open your preferred database management tool (e.g., **pgAdmin**, **TablePlus**, or **DBeaver**).
-3.  Create a new database for the project (e.g., `frai_db`).
+* Users (Department Heads) can request facilities and equipment they wish to use in the future through the Create Request page. They can specify the expected attendees, equipments, date, time, etc..
+* Once a request is submitted, admins are notified instantly through Web Push Notifications.
+* Admins can review and decide on requests, after which the requester will receive a notification regarding the result.
+* Admins can set rules which will be the base for AI Recommendations. Recommendations will show to help admins with their decision.
+* Users can generate their requests via the Chatbot feature. They can also ask FAQ in the Chatbot.
+* Admins can modify facilities, equipments, and accounts.
 
-### Enable pgvector
-To support vector embeddings, you must manually enable the `pgvector` extension on your specific database:
-1.  Open a **SQL Query** window in your database tool.
-2.  Select your project database.
-3.  Run the following command:
-    ```sql
-    CREATE EXTENSION IF NOT EXISTS vector;
-    ```
-    *Note: If this fails, ensure the pgvector binary is installed on your system.*
 
-### Update `.env`
-Update your project's `.env` file with your local PostgreSQL credentials:
-
-```env
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=frai_db
-DB_USERNAME=your_username
-DB_PASSWORD=your_password
-```
-
----
-
-## 2. Ollama & Models
-Ollama provides the local LLM and embedding capabilities.
-
-1.  **Install Ollama:** Download from [ollama.com](https://ollama.com).
-2.  **Download LLM:**
-    *or whatever model you want
-    ```bash
-    ollama pull qwen2.5:3b
-    ```
-3.  **Download Embedding Model:**
-    ```bash
-    ollama pull nomic-embed-text
-    ```
-
----
-
-## 3. Application Configuration
-Configure the application to communicate with your local Ollama instance:
-
-```env
-OLLAMA_MODEL=qwen2.5:3b
-OLLAMA_EMBED_MODEL=nomic-embed-text
-OLLAMA_URL=http://localhost:11434
-```
-
----
-
-## 4. Initialization
-Run these commands in your terminal to prepare the application:
-
-1.  **Install Dependencies:**
-    ```bash
-    composer install
-    ```
-2.  **Run Migrations:**
-    ```bash
-    php artisan migrate:fresh --seed
-    ```
-3. **Run the Queue**
-    For the Notifications and other non blocking proccess to work
-    ```
-    php artisan queue:work
-    ```
-4. **Run Ollama**
-    ```
-    ollama serve
-    ```
-5.  **Index Application Rules:**
-    *you only need to do this once or when you change models
-    Process your project data into the vector database by running:
-    ```bash
-    php artisan app:index-rules
-    ```
-
----
-
-## Troubleshooting
-* **Database Connection:** Ensure the PostgreSQL service is active on your system. If you use a non-standard port (not 5432), update the `DB_PORT` in your `.env`.
-* **Vector Errors:** If `app:index-rules` throws a "type 'vector' does not exist" error, double-check that you ran the `CREATE EXTENSION` query on the **correct** database.
-* **Ollama Status:** Ensure the Ollama app is running in your menu bar/system tray, or the models won't be reachable.
-
-# Local Development Setup Guide - Docker
-
-Work in progress!

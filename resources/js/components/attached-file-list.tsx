@@ -24,16 +24,17 @@ interface AttachedFileListProps {
     files?: LocalAttachedFile[];
     serverFiles?: ServerAttachedFile[];
     onRemove?: (index: number) => void | null;
+    onRemoveServer?: (index: number) => void | null;
 }
 
-export function AttachedFileList({ files = [], serverFiles = [], onRemove }: AttachedFileListProps) {
+export function AttachedFileList({ files = [], serverFiles = [], onRemove, onRemoveServer }: AttachedFileListProps) {
     const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
     if (files.length === 0 && serverFiles.length === 0) return null;
 
     function getFileIcon(mimeType: string) {
-        if (mimeType.startsWith('image/')) return <ImageIcon size={16} className="text-blue-500" />;
-        if (mimeType === 'application/pdf') return <FileText size={16} className="text-red-500" />;
+        if (mimeType.startsWith('image/')) return <ImageIcon size={16} className="text-[var(--ads-ok)]" />;
+        if (mimeType === 'application/pdf') return <FileText size={16} className="text-[var(--ads-danger)]" />;
         return <File size={16} className="text-muted-foreground" />;
     }
 
@@ -72,10 +73,10 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
     }));
 
     const serverViewable = serverFiles.map((f) => ({
-        name: getFilenameFromPath(f.path),
-        url: `/storage/${f.path}`,
-        mime_type: getMimeTypeFromPath(f.path),
-        size: null as number | null,
+        name: getFilenameFromPath(f.original_name ?? f.path),
+        url: f.url ?? `/storage/${f.path}`,
+        mime_type: f.mime_type ?? getMimeTypeFromPath(f.path),
+        size: f.size ?? (null as number | null),
         isLocal: false as const,
         original_name: f.original_name,
     }));
@@ -135,9 +136,9 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
 
                 {/* Server files */}
                 {serverFiles.map((attached, index) => {
-                    const mime = getMimeTypeFromPath(attached.path);
-                    const name = getFilenameFromPath(attached.original_name);
-                    const url = `/storage/${attached.path}`;
+                    const mime = attached.mime_type ?? getMimeTypeFromPath(attached.path);
+                    const name = attached.original_name ?? getFilenameFromPath(attached.path);
+                    const url = attached.url ?? `/storage/${attached.path}`;
                     const viewerIdx = files.length + index; // offset past local files
 
                     return (
@@ -167,6 +168,18 @@ export function AttachedFileList({ files = [], serverFiles = [], onRemove }: Att
                             >
                                 <p className="truncate text-sm font-medium">{name}</p>
                             </button>
+
+                            {onRemoveServer && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onRemoveServer(index)}
+                                    className="flex-shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
+                                >
+                                    <X size={14} />
+                                </Button>
+                            )}
                         </div>
                     );
                 })}

@@ -46,6 +46,7 @@ const eventLabels: Record<string, string> = {
     "request.marked_for_reschedule": "Marked for Reschedule",
     "request.file_uploaded": "File Uploaded",
     "request.file_removed": "File Removed",
+    "settings.updated": "Settings Updated",
 };
 
 function formatEventLabel(event: string): string {
@@ -95,34 +96,29 @@ function getEventIcon(event: string) {
 
 const TAG_COLOR_CYCLES = [
     {
-        dot: "#ef4444",
+        dot: "#0c66e4",
         className:
-            "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800",
-        dotColor: "#ef4444",
+            "bg-[var(--ads-ac-department)] text-[var(--ads-ac-ink-department)] border-[var(--ads-ac-ink-department)]/30",
     },
     {
-        dot: "#3b82f6",
+        dot: "#216e4e",
         className:
-            "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
-        dotColor: "#3b82f6",
+            "bg-[var(--ads-ac-community)] text-[var(--ads-ac-ink-community)] border-[var(--ads-ac-ink-community)]/30",
     },
     {
-        dot: "#10b981",
+        dot: "#e56910",
         className:
-            "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800",
-        dotColor: "#10b981",
+            "bg-[var(--ads-ac-university)] text-[var(--ads-ac-ink-university)] border-[var(--ads-ac-ink-university)]/30",
     },
     {
-        dot: "#f59e0b",
+        dot: "#ae3e86",
         className:
-            "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800",
-        dotColor: "#f59e0b",
+            "bg-[var(--ads-ac-cultural)] text-[var(--ads-ac-ink-cultural)] border-[var(--ads-ac-ink-cultural)]/30",
     },
     {
-        dot: "#8b5cf6",
+        dot: "#5e4db2",
         className:
-            "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400 dark:border-violet-800",
-        dotColor: "#8b5cf6",
+            "bg-[var(--ads-ac-academic)] text-[var(--ads-ac-ink-academic)] border-[var(--ads-ac-ink-academic)]/30",
     },
 ];
 
@@ -137,7 +133,7 @@ function TagPill({ label, index = 0 }: { label: string; index?: number }) {
         >
             <span
                 className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ backgroundColor: color.dotColor }}
+                style={{ backgroundColor: color.dot }}
             />
             {label}
         </span>

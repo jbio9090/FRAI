@@ -20,20 +20,20 @@ import {
 import moment from 'moment';
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
-import { Avatar, AvatarImage } from '@/components/ui/avatar';
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, type CarouselApi } from '@/components/ui/carousel';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import { cn, formatTime, recommendedActionToPresentTense } from '@/lib/utils';
-import { PRIORITY_LABELS } from '@/types/request';
+import { cn, recommendedActionToPresentTense } from '@/lib/utils';
+import { PRIORITY_LABELS, PRIORITY_ACCENT } from '@/types/request';
 import type { Request } from '@/types/request';
 import AnimatedText from './animated-text';
-import { RecommendationPanel } from './request/recommendation-panel';
 import { AttachedFileList } from './attached-file-list';
 import AvatarWithInitials from './avatar-with-initials';
 import { BookingCard } from './booking-card';
 import Comment from './comment';
+import { RecommendationPanel } from './request/recommendation-panel';
 import StatusTag from './status-tag';
 import { Button } from './ui/button';
 import { Field, FieldDescription } from './ui/field';
@@ -71,6 +71,13 @@ export default function RequestCard({
     const [isLoadingFacilityStatuses, setIsLoadingFacilityStatuses] = useState(() => facilitiesNeedPolling(initialRequest));
 
     const isPollingActive = isLoadingRecommendation || isLoadingFacilityStatuses;
+
+    useEffect(() => {
+        // Sync internal state when parent props update (e.g., after an Inertia reload)
+        setRequest(initialRequest);
+        setIsLoadingRecommendation(!initialRequest.recommended_action);
+        setIsLoadingFacilityStatuses(facilitiesNeedPolling(initialRequest));
+    }, [initialRequest]);
 
     useEffect(() => {
         if (!isPollingActive) return;
@@ -132,11 +139,10 @@ export default function RequestCard({
 
     const handleAction = (action: string) => {
         const inertiaOptions = {
-            preserveState: true,
-            preserveScroll: true,
             onSuccess: () => {
                 setComment('');
                 setCommentInputState(false);
+                router.reload();
             },
         };
 
@@ -180,7 +186,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection?.(request.id)}
             className={cn(
-                'h-content mx-auto min-h-0 w-full rounded-lg border p-8 shadow-2xs transition-all duration-200',
+                'ads-card mx-auto min-h-0 w-full p-8 transition-all duration-200',
                 className,
                 isSelecting && 'cursor-pointer hover:border-primary/50',
                 isSelected && 'border-primary ring-1 ring-primary',
@@ -195,21 +201,27 @@ export default function RequestCard({
                             <StatusTag requestStatus={request.status} />
 
                             {request.priority_level > 0 && (
-                                <div className="flex gap-1 rounded-full border-1 border-border px-2 py-1 text-xs font-semibold">
+                                <div
+                                    className="flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[11px] font-semibold"
+                                    style={{
+                                        backgroundColor: PRIORITY_ACCENT[request.priority_level].fill,
+                                        color: PRIORITY_ACCENT[request.priority_level].ink,
+                                    }}
+                                >
                                     {PRIORITY_ICONS[request.priority_level as 0 | 1 | 2]}
                                     <span>{PRIORITY_LABELS[request.priority_level]}</span>
                                 </div>
                             )}
 
                             {request.on_hold && (
-                                <div className="flex items-center gap-1 rounded-full border-1 border-yellow-900 bg-yellow-200/50 px-2 py-1 text-xs font-semibold text-yellow-900 dark:border-yellow-200 dark:text-yellow-100">
+                                <div className="flex items-center gap-1 rounded-[4px] bg-[var(--ads-danger-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ads-danger)]">
                                     <CirclePause size={14} />
                                     <span>On Hold</span>
                                 </div>
                             )}
                         </div>
 
-                        <p className="mt-2 text-sm text-foreground/70">{request.description}</p>
+                        <p className="mt-2 text-sm text-muted-foreground">{request.description}</p>
 
                         {request.approved_by !== null && (
                             <div className="flex flex-wrap gap-1 text-sm">
@@ -339,8 +351,25 @@ function RequestDetails({
     isLoadingRecommendation: boolean;
     files?: typeof request.files;
 }) {
-    const isPending: boolean = request.status === 'Pending';
     const [activeTab, setActiveTab] = useState('facilities');
+    const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
+    const [canScrollPrev, setCanScrollPrev] = useState(false);
+    const [canScrollNext, setCanScrollNext] = useState(false);
+
+    useEffect(() => {
+        if (!carouselApi) return;
+        const update = () => {
+            setCanScrollPrev(carouselApi.canScrollPrev());
+            setCanScrollNext(carouselApi.canScrollNext());
+        };
+        update();
+        carouselApi.on('scroll', update);
+        carouselApi.on('reInit', update);
+        return () => {
+            carouselApi.off('scroll', update);
+            carouselApi.off('reInit', update);
+        };
+    }, [carouselApi]);
 
     const { hasPermission } = usePermission();
     const tabs = [
@@ -359,8 +388,8 @@ function RequestDetails({
                                 .filter((c) => c.facility_id === rf.facility_id)
                                 .map((c) => ({
                                     request_id: c.request_id,
-                                    request_title: c.request.title,
-                                    status: 'Pending',
+                                    request_title: c.request?.title ?? 'Unknown',
+                                    status: c.request?.status ?? 'Pending',
                                     time_start: c.time_start,
                                     time_end: c.time_end,
                                 }));
@@ -369,8 +398,8 @@ function RequestDetails({
                                 .filter((c) => c.facility_id === rf.facility_id)
                                 .map((c) => ({
                                     request_id: c.request_id,
-                                    request_title: c.request.title,
-                                    status: 'Approved',
+                                    request_title: c.request?.title ?? 'Unknown',
+                                    status: c.request?.status ?? 'Approved',
                                     time_start: c.time_start,
                                     time_end: c.time_end,
                                 }));
@@ -378,6 +407,7 @@ function RequestDetails({
                             const booking = {
                                 request_id: rf.request_id,
                                 facility_id: rf.facility_id,
+                                request_facility_id: rf.id,
                                 facility_name: facility?.name ?? `Facility #${rf.facility_id}`,
                                 date: rf.date_requested,
                                 time_start: rf.time_start,
@@ -393,7 +423,7 @@ function RequestDetails({
                                 request_facility_status: rf.status ?? null,
                             };
 
-                            return <BookingCard key={rf.date_requested + rf.time_start} booking={booking} index={0} className="mt-4" />;
+                            return <BookingCard key={rf.id} booking={booking} index={0} className="mt-4" />;
                         })}
                     </div>
                 </ScrollArea>
@@ -418,55 +448,67 @@ function RequestDetails({
         },
         ...(files?.length > 0
             ? [
-                  {
-                      value: 'attachments',
-                      icon: <Paperclip size={16} />,
-                      label: 'Attachments',
-                      badge: files.length,
-                      content: (
-                          <ScrollArea className="mt-4 h-96">
-                              <AttachedFileList serverFiles={files} />
-                              <ScrollBar />
-                          </ScrollArea>
-                      ),
-                  },
-              ]
+                {
+                    value: 'attachments',
+                    icon: <Paperclip size={16} />,
+                    label: 'Attachments',
+                    badge: files.length,
+                    content: (
+                        <ScrollArea className="mt-4 h-96">
+                            <AttachedFileList serverFiles={files} />
+                            <ScrollBar />
+                        </ScrollArea>
+                    ),
+                },
+            ]
             : []),
         ...(hasPermission('approve requests')
             ? [
-                  {
-                      value: 'recommend',
-                      icon: <ThumbsUp size={16} />,
-                      label: 'Recommendation',
-                      content: (
-                          <div className="mt-4">
-                              <RecommendationPanel request={request} isLoading={isLoadingRecommendation} variant="card" />
-                          </div>
-                      ),
-                  },
-              ]
+                {
+                    value: 'recommend',
+                    icon: <ThumbsUp size={16} />,
+                    label: 'Recommendation',
+                    content: (
+                        <div className="mt-4">
+                            <RecommendationPanel request={request} isLoading={isLoadingRecommendation} variant="card" />
+                        </div>
+                    ),
+                },
+            ]
             : []),
     ];
 
     return (
         <>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="hidden w-full xs:block">
-                <ScrollArea className="w-full" type="scroll">
-                    <TabsList className="w-max min-w-full border-b" variant="line">
+                <Carousel opts={{ align: 'start', dragFree: true }} setApi={setCarouselApi} className={cn('w-full', (canScrollPrev || canScrollNext) && 'px-8')}>
+                    <CarouselContent className="-ml-1 border-b">
                         {tabs.map((tab) => (
-                            <TabsTrigger key={tab.value} value={tab.value}>
-                                {tab.icon}
-                                <span>{tab.label}</span>
-                                {tab.badge !== undefined && (
-                                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium text-secondary-foreground">
-                                        {tab.badge}
-                                    </span>
-                                )}
-                            </TabsTrigger>
+                            <CarouselItem key={tab.value} className="basis-auto pl-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setActiveTab(tab.value)}
+                                    className={cn(
+                                        'flex items-center gap-1.5 rounded-none border-b-2 border-transparent pb-2 font-medium text-muted-foreground transition-colors hover:bg-transparent hover:text-foreground',
+                                        activeTab === tab.value && 'border-primary text-foreground',
+                                    )}
+                                >
+                                    {tab.icon}
+                                    <span>{tab.label}</span>
+                                    {tab.badge !== undefined && (
+                                        <span className="flex h-5 min-w-[20px] items-center justify-center rounded-[4px] bg-[var(--ads-neutral-bg)] px-1 text-[10px] font-semibold text-[var(--ads-neutral)]">
+                                            {tab.badge}
+                                        </span>
+                                    )}
+                                </Button>
+                            </CarouselItem>
                         ))}
-                    </TabsList>
-                    <ScrollBar orientation="horizontal" className="translate-y-2" />
-                </ScrollArea>
+                    </CarouselContent>
+                    <CarouselPrevious className={cn('left-0', !canScrollPrev && 'hidden')} />
+                    <CarouselNext className={cn('right-0', !canScrollNext && 'hidden')} />
+                </Carousel>
+
                 {tabs.map((tab) => (
                     <TabsContent key={tab.value} value={tab.value}>
                         {tab.content}

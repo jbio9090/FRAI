@@ -1,15 +1,16 @@
-import { useForm, usePage } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
+import { UserRoundPen, Mail } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import PushNotifications from '@/components/notification/pushNotification';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
-    DialogClose,
     DialogContent,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
+    DialogFooter,
+    DialogClose,
 } from "@/components/ui/dialog";
 import {
     DropdownMenu,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RoleBadge } from '@/components/ui/role-badge';
 import {
     Select,
     SelectContent,
@@ -27,6 +29,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 
 interface PageProps extends Record<string, unknown> {
@@ -36,6 +39,7 @@ interface PageProps extends Record<string, unknown> {
             name: string;
             profile: string;
             roles: string[];
+            email: string;
             admin_email_notifications_enabled: boolean;
         };
     };
@@ -46,7 +50,27 @@ export default function Settings() {
     const [theme, setTheme] = useState(localStorage.theme);
     const [preview, setPreview] = useState<string | null>(null);
     const [pwDialogOpen, setPwDialogOpen] = useState(false);
+    const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { hasRole } = usePermission();
+    const [editDetailsDialogOpen, setEditDetailsDialogOpen] = useState(false);
+
+    const {
+        data: detailsData,
+        setData: setDetailsData,
+        post: postDetails,
+        processing: detailsProcessing,
+        errors: detailsErrors
+    } = useForm({
+        name: auth.user.name,
+        email: auth.user.email,
+    });
+
+    const handleUpdateDetails = () => {
+        postDetails(route('settings.update-details', auth.user.id), {
+            onSuccess: () => setEditDetailsDialogOpen(false),
+        });
+    };
 
     const { data, setData, post, processing, errors, reset } = useForm<{ profile: File | null }>({
         profile: null,
@@ -57,7 +81,6 @@ export default function Settings() {
         password: '',
         password_confirmation: '',
     });
-    const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
 
     const handlePasswordChange = () => {
         postPw(route('settings.change-password'), {
@@ -119,6 +142,9 @@ export default function Settings() {
         destroy(route('settings.profile-picture.remove'));
     };
 
+    const hasCustomPicture = auth.user.profile !== 'default.png';
+    const isAdmin = hasRole('admin') || hasRole('Super Admin');
+
     const handleAdminEmailNotificationToggle = () => {
         router.post(
             route('settings.admin-email-notifications'),
@@ -132,9 +158,6 @@ export default function Settings() {
             },
         );
     };
-
-    const hasCustomPicture = auth.user.profile !== 'default.png';
-    const isAdmin = auth.user.roles?.includes('admin') ?? false;
 
     return (
         <DefaultLayout>
@@ -157,9 +180,10 @@ export default function Settings() {
                         onChange={handleFileChange}
                     />
 
-                    <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="text-sm font-semibold leading-none truncate">{auth.user.name}</span>
-                        <span className="text-sm text-muted-foreground capitalize">{auth.user.roles.join(', ')}</span>
+                    <div className="flex flex-col gap-1 min-w-0">
+                        <span className="text-md font-semibold leading-none truncate text-wrap">{auth.user.name}</span>
+                        <span className="text-sm text-muted-foreground leading-none text-wrap flex gap-1 items-center"><Mail size={12} />{auth.user.email}</span>
+                        <RoleBadge roles={auth.user.roles} variant="sm" />
                     </div>
 
                     <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -188,6 +212,12 @@ export default function Settings() {
                                         </svg>
                                         Upload photo
                                     </DropdownMenuItem>
+
+                                    <DropdownMenuItem onClick={() => setEditDetailsDialogOpen(true)} className='cursor-pointer'>
+                                        <UserRoundPen size={12} />
+                                        <span>Edit Details</span>
+                                    </DropdownMenuItem>
+
                                     {hasCustomPicture && (
                                         <DropdownMenuItem onClick={handleRemove} disabled={removing} className="text-destructive focus:text-destructive cursor-pointer">
                                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -279,13 +309,66 @@ export default function Settings() {
                     </DialogContent>
                 </Dialog>
 
+                <Dialog open={editDetailsDialogOpen} onOpenChange={setEditDetailsDialogOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Edit Account Details</DialogTitle>
+                        </DialogHeader>
+
+                        <div className="flex flex-col gap-3 py-2">
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Full Name</Label>
+                                <Input
+                                    value={detailsData.name}
+                                    onChange={e => setDetailsData('name', e.target.value)}
+                                    placeholder="Your name"
+                                    disabled={detailsProcessing}
+                                />
+                                {detailsErrors.name && (
+                                    <span className="text-xs text-destructive">{detailsErrors.name}</span>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Email Address</Label>
+                                <Input
+                                    type="email"
+                                    value={detailsData.email}
+                                    onChange={e => setDetailsData('email', e.target.value)}
+                                    placeholder="Your email"
+                                    disabled={detailsProcessing}
+                                />
+                                {detailsErrors.email && (
+                                    <span className="text-xs text-destructive">{detailsErrors.email}</span>
+                                )}
+                            </div>
+                        </div>
+
+                        <DialogFooter className="gap-2">
+                            <DialogClose asChild>
+                                <Button variant="outline" size="sm" type="button" disabled={detailsProcessing}>
+                                    Cancel
+                                </Button>
+                            </DialogClose>
+                            <Button
+                                size="sm"
+                                type="button"
+                                onClick={handleUpdateDetails}
+                                disabled={detailsProcessing || !detailsData.name || !detailsData.email}
+                            >
+                                {detailsProcessing ? 'Saving…' : 'Save Changes'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
                 <PushNotifications />
 
                 {isAdmin && (
                     <div className="flex justify-between items-center gap-4">
                         <span className="text-sm font-semibold">Email Notifications</span>
                         <Button
-                            variant="outline"
+                            variant={auth.user.admin_email_notifications_enabled ? "default" : "outline"}
                             size="sm"
                             type="button"
                             onClick={handleAdminEmailNotificationToggle}
