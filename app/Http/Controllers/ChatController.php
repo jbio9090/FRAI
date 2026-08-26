@@ -1442,6 +1442,158 @@ class ChatController extends Controller
         return $this->faqSearchTool->search($question);
     }
 
+    private function buildFaqLookupToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'faq_lookup',
+                'description' => 'Search the internal FAQ database for relevant answers to a user question.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'question' => [
+                            'type' => 'string',
+                            'description' => 'The user question to look up in the FAQ database.',
+                        ],
+                        'top_k' => [
+                            'type' => 'integer',
+                            'description' => 'Maximum number of matching FAQ entries to return. Defaults to 5 and max is 20.',
+                            'minimum' => 1,
+                            'maximum' => 20,
+                        ],
+                    ],
+                    'required' => ['question'],
+                ],
+            ],
+        ];
+    }
+
+    private function tryFaqLookupToolCall(array $messages, ?string $latestUserMessage): ?array
+    {
+        $question = trim((string) $latestUserMessage);
+        if ($question === '') {
+            return null;
+        }
+
+        $conversation = $this->getFaqConversationMessages($messages, 12);
+
+        try {
+            $toolResponse = $this->ai->chatWithTools(
+                $conversation,
+                [$this->buildFaqLookupToolDefinition()],
+                ['timeout' => 60, 'tool_choice' => 'auto']
+            );
+        } catch (\Throwable $exception) {
+            \Log::warning('FAQ tool call failed: '.$exception->getMessage());
+
+            return null;
+        }
+
+        $toolCalls = $toolResponse['tool_calls'] ?? [];
+        if (empty($toolCalls)) {
+            return null;
+        }
+
+        $toolCall = $toolCalls[0];
+        $toolName = trim((string) ($toolCall['name'] ?? ''));
+        if ($toolName !== 'faq_lookup') {
+            return null;
+        }
+
+        $arguments = is_array($toolCall['arguments'] ?? null) ? $toolCall['arguments'] : [];
+        $lookupQuestion = trim((string) ($arguments['question'] ?? $question));
+        $topK = max(1, min(20, (int) ($arguments['top_k'] ?? 5)));
+
+        $searchResult = $this->faqSearchTool->search($lookupQuestion, $topK);
+        $matches = array_values($searchResult['matches'] ?? []);
+        $toolResultContent = json_encode($searchResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $toolCallId = (string) ($toolCall['id'] ?? 'faq_lookup_call');
+
+        $assistantToolCallMessage = [
+            'role' => 'assistant',
+            'content' => null,
+            'tool_calls' => [[
+                'id' => $toolCallId,
+                'type' => 'function',
+                'function' => [
+                    'name' => 'faq_lookup',
+                    'arguments' => json_encode($arguments, JSON_UNESCAPED_SLASHES),
+                ],
+            ]],
+        ];
+
+        $toolResultMessage = [
+            'role' => 'tool',
+            'tool_call_id' => $toolCallId,
+            'name' => 'faq_lookup',
+            'content' => $toolResultContent !== false ? $toolResultContent : '{}',
+        ];
+
+        $followUpMessages = array_merge($conversation, [$assistantToolCallMessage, $toolResultMessage]);
+
+        $finalMessages = [[
+            'role' => 'system',
+            'content' => "You are the FAQ assistant. Use the faq_lookup tool results to answer the user's question. Base the answer only on FAQ matches returned by the tool. If there are no matches, say that no FAQ match was found and ask the user to rephrase or leave FAQ mode. Keep the answer concise and conversational.",
+        ]];
+
+        $finalMessages = array_merge($finalMessages, $followUpMessages);
+
+        try {
+            $finalAnswer = trim((string) $this->ai->chat($finalMessages, ['timeout' => 120]));
+        } catch (\Throwable $exception) {
+            \Log::warning('FAQ tool follow-up response failed: '.$exception->getMessage());
+
+            return null;
+        }
+
+        if ($finalAnswer === '') {
+            return null;
+        }
+
+        $ruleIds = [];
+        $similarities = [];
+        foreach ($matches as $match) {
+            $ruleId = (int) ($match['rule_id'] ?? $match['id'] ?? 0);
+            if ($ruleId > 0) {
+                $ruleIds[] = $ruleId;
+            }
+
+            if (isset($match['similarity'])) {
+                $similarities[] = round((float) $match['similarity'], 4);
+            }
+        }
+
+        $primaryMatch = ! empty($matches) ? $matches[0] : null;
+
+        return [
+            'content' => $finalAnswer,
+            'deterministic' => [
+                'source' => 'faq_tool_call',
+                'check' => 'faq',
+                'status' => 'grounded_answer',
+                'reason' => 'tool_lookup',
+                'faq_mode' => true,
+                'rule_id' => $primaryMatch !== null ? (int) ($primaryMatch['rule_id'] ?? $primaryMatch['id'] ?? 0) : null,
+                'question' => $primaryMatch !== null ? (string) ($primaryMatch['question'] ?? '') : $lookupQuestion,
+                'similarity' => $primaryMatch !== null && isset($primaryMatch['similarity']) ? (float) $primaryMatch['similarity'] : null,
+                'match_type' => 'tool_call',
+                'retrieved_rule_ids' => array_slice($ruleIds, 0, 5),
+                'retrieved_similarities' => array_slice($similarities, 0, 5),
+            ],
+            'context' => [
+                'faq_mode' => true,
+                'faq_tool_used' => true,
+                'faq_lookup_question' => $lookupQuestion,
+                'faq_lookup_top_k' => $topK,
+                'faq_lookup_result_count' => count($matches),
+                'faq_retrieval_rule_ids' => array_slice($ruleIds, 0, 5),
+                'faq_retrieval_similarities' => array_slice($similarities, 0, 5),
+                'response_source' => 'faq_tool_call',
+            ],
+        ];
+    }
+
     private function buildFaqKnowledgeBlock(array $retrievedFaqs): string
     {
         if (empty($retrievedFaqs)) {
@@ -1745,6 +1897,13 @@ class ChatController extends Controller
                     'response_source' => 'faq_conversational_rag',
                 ],
             ];
+        }
+
+        $toolResult = $this->tryFaqLookupToolCall($messages, $latestUserMessage);
+        if ($toolResult !== null) {
+            $this->clearFaqState();
+
+            return $toolResult;
         }
 
         $nearMatch = $this->faqMatchingService->suggestNearMatch($latestUserMessage);

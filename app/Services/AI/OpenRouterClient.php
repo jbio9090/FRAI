@@ -11,6 +11,13 @@ class OpenRouterClient
 {
     public function chat(array $messages, array $options = []): string
     {
+        $response = $this->chatWithTools($messages, $options['tools'] ?? [], $options);
+
+        return (string) ($response['content'] ?? '');
+    }
+
+    public function chatWithTools(array $messages, array $tools = [], array $options = []): array
+    {
         $apiKey = $this->apiKey();
         $model = $this->model();
 
@@ -30,6 +37,11 @@ class OpenRouterClient
             'temperature' => (float) ($options['temperature'] ?? config('ai.generate.temperature', 0.1)),
             'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
         ];
+
+        if (! empty($tools)) {
+            $payload['tools'] = $tools;
+            $payload['tool_choice'] = $options['tool_choice'] ?? 'auto';
+        }
 
         $request = Http::timeout($timeout)
             ->withToken($apiKey)
@@ -57,26 +69,112 @@ class OpenRouterClient
             throw new RuntimeException('AI chat request failed with status '.$response->status().'.');
         }
 
-        $content = trim((string) $response->json('choices.0.message.content', ''));
-        if ($content === '') {
+        $message = $response->json('choices.0.message', []);
+        $content = trim((string) ($message['content'] ?? ''));
+        $toolCalls = $this->normalizeToolCalls($message['tool_calls'] ?? []);
+
+        if ($content === '' && empty($toolCalls)) {
             Log::warning('AI chat returned empty content', [
                 'provider' => $this->providerName(),
                 'body' => substr($response->body(), 0, 1000),
             ]);
         }
 
-        return $content;
+        return [
+            'message' => $message,
+            'content' => $content,
+            'tool_calls' => $toolCalls,
+            'raw' => $response->json(),
+            'model' => $model,
+        ];
+    }
+
+    public function executeToolCall(array $toolCall, callable $toolHandler): array
+    {
+        $type = (string) ($toolCall['type'] ?? 'function');
+        $callData = is_array($toolCall['function'] ?? null) ? $toolCall['function'] : [];
+        $name = trim((string) ($callData['name'] ?? $toolCall['name'] ?? ''));
+        $arguments = $callData['arguments'] ?? $toolCall['arguments'] ?? '{}';
+
+        if ($type !== 'function' || $name === '') {
+            throw new RuntimeException('Unsupported tool call payload received from the model.');
+        }
+
+        $parsedArguments = $arguments;
+        if (is_string($parsedArguments)) {
+            $decoded = json_decode($parsedArguments, true);
+            $parsedArguments = is_array($decoded) ? $decoded : ['value' => $parsedArguments];
+        }
+
+        if (! is_array($parsedArguments)) {
+            $parsedArguments = ['value' => $parsedArguments];
+        }
+
+        $result = $toolHandler($name, $parsedArguments);
+
+        return [
+            'tool_call_id' => (string) ($toolCall['id'] ?? ''),
+            'name' => $name,
+            'arguments' => $parsedArguments,
+            'result' => $result,
+        ];
     }
 
     public function chatResponse(array $messages, array $options = []): array
     {
+        $response = $this->chatWithTools($messages, $options['tools'] ?? [], $options);
+
         return [
             'message' => [
                 'role' => 'assistant',
-                'content' => $this->chat($messages, $options),
+                'content' => $response['content'],
+                'tool_calls' => $response['tool_calls'],
             ],
-            'model' => $this->model(),
+            'model' => $response['model'],
+            'tool_calls' => $response['tool_calls'],
         ];
+    }
+
+    private function normalizeToolCalls(mixed $toolCalls): array
+    {
+        if (! is_array($toolCalls)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($toolCalls as $index => $toolCall) {
+            if (! is_array($toolCall)) {
+                continue;
+            }
+
+            $callData = is_array($toolCall['function'] ?? null) ? $toolCall['function'] : [];
+            $name = trim((string) ($callData['name'] ?? $toolCall['name'] ?? ''));
+            $argumentsValue = $callData['arguments'] ?? $toolCall['arguments'] ?? '{}';
+
+            $decodedArguments = $argumentsValue;
+            if (is_string($decodedArguments)) {
+                $json = json_decode($decodedArguments, true);
+                $decodedArguments = is_array($json) ? $json : ['value' => $decodedArguments];
+            }
+
+            if (! is_array($decodedArguments)) {
+                $decodedArguments = ['value' => $decodedArguments];
+            }
+
+            $normalized[] = [
+                'id' => (string) ($toolCall['id'] ?? 'call_'.($index + 1)),
+                'type' => (string) ($toolCall['type'] ?? 'function'),
+                'name' => $name,
+                'arguments' => $decodedArguments,
+                'raw_arguments' => is_string($argumentsValue) ? $argumentsValue : json_encode($argumentsValue),
+                'function' => [
+                    'name' => $name,
+                    'arguments' => is_string($argumentsValue) ? $argumentsValue : json_encode($argumentsValue),
+                ],
+            ];
+        }
+
+        return $normalized;
     }
 
     public function streamChat(array $messages, callable $onToken, array $options = []): string
