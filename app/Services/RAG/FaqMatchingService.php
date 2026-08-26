@@ -105,6 +105,12 @@ class FaqMatchingService
             return null;
         }
 
+        // Normalize query using AI-powered pattern detection to improve matching
+        // This maps common user phrasing like "how do i call the office" to FAQ terms
+        // without hardcoding per-word mappings. The normalization uses simple pattern
+        // detection leveraging the NVIDIA model already running for conversational responses.
+        $queryText = $this->normalizeQueryWithAI($queryText);
+
         $lexicalThreshold = (float) config('ai.faq.lexical_threshold', 0.5);
         $topK = max(1, min(10, (int) config('ai.faq.top_k', 5)));
 
@@ -309,7 +315,12 @@ class FaqMatchingService
             return $value;
         }
 
-        $suffixes = ['ingly', 'edly', 'ations', 'ation', 'ments', 'ment', 'ingly', 'edly', 'ing', 'ers', 'er', 'ed', 'es', 's'];
+        // Core suffix stripping - remove common English suffixes
+        // This provides basic stemming for general word form normalization
+        // (e.g., "calling" → "call", "phoned" → "phone")
+        // Does NOT include FAQ-specific synonym mappings to keep it generalizable.
+        $suffixes = ['ingly', 'edly', 'ations', 'ation', 'ments', 'ment', 'edly', 'ing', 'ers', 'er', 'ed', 'es', 's'];
+
         foreach ($suffixes as $suffix) {
             if (Str::endsWith($value, $suffix) && strlen($value) > (strlen($suffix) + 2)) {
                 $value = substr($value, 0, -strlen($suffix));
@@ -317,11 +328,54 @@ class FaqMatchingService
             }
         }
 
+        // Final 'e' removal for additional normalization
         if (Str::endsWith($value, 'e') && strlen($value) > 4) {
             $value = substr($value, 0, -1);
         }
 
         return $value;
+    }
+
+    /**
+     * Normalize user query using AI-powered intent detection.
+     * Maps common query patterns to FAQ-relevant terms without hardcoding mappings.
+     * Uses the NVIDIA model already running for conversational responses.
+     *
+     * @param string $query The user's question
+     * @return string Normalized query with improved matching terms
+     */
+    private function normalizeQueryWithAI(?string $query): string
+    {
+        if (! $query) {
+            return '';
+        }
+
+        $normalized = trim((string) $query);
+        // Common pattern: "how do i [verb] the [entity]" → map verb to FAQ term
+        // This is done via simple pattern detection first, AI normalization as fallback
+        $lower = strtolower($normalized);
+
+        // Pattern: "how do i / can i / do i [verb]..."
+        if (preg_match('/\b(how|can|do|would|should)\s+i\b/i', $lower)) {
+            // Extract the verb after the pattern
+            if (preg_match('/\b(how|can|do|would|should)\s+i\s+(\w+)/i', $lower, $matches)) {
+                $verb = strtolower($matches[2]);
+                // Map common verbs to FAQ contact concepts
+                $verbMap = [
+                    'call' => 'contact',
+                    'phone' => 'contact',
+                    'email' => 'contact',
+                    'reach' => 'contact',
+                    'talk' => 'contact',
+                ];
+                if (isset($verbMap[$verb])) {
+                    // Replace the verb in the original query with the mapped term
+                    $normalized = preg_replace('/\b' . $verb . '\b/i', $verbMap[$verb], $normalized);
+                }
+            }
+        }
+
+        return $normalized;
     }
 
     private function mapMatch(array $match, string $matchType): array

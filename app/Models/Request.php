@@ -89,7 +89,7 @@ class Request extends Model
     public function equipment()
     {
         return $this->belongsToMany(Equipment::class, 'request_equipment')
-            ->withPivot('quantity_needed')
+            ->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id'])
             ->withTimestamps();
     }
 

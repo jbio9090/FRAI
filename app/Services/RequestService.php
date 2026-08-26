@@ -361,17 +361,26 @@ class RequestService
                 $requestFacility->externalEquipments()->createMany($externalItems);
             }
 
-            // 3. Attach standard + borrowed equipment in a single bulk insert
+            // 3. Attach standard + borrowed equipment in a single bulk insert.
+            // Chat-generated payloads may mark an item as borrowed inline inside
+            // the normal `equipment` bucket when the source facility is auto-resolved.
             $equipmentRows = [];
 
             foreach ($booking['equipment'] ?? [] as $equipment) {
+                $isBorrowed = (bool) ($equipment['is_borrowed'] ?? false);
+                $sourceFacilityId = $equipment['source_facility_id'] ?? null;
+
+                if (! $isBorrowed && is_numeric($sourceFacilityId) && (int) $sourceFacilityId !== (int) $booking['facility_id']) {
+                    $isBorrowed = true;
+                }
+
                 $equipmentRows[] = [
                     'request_id' => $facilityRequest->id,
                     'request_facility_id' => $requestFacility->id,
                     'equipment_id' => $equipment['equipment_id'],
                     'quantity_needed' => $equipment['quantity_needed'],
-                    'is_borrowed' => false,
-                    'source_facility_id' => null,
+                    'is_borrowed' => $isBorrowed,
+                    'source_facility_id' => $isBorrowed ? ($sourceFacilityId ?? null) : null,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -384,7 +393,7 @@ class RequestService
                     'equipment_id' => $equipment['equipment_id'],
                     'quantity_needed' => $equipment['quantity_needed'],
                     'is_borrowed' => true,
-                    'source_facility_id' => $equipment['source_facility_id'],
+                    'source_facility_id' => $equipment['source_facility_id'] ?? null,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];

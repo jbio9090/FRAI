@@ -494,6 +494,63 @@ class ChatController extends Controller
         return (int) $candidates[0]['id'];
     }
 
+    private function finalizeBorrowSourceMetadata(array &$facilityBookings): void
+    {
+        foreach ($facilityBookings as $bookingIndex => &$booking) {
+            $facilityId = isset($booking['facility_id']) && is_numeric($booking['facility_id'])
+                ? (int) $booking['facility_id']
+                : 0;
+            if ($facilityId <= 0 || empty($booking['equipment']) || ! is_array($booking['equipment'])) {
+                continue;
+            }
+
+            $date = isset($booking['date']) && is_string($booking['date']) ? $booking['date'] : null;
+            $timeStart = isset($booking['time_start']) && is_string($booking['time_start']) ? $booking['time_start'] : null;
+            $timeEnd = isset($booking['time_end']) && is_string($booking['time_end']) ? $booking['time_end'] : null;
+
+            foreach ($booking['equipment'] as $equipmentIndex => &$selection) {
+                $equipmentId = isset($selection['equipment_id']) && is_numeric($selection['equipment_id'])
+                    ? (int) $selection['equipment_id']
+                    : 0;
+                $quantityNeeded = isset($selection['quantity_needed']) && is_numeric($selection['quantity_needed'])
+                    ? (int) $selection['quantity_needed']
+                    : 0;
+                if ($equipmentId <= 0 || $quantityNeeded <= 0) {
+                    continue;
+                }
+
+                $equipment = Equipment::with('facilities:id')->find($equipmentId);
+                if (! $equipment) {
+                    continue;
+                }
+
+                $sourceFacilityId = isset($selection['source_facility_id']) && is_numeric($selection['source_facility_id'])
+                    ? (int) $selection['source_facility_id']
+                    : null;
+
+                if ($sourceFacilityId === null && ! $equipment->facilities->contains('id', $facilityId)) {
+                    $sourceFacilityId = $this->resolveBorrowSourceFacilityId(
+                        $equipment,
+                        $facilityId,
+                        $date ?? date('Y-m-d'),
+                        $timeStart ?? '00:00',
+                        $timeEnd ?? '23:59',
+                        $quantityNeeded
+                    );
+                }
+
+                if ($sourceFacilityId !== null && $sourceFacilityId !== $facilityId) {
+                    $selection['source_facility_id'] = $sourceFacilityId;
+                    $selection['is_borrowed'] = true;
+                }
+            }
+
+            unset($selection);
+        }
+
+        unset($booking);
+    }
+
     private function validateFacilityEquipmentSelections(array &$facilityBookings): array
     {
         $errors = [];
@@ -3132,6 +3189,7 @@ class ChatController extends Controller
             ]);
 
             $bookingsForValidation = $validated['facility_bookings'];
+            $this->finalizeBorrowSourceMetadata($bookingsForValidation);
             $equipmentSelectionErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
             $validated['facility_bookings'] = $bookingsForValidation;
             if (! empty($equipmentSelectionErrors)) {
@@ -3161,6 +3219,8 @@ class ChatController extends Controller
                 &$heldCount
             ) {
                 $bookingsForValidation = $validated['facility_bookings'];
+                $this->finalizeBorrowSourceMetadata($bookingsForValidation);
+                $validated['facility_bookings'] = $bookingsForValidation;
                 $preLockEquipmentErrors = $this->validateFacilityEquipmentSelections($bookingsForValidation);
                 if (! empty($preLockEquipmentErrors)) {
                     throw ValidationException::withMessages($preLockEquipmentErrors);

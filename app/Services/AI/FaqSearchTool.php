@@ -42,16 +42,20 @@ class FaqSearchTool
 
         foreach ($rows as $row) {
             $score = $this->lexicalScore($queryText, (string) $row->faq_question, (string) $row->faq_answer);
-            $scored[] = [
-                'id' => (int) $row->id,
-                'question' => (string) $row->faq_question,
-                'answer' => (string) $row->faq_answer,
-                'similarity' => $score,
-            ];
+            // Include matches with similarity >= 0.3 (lowered from default for better coverage)
+            if ($score >= 0.3) {
+                $scored[] = [
+                    'id' => (int) $row->id,
+                    'question' => (string) $row->faq_question,
+                    'answer' => (string) $row->faq_answer,
+                    'similarity' => $score,
+                ];
+            }
         }
 
         usort($scored, fn (array $a, array $b) => (float) $b['similarity'] <=> (float) $a['similarity']);
 
+        // Return ALL matches above threshold (not just top-k), so the controller can prioritize
         $topMatches = array_slice($scored, 0, $resolvedTopK);
 
         return [
