@@ -169,15 +169,6 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('/chat')->group(function () {
         Route::post('/', [ChatController::class, 'chat'])->name('api.chat')->middleware(['throttle:60,1']);
-        Route::get('/test', [ChatController::class, 'testCsrf'])->name('chat.test');
-        Route::get('/models', [ChatController::class, 'models'])->name('chat.models');
-        Route::get('/requests', [ChatController::class, 'latestRequests'])->name('chat.requests');
-        Route::get('/rules', [ChatController::class, 'rulesList'])->name('chat.rules');
-        Route::get('/facilities', [ChatController::class, 'facilitiesList'])->name('chat.facilities');
-        Route::get('/equipment', [ChatController::class, 'equipmentList'])->name('chat.equipment');
-        Route::post('/upload', [ChatController::class, 'uploadFile'])->name('chat.upload')->middleware(['throttle:60,1']);
-        Route::post('/create-request', [ChatController::class, 'createRequestApi'])->name('api.db.create.request')->middleware(['throttle:10,1']);
-        Route::post('/stream', [ChatController::class, 'stream'])->name('chat.stream')->middleware(['throttle:60,1']);
         Route::get('/session', [ChatController::class, 'getSession'])->name('chat.session.get');
         Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
