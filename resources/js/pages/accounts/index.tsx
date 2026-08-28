@@ -269,7 +269,7 @@ export default function AccountsPage({ users, roles }: Props) {
      *  - Admins can only toggle Department Heads.
      */
     const canToggleStatus = (rowUser: RowUser): boolean => {
-        const rowRole = rowUser.role.toLowerCase();
+        const rowRole = (rowUser.role ?? '').toLowerCase();
 
         // Nobody can toggle a Super Admin
         if (rowRole === 'super admin') return false;
@@ -1160,7 +1160,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                                     </Button>
                                                 )}
 
-                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && rowUser.role.toLowerCase() === "admin")) && (
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && (rowUser.role ?? '').toLowerCase() === "admin")) && (
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
@@ -1170,7 +1170,7 @@ export default function AccountsPage({ users, roles }: Props) {
                                                     </Button>
                                                 )}
 
-                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && rowUser.role.toLowerCase() === "admin")) && (
+                                                {!(rowUser.id === auth.user.id || rowUser.role === "Super Admin" || (isAdmin && !isSuperAdmin && (rowUser.role ?? '').toLowerCase() === "admin")) && (
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
