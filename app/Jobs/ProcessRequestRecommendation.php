@@ -2,9 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Enums\RequestStatus;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
-use App\Enums\RequestStatus; 
 use App\Services\NotificationService;
 use App\Services\RAG\AIRecommendationService;
 use Illuminate\Bus\Queueable;
@@ -19,9 +19,12 @@ class ProcessRequestRecommendation implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries         = 2;
-    public int $timeout       = 300;
+    public int $tries = 2;
+
+    public int $timeout = 300;
+
     public int $maxExceptions = 2;
+
     public bool $failOnTimeout = true;
 
     public function __construct(
@@ -45,6 +48,7 @@ class ProcessRequestRecommendation implements ShouldQueue
 
         if (empty($recommendations)) {
             Log::warning("ProcessRequestRecommendation: no recommendations returned for Request#{$this->request->id}. Aborting.");
+
             return;
         }
 
@@ -80,14 +84,14 @@ class ProcessRequestRecommendation implements ShouldQueue
     private function deriveRollupStatus(array $recommendations): RequestStatus
     {
         $statuses = array_column($recommendations, 'status');
-        $uniqueStatuses = array_unique(array_map(fn($s) => $s->value, $statuses));
+        $uniqueStatuses = array_values(array_unique(array_map(fn ($s) => $s->value, $statuses)));
 
         if (in_array(RequestStatus::DENIED->value, $uniqueStatuses, true)) {
             return RequestStatus::DENIED;
         }
 
-        if (count($uniqueStatuses) === 1 && $uniqueStatuses[0] === RequestStatus::APPROVED->value) {
-            return RequestStatus::APPROVED;
+        if (count($uniqueStatuses) === 1) {
+            return RequestStatus::from($uniqueStatuses[0]);
         }
 
         $nonDeniedAllowed = [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value];
@@ -95,11 +99,7 @@ class ProcessRequestRecommendation implements ShouldQueue
             return RequestStatus::CONDITIONALLY_APPROVED;
         }
 
-        if (count($uniqueStatuses) > 1) {
-            return RequestStatus::PARTIALLY_APPROVED;
-        }
-
-        return RequestStatus::PENDING;
+        return RequestStatus::PARTIALLY_APPROVED;
     }
 
     private function deriveRollupReason(array $recommendations): string

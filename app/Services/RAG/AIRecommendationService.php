@@ -6,11 +6,14 @@ use App\Enums\RequestStatus;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\Rule;
+use App\Services\AI\EmbeddingService;
 use App\Services\AI\OpenRouterClient;
+use Illuminate\Support\Collection;
+use Pgvector\Laravel\Vector;
 
 class AIRecommendationService
 {
-    public function __construct(protected OpenRouterClient $ai) {}
+    public function __construct(protected OpenRouterClient $ai, protected EmbeddingService $embedder) {}
 
     /**
      * Evaluate each RequestFacility in isolation and return a map of results.
@@ -54,11 +57,7 @@ class AIRecommendationService
         $facilityContext = $this->buildRequestContext($request, $rf);
         $ruleLimit = (int) config('ai.recommendation.rule_limit', 10);
 
-        $relevantRules = Rule::policy()
-            ->orderBy('priority')
-            ->orderBy('id')
-            ->limit(max($ruleLimit, 1))
-            ->get();
+        $relevantRules = $this->retrieveRelevantRules($request, $rf, $ruleLimit);
 
         if ($relevantRules->isEmpty()) {
             return $this->fallbackForFacility($rf);
@@ -122,6 +121,60 @@ PROMPT;
         ], ['timeout' => config('ai.recommendation.timeout', 120)]);
 
         return $this->parseResponse($raw);
+    }
+
+    /**
+     * Retrieve the rules to apply for this RequestFacility.
+     *
+     * When vector search is enabled, the facility context is embedded and the
+     * top-K most semantically similar policy rules are returned via pgvector
+     * cosine distance. Otherwise (or if embedding fails / no embeddings exist
+     * yet) it falls back to the original priority-ordered selection so behavior
+     * is unchanged until embeddings are available.
+     */
+    private function retrieveRelevantRules(FacilityRequest $request, RequestFacility $rf, int $ruleLimit): Collection
+    {
+        $limit = max($ruleLimit, 1);
+
+        if (! $this->useVectorSearch()) {
+            return $this->priorityRules($limit);
+        }
+
+        try {
+            $queryText = $this->buildRequestContext($request, $rf);
+            $vector = new Vector($this->embedder->embed($queryText));
+
+            $rules = Rule::query()
+                ->policy()
+                ->join('rule_embeddings', 'rule_embeddings.rule_id', '=', 'rules.id')
+                ->select('rules.*')
+                ->orderByRaw('rule_embeddings.embedding <=> ?', [$vector])
+                ->limit($limit)
+                ->get();
+
+            if ($rules->isNotEmpty()) {
+                return $rules;
+            }
+        } catch (\Throwable $e) {
+            \Log::warning("AIRecommendationService: vector retrieval failed for RequestFacility#{$rf->id}, falling back to priority rules: ".$e->getMessage());
+        }
+
+        return $this->priorityRules($limit);
+    }
+
+    private function priorityRules(int $limit): Collection
+    {
+        return Rule::policy()
+            ->orderBy('priority')
+            ->orderBy('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    private function useVectorSearch(): bool
+    {
+        return $this->embedder->isConfigured()
+            && config('database.default') === 'pgsql';
     }
 
     /**

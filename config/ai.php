@@ -31,4 +31,11 @@ return [
         'rule_limit' => (int) env('AI_RECOMMENDATION_RULE_LIMIT', 10),
         'timeout' => (int) env('AI_RECOMMENDATION_TIMEOUT', 180),
     ],
+
+    'embedding' => [
+        // When empty, vector search is disabled and the app keeps the
+        // priority-ordered rule selection it used before pgvector support.
+        'model' => env('NVIDIA_EMBED_MODEL', ''),
+        'dimensions' => (int) env('EMBED_DIMENSIONS', 2048),
+    ],
 ];
