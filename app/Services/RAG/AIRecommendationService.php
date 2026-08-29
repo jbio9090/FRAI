@@ -119,7 +119,7 @@ PROMPT;
                 'role' => 'user',
                 'content' => $prompt,
             ],
-        ]);
+        ], ['timeout' => config('ai.recommendation.timeout', 120)]);
 
         return $this->parseResponse($raw);
     }

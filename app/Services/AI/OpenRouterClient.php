@@ -31,6 +31,10 @@ class OpenRouterClient
             'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
         ];
 
+        if ($this->providerName() === 'nvidia') {
+            $payload['chat_template_kwargs'] = ['enable_thinking' => false];
+        }
+
         $request = Http::timeout($timeout)
             ->withToken($apiKey)
             ->withHeaders(array_filter([
@@ -100,6 +104,10 @@ class OpenRouterClient
             'temperature' => (float) ($options['temperature'] ?? config('ai.generate.temperature', 0.1)),
             'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
         ];
+
+        if ($this->providerName() === 'nvidia') {
+            $payload['chat_template_kwargs'] = ['enable_thinking' => false];
+        }
 
         $client = new Client([
             'timeout' => $timeout,

@@ -29,5 +29,6 @@ return [
 
     'recommendation' => [
         'rule_limit' => (int) env('AI_RECOMMENDATION_RULE_LIMIT', 10),
+        'timeout' => (int) env('AI_RECOMMENDATION_TIMEOUT', 180),
     ],
 ];
