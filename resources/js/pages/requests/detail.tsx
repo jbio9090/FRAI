@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Spinner } from '@/components/ui/spinner';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
@@ -143,7 +144,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
         return (
             <DefaultLayout>
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    <Spinner size="sm" />
                     Loading request...
                 </div>
             </DefaultLayout>
@@ -592,7 +593,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     <TabsContent value="activity" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
                         {logsLoading ? (
                             <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                <Spinner size="sm" className="size-3.5" />
                                 Loading activity...
                             </div>
                         ) : (

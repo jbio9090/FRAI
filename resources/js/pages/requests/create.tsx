@@ -54,6 +54,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         existingFiles,
         equipmentConflicts,
         equipmentAvailability,
+        checkingConflicts,
         editingIndex,
 
         // alternatives
@@ -180,6 +181,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         hasOutsiders={hasOutsiders}
                                         setHasOutsiders={setHasOutsiders}
                                         scheduleConflicts={scheduleConflicts}
+                                        checkingConflicts={checkingConflicts}
                                         alternatives={alternatives}
                                         alternativesLoading={alternativesLoading}
                                         alternativesError={alternativesError}

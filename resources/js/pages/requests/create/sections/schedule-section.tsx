@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { AlternativesPanel } from '../components/AlternativesPanel';
 import type { BookingSchedule } from '../types';
@@ -32,6 +33,7 @@ interface ScheduleSectionProps {
     hasOutsiders: boolean;
     setHasOutsiders: (value: boolean) => void;
     scheduleConflicts: BookingSchedule[];
+    checkingConflicts: boolean;
 
     // Alternatives (for mobile/tablet inline rendering)
     alternatives?: Record<number, AlternativeSlot[]>;
@@ -63,6 +65,7 @@ export function ScheduleSection({
     hasOutsiders,
     setHasOutsiders,
     scheduleConflicts,
+    checkingConflicts,
     alternatives,
     alternativesLoading,
     alternativesError,
@@ -187,6 +190,13 @@ export function ScheduleSection({
                         </Label>
                     </div>
                 </div>
+
+                {checkingConflicts && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Spinner size="sm" />
+                        <span>Checking for conflicts…</span>
+                    </div>
+                )}
 
                 {scheduleConflicts.length > 0 && (
                     <Alert className="border-[var(--ads-amber)]/50 text-[var(--ads-amber)]">
