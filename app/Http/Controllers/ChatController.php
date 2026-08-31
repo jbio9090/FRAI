@@ -29,11 +29,16 @@ class ChatController extends Controller
 {
     private const SESSION_TTL_MINUTES = 15;
 
+    protected PageContextService $pageContextService;
+
     public function __construct(
         protected ChatbotLogService $chatbotLogService,
         protected FaqMatchingService $faqMatchingService,
-        protected OpenRouterClient $ai
-    ) {}
+        protected OpenRouterClient $ai,
+        PageContextService $pageContextService
+    ) {
+        $this->pageContextService = $pageContextService;
+    }
 
     private function sessionCacheKey(): string
     {
@@ -176,6 +181,137 @@ class ChatController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Process potential tool calls from the AI model.
+     * For thinking models that support tool use, parse the message for tool call format.
+     * Returns the assistant reply content, or null if no tool call was detected.
+     */
+    private function getContextAwareSystemPrompt(): string
+    {
+        return <<'SYMTPROMPT'
+You are an AI assistant for the PLV-GSO Facility Request System. You have access to a tool called `get_context` that can retrieve information about the current page/facility context.
+
+When users ask questions about:
+- Facility availability, bookings, or scheduling
+- Equipment availability or assignments
+- Request status or details
+- Rules, policies, or FAQ topics
+- Any system-specific knowledge about facilities, equipment, or requests
+
+You MUST call the `get_context` tool first to get the current page context before answering. The tool returns structured information about:
+1. Available facilities (ID, name, building, capacity)
+2. Equipment and their assignments
+3. Recent requests
+4. Active rules/FAQ entries
+5. Current selected facility/equipment/request
+
+After calling `get_context`, use the returned information to provide accurate, contextual answers. If the user's question doesn't require page context, you can answer directly without calling the tool.
+
+Format your tool call as a JSON object in your messages:
+{"name": "get_context", "arguments": {"page": true}}
+
+After receiving the tool response, incorporate the context into your answer naturally, citing facility IDs, equipment names, request details, or rule information as relevant to the user's question.
+
+Keep your answers conversational and helpful. Do not cite the tool call or context data unless directly relevant to answering the user's question.
+SYMTPROMPT;
+    }
+
+    private function processToolCalls(array $messages, array $incomingMessages): ?string
+    {
+        // Check the most recent message for tool call patterns
+        $combinedMessages = array_merge($messages, $incomingMessages);
+        $recentMessage = end(array_values($combinedMessages));
+
+        if (! $recentMessage) {
+            return null;
+        }
+
+        $content = (string) ($recentMessage['content'] ?? '');
+
+        if ($content === '') {
+            return null;
+        }
+
+        // Check for JSON tool call format: {"name": "get_context", "arguments": {...}}
+        if (preg_match('/\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*\{(.*?)\}\s*\}/s', $content, $matches)) {
+            $toolName = $matches[1];
+            $argumentsStr = '{'.$matches[2].'}';
+            $arguments = json_decode($argumentsStr, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && $toolName === 'get_context') {
+                // Determine if we should fetch page context
+                $fetchPageContext = isset($arguments['page']) ? (bool) $arguments['page'] : true;
+
+                if ($fetchPageContext) {
+                    // Get the current page context using our service
+                    $context = $this->pageContextService->getCurrentPageContext();
+
+                    // Format the context for the AI to read
+                    $contextText = "Here is the current page context:\n\n";
+                    $contextText .= "FACILITIES:\n";
+                    foreach ($context['facilities'] as $facility) {
+                        $contextText .= "- ID: {$facility['id']}, Name: {$facility['name']}, Building: {$facility['building']}, Capacity: {$facility['capacity']}\n";
+                    }
+
+                    $contextText .= "\nEQUIPMENT:\n";
+                    foreach ($context['equipment'] as $equipment) {
+                        $contextText .= "- ID: {$equipment['id']}, Name: {$equipment['name']}, Quantity: {$equipment['quantity']}\n";
+                    }
+
+                    $contextText .= "\nRECENT REQUESTS:\n";
+                    foreach ($context['requests'] as $request) {
+                        $contextText .= "- #{$request['id']}: {$request['title']} ({$request['status']}) - Created: {$request['created_at']}\n";
+                    }
+
+                    $contextText .= "\nRULES/FAQ:\n";
+                    foreach (array_slice($context['rules'], 0, 5) as $rule) {
+                        $contextText .= "- Rule ID: {$rule['id']}: {$rule['rule']}\n";
+                    }
+
+                    $contextText .= "\nCURRENT FACILITY: ".($context['current_facility']?: 'None')."\n";
+                    $contextText .= "CURRENT EQUIPMENT: ".($context['current_equipment']?: 'None')."\n";
+                    $contextText .= "CURRENT REQUEST: ".($context['current_request']?: 'None')."\n";
+
+                    return $contextText;
+                }
+            }
+        }
+
+        // Check for [TOOL_CALL:get_context] marker format
+        if (str_contains($content, '[TOOL_CALL:get_context]')) {
+            $context = $this->pageContextService->getCurrentPageContext();
+
+            $contextText = "Here is the current page context:\n\n";
+            $contextText .= "FACILITIES:\n";
+            foreach ($context['facilities'] as $facility) {
+                $contextText .= "- ID: {$facility['id']}, Name: {$facility['name']}, Building: {$facility['building']}, Capacity: {$facility['capacity']}\n";
+            }
+
+            $contextText .= "\nEQUIPMENT:\n";
+            foreach ($context['equipment'] as $equipment) {
+                $contextText .= "- ID: {$equipment['id']}, Name: {$equipment['name']}, Quantity: {$equipment['quantity']}\n";
+            }
+
+            $contextText .= "\nRECENT REQUESTS:\n";
+            foreach ($context['requests'] as $request) {
+                $contextText .= "- #{$request['id']}: {$request['title']} ({$request['status']}) - Created: {$request['created_at']}\n";
+            }
+
+            $contextText .= "\nRULES/FAQ:\n";
+            foreach (array_slice($context['rules'], 0, 5) as $rule) {
+                $contextText .= "- Rule ID: {$rule['id']}: {$rule['rule']}\n";
+            }
+
+            $contextText .= "\nCURRENT FACILITY: ".($context['current_facility']?: 'None')."\n";
+            $contextText .= "CURRENT EQUIPMENT: ".($context['current_equipment']?: 'None')."\n";
+            $contextText .= "CURRENT REQUEST: ".($context['current_request']?: 'None')."\n";
+
+            return $contextText;
+        }
+
+        return null; // No tool call detected
     }
 
     private function extractFacilityAndDateFromMessage(?string $message, $facilities): array
@@ -1960,15 +2096,20 @@ class ChatController extends Controller
             $sessionMessages = $this->loadSession();
             $messages = array_merge($sessionMessages, $incomingMessages);
 
-            $assistantReply = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
+            $assistantReply = $this->processToolCalls($messages, $incomingMessages);
 
-            if ($assistantReply === '') {
-                return response()->json([
-                    'message' => [
-                        'role' => 'assistant',
-                        'content' => 'I did not receive a response from the AI provider.',
-                    ],
-                ], 500);
+            if ($assistantReply === null) {
+                // No tool calls, proceed with normal AI chat
+                $assistantReply = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
+
+                if ($assistantReply === '') {
+                    return response()->json([
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => 'I did not receive a response from the AI provider.',
+                        ],
+                    ], 500);
+                }
             }
 
             $finalMessages = array_merge($messages, [[
@@ -2017,6 +2158,104 @@ class ChatController extends Controller
         $response = $this->chat($request);
         $payload = $response->getData(true);
         $content = $payload['message']['content'] ?? 'I did not receive a response from the AI provider.';
+    public function chat(Request $request): JsonResponse
+    {
+        try {
+            $incomingMessages = $request->input('messages', []);
+            $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
+
+            if (! is_string($latestUserMessage) || trim($latestUserMessage) === '') {
+                return response()->json([
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => 'Please type a message to start chatting.',
+                    ],
+                ], 422);
+            }
+
+            $sessionMessages = $this->loadSession();
+            $messages = array_merge($sessionMessages, $incomingMessages);
+
+            // Prepend system prompt that instructs the AI to use the get_context tool
+            $systemPrompt = $this->getContextAwareSystemPrompt();
+
+            // Build messages with system prompt first, then session messages, then incoming messages
+            $allMessages = [];
+
+            // Add system prompt as first message
+            $allMessages[] = [
+                'role' => 'system',
+                'content' => $systemPrompt,
+            ];
+
+            // Add session messages (if any)
+            if (isset($messages[0]['role'])) {
+                $allMessages = array_merge($allMessages, $messages);
+            } else {
+                $allMessages = array_merge($allMessages, [['role' => 'assistant', 'content' => '']], $messages);
+            }
+
+            // Process potential tool calls from the AI model using the augmented messages
+            $assistantReply = $this->processToolCalls($allMessages, $incomingMessages);
+
+            if ($assistantReply === null) {
+                // No tool calls, proceed with normal AI chat using the augmented messages
+                $aiMessages = array_merge([
+                    ['role' => 'system', 'content' => $systemPrompt],
+                ], $messages, $incomingMessages);
+
+                $assistantReply = trim((string) $this->ai->chat($aiMessages, ['timeout' => 120]));
+
+                if ($assistantReply === '') {
+                    return response()->json([
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => 'I did not receive a response from the AI provider.',
+                        ],
+                    ], 500);
+                }
+            }
+
+            $finalMessages = array_merge($messages, [[
+                'role' => 'assistant',
+                'content' => $assistantReply,
+            ]]);
+
+            $this->saveSession(array_values(array_filter($finalMessages, function ($message) {
+                if (! is_array($message)) {
+                    return false;
+                }
+
+                $role = $message['role'] ?? null;
+                $content = $message['content'] ?? null;
+
+                return in_array($role, ['user', 'assistant'], true)
+                    && is_string($content)
+                    && trim($content) !== '';
+            }));
+
+            return response()->json([
+                'message' => [
+                    'role' => 'assistant',
+                    'content' => $assistantReply,
+                ],
+            ]);
+        } catch (\RuntimeException $e) {
+            \Log::error('Chat error: '.$e->getMessage());
+
+            return response()->json([
+                'error' => 'Failed to connect to the configured AI provider',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        } catch (\Exception $e) {
+            \Log::error('Chat error: '.$e->getMessage());
+
+            return response()->json([
+                'error' => 'Failed to process chat request',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
+        }
+    }
 
         return response()->stream(function () use ($content) {
             echo "data: ".json_encode([

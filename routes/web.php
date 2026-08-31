@@ -151,6 +151,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/chatbot-logs', [ChatbotLogController::class, 'index'])->name('chatbot.logs.index');
     });
 
+    // Context tool for AI - returns page context objects
+    Route::get('/api/page-context', [\App\Http\Controllers\PageContextController::class, 'index'])->name('api.page.context');
+
     Route::middleware('permission:manage facilities')->group(function () {
         Route::put('/facilities/{facility}', [FacilityController::class, 'update'])->name('facility.update');
         Route::post('/facilities', [FacilityController::class, 'store'])->name('facility.store');
