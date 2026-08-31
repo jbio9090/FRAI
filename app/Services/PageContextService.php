@@ -6,7 +6,6 @@ use App\Models\Equipment;
 use App\Models\Facility;
 use App\Models\Rule as RuleModel;
 use App\Models\Request as RequestModel;
-use Illuminate\Support\Str;
 
 class PageContextService
 {
@@ -49,8 +48,6 @@ class PageContextService
         return Facility::select('id', 'name', 'building', 'capacity')
             ->orderBy('name', 'asc')
             ->get()
-            ->keyBy('id')
-            ->only(['id', 'name', 'building', 'capacity'])
             ->toArray();
     }
 
@@ -62,8 +59,6 @@ class PageContextService
         return Equipment::select('id', 'name', 'quantity')
             ->orderBy('name', 'asc')
             ->get()
-            ->keyBy('id')
-            ->only(['id', 'name', 'quantity'])
             ->toArray();
     }
 
@@ -103,8 +98,6 @@ class PageContextService
             ->orderBy('id', 'asc')
             ->take(20)
             ->get()
-            ->keyBy('id')
-            ->only(['id', 'rule', 'faq_answer'])
             ->toArray();
     }
 

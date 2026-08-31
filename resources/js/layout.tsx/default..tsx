@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react';
 import React, { useEffect } from 'react';
 import { toast } from 'sonner';
 import { AppSidebar } from '@/components/app-sidebar';
+import Chatbot from '@/components/chatbot';
 import ThemeToggle from '@/components/theme-toggle';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
@@ -154,6 +155,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                     }}
                     position="top-right"
                 />
+                <Chatbot />
             </SidebarInset>
         </SidebarProvider>
     );

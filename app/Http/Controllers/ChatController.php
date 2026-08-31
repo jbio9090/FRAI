@@ -11,6 +11,7 @@ use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
 use App\Services\AI\OpenRouterClient;
 use App\Services\ChatbotLogService;
+use App\Services\PageContextService;
 use App\Services\RAG\FaqMatchingService;
 use App\Services\RequestSettingsService;
 use Illuminate\Http\JsonResponse;
@@ -190,7 +191,7 @@ class ChatController extends Controller
      */
     private function getContextAwareSystemPrompt(): string
     {
-        return <<'SYMTPROMPT'
+        return <<<'SYMTPROMPT'
 You are an AI assistant for the PLV-GSO Facility Request System. You have access to a tool called `get_context` that can retrieve information about the current page/facility context.
 
 When users ask questions about:
@@ -2158,104 +2159,6 @@ SYMTPROMPT;
         $response = $this->chat($request);
         $payload = $response->getData(true);
         $content = $payload['message']['content'] ?? 'I did not receive a response from the AI provider.';
-    public function chat(Request $request): JsonResponse
-    {
-        try {
-            $incomingMessages = $request->input('messages', []);
-            $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
-
-            if (! is_string($latestUserMessage) || trim($latestUserMessage) === '') {
-                return response()->json([
-                    'message' => [
-                        'role' => 'assistant',
-                        'content' => 'Please type a message to start chatting.',
-                    ],
-                ], 422);
-            }
-
-            $sessionMessages = $this->loadSession();
-            $messages = array_merge($sessionMessages, $incomingMessages);
-
-            // Prepend system prompt that instructs the AI to use the get_context tool
-            $systemPrompt = $this->getContextAwareSystemPrompt();
-
-            // Build messages with system prompt first, then session messages, then incoming messages
-            $allMessages = [];
-
-            // Add system prompt as first message
-            $allMessages[] = [
-                'role' => 'system',
-                'content' => $systemPrompt,
-            ];
-
-            // Add session messages (if any)
-            if (isset($messages[0]['role'])) {
-                $allMessages = array_merge($allMessages, $messages);
-            } else {
-                $allMessages = array_merge($allMessages, [['role' => 'assistant', 'content' => '']], $messages);
-            }
-
-            // Process potential tool calls from the AI model using the augmented messages
-            $assistantReply = $this->processToolCalls($allMessages, $incomingMessages);
-
-            if ($assistantReply === null) {
-                // No tool calls, proceed with normal AI chat using the augmented messages
-                $aiMessages = array_merge([
-                    ['role' => 'system', 'content' => $systemPrompt],
-                ], $messages, $incomingMessages);
-
-                $assistantReply = trim((string) $this->ai->chat($aiMessages, ['timeout' => 120]));
-
-                if ($assistantReply === '') {
-                    return response()->json([
-                        'message' => [
-                            'role' => 'assistant',
-                            'content' => 'I did not receive a response from the AI provider.',
-                        ],
-                    ], 500);
-                }
-            }
-
-            $finalMessages = array_merge($messages, [[
-                'role' => 'assistant',
-                'content' => $assistantReply,
-            ]]);
-
-            $this->saveSession(array_values(array_filter($finalMessages, function ($message) {
-                if (! is_array($message)) {
-                    return false;
-                }
-
-                $role = $message['role'] ?? null;
-                $content = $message['content'] ?? null;
-
-                return in_array($role, ['user', 'assistant'], true)
-                    && is_string($content)
-                    && trim($content) !== '';
-            }));
-
-            return response()->json([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => $assistantReply,
-                ],
-            ]);
-        } catch (\RuntimeException $e) {
-            \Log::error('Chat error: '.$e->getMessage());
-
-            return response()->json([
-                'error' => 'Failed to connect to the configured AI provider',
-                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-            ], 500);
-        } catch (\Exception $e) {
-            \Log::error('Chat error: '.$e->getMessage());
-
-            return response()->json([
-                'error' => 'Failed to process chat request',
-                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
-            ], 500);
-        }
-    }
 
         return response()->stream(function () use ($content) {
             echo "data: ".json_encode([

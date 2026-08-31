@@ -1,5 +1,4 @@
 import AddIcon from '@atlaskit/icon/core/add';
-import AiSparkleIcon from '@atlaskit/icon/core/ai-sparkle';
 import BookWithBookmarkIcon from '@atlaskit/icon/core/book-with-bookmark';
 import CheckCircleIcon from '@atlaskit/icon/core/check-circle';
 import CheckMarkIcon from '@atlaskit/icon/core/check-mark';
@@ -19,7 +18,6 @@ import SettingsIcon from '@atlaskit/icon/core/settings';
 import { Link, router, usePage } from '@inertiajs/react';
 import * as React from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
-import ChatbotSessionModal from '@/components/ChatbotSessionModal';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
     DropdownMenu,
@@ -52,7 +50,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { hasPermission } = usePermission();
     const { auth } = usePage<SharedData>().props;
     const hasUnreadNotifications = Number(auth.user?.notification_unread_count ?? 0) > 0;
-    const [isChatbotModalOpen, setIsChatbotModalOpen] = React.useState(false);
 
     const data = {
         topNav: [
@@ -132,18 +129,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 <AddIcon label="Create Request" color="currentColor" />
                                 <span className="group-data-[collapsible=icon]:hidden">Create Request</span>
                             </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    {/* Chatbot */}
-                    <SidebarMenuItem className={`px-2 ${iconRailItem}`}>
-                        <SidebarMenuButton
-                            tooltip="Chatbot"
-                            className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/80 hover:text-primary-foreground dark:text-foreground"
-                            onClick={() => setIsChatbotModalOpen(true)}
-                        >
-                            <AiSparkleIcon label="Chatbot" color="currentColor" />
-                            <span className="group-data-[collapsible=icon]:hidden">Chatbot</span>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
@@ -265,8 +250,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarFooter>
 
             <SidebarRail />
-
-            <ChatbotSessionModal isOpen={isChatbotModalOpen} onClose={() => setIsChatbotModalOpen(false)} />
         </Sidebar>
     );
 }
