@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
-import { MessageCircle, X } from 'lucide-react';
+import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
 import ChatInput from './components/ChatInput';
 import MessageList from './components/MessageList';
 import { useChatAPI } from './hooks/useChatAPI';
@@ -12,8 +12,13 @@ export default function Chatbot() {
     const [error, setError] = useState<string | null>(null);
     const [isInitializing, setIsInitializing] = useState(true);
     const [isOpen, setIsOpen] = useState(false);
+    const [isContextOpen, setIsContextOpen] = useState(false);
+    const [contextOutput, setContextOutput] = useState<unknown>(null);
+    const [contextError, setContextError] = useState<string | null>(null);
+    const [isContextLoading, setIsContextLoading] = useState(false);
     const { messages, addMessage, setMessages, clearMessages } = useMessages();
     const { isLoading, sendMessage } = useChatAPI();
+    const devMode = new URLSearchParams(window.location.search).has('devmode');
 
     useEffect(() => {
         const loadSession = async () => {
@@ -48,6 +53,34 @@ export default function Chatbot() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isLoading]);
+
+    const loadContext = async () => {
+        setIsContextLoading(true);
+        setContextError(null);
+
+        try {
+            const response = await fetch(route('api.page.context'), {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                    'X-Page-URL': window.location.href,
+                },
+                credentials: 'same-origin',
+            });
+            const payload = (await response.json()) as { context?: unknown; message?: string };
+
+            if (!response.ok) {
+                throw new Error(payload.message ?? `Unable to load context (${response.status}).`);
+            }
+
+            setContextOutput(payload.context ?? payload);
+        } catch (err) {
+            setContextError(err instanceof Error ? err.message : 'Unable to load page context.');
+        } finally {
+            setIsContextLoading(false);
+        }
+    };
 
     const handleSend = async () => {
         const trimmed = input.trim();
@@ -125,6 +158,38 @@ export default function Chatbot() {
 
     return (
         <div className="fixed right-4 bottom-4 z-[110] flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
+            {devMode && isContextOpen ? (
+                <section className="flex h-[min(560px,calc(100vh-8rem))] w-[min(560px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-amber-300 bg-slate-950 text-slate-100 shadow-2xl">
+                    <header className="flex items-center justify-between gap-3 border-b border-amber-300/30 bg-amber-300/10 px-4 py-3">
+                        <div>
+                            <p className="text-xs font-semibold tracking-[0.2em] text-amber-300 uppercase">Developer mode</p>
+                            <h2 className="text-sm font-semibold">Current page context</h2>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() => void loadContext()}
+                                disabled={isContextLoading}
+                                aria-label="Refresh page context"
+                                className="rounded-full p-1.5 hover:bg-white/10 disabled:opacity-50"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isContextLoading ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsContextOpen(false)}
+                                aria-label="Close context viewer"
+                                className="rounded-full p-1.5 hover:bg-white/10"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </header>
+                    <pre className="min-h-0 flex-1 overflow-auto p-4 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                        {isContextLoading ? 'Loading context…' : (contextError ?? JSON.stringify(contextOutput, null, 2))}
+                    </pre>
+                </section>
+            ) : null}
             {isOpen ? (
                 <section
                     aria-label="FRAI AI Assistant"
@@ -194,6 +259,20 @@ export default function Chatbot() {
                         />
                     </div>
                 </section>
+            ) : null}
+            {devMode ? (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setIsContextOpen((open) => !open);
+                        if (!isContextOpen && contextOutput === null) void loadContext();
+                    }}
+                    aria-label="Open page context developer viewer"
+                    aria-expanded={isContextOpen}
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-400 text-slate-950 shadow-lg ring-4 ring-amber-400/20 transition hover:scale-105 hover:bg-amber-300 focus-visible:ring-4 focus-visible:ring-amber-300/40 focus-visible:outline-none"
+                >
+                    <Braces className="h-5 w-5" />
+                </button>
             ) : null}
             <button
                 type="button"

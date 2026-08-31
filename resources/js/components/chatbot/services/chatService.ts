@@ -1,5 +1,6 @@
 import type { ChatRequest } from '../types';
 import { getCsrfToken } from '../utils/csrfToken';
+import { collectPageContext } from '../utils/pageContext';
 
 function extractBookingPayloadFromText(content: string): string | null {
     let depth = 0;
@@ -65,7 +66,7 @@ export async function sendChatMessage(payload: ChatRequest): Promise<{
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, page_context: collectPageContext() }),
     });
 
     if (response.status === 419) {

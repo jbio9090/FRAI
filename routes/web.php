@@ -172,6 +172,7 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('/chat')->group(function () {
         Route::post('/', [ChatController::class, 'chat'])->name('api.chat')->middleware(['throttle:60,1']);
+        Route::get('/facilities', [ChatController::class, 'facilitiesList'])->name('chat.facilities');
         Route::get('/equipment', [ChatController::class, 'equipmentList'])->name('chat.equipment');
         Route::get('/session', [ChatController::class, 'getSession'])->name('chat.session.get');
         Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');

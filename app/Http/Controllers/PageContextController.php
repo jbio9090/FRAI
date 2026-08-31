@@ -4,13 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Services\PageContextService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Session;
+use Illuminate\Http\Request;
 
 class PageContextController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $context = app(PageContextService::class)->getCurrentPageContext();
+        $context = app(PageContextService::class)->getCurrentPageContext($request->input('page_context'));
 
         return response()->json([
             'success' => true,

@@ -13,6 +13,7 @@ export interface AttachedFileInfo {
 
 export interface ChatRequest {
     messages: Message[];
+    page_context?: Record<string, unknown>;
     participant_count?: number;
     booking_context?: string;
     faq_mode?: boolean;

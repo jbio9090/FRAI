@@ -16,29 +16,287 @@ class PageContextService
      *
      * @return array Structured context objects
      */
-    public function getCurrentPageContext(): array
+    public function getCurrentPageContext(?array $clientContext = null): array
     {
-        $context = [];
-        $context['page'] = $this->getPageObject();
+        $page = $clientContext ?: $this->getPageObject();
+        $routeName = $page['route'] ?? $this->resolveCurrentRouteName();
 
-        // Get all facilities for reference
-        $context['facilities'] = $this->getFacilities();
+        $context = [
+            'page' => $page,
+            'facilities' => [],
+            'equipment' => [],
+            'requests' => [],
+            'rules' => [],
+            'current_facility' => $this->getCurrentFacility(),
+            'current_equipment' => $this->getCurrentEquipment(),
+            'current_request' => $this->getCurrentRequest(),
+        ];
 
-        // Get all equipment for reference
-        $context['equipment'] = $this->getEquipment();
+        $pageSpecificContext = $this->getPageSpecificContext($routeName, $page);
 
-        // Get recent/active requests
-        $context['requests'] = $this->getRecentRequests();
+        return array_merge($context, $pageSpecificContext);
+    }
 
-        // Get rules/FAQ entries
-        $context['rules'] = $this->getRules();
+    private function resolveCurrentRouteName(): ?string
+    {
+        return request()->route()?->getName();
+    }
 
-        // Determine current active facility/page
-        $context['current_facility'] = $this->getCurrentFacility();
-        $context['current_equipment'] = $this->getCurrentEquipment();
-        $context['current_request'] = $this->getCurrentRequest();
+    private function getPageSpecificContext(?string $routeName, array $page): array
+    {
+        $path = $page['path'] ?? parse_url(request()->header('X-Page-URL', request()->fullUrl()), PHP_URL_PATH) ?: '/';
+
+        $context = [
+            'facilities' => [],
+            'equipment' => [],
+            'requests' => [],
+            'rules' => [],
+        ];
+
+        if (in_array($routeName, ['dashboard'], true)) {
+            return $this->dashboardPageContext();
+        }
+
+        if (in_array($routeName, ['rules'], true)) {
+            return $this->rulesPageContext();
+        }
+
+        if (in_array($routeName, ['facilities'], true)) {
+            return $this->facilitiesPageContext();
+        }
+
+        if (in_array($routeName, ['facility.detail'], true) || preg_match('#^/facilities/(\d+)#', $path) === 1) {
+            $facilityId = request()->route('facility_id') ?? request()->route('facility');
+            if ($facilityId === null && preg_match('#^/facilities/(\d+)#', $path, $matches)) {
+                $facilityId = $matches[1];
+            }
+
+            return $this->facilityDetailPageContext($facilityId);
+        }
+
+        if (in_array($routeName, ['equipments'], true) || preg_match('#^/equipments#', $path) === 1) {
+            return $this->equipmentPageContext();
+        }
+
+        if (in_array($routeName, ['request.create'], true)) {
+            return $this->requestCreatePageContext();
+        }
+
+        if (in_array($routeName, ['requests.index'], true)) {
+            return $this->requestsPageContext(request()->query('status'));
+        }
+
+        if (in_array($routeName, ['requests.detail', 'requests.edit'], true) || preg_match('#^/requests/(\d+)(?:/|$)#', $path) === 1) {
+            $requestId = request()->route('request_id') ?? request()->route('request') ?? request()->route('id');
+            if ($requestId === null && preg_match('#^/requests/(\d+)(?:/|$)#', $path, $matches)) {
+                $requestId = $matches[1];
+            }
+
+            return $this->requestDetailPageContext($requestId);
+        }
+
+        if (in_array($routeName, ['settings'], true)) {
+            return $context;
+        }
+
+        if (in_array($routeName, ['request-options'], true)) {
+            return $context;
+        }
+
+        if (in_array($routeName, ['accounts.index'], true)) {
+            return $this->accountsPageContext();
+        }
+
+        if (in_array($routeName, ['chatbot.logs.index'], true)) {
+            return $this->chatbotLogsPageContext();
+        }
 
         return $context;
+    }
+
+    private function dashboardPageContext(): array
+    {
+        return [
+            'facilities' => $this->getFacilities(6),
+            'equipment' => $this->getEquipment(6),
+            'requests' => $this->getRecentRequests(6),
+            'rules' => $this->getRules(6),
+        ];
+    }
+
+    private function rulesPageContext(): array
+    {
+        return [
+            'rules' => $this->getRules(50),
+        ];
+    }
+
+    private function facilitiesPageContext(): array
+    {
+        return [
+            'facilities' => $this->getFacilities(50),
+        ];
+    }
+
+    private function facilityDetailPageContext(mixed $facilityId): array
+    {
+        if (! is_numeric($facilityId)) {
+            return [
+                'facilities' => [],
+                'equipment' => [],
+            ];
+        }
+
+        $facility = Facility::with(['facilityEquipments.equipment'])->find((int) $facilityId);
+        if (! $facility) {
+            return [
+                'facilities' => [],
+                'equipment' => [],
+            ];
+        }
+
+        return [
+            'facilities' => [[
+                'id' => $facility->id,
+                'name' => $facility->name,
+                'building' => $facility->building,
+                'capacity' => $facility->capacity,
+            ]],
+            'equipment' => $facility->facilityEquipments
+                ->map(fn ($facilityEquipment) => [
+                    'id' => $facilityEquipment->equipment?->id,
+                    'name' => $facilityEquipment->equipment?->name,
+                    'quantity' => $facilityEquipment->quantity,
+                ])
+                ->filter(fn ($equipment) => isset($equipment['id']))
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function equipmentPageContext(): array
+    {
+        return [
+            'equipment' => $this->getEquipment(50),
+        ];
+    }
+
+    private function requestCreatePageContext(): array
+    {
+        return [
+            'facilities' => $this->getFacilities(50),
+            'equipment' => $this->getEquipment(50),
+        ];
+    }
+
+    private function requestsPageContext(?string $status): array
+    {
+        $query = RequestModel::with('requestFacilities.facility')
+            ->orderBy('created_at', 'desc');
+
+        if ($status !== null && $status !== '') {
+            $requestedStatuses = collect(explode(',', $status))
+                ->map(fn ($value) => trim((string) $value))
+                ->filter()
+                ->map(function (string $value) {
+                    $normalized = strtolower($value);
+
+                    return collect(\App\Enums\RequestStatus::cases())
+                        ->first(fn ($case) => strtolower($case->name) === $normalized || strtolower($case->value) === $normalized)
+                        ?->value;
+                })
+                ->filter()
+                ->values();
+
+            if ($requestedStatuses->isNotEmpty()) {
+                $query->whereIn('status', $requestedStatuses->all());
+            }
+        }
+
+        $requests = $query->take(20)->get()->map(fn ($request) => [
+            'id' => $request->id,
+            'title' => $request->title,
+            'status' => $request->status?->value ?? 'unknown',
+            'created_at' => $request->created_at?->toDateTimeString(),
+            'facilities' => $request->requestFacilities->map(fn ($facilityRequest) => [
+                'facility_id' => $facilityRequest->facility_id,
+                'facility_name' => $facilityRequest->facility?->name ?? 'unknown',
+            ])->toArray(),
+        ])->toArray();
+
+        return [
+            'requests' => $requests,
+        ];
+    }
+
+    private function requestDetailPageContext(mixed $requestId): array
+    {
+        if (! is_numeric($requestId)) {
+            return [
+                'requests' => [],
+                'facilities' => [],
+                'equipment' => [],
+            ];
+        }
+
+        $request = RequestModel::with(['requestFacilities.facility', 'equipment'])->find((int) $requestId);
+        if (! $request) {
+            return [
+                'requests' => [],
+                'facilities' => [],
+                'equipment' => [],
+            ];
+        }
+
+        $detail = [
+            'id' => $request->id,
+            'title' => $request->title,
+            'status' => $request->status?->value ?? 'unknown',
+            'created_at' => $request->created_at?->toDateTimeString(),
+            'updated_at' => $request->updated_at?->toDateTimeString(),
+        ];
+
+        return [
+            'requests' => [$detail],
+            'facilities' => $request->requestFacilities
+                ->map(fn ($requestFacility) => [
+                    'id' => $requestFacility->facility_id,
+                    'name' => $requestFacility->facility?->name ?? 'unknown',
+                ])
+                ->toArray(),
+            'equipment' => $request->equipment
+                ->map(fn ($equipment) => [
+                    'id' => $equipment->id,
+                    'name' => $equipment->name,
+                    'quantity' => $equipment->pivot?->quantity ?? $equipment->quantity,
+                ])
+                ->toArray(),
+        ];
+    }
+
+    private function accountsPageContext(): array
+    {
+        return [
+            'users' => \App\Models\User::select('id', 'name', 'email')->orderBy('name')->take(25)->get()->toArray(),
+        ];
+    }
+
+    private function chatbotLogsPageContext(): array
+    {
+        return [
+            'chatbot_logs' => \App\Models\ChatbotInteractionLog::with(['user:id,name', 'facilityRequest:id,title'])
+                ->latest()
+                ->take(20)
+                ->get()
+                ->map(fn ($log) => [
+                    'id' => $log->id,
+                    'user' => $log->user?->name,
+                    'status' => $log->status,
+                    'intent' => $log->intent,
+                    'created_at' => $log->created_at?->toDateTimeString(),
+                ])
+                ->toArray(),
+        ];
     }
 
     private function getPageObject(): array
@@ -110,7 +368,7 @@ class PageContextService
             return null;
         }
 
-        $facilityRequest = RequestModel::with('status')->find((int) $id);
+        $facilityRequest = RequestModel::find((int) $id);
 
         return $facilityRequest ? [
             'id' => $facilityRequest->id,
@@ -122,62 +380,75 @@ class PageContextService
     /**
      * Get all facilities with basic info.
      */
-    private function getFacilities(): array
+    private function getFacilities(?int $limit = null): array
     {
-        return Facility::select('id', 'name', 'building', 'capacity')
-            ->orderBy('name', 'asc')
-            ->get()
-            ->toArray();
+        $query = Facility::select('id', 'name', 'building', 'capacity')
+            ->orderBy('name', 'asc');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        return $query->get()->toArray();
     }
 
     /**
      * Get all equipment with basic info.
      */
-    private function getEquipment(): array
+    private function getEquipment(?int $limit = null): array
     {
-        return Equipment::select('id', 'name', 'quantity')
-            ->orderBy('name', 'asc')
-            ->get()
-            ->toArray();
+        $query = Equipment::select('id', 'name', 'quantity')
+            ->orderBy('name', 'asc');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        return $query->get()->toArray();
     }
 
     /**
      * Get recent requests with status info.
      */
-    private function getRecentRequests(): array
+    private function getRecentRequests(?int $limit = 10): array
     {
-        return RequestModel::with(['status', 'requestFacilities.facility'])
-            ->orderBy('created_at', 'desc')
-            ->take(10)
-            ->get()
-            ->map(fn ($r) => [
-                'id' => $r->id,
-                'title' => $r->title,
-                'status' => $r->status?->value ?? 'unknown',
-                'created_at' => $r->created_at->toDateTimeString(),
-                'facilities' => $r->requestFacilities->map(fn ($rf) => [
-                    'facility_id' => $rf->facility_id,
-                    'facility_name' => $rf->facility?->name ?? 'unknown',
-                    'status' => $rf->status ?? 'unknown',
-                ])->toArray(),
-            ])
-            ->toArray();
+        $query = RequestModel::with('requestFacilities.facility')
+            ->orderBy('created_at', 'desc');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        return $query->get()->map(fn ($r) => [
+            'id' => $r->id,
+            'title' => $r->title,
+            'status' => $r->status?->value ?? 'unknown',
+            'created_at' => $r->created_at?->toDateTimeString(),
+            'facilities' => $r->requestFacilities->map(fn ($rf) => [
+                'facility_id' => $rf->facility_id,
+                'facility_name' => $rf->facility?->name ?? 'unknown',
+                'status' => $rf->status ?? 'unknown',
+            ])->toArray(),
+        ])->toArray();
     }
 
     /**
      * Get all rules/FAQ entries.
      */
-    private function getRules(): array
+    private function getRules(?int $limit = 20): array
     {
-        return RuleModel::where('forPolicy', 1)
+        $query = RuleModel::where('forPolicy', 1)
             ->whereNotNull('faq_answer')
             ->whereRaw("TRIM(faq_answer) <> ''")
             ->select('id', 'rule', 'faq_answer')
             ->orderBy('priority', 'asc')
-            ->orderBy('id', 'asc')
-            ->take(20)
-            ->get()
-            ->toArray();
+            ->orderBy('id', 'asc');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        return $query->get()->toArray();
     }
 
     /**
@@ -229,7 +500,7 @@ class PageContextService
     {
         $sessionRequest = session()->get('current_request');
         if ($sessionRequest && is_numeric($sessionRequest)) {
-            $request = RequestModel::with('status')->find($sessionRequest);
+            $request = RequestModel::find($sessionRequest);
             if ($request) {
                 return [
                     'id' => $request->id,

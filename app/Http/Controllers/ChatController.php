@@ -2097,6 +2097,17 @@ SYMTPROMPT;
 
             $sessionMessages = $this->loadSession();
             $messages = array_merge($sessionMessages, $incomingMessages);
+            $messages = array_merge([[
+                'role' => 'system',
+                'content' => $this->getContextAwareSystemPrompt(),
+            ]], $messages);
+            $clientPageContext = $request->input('page_context');
+            if (is_array($clientPageContext)) {
+                $messages = array_merge([[
+                    'role' => 'system',
+                    'content' => "Visible browser page context (the user's current screen):\n".json_encode($clientPageContext, JSON_UNESCAPED_SLASHES),
+                ]], $messages);
+            }
 
             $assistantReply = $this->processToolCalls($messages, $incomingMessages);
 
@@ -2257,8 +2268,18 @@ SYMTPROMPT;
     {
         try {
             $limit = max(1, min(200, (int) $request->input('limit', 50)));
+            $minimumCapacity = $request->filled('min_capacity')
+                ? max(1, (int) $request->input('min_capacity'))
+                : null;
+            $search = trim((string) $request->input('search', ''));
 
-            $rows = Facility::orderBy('id', 'asc')
+            $rows = Facility::query()
+                ->when($minimumCapacity, fn ($query) => $query->where('capacity', '>=', $minimumCapacity))
+                ->when($search !== '', fn ($query) => $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('building', 'like', "%{$search}%");
+                }))
+                ->orderBy('id', 'asc')
                 ->limit($limit)
                 ->get(['id', 'name', 'building', 'capacity'])
                 ->map(fn ($f) => [
