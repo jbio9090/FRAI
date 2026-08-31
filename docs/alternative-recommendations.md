@@ -26,6 +26,7 @@ When a request is overridden by a higher-priority approved request and marked as
 ### Smart Filtering
 
 - **Capacity awareness**: Only shows facilities with `capacity >= expected_capacity`
+- **Duration matching**: Time-slot alternatives always keep the same duration as the original booking (`time_end` − `time_start`), sliding forward by the booking-window step within the window bounds
 - **Booking window compliance**: Respects global settings (allowed days, hours, step minutes)
 - **Minimum advance days**: Excludes dates too soon based on `min_advance_days` setting
 - **Higher-priority conflict exclusion**: Filters out slots that would conflict with higher-priority PENDING requests

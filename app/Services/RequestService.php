@@ -913,6 +913,7 @@ class RequestService
                         'borrowed_equipment' => $borrowedEquipment,
                         'conflicts' => $scheduleConflicts,
                         'has_outsiders' => (bool) $rf->has_outsiders,
+                        'request_facility_status' => $rf->status?->value,
                     ];
                 },
             )->values(),
