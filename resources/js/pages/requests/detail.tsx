@@ -237,22 +237,11 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                         <StatusTag requestStatus={request.status} />
 
                         <div className="ml-auto flex items-center gap-2">
-                            {canEdit && (
+                            {(request.user.id === auth.user.id) && (
                                 <Link href={route('requests.edit', request.id)}>
-                                    <Button variant="ghost" size="icon-sm" aria-label="Edit request">
+                                    <Button variant="ghost" size="sm" aria-label="Edit request">
                                         <Pen className="h-4 w-4" />
-                                    </Button>
-                                </Link>
-                            )}
-                            {canReschedule && (
-                                <Link href={route('requests.edit', request.id)}>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="gap-1.5 border-[var(--ads-amber)]/40 text-[var(--ads-amber)] hover:bg-[var(--ads-amber-bg)]"
-                                    >
-                                        <Calendar className="h-4 w-4" />
-                                        Reschedule
+                                        <span>{ canReschedule ? "Reschedule" : "Edit"}</span>
                                     </Button>
                                 </Link>
                             )}
