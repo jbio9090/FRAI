@@ -50,9 +50,7 @@ interface ChatJsonResponse {
     error?: string;
 }
 
-export async function sendChatMessage(
-    payload: ChatRequest,
-): Promise<{
+export async function sendChatMessage(payload: ChatRequest): Promise<{
     content: string;
     bookingPayload: string | null;
     deterministic: Record<string, unknown> | null;
@@ -64,6 +62,7 @@ export async function sendChatMessage(
             Accept: 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': getCsrfToken(),
+            'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
         body: JSON.stringify(payload),
@@ -103,12 +102,11 @@ export async function sendChatMessageStream(
     onDone: () => void,
     onError: (message: string) => void,
 ): Promise<void> {
-
     const response = await fetch(route('chat.stream'), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
+            Accept: 'text/event-stream',
             'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': getCsrfToken(),
         },
@@ -190,9 +188,7 @@ export async function sendChatMessageStream(
 
                 if (event.booking_payload) {
                     // event.booking_payload is already a string from the backend
-                    const payloadStr = typeof event.booking_payload === 'string' 
-                        ? event.booking_payload 
-                        : JSON.stringify(event.booking_payload);
+                    const payloadStr = typeof event.booking_payload === 'string' ? event.booking_payload : JSON.stringify(event.booking_payload);
                     bookingPayloadEmitted = true;
                     onBookingPayload(payloadStr);
                 }
@@ -217,7 +213,6 @@ export async function sendChatMessageStream(
                 if (event.error) {
                     onError(event.error);
                 }
-
             } catch {}
         }
     }

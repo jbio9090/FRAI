@@ -19,6 +19,7 @@ class PageContextService
     public function getCurrentPageContext(): array
     {
         $context = [];
+        $context['page'] = $this->getPageObject();
 
         // Get all facilities for reference
         $context['facilities'] = $this->getFacilities();
@@ -38,6 +39,84 @@ class PageContextService
         $context['current_request'] = $this->getCurrentRequest();
 
         return $context;
+    }
+
+    private function getPageObject(): array
+    {
+        $pageUrl = request()->header('X-Page-URL', request()->fullUrl());
+        $routeName = request()->route()?->getName();
+        $path = parse_url($pageUrl, PHP_URL_PATH) ?: '/';
+        $page = [
+            'url' => $pageUrl,
+            'path' => $path,
+            'route' => $routeName,
+        ];
+
+        $facilityId = request()->route('facility_id') ?? request()->route('facility');
+        $requestId = request()->route('request_id') ?? request()->route('request');
+        $equipmentId = request()->route('equipment');
+
+        if ($facilityId === null && preg_match('#/facilities/(\d+)#', $path, $matches)) {
+            $facilityId = $matches[1];
+        }
+        if ($requestId === null && preg_match('#/requests/(\d+)#', $path, $matches)) {
+            $requestId = $matches[1];
+        }
+        if ($equipmentId === null && preg_match('#/equipments/(\d+)#', $path, $matches)) {
+            $equipmentId = $matches[1];
+        }
+
+        $page['facility'] = $this->facilityObject($facilityId);
+        $page['request'] = $this->requestObject($requestId);
+        $page['equipment'] = $this->equipmentObject($equipmentId);
+
+        return $page;
+    }
+
+    private function facilityObject(mixed $id): ?array
+    {
+        if (! is_numeric($id)) {
+            return null;
+        }
+
+        $facility = Facility::find((int) $id);
+
+        return $facility ? [
+            'id' => $facility->id,
+            'name' => $facility->name,
+            'building' => $facility->building,
+            'capacity' => $facility->capacity,
+        ] : null;
+    }
+
+    private function equipmentObject(mixed $id): ?array
+    {
+        if (! is_numeric($id)) {
+            return null;
+        }
+
+        $equipment = Equipment::find((int) $id);
+
+        return $equipment ? [
+            'id' => $equipment->id,
+            'name' => $equipment->name,
+            'quantity' => $equipment->quantity,
+        ] : null;
+    }
+
+    private function requestObject(mixed $id): ?array
+    {
+        if (! is_numeric($id)) {
+            return null;
+        }
+
+        $facilityRequest = RequestModel::with('status')->find((int) $id);
+
+        return $facilityRequest ? [
+            'id' => $facilityRequest->id,
+            'title' => $facilityRequest->title,
+            'status' => $facilityRequest->status?->value ?? 'unknown',
+        ] : null;
     }
 
     /**

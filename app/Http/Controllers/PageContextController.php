@@ -10,8 +10,7 @@ class PageContextController extends Controller
 {
     public function index(): JsonResponse
     {
-        $service = new PageContextService();
-        $context = $service->getCurrentPageContext();
+        $context = app(PageContextService::class)->getCurrentPageContext();
 
         return response()->json([
             'success' => true,

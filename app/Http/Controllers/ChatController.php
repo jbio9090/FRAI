@@ -223,7 +223,8 @@ SYMTPROMPT;
     {
         // Check the most recent message for tool call patterns
         $combinedMessages = array_merge($messages, $incomingMessages);
-        $recentMessage = end(array_values($combinedMessages));
+        $combinedMessages = array_values($combinedMessages);
+        $recentMessage = end($combinedMessages);
 
         if (! $recentMessage) {
             return null;
@@ -2660,21 +2661,17 @@ SYMTPROMPT;
                             $sourceFacilityId = isset($equipment['source_facility_id']) && is_numeric($equipment['source_facility_id'])
                                 ? (int) $equipment['source_facility_id']
                                 : null;
-                            if ($sourceFacilityId === null) {
-                                $equipmentModel = Equipment::with('facilities:id')->find((int) $equipment['equipment_id']);
-                                if (
-                                    $equipmentModel
-                                    && ! $equipmentModel->facilities->contains('id', (int) $booking['facility_id'])
-                                ) {
-                                    $sourceFacilityId = $this->resolveBorrowSourceFacilityId(
-                                        $equipmentModel,
-                                        (int) $booking['facility_id'],
-                                        $dateOnly,
-                                        (string) $booking['time_start'],
-                                        (string) $booking['time_end'],
-                                        (int) $equipment['quantity_needed']
-                                    );
-                                }
+                            $equipmentModel = Equipment::with('facilities:id')->find((int) $equipment['equipment_id']);
+                            if ($sourceFacilityId === null && $equipmentModel
+                                && ! $equipmentModel->facilities->contains('id', (int) $booking['facility_id'])) {
+                                $sourceFacilityId = $this->resolveBorrowSourceFacilityId(
+                                    $equipmentModel,
+                                    (int) $booking['facility_id'],
+                                    $dateOnly,
+                                    (string) $booking['time_start'],
+                                    (string) $booking['time_end'],
+                                    (int) $equipment['quantity_needed']
+                                );
                             }
                             $isBorrowed = $sourceFacilityId !== null && $sourceFacilityId !== (int) $booking['facility_id'];
 
