@@ -1,6 +1,7 @@
 export interface ClientPageContext {
     url: string;
     path: string;
+    route?: string;
     title: string;
     headings: string[];
     active_tabs: string[];
@@ -20,6 +21,7 @@ export function collectPageContext(): ClientPageContext {
     return {
         url: window.location.href,
         path: window.location.pathname,
+        route: route?.current?.() ?? undefined,
         title: document.title,
         headings: Array.from(document.querySelectorAll('h1, h2, h3')).map(visibleText).filter(Boolean).slice(0, 30),
         active_tabs: [...new Set(activeTabs)].slice(0, 20),

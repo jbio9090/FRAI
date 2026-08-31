@@ -19,7 +19,10 @@ class PageContextService
     public function getCurrentPageContext(?array $clientContext = null): array
     {
         $page = $clientContext ?: $this->getPageObject();
-        $routeName = $page['route'] ?? $this->resolveCurrentRouteName();
+        $routeName = $this->resolveRouteName($page);
+        if (is_string($routeName) && $routeName !== '') {
+            $page['route'] = $routeName;
+        }
 
         $context = [
             'page' => $page,
@@ -37,9 +40,76 @@ class PageContextService
         return array_merge($context, $pageSpecificContext);
     }
 
-    private function resolveCurrentRouteName(): ?string
+    private function resolveRouteName(array $page): ?string
     {
-        return request()->route()?->getName();
+        $routeName = $page['route'] ?? null;
+        if (is_string($routeName) && $routeName !== '' && ! str_starts_with($routeName, 'api.')) {
+            return $routeName;
+        }
+
+        $routeName = request()->route()?->getName();
+        if (is_string($routeName) && $routeName !== '' && ! str_starts_with($routeName, 'api.')) {
+            return $routeName;
+        }
+
+        $path = $page['path'] ?? parse_url(request()->header('X-Page-URL', request()->fullUrl()), PHP_URL_PATH) ?: '/';
+
+        return $this->resolveRouteNameFromPath($path, $page['url'] ?? null);
+    }
+
+    private function resolveRouteNameFromPath(string $path, ?string $url = null): ?string
+    {
+        $normalizedPath = rtrim($path, '/');
+        if ($normalizedPath === '') {
+            $normalizedPath = '/';
+        }
+
+        $queryString = null;
+        if ($url !== null && str_contains($url, '?')) {
+            $queryString = parse_url($url, PHP_URL_QUERY) ?: null;
+        }
+
+        $status = null;
+        if (is_string($queryString) && $queryString !== '') {
+            parse_str($queryString, $queryParams);
+            $status = $queryParams['status'] ?? null;
+        }
+
+        $routeMap = [
+            '/' => 'dashboard',
+            '/dashboard' => 'dashboard',
+            '/rules' => 'rules',
+            '/facilities' => 'facilities',
+            '/settings' => 'settings',
+            '/request-options' => 'request-options',
+            '/equipments' => 'equipments',
+            '/requests' => 'requests.index',
+            '/requests/create' => 'request.create',
+            '/accounts' => 'accounts.index',
+            '/chatbot-logs' => 'chatbot.logs.index',
+        ];
+
+        if (isset($routeMap[$normalizedPath])) {
+            return $routeMap[$normalizedPath];
+        }
+
+        if (preg_match('#^/facilities/(\d+)$#', $normalizedPath, $matches)) {
+            return 'facility.detail';
+        }
+
+        if (preg_match('#^/requests/(\d+)/edit$#', $normalizedPath, $matches)) {
+            return 'requests.edit';
+        }
+
+        if (preg_match('#^/requests/(\d+)$#', $normalizedPath, $matches)) {
+            return 'requests.detail';
+        }
+
+        if (is_string($status) && $status !== '' && preg_match('#^/requests$#', $normalizedPath)) {
+            return 'requests.index';
+        }
+
+        return null;
     }
 
     private function getPageSpecificContext(?string $routeName, array $page): array
