@@ -199,11 +199,20 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                                                     className="ads-card p-3 text-left hover:border-primary/50 transition-colors"
                                                                 >
                                                                     <div className="flex items-center justify-between gap-2 mb-2">
-                                                                        <span className="text-sm font-medium">{formatDate(slot.date)}</span>
-                                                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                                            <Clock size={11} />
-                                                                            {formatTime(slot.time_start)} – {formatTime(slot.time_end)}
-                                                                        </span>
+                                                                        {slot.type === 'different_facility' || slot.type === 'different_facility_date' ? (
+                                                                            <span className="flex items-center gap-1 text-sm font-medium truncate">
+                                                                                <LayoutGrid size={11} />
+                                                                                {slot.facility_name}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span className="text-sm font-medium">{formatDate(slot.date)}</span>
+                                                                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                                                    <Clock size={11} />
+                                                                                    {formatTime(slot.time_start)} – {formatTime(slot.time_end)}
+                                                                                </span>
+                                                                            </>
+                                                                        )}
                                                                     </div>
                                                                     <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                                                                         {getCapacityBadge(slot.capacity_fit)}

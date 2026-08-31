@@ -155,13 +155,21 @@ export function AlternativesPanel({
                                                                 }`}
                                                             >
                                                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                                                    <span className="font-medium text-foreground truncate flex gap-1 text-sm">
-                                                                        <Calendar size={14}/>
-                                                                        {moment(slot.date).format('MMM D')}</span>
-                                                                    <span className="flex items-center gap-1 text-foreground shrink-0 text-xs">
-                                                                        <Clock size={14} />
-                                                                        {moment(slot.time_start, 'HH:mm:ss').format('h:mm A')} – {moment(slot.time_end, 'HH:mm:ss').format('h:mm A')}
-                                                                    </span>
+                                                                    {slot.type === 'different_facility' || slot.type === 'different_facility_date' ? (
+                                                                        <span className="font-medium text-foreground truncate flex gap-1 text-sm">
+                                                                            <LayoutGrid size={14}/>
+                                                                            {slot.facility_name}</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="font-medium text-foreground truncate flex gap-1 text-sm">
+                                                                                <Calendar size={14}/>
+                                                                                {moment(slot.date).format('MMM D')}</span>
+                                                                            <span className="flex items-center gap-1 text-foreground shrink-0 text-xs">
+                                                                                <Clock size={14} />
+                                                                                {moment(slot.time_start, 'HH:mm:ss').format('h:mm A')} – {moment(slot.time_end, 'HH:mm:ss').format('h:mm A')}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex flex-wrap items-center gap-1.5">
                                                                     <Badge variant={slot.capacity_fit === 'exact' ? 'default' : slot.capacity_fit === 'larger' ? 'secondary' : 'outline'} className="text-[10px] px-2 py-0.5">
