@@ -29,11 +29,16 @@ class ChatController extends Controller
 {
     private const SESSION_TTL_MINUTES = 15;
 
+    protected PageContextService $pageContextService;
+
     public function __construct(
         protected ChatbotLogService $chatbotLogService,
         protected FaqMatchingService $faqMatchingService,
-        protected OpenRouterClient $ai
-    ) {}
+        protected OpenRouterClient $ai,
+        PageContextService $pageContextService
+    ) {
+        $this->pageContextService = $pageContextService;
+    }
 
     private function sessionCacheKey(): string
     {
@@ -176,6 +181,137 @@ class ChatController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Process potential tool calls from the AI model.
+     * For thinking models that support tool use, parse the message for tool call format.
+     * Returns the assistant reply content, or null if no tool call was detected.
+     */
+    private function getContextAwareSystemPrompt(): string
+    {
+        return <<'SYMTPROMPT'
+You are an AI assistant for the PLV-GSO Facility Request System. You have access to a tool called `get_context` that can retrieve information about the current page/facility context.
+
+When users ask questions about:
+- Facility availability, bookings, or scheduling
+- Equipment availability or assignments
+- Request status or details
+- Rules, policies, or FAQ topics
+- Any system-specific knowledge about facilities, equipment, or requests
+
+You MUST call the `get_context` tool first to get the current page context before answering. The tool returns structured information about:
+1. Available facilities (ID, name, building, capacity)
+2. Equipment and their assignments
+3. Recent requests
+4. Active rules/FAQ entries
+5. Current selected facility/equipment/request
+
+After calling `get_context`, use the returned information to provide accurate, contextual answers. If the user's question doesn't require page context, you can answer directly without calling the tool.
+
+Format your tool call as a JSON object in your messages:
+{"name": "get_context", "arguments": {"page": true}}
+
+After receiving the tool response, incorporate the context into your answer naturally, citing facility IDs, equipment names, request details, or rule information as relevant to the user's question.
+
+Keep your answers conversational and helpful. Do not cite the tool call or context data unless directly relevant to answering the user's question.
+SYMTPROMPT;
+    }
+
+    private function processToolCalls(array $messages, array $incomingMessages): ?string
+    {
+        // Check the most recent message for tool call patterns
+        $combinedMessages = array_merge($messages, $incomingMessages);
+        $recentMessage = end(array_values($combinedMessages));
+
+        if (! $recentMessage) {
+            return null;
+        }
+
+        $content = (string) ($recentMessage['content'] ?? '');
+
+        if ($content === '') {
+            return null;
+        }
+
+        // Check for JSON tool call format: {"name": "get_context", "arguments": {...}}
+        if (preg_match('/\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*\{(.*?)\}\s*\}/s', $content, $matches)) {
+            $toolName = $matches[1];
+            $argumentsStr = '{'.$matches[2].'}';
+            $arguments = json_decode($argumentsStr, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && $toolName === 'get_context') {
+                // Determine if we should fetch page context
+                $fetchPageContext = isset($arguments['page']) ? (bool) $arguments['page'] : true;
+
+                if ($fetchPageContext) {
+                    // Get the current page context using our service
+                    $context = $this->pageContextService->getCurrentPageContext();
+
+                    // Format the context for the AI to read
+                    $contextText = "Here is the current page context:\n\n";
+                    $contextText .= "FACILITIES:\n";
+                    foreach ($context['facilities'] as $facility) {
+                        $contextText .= "- ID: {$facility['id']}, Name: {$facility['name']}, Building: {$facility['building']}, Capacity: {$facility['capacity']}\n";
+                    }
+
+                    $contextText .= "\nEQUIPMENT:\n";
+                    foreach ($context['equipment'] as $equipment) {
+                        $contextText .= "- ID: {$equipment['id']}, Name: {$equipment['name']}, Quantity: {$equipment['quantity']}\n";
+                    }
+
+                    $contextText .= "\nRECENT REQUESTS:\n";
+                    foreach ($context['requests'] as $request) {
+                        $contextText .= "- #{$request['id']}: {$request['title']} ({$request['status']}) - Created: {$request['created_at']}\n";
+                    }
+
+                    $contextText .= "\nRULES/FAQ:\n";
+                    foreach (array_slice($context['rules'], 0, 5) as $rule) {
+                        $contextText .= "- Rule ID: {$rule['id']}: {$rule['rule']}\n";
+                    }
+
+                    $contextText .= "\nCURRENT FACILITY: ".($context['current_facility']?: 'None')."\n";
+                    $contextText .= "CURRENT EQUIPMENT: ".($context['current_equipment']?: 'None')."\n";
+                    $contextText .= "CURRENT REQUEST: ".($context['current_request']?: 'None')."\n";
+
+                    return $contextText;
+                }
+            }
+        }
+
+        // Check for [TOOL_CALL:get_context] marker format
+        if (str_contains($content, '[TOOL_CALL:get_context]')) {
+            $context = $this->pageContextService->getCurrentPageContext();
+
+            $contextText = "Here is the current page context:\n\n";
+            $contextText .= "FACILITIES:\n";
+            foreach ($context['facilities'] as $facility) {
+                $contextText .= "- ID: {$facility['id']}, Name: {$facility['name']}, Building: {$facility['building']}, Capacity: {$facility['capacity']}\n";
+            }
+
+            $contextText .= "\nEQUIPMENT:\n";
+            foreach ($context['equipment'] as $equipment) {
+                $contextText .= "- ID: {$equipment['id']}, Name: {$equipment['name']}, Quantity: {$equipment['quantity']}\n";
+            }
+
+            $contextText .= "\nRECENT REQUESTS:\n";
+            foreach ($context['requests'] as $request) {
+                $contextText .= "- #{$request['id']}: {$request['title']} ({$request['status']}) - Created: {$request['created_at']}\n";
+            }
+
+            $contextText .= "\nRULES/FAQ:\n";
+            foreach (array_slice($context['rules'], 0, 5) as $rule) {
+                $contextText .= "- Rule ID: {$rule['id']}: {$rule['rule']}\n";
+            }
+
+            $contextText .= "\nCURRENT FACILITY: ".($context['current_facility']?: 'None')."\n";
+            $contextText .= "CURRENT EQUIPMENT: ".($context['current_equipment']?: 'None')."\n";
+            $contextText .= "CURRENT REQUEST: ".($context['current_request']?: 'None')."\n";
+
+            return $contextText;
+        }
+
+        return null; // No tool call detected
     }
 
     private function extractFacilityAndDateFromMessage(?string $message, $facilities): array
@@ -1945,358 +2081,63 @@ class ChatController extends Controller
     public function chat(Request $request): JsonResponse
     {
         try {
-            set_time_limit(300);
-
-            $sessionMessages = $this->loadSession();
             $incomingMessages = $request->input('messages', []);
             $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
-            $sessionId = $request->session()->getId();
-            $faqMode = $request->boolean('faq_mode');
-            if (! $faqMode) {
-                $this->clearFaqState();
+
+            if (! is_string($latestUserMessage) || trim($latestUserMessage) === '') {
+                return response()->json([
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => 'Please type a message to start chatting.',
+                    ],
+                ], 422);
             }
 
-            $sessionMessages = array_filter($sessionMessages, function ($msg) {
-                $content = $msg['content'] ?? '';
-                $isStaleContext =
-                    strpos($content, 'APPROVED BOOKINGS TABLE') !== false ||
-                    strpos($content, 'CURRENT FACILITY REQUESTS') !== false ||
-                    strpos($content, 'Available Facilities') !== false ||
-                    strpos($content, 'Available Equipment') !== false ||
-                    strpos($content, 'FACILITY CAPACITY MATCHING') !== false ||
-                    strpos($content, 'DETERMINISTIC AVAILABILITY CHECK') !== false ||
-                    strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
-                    strpos($content, 'When the user asks whether a facility is available') !== false;
-
-                return $msg['role'] !== 'system' || ! $isStaleContext;
-            });
-
+            $sessionMessages = $this->loadSession();
             $messages = array_merge($sessionMessages, $incomingMessages);
 
-            $participantCount = $request->input('participant_count');
-            $bookingContext = $request->input('booking_context');
-            $allRequests = collect();
-            $allFacilities = collect();
-            $rules = [];
-            $rulesInjected = false;
-            $approvedBookingContextInjected = false;
-            $deterministicAvailabilityInjected = false;
-            $facilityFilterApplied = false;
-            $equipmentCount = 0;
+            $assistantReply = $this->processToolCalls($messages, $incomingMessages);
 
-            try {
-                // Fetch recent requests (both pending and approved) for context
-                $allRequests = RequestModel::with(['user', 'requestFacilities', 'facilities'])
-                    ->whereIn('status', ['Pending', 'Approved'])
-                    ->latest()
-                    ->limit(30)
-                    ->get();
+            if ($assistantReply === null) {
+                // No tool calls, proceed with normal AI chat
+                $assistantReply = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
 
-                // Keep request data for deterministic backend checks and logging only.
-            } catch (\Exception $e) {
-                \Log::warning('Failed to fetch requests for chat: '.$e->getMessage());
+                if ($assistantReply === '') {
+                    return response()->json([
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => 'I did not receive a response from the AI provider.',
+                        ],
+                    ], 500);
+                }
             }
 
-            try {
-                $allFacilities = Facility::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'building', 'capacity']);
-                $facilities = $allFacilities->map(function ($f) {
-                    return "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})";
-                })->toArray();
+            $finalMessages = array_merge($messages, [[
+                'role' => 'assistant',
+                'content' => $assistantReply,
+            ]]);
 
-                if (! empty($facilities)) {
-                    array_unshift($messages, [
-                        'role' => 'system',
-                        'content' => "Available Facilities:\n- ".implode("\n- ", $facilities),
-                    ]);
+            $this->saveSession(array_values(array_filter($finalMessages, function ($message) {
+                if (! is_array($message)) {
+                    return false;
                 }
 
-                $equipmentRows = $this->getEquipmentContextRows(50);
-                $equipment = array_map(fn ($row) => $row['line'], $equipmentRows);
-                $equipmentCount = count($equipmentRows);
+                $role = $message['role'] ?? null;
+                $content = $message['content'] ?? null;
 
-                if (! empty($equipment)) {
-                    array_unshift($messages, [
-                        'role' => 'system',
-                        'content' => "Available Equipment:\n- ".implode("\n- ", $equipment),
-                    ]);
-                }
+                return in_array($role, ['user', 'assistant'], true)
+                    && is_string($content)
+                    && trim($content) !== '';
+            })));
 
-                $maxMb = RequestSettingsService::maxFileSizeMb();
-
-                if ($latestUserMessage) {
-                    if ($faqMode) {
-                        $faqModeResult = $this->handleFaqModeConversation($messages, $latestUserMessage);
-                        $content = (string) ($faqModeResult['content'] ?? '');
-                        $this->storeAssistantReply($incomingMessages, $content);
-                        $this->chatbotLogService->logAssistantReply(
-                            $latestUserMessage,
-                            $content,
-                            $this->buildLogContext(
-                                $latestUserMessage,
-                                $participantCount,
-                                $bookingContext,
-                                $allRequests,
-                                $allFacilities,
-                                $equipmentCount,
-                                count($rules),
-                                $rulesInjected,
-                                $approvedBookingContextInjected,
-                                $deterministicAvailabilityInjected,
-                                $facilityFilterApplied,
-                                array_merge(['faq_mode' => true], $faqModeResult['context'] ?? [])
-                            ),
-                            $sessionId,
-                            'faq_answer',
-                            'faq',
-                        );
-
-                        return response()->json([
-                            'message' => [
-                                'role' => 'assistant',
-                                'content' => $content,
-                            ],
-                            'deterministic' => $faqModeResult['deterministic'] ?? [
-                                'source' => 'faq_conversational_rag',
-                                'check' => 'faq',
-                                'status' => 'info',
-                                'faq_mode' => true,
-                            ],
-                        ]);
-                    }
-
-                    $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
-                    $shouldRunAvailability = $this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities);
-
-                    if (! $faqMode && $shouldRunAvailability) {
-                        $availabilityResult = $this->buildAvailabilityCheckResult(
-                            $resolved['facility'],
-                            $resolved['date'],
-                            $allRequests,
-                            $resolved['time_start'] ?? null,
-                            $resolved['time_end'] ?? null
-                        );
-                        $content = $availabilityResult['content'];
-                        $this->storeAssistantReply($incomingMessages, $content);
-                        $this->chatbotLogService->logAssistantReply(
-                            $latestUserMessage,
-                            $content,
-                            $this->buildLogContext(
-                                $latestUserMessage,
-                                $participantCount,
-                                $bookingContext,
-                                $allRequests,
-                                $allFacilities,
-                                $equipmentCount,
-                                count($rules),
-                                $rulesInjected,
-                                $approvedBookingContextInjected,
-                                $deterministicAvailabilityInjected,
-                                $facilityFilterApplied,
-                                ['response_source' => 'deterministic_check', 'faq_mode' => false]
-                            ),
-                            $sessionId,
-                            'deterministic_check',
-                            'availability_check',
-                        );
-
-                        return response()->json([
-                            'message' => [
-                                'role' => 'assistant',
-                                'content' => $content,
-                            ],
-                            'deterministic' => $availabilityResult['deterministic'],
-                        ]);
-                    }
-
-                    if (! $faqMode) {
-                        $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, false);
-                        if ($faqResult) {
-                            $content = (string) $faqResult['content'];
-                            $this->storeAssistantReply($incomingMessages, $content);
-                            $this->chatbotLogService->logAssistantReply(
-                                $latestUserMessage,
-                                $content,
-                                $this->buildLogContext(
-                                    $latestUserMessage,
-                                    $participantCount,
-                                    $bookingContext,
-                                    $allRequests,
-                                    $allFacilities,
-                                    $equipmentCount,
-                                    count($rules),
-                                    $rulesInjected,
-                                    $approvedBookingContextInjected,
-                                    $deterministicAvailabilityInjected,
-                                    $facilityFilterApplied,
-                                    array_merge(['faq_mode' => false], $faqResult['context'])
-                                ),
-                                $sessionId,
-                                'faq_answer',
-                                'faq',
-                            );
-
-                            return response()->json([
-                                'message' => [
-                                    'role' => 'assistant',
-                                    'content' => $content,
-                                ],
-                                'deterministic' => $faqResult['deterministic'],
-                            ]);
-                        }
-                    }
-
-                }
-
-                array_unshift($messages, [
-                    'role' => 'system',
-                    'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission.",
-                ]);
-
-                array_unshift($messages, [
-                    'role' => 'system',
-                    'content' => "AI ROLE BOUNDARY (STRICT):\nYou are an assistant and rationale layer only.\n- Never compute or decide final operational truth for availability, conflicts, participant-capacity limits, or equipment slot limits.\n- Never refuse or approve requests based on your own calculations.\n- Deterministic backend checks and submission validation are the source of truth.\n- When backend deterministic output is available, explain it clearly and suggest next valid actions.",
-                ]);
-
-                array_unshift($messages, [
-                    'role' => 'system',
-                    'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nEQUIPMENT POLICY:\n- During chat, never refuse equipment quantities based on availability math.\n- Do not say \"cannot fulfill\" due to stock/remaining quantity while collecting details.\n- If the user requests equipment, capture the requested equipment ID and quantity and continue.\n- Backend submission validation is the only source of truth for slot-aware equipment limits.\n- If submission fails, relay the backend validation message (including available quantity) and ask for an updated quantity.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max {$maxMb}MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database.",
-                ]);
-            } catch (\Exception $e) {
-                \Log::warning('Failed to fetch facilities/equipment for chat: '.$e->getMessage());
-            }
-
-            try {
-                $limitRules = max(1, min(200, (int) $request->input('rules_limit', 50)));
-                $rules = RuleModel::policy()->orderBy('priority')->orderBy('id')->limit($limitRules)->get(['id', 'rule'])
-                    ->map(fn ($r) => trim($r->rule))->filter()->toArray();
-                $rules = $this->applyBookingPolicyToRules($rules);
-
-                $rulesListText = ! empty($rules) ? implode("\n- ", $rules) : '';
-                $rulesSummary = 'Please be aware of the following facility booking guidelines. If a request is directly relevant to these guidelines and would clearly violate one, politely explain the issue and guide toward a valid solution. If a guideline is vague, unrelated to the booking process, or would unnecessarily block a valid facility reservation, use your judgment to allow the request.';
-                $rulesSummary .= ! empty($rulesListText) ? "\nGuidelines:\n- ".$rulesListText : "\n(There are currently no configured guidelines.)";
-
-                array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
-                $rulesInjected = true;
-            } catch (\Exception $e) {
-                \Log::warning('Failed to fetch Rules for chat: '.$e->getMessage());
-                array_unshift($messages, [
-                    'role' => 'system',
-                    'content' => 'Please be aware of facility booking guidelines stored in the system. If a request directly violates a relevant guideline, explain the issue politely and guide toward a valid solution. Do not unnecessarily block valid facility reservations.',
-                ]);
-            }
-
-            if (! empty($bookingContext)) {
-                array_unshift($messages, [
-                    'role' => 'system',
-                    'content' => "BOOKING FLOW CONTEXT (HIGHEST PRIORITY):\n".$bookingContext."\n\nIMPORTANT: The user is currently in the middle of a structured booking process. Do NOT restart the process. Only assist based on the collected data and current step.",
-                ]);
-            }
-
-            if (empty($messages)) {
-                return response()->json(['error' => 'No messages provided'], 400);
-            }
-
-            $data = $this->ai->chatResponse($messages, ['timeout' => 580]);
-
-            $userAndAssistantMessages = array_filter($incomingMessages, fn ($m) => in_array($m['role'], ['user', 'assistant']));
-            if (isset($data['message']['content'])) {
-                $userAndAssistantMessages[] = [
+            return response()->json([
+                'message' => [
                     'role' => 'assistant',
-                    'content' => $data['message']['content'],
-                ];
-            }
-            $this->saveSession(array_values($userAndAssistantMessages));
-
-            // Rule validation
-            if (! empty($rules)) {
-                try {
-                    $assistantText = $data['message']['content'] ?? $data['response'] ?? (is_string($data) ? $data : '');
-
-                    $validatorMessages = [
-                        [
-                            'role' => 'system',
-                            'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules. Important distinctions:\n\n- VIOLATIONS (hard constraints): Explicit prohibitions like 'do not mention X', 'never do Y', 'forbidden topic', 'cannot discuss Z'\n- NOT VIOLATIONS (soft guidelines): Style preferences like 'be brief', 'be concise', 'use simple language', 'be friendly'\n\nPolicy override for this system:\n- Missing request description/additional information is NOT a violation. Description is optional.\n\nOnly flag something as a violation if it DIRECTLY contradicts a strict prohibition. Return ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). Example: {\"violations\": [0,2]} or {\"violations\": []}. No extra text.",
-                        ],
-                        [
-                            'role' => 'user',
-                            'content' => "Rules:\n- ".implode("\n- ", $rules)."\n\nAssistant Response:\n".$assistantText,
-                        ],
-                    ];
-
-                    try {
-                        $jsonText = $this->ai->chat($validatorMessages, ['timeout' => 60]);
-                        $parsed = @json_decode($jsonText, true);
-
-                        if (is_array($parsed) && ! empty($parsed['violations'])) {
-                            $violationDetails = [];
-                            foreach ($parsed['violations'] as $ruleIndex) {
-                                if (isset($rules[$ruleIndex])) {
-                                    $violationDetails[] = 'Rule #'.($ruleIndex + 1).': '.$rules[$ruleIndex];
-                                }
-                            }
-                            $data = [
-                                'message' => [
-                                    'content' => "I cannot comply with that request because it would violate the following rules:\n\n".implode("\n\n", $violationDetails),
-                                    'role' => 'assistant',
-                                ],
-                            ];
-                        }
-                    } catch (\Throwable $ve) {
-                        \Log::warning('Validator API request failed: '.$ve->getMessage());
-
-                        return response()->json($data);
-                    }
-                } catch (\Exception $e) {
-                    \Log::warning('Rule validation failed: '.$e->getMessage());
-                }
-            }
-
-            $assistantMessage = $data['message']['content'] ?? $data['response'] ?? null;
-            $logContext = $this->buildLogContext(
-                $latestUserMessage,
-                $participantCount,
-                $bookingContext,
-                $allRequests,
-                $allFacilities,
-                $equipmentCount,
-                count($rules),
-                $rulesInjected,
-                $approvedBookingContextInjected,
-                $deterministicAvailabilityInjected,
-                $facilityFilterApplied,
-                ['faq_mode' => $faqMode]
-            );
-            $payload = $this->extractStructuredPayload($assistantMessage);
-
-            if ($payload) {
-                $this->chatbotLogService->logPayloadGenerated(
-                    $latestUserMessage,
-                    $assistantMessage,
-                    $payload,
-                    array_merge($logContext, ['generated_payload' => true, 'request_creation' => true]),
-                    $sessionId
-                );
-            } else {
-                $this->chatbotLogService->logAssistantReply(
-                    $latestUserMessage,
-                    $assistantMessage,
-                    array_merge($logContext, ['response_source' => 'ai_rationale']),
-                    $sessionId,
-                    'ai_rationale',
-                    'ai_rationale'
-                );
-            }
-
-            return response()->json($data);
-
+                    'content' => $assistantReply,
+                ],
+            ]);
         } catch (\RuntimeException $e) {
             \Log::error('Chat error: '.$e->getMessage());
-            $this->chatbotLogService->logError(
-                $latestUserMessage ?? null,
-                $e->getMessage(),
-                [],
-                $request->session()->getId(),
-            );
 
             return response()->json([
                 'error' => 'Failed to connect to the configured AI provider',
@@ -2304,12 +2145,6 @@ class ChatController extends Controller
             ], 500);
         } catch (\Exception $e) {
             \Log::error('Chat error: '.$e->getMessage());
-            $this->chatbotLogService->logError(
-                $latestUserMessage ?? null,
-                $e->getMessage(),
-                [],
-                $request->session()->getId(),
-            );
 
             return response()->json([
                 'error' => 'Failed to process chat request',
@@ -2320,366 +2155,123 @@ class ChatController extends Controller
 
     public function stream(Request $request): StreamedResponse
     {
-        // Collect all the same context as chat()
-        $messages = $request->input('messages', []);
-        $participantCount = $request->input('participant_count');
-        $bookingContext = $request->input('booking_context');
-        $allRequests = collect();
-        $allFacilities = collect();
-        $latestUserMessage = $this->getLatestUserMessageContent($request->input('messages', []));
-        $sessionId = $request->session()->getId();
-        $faqMode = $request->boolean('faq_mode');
-        if (! $faqMode) {
-            $this->clearFaqState();
-        }
-        $rulesInjected = false;
-        $approvedBookingContextInjected = false;
-        $deterministicAvailabilityInjected = false;
-        $equipmentCount = 0;
-        $facilityFilterApplied = false;
-
-        // Load session history and merge
-        $sessionMessages = $this->loadSession();
-
-        $sessionMessages = array_filter($sessionMessages, function ($msg) {
-            $content = $msg['content'] ?? '';
-            $isStaleContext =
-                strpos($content, 'APPROVED BOOKINGS TABLE') !== false ||
-                strpos($content, 'CURRENT FACILITY REQUESTS') !== false ||
-                strpos($content, 'Available Facilities') !== false ||
-                strpos($content, 'Available Equipment') !== false ||
-                strpos($content, 'FACILITY CAPACITY MATCHING') !== false ||
-                strpos($content, 'DETERMINISTIC AVAILABILITY CHECK') !== false ||
-                strpos($content, 'IMPORTANT REQUEST CREATION CAPABILITY') !== false ||
-                strpos($content, 'When the user asks whether a facility is available') !== false;
-
-            return $msg['role'] !== 'system' || ! $isStaleContext;
-        });
-
-        $messages = array_merge($sessionMessages, $messages);
-
-        // Inject DB context
+        $response = $this->chat($request);
+        $payload = $response->getData(true);
+        $content = $payload['message']['content'] ?? 'I did not receive a response from the AI provider.';
+    public function chat(Request $request): JsonResponse
+    {
         try {
-            $allRequests = RequestModel::with(['user', 'requestFacilities', 'facilities'])
-                ->whereIn('status', ['Pending', 'Approved'])
-                ->latest()->limit(30)->get();
+            $incomingMessages = $request->input('messages', []);
+            $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
 
-            // Keep request data for deterministic backend checks and logging only.
+            if (! is_string($latestUserMessage) || trim($latestUserMessage) === '') {
+                return response()->json([
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => 'Please type a message to start chatting.',
+                    ],
+                ], 422);
+            }
+
+            $sessionMessages = $this->loadSession();
+            $messages = array_merge($sessionMessages, $incomingMessages);
+
+            // Prepend system prompt that instructs the AI to use the get_context tool
+            $systemPrompt = $this->getContextAwareSystemPrompt();
+
+            // Build messages with system prompt first, then session messages, then incoming messages
+            $allMessages = [];
+
+            // Add system prompt as first message
+            $allMessages[] = [
+                'role' => 'system',
+                'content' => $systemPrompt,
+            ];
+
+            // Add session messages (if any)
+            if (isset($messages[0]['role'])) {
+                $allMessages = array_merge($allMessages, $messages);
+            } else {
+                $allMessages = array_merge($allMessages, [['role' => 'assistant', 'content' => '']], $messages);
+            }
+
+            // Process potential tool calls from the AI model using the augmented messages
+            $assistantReply = $this->processToolCalls($allMessages, $incomingMessages);
+
+            if ($assistantReply === null) {
+                // No tool calls, proceed with normal AI chat using the augmented messages
+                $aiMessages = array_merge([
+                    ['role' => 'system', 'content' => $systemPrompt],
+                ], $messages, $incomingMessages);
+
+                $assistantReply = trim((string) $this->ai->chat($aiMessages, ['timeout' => 120]));
+
+                if ($assistantReply === '') {
+                    return response()->json([
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => 'I did not receive a response from the AI provider.',
+                        ],
+                    ], 500);
+                }
+            }
+
+            $finalMessages = array_merge($messages, [[
+                'role' => 'assistant',
+                'content' => $assistantReply,
+            ]]);
+
+            $this->saveSession(array_values(array_filter($finalMessages, function ($message) {
+                if (! is_array($message)) {
+                    return false;
+                }
+
+                $role = $message['role'] ?? null;
+                $content = $message['content'] ?? null;
+
+                return in_array($role, ['user', 'assistant'], true)
+                    && is_string($content)
+                    && trim($content) !== '';
+            }));
+
+            return response()->json([
+                'message' => [
+                    'role' => 'assistant',
+                    'content' => $assistantReply,
+                ],
+            ]);
+        } catch (\RuntimeException $e) {
+            \Log::error('Chat error: '.$e->getMessage());
+
+            return response()->json([
+                'error' => 'Failed to connect to the configured AI provider',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
         } catch (\Exception $e) {
-            \Log::warning('Stream: Failed to fetch requests: '.$e->getMessage());
+            \Log::error('Chat error: '.$e->getMessage());
+
+            return response()->json([
+                'error' => 'Failed to process chat request',
+                'message' => config('app.debug') ? $e->getMessage() : 'An error occurred',
+            ], 500);
         }
+    }
 
-        try {
-            $allFacilities = Facility::orderBy('id', 'asc')->limit(50)->get(['id', 'name', 'building', 'capacity']);
-            $facilities = $allFacilities->map(fn ($f) => "ID {$f->id}: {$f->name} (Building: {$f->building}, Capacity: {$f->capacity})")->toArray();
+        return response()->stream(function () use ($content) {
+            echo "data: ".json_encode([
+                'message' => [
+                    'role' => 'assistant',
+                    'content' => $content,
+                ],
+            ])."
 
-            if (! empty($facilities)) {
-                array_unshift($messages, ['role' => 'system', 'content' => "Available Facilities:\n- ".implode("\n- ", $facilities)]);
-            }
+";
+            echo "data: ".json_encode(['done' => true])."
 
-            $equipmentRows = $this->getEquipmentContextRows(50);
-            $equipment = array_map(fn ($row) => $row['line'], $equipmentRows);
-            $equipmentCount = count($equipmentRows);
-
-            if (! empty($equipment)) {
-                array_unshift($messages, ['role' => 'system', 'content' => "Available Equipment:\n- ".implode("\n- ", $equipment)]);
-            }
-
-            $maxMb = RequestSettingsService::maxFileSizeMb();
-
-            if ($latestUserMessage) {
-                if ($faqMode) {
-                    $faqModeResult = $this->handleFaqModeConversation($messages, $latestUserMessage);
-                    $content = (string) ($faqModeResult['content'] ?? '');
-                    $incomingMessages = $request->input('messages', []);
-                    $this->storeAssistantReply($incomingMessages, $content);
-                    $this->chatbotLogService->logAssistantReply(
-                        $latestUserMessage,
-                        $content,
-                        $this->buildLogContext(
-                            $latestUserMessage,
-                            $participantCount,
-                            $bookingContext,
-                            $allRequests,
-                            $allFacilities,
-                            $equipmentCount,
-                            0,
-                            $rulesInjected,
-                            $approvedBookingContextInjected,
-                            $deterministicAvailabilityInjected,
-                            $facilityFilterApplied,
-                            array_merge(['faq_mode' => true], $faqModeResult['context'] ?? [])
-                        ),
-                        $sessionId,
-                        'faq_answer',
-                        'faq',
-                    );
-
-                    $deterministic = $faqModeResult['deterministic'] ?? [
-                        'source' => 'faq_conversational_rag',
-                        'check' => 'faq',
-                        'status' => 'info',
-                        'faq_mode' => true,
-                    ];
-
-                    return response()->stream(function () use ($content, $deterministic) {
-                        $this->streamTextTokens($content);
-                        echo 'data: '.json_encode(['deterministic' => $deterministic])."\n\n";
-                        $this->flushStreamOutput();
-                        echo 'data: '.json_encode(['done' => true])."\n\n";
-                        $this->flushStreamOutput();
-                    }, 200, [
-                        'Content-Type' => 'text/event-stream',
-                        'Cache-Control' => 'no-cache',
-                        'X-Accel-Buffering' => 'no',
-                        'Connection' => 'keep-alive',
-                    ]);
-                }
-
-                $resolved = $this->resolveFacilityAndDateFromConversation($messages, $allFacilities);
-                $shouldRunAvailability = $this->shouldRunDeterministicAvailabilityCheck($latestUserMessage, $resolved, $allFacilities);
-
-                if (! $faqMode && $shouldRunAvailability) {
-                    $availabilityResult = $this->buildAvailabilityCheckResult(
-                        $resolved['facility'],
-                        $resolved['date'],
-                        $allRequests,
-                        $resolved['time_start'] ?? null,
-                        $resolved['time_end'] ?? null
-                    );
-                    $content = $availabilityResult['content'];
-                    $incomingMessages = $request->input('messages', []);
-                    $this->storeAssistantReply($incomingMessages, $content);
-                    $this->chatbotLogService->logAssistantReply(
-                        $latestUserMessage,
-                        $content,
-                        $this->buildLogContext(
-                            $latestUserMessage,
-                            $participantCount,
-                            $bookingContext,
-                            $allRequests,
-                            $allFacilities,
-                            $equipmentCount,
-                            0,
-                            $rulesInjected,
-                            $approvedBookingContextInjected,
-                            $deterministicAvailabilityInjected,
-                            $facilityFilterApplied,
-                            ['response_source' => 'deterministic_check', 'faq_mode' => false]
-                        ),
-                        $sessionId,
-                        'deterministic_check',
-                        'availability_check',
-                    );
-
-                    return response()->stream(function () use ($content, $availabilityResult) {
-                        echo 'data: '.json_encode(['token' => $content])."\n\n";
-                        $this->flushStreamOutput();
-                        echo 'data: '.json_encode(['deterministic' => $availabilityResult['deterministic']])."\n\n";
-                        $this->flushStreamOutput();
-                        echo 'data: '.json_encode(['done' => true])."\n\n";
-                        $this->flushStreamOutput();
-                    }, 200, [
-                        'Content-Type' => 'text/event-stream',
-                        'Cache-Control' => 'no-cache',
-                        'X-Accel-Buffering' => 'no',
-                        'Connection' => 'keep-alive',
-                    ]);
-                }
-
-                if (! $faqMode) {
-                    $faqResult = $this->tryFaqSemanticMatch($latestUserMessage, false);
-                    if ($faqResult) {
-                        $content = (string) $faqResult['content'];
-                        $incomingMessages = $request->input('messages', []);
-                        $this->storeAssistantReply($incomingMessages, $content);
-                        $this->chatbotLogService->logAssistantReply(
-                            $latestUserMessage,
-                            $content,
-                            $this->buildLogContext(
-                                $latestUserMessage,
-                                $participantCount,
-                                $bookingContext,
-                                $allRequests,
-                                $allFacilities,
-                                $equipmentCount,
-                                0,
-                                $rulesInjected,
-                                $approvedBookingContextInjected,
-                                $deterministicAvailabilityInjected,
-                                $facilityFilterApplied,
-                                array_merge(['faq_mode' => false], $faqResult['context'])
-                            ),
-                            $sessionId,
-                            'faq_answer',
-                            'faq',
-                        );
-
-                        return response()->stream(function () use ($content, $faqResult) {
-                            $this->streamTextTokens($content);
-                            echo 'data: '.json_encode(['deterministic' => $faqResult['deterministic']])."\n\n";
-                            $this->flushStreamOutput();
-                            echo 'data: '.json_encode(['done' => true])."\n\n";
-                            $this->flushStreamOutput();
-                        }, 200, [
-                            'Content-Type' => 'text/event-stream',
-                            'Cache-Control' => 'no-cache',
-                            'X-Accel-Buffering' => 'no',
-                            'Connection' => 'keep-alive',
-                        ]);
-                    }
-                }
-
-            }
-
-            array_unshift($messages, ['role' => 'system', 'content' => "PARTICIPANT COUNT GUIDANCE:\nIf the user shares participant count, use it only for helpful guidance (for example, suggest rooms whose capacities are close to the count).\nDo NOT reject or block a booking based on participant count in chat.\nDo NOT claim final capacity approval in chat.\nFinal participant-capacity validation is performed by the backend during request submission."]);
-            array_unshift($messages, ['role' => 'system', 'content' => "AI ROLE BOUNDARY (STRICT):\nYou are an assistant and rationale layer only.\n- Never compute or decide final operational truth for availability, conflicts, participant-capacity limits, or equipment slot limits.\n- Never refuse or approve requests based on your own calculations.\n- Deterministic backend checks and submission validation are the source of truth.\n- When backend deterministic output is available, explain it clearly and suggest next valid actions."]);
-            // Updated flow: ask for event type and map to priority level, no separate priority reason
-            // Updated order: Description moved after Event Type, and Additional Message retained at end.
-            // Updated file attachment handling: files are optional. If provided, include them; otherwise proceed without prompting.
-            array_unshift($messages, ['role' => 'system', 'content' => "IMPORTANT REQUEST CREATION CAPABILITY:\nYou can create facility requests for the user. When they ask to create a request, collect the following information in this order:\n1. Title (brief request name)\n2. Participant Count (OPTIONAL, numeric; include if user provided it)\n3. Facility ID (from the available facilities list above)\n4. Equipment (optional list of equipment IDs and quantities needed, from the available equipment list above)\n5. Date (YYYY-MM-DD format)\n6. Start Time (HH:MM format in 24-hour)\n7. End Time (HH:MM format in 24-hour)\n8. Event Type (IMPORTANT - determine from context):\n   - 0 = Academic (default, regular academic events)\n   - 1 = Organizational (official school activities, department events)\n   - 2 = University (university-wide events)\n   - 3 = Government (government officials, external government events, high-authority visits)\n   *Map the selected Event Type to a priority level as follows: Academic=0, Organizational=1, University=1, Government=2.*\n9. Description (OPTIONAL)\n10. Additional Message (OPTIONAL)\n\nPARTICIPANT COUNT POLICY:\n- Participant count is guidance only during chat.\n- Never refuse a request purely because of participant count.\n- Backend validation is the final source of truth for participant-capacity checks at submission.\n\nEQUIPMENT POLICY:\n- During chat, never refuse equipment quantities based on availability math.\n- Do not say \"cannot fulfill\" due to stock/remaining quantity while collecting details.\n- If the user requests equipment, capture the requested equipment ID and quantity and continue.\n- Backend submission validation is the only source of truth for slot-aware equipment limits.\n- If submission fails, relay the backend validation message (including available quantity) and ask for an updated quantity.\n\nCRITICAL FACILITY ID RULE:\n- `facility_id` in the JSON must be a NUMERIC facility ID only\n- Never use a facility name, label, abbreviation, or room code string in `facility_id`\n- If the selected facility is MPH 6D (CEIT Small room), use its numeric ID from the Available Facilities list, not \"MPH 6D\"\n\nPRIORITY OVERRIDE SYSTEM: If the user's event is Organizational (type 1) or University (type 2) or Government (type 3), and there are existing requests at the same time with lower priority, the system will AUTOMATICALLY put those lower-priority requests on hold.\n\nFILE ATTACHMENT (OPTIONAL): Users may optionally upload supporting documents (JPG, PNG, PDF, DOC, XLSX, PPTX - max {$maxMb}MB each). Files are not required to proceed with the request. If files are available, include them in the submission. If no files are provided, proceed without them.\n\nAfter collecting all required information and any optional files, construct the JSON payload exactly as shown below and present it to the user for confirmation. Ensure the JSON includes the correct `priority_level` based on the Event Type mapping above:\n{\"title\": \"...\", \"description\": \"...\", \"priority_level\": 0, \"participant_count\": 120, \"facility_bookings\": [{\"facility_id\": 6, \"date\": \"YYYY-MM-DD\", \"time_start\": \"HH:MM\", \"time_end\": \"HH:MM\", \"expected_capacity\": 120, \"equipment\": [{\"equipment_id\": ID, \"quantity_needed\": number}]}]}\n\nWait for the user to confirm 'yes' or 'proceed' before submitting the JSON. Once confirmed, output ONLY the JSON payload (no additional text) to trigger automatic submission to the database."]);
-        } catch (\Exception $e) {
-            \Log::warning('Stream: Failed to fetch facilities/equipment: '.$e->getMessage());
-        }
-
-        $rules = [];
-        try {
-            $rules = RuleModel::policy()->orderBy('priority')->orderBy('id')->limit(50)->get(['id', 'rule'])
-                ->map(fn ($r) => trim($r->rule))->filter()->toArray();
-            $rules = $this->applyBookingPolicyToRules($rules);
-
-            $rulesSummary = 'You MUST follow the following rules exactly. If a user request would violate any rule, you MUST refuse and reply with a short explanation stating which rule would be violated. Do NOT provide prohibited content.';
-            $rulesSummary .= ! empty($rules) ? "\nRules:\n- ".implode("\n- ", $rules) : "\n(There are currently no configured rules.)";
-            array_unshift($messages, ['role' => 'system', 'content' => $rulesSummary]);
-            $rulesInjected = true;
-        } catch (\Exception $e) {
-            \Log::warning('Stream: Failed to fetch rules: '.$e->getMessage());
-        }
-
-        if (! empty($bookingContext)) {
-            array_unshift($messages, ['role' => 'system', 'content' => "BOOKING FLOW CONTEXT (HIGHEST PRIORITY):\n".$bookingContext."\n\nIMPORTANT: The user is currently in the middle of a structured booking process. Do NOT restart the process."]);
-        }
-
-        // Capture incoming user messages to save to session ltr
-        $incomingMessages = $request->input('messages', []);
-
-        $logContext = $this->buildLogContext(
-            $latestUserMessage,
-            $participantCount,
-            $bookingContext,
-            $allRequests,
-            $allFacilities,
-            $equipmentCount,
-            count($rules),
-            $rulesInjected,
-            $approvedBookingContextInjected,
-            $deterministicAvailabilityInjected,
-            $facilityFilterApplied,
-            ['faq_mode' => $faqMode]
-        );
-
-        return response()->stream(function () use ($messages, $incomingMessages, $rules, $latestUserMessage, $sessionId, $logContext) {
-            set_time_limit(300);
-
-            $fullContent = '';
-            $generatedPayload = null;
-
-            try {
-                echo ": connected\n\n";
-                $this->flushStreamOutput();
-
-                $fullContent = $this->ai->streamChat($messages, function (string $token): void {
-                    echo 'data: '.json_encode(['token' => $token])."\n\n";
-                    $this->flushStreamOutput();
-                }, ['timeout' => 580]);
-
-                $generatedPayload = $this->extractStructuredPayload($fullContent);
-                if (is_array($generatedPayload) && isset($generatedPayload['facility_bookings'])) {
-                    echo 'data: '.json_encode(['booking_payload' => json_encode($generatedPayload)])."\n\n";
-                    $this->flushStreamOutput();
-                }
-
-                // Rule validation on full content
-                if (! empty($rules)) {
-                    try {
-                        $validatorMessages = [
-                            ['role' => 'system', 'content' => "You are a careful rules validator. Analyze if the assistant response CLEARLY AND DIRECTLY VIOLATES any hard constraints in the rules.\n\n- VIOLATIONS: Explicit prohibitions like 'do not mention X', 'never do Y'\n- NOT VIOLATIONS: Style preferences like 'be brief', 'be friendly'\n\nPolicy override for this system:\n- Missing request description/additional information is NOT a violation. Description is optional.\n\nReturn ONLY valid JSON with key \"violations\" (array of rule indices, 0-based). No extra text."],
-                            ['role' => 'user',   'content' => "Rules:\n- ".implode("\n- ", $rules)."\n\nAssistant Response:\n".$fullContent],
-                        ];
-
-                        $jsonText = $this->ai->chat($validatorMessages, ['timeout' => 60]);
-                        $parsed = @json_decode($jsonText, true);
-
-                        if (! empty($parsed['violations'])) {
-                            $violationDetails = [];
-                            foreach ($parsed['violations'] as $idx) {
-                                if (isset($rules[$idx])) {
-                                    $violationDetails[] = 'Rule #'.($idx + 1).': '.$rules[$idx];
-                                }
-                            }
-                            $violationMessage = "I cannot comply with that request because it would violate the following rules:\n\n".implode("\n\n", $violationDetails);
-
-                            // Override the streamed content with the violation message
-                            echo 'data: '.json_encode(['violation' => $violationMessage])."\n\n";
-                            $this->flushStreamOutput();
-
-                            $fullContent = $violationMessage;
-                        }
-                    } catch (\Exception $e) {
-                        \Log::warning('Stream: Rule validation failed: '.$e->getMessage());
-                    }
-                }
-
-                if (! is_array($generatedPayload)) {
-                    $generatedPayload = $this->extractStructuredPayload($fullContent);
-                    if (is_array($generatedPayload)) {
-                        echo 'data: '.json_encode(['booking_payload' => json_encode($generatedPayload)])."\n\n";
-                        $this->flushStreamOutput();
-                    }
-                }
-
-                // Save session
-                $userAndAssistant = array_filter($incomingMessages, fn ($m) => in_array($m['role'], ['user', 'assistant']));
-                $userAndAssistant[] = ['role' => 'assistant', 'content' => $fullContent];
-                $this->saveSession(array_values($userAndAssistant));
-
-                if (is_array($generatedPayload) && isset($generatedPayload['facility_bookings'])) {
-                    $this->chatbotLogService->logPayloadGenerated(
-                        $latestUserMessage,
-                        $fullContent,
-                        $generatedPayload,
-                        array_merge($logContext, ['generated_payload' => true, 'request_creation' => true]),
-                        $sessionId
-                    );
-                } else {
-                    $this->chatbotLogService->logAssistantReply(
-                        $latestUserMessage,
-                        $fullContent,
-                        array_merge($logContext, ['response_source' => 'ai_rationale']),
-                        $sessionId,
-                        'ai_rationale',
-                        'ai_rationale'
-                    );
-                }
-
-                echo 'data: '.json_encode(['done' => true])."\n\n";
-                $this->flushStreamOutput();
-
-            } catch (\Exception $e) {
-                \Log::error('Stream error: '.$e->getMessage());
-                $this->chatbotLogService->logError(
-                    $latestUserMessage,
-                    $e->getMessage(),
-                    $logContext,
-                    $sessionId
-                );
-                echo 'data: '.json_encode(['error' => 'Stream failed'])."\n\n";
-                $this->flushStreamOutput();
-            }
+";
         }, 200, [
             'Content-Type' => 'text/event-stream',
-            'Cache-Control' => 'no-cache',
-            'X-Accel-Buffering' => 'no',
+            'Cache-Control' => 'no-cache, no-transform',
             'Connection' => 'keep-alive',
         ]);
     }
