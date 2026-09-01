@@ -21,6 +21,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
+import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
 import { cn } from '@/lib/utils';
 import { PRIORITY_ACCENT, PRIORITY_LABELS } from '@/types/request';
 import type { Request } from '@/types/request';
@@ -45,6 +46,24 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     const [logsLoading, setLogsLoading] = useState(false);
     const [request, setRequest] = useState(initialRequest);
     const [activeTab, setActiveTab] = useState('overview');
+
+    useEffect(() => {
+        if (!request) {
+            clearRichPageContext();
+            return;
+        }
+
+        setRichPageContext({
+            entity: 'request_detail',
+            request_id: request.id,
+            status: request.status,
+            facility_count: request.request_facilities?.length ?? 0,
+        });
+
+        return () => {
+            clearRichPageContext();
+        };
+    }, [request?.id, request?.status, request?.request_facilities?.length]);
 
     useEffect(() => {
         // Sync local activity state when the deferred prop resolves or changes

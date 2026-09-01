@@ -219,101 +219,77 @@ Keep your answers conversational and helpful. Do not cite the tool call or conte
 SYMTPROMPT;
     }
 
-    private function processToolCalls(array $messages, array $incomingMessages): ?string
+    private function getPageContextToolDefinition(): array
     {
-        // Check the most recent message for tool call patterns
-        $combinedMessages = array_merge($messages, $incomingMessages);
-        $combinedMessages = array_values($combinedMessages);
-        $recentMessage = end($combinedMessages);
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'get_page_context',
+                'description' => 'Retrieve the current page context for the user\'s active facility request workflow, including current page details, related facilities/equipment/requests, and any applicable rules.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'page' => [
+                            'type' => 'boolean',
+                            'description' => 'Whether to fetch the current page context.',
+                            'default' => true,
+                        ],
+                    ],
+                    'required' => [],
+                ],
+            ],
+        ];
+    }
 
-        if (! $recentMessage) {
-            return null;
+    private function processToolCalls(array $messages, Request $request): ?string
+    {
+        $result = $this->ai->chatWithTools($messages, [$this->getPageContextToolDefinition()], [
+            'timeout' => 120,
+            'tool_choice' => 'auto',
+        ]);
+
+        $toolCalls = $result['tool_calls'] ?? [];
+        if (empty($toolCalls)) {
+            return $result['content'] !== '' ? trim((string) $result['content']) : null;
         }
 
-        $content = (string) ($recentMessage['content'] ?? '');
+        foreach ($toolCalls as $toolCall) {
+            $callType = $toolCall['type'] ?? null;
+            if ($callType !== 'function') {
+                continue;
+            }
 
-        if ($content === '') {
-            return null;
+            $functionName = (string) ($toolCall['function']['name'] ?? '');
+            if ($functionName !== 'get_page_context') {
+                continue;
+            }
+
+            $arguments = $toolCall['function']['arguments'] ?? '{}';
+            $parsedArguments = is_string($arguments) ? json_decode($arguments, true) : $arguments;
+            $fetchPageContext = is_array($parsedArguments) ? (bool) ($parsedArguments['page'] ?? true) : true;
+            if (! $fetchPageContext) {
+                return null;
+            }
+
+            $pageContext = $this->pageContextService->getCurrentPageContext($request->input('page_context', []));
+            $toolResult = [
+                'context' => $pageContext,
+                'page' => true,
+            ];
+
+            $messages[] = [
+                'role' => 'tool',
+                'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
+                'name' => 'get_page_context',
+                'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+            ];
+
+            $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
+
+            return $followUp !== '' ? $followUp : null;
         }
 
-        // Check for JSON tool call format: {"name": "get_context", "arguments": {...}}
-        if (preg_match('/\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*\{(.*?)\}\s*\}/s', $content, $matches)) {
-            $toolName = $matches[1];
-            $argumentsStr = '{'.$matches[2].'}';
-            $arguments = json_decode($argumentsStr, true);
-
-            if (json_last_error() === JSON_ERROR_NONE && $toolName === 'get_context') {
-                // Determine if we should fetch page context
-                $fetchPageContext = isset($arguments['page']) ? (bool) $arguments['page'] : true;
-
-                if ($fetchPageContext) {
-                    // Get the current page context using our service
-                    $context = $this->pageContextService->getCurrentPageContext();
-
-                    // Format the context for the AI to read
-                    $contextText = "Here is the current page context:\n\n";
-                    $contextText .= "FACILITIES:\n";
-                    foreach ($context['facilities'] as $facility) {
-                        $contextText .= "- ID: {$facility['id']}, Name: {$facility['name']}, Building: {$facility['building']}, Capacity: {$facility['capacity']}\n";
-                    }
-
-                    $contextText .= "\nEQUIPMENT:\n";
-                    foreach ($context['equipment'] as $equipment) {
-                        $contextText .= "- ID: {$equipment['id']}, Name: {$equipment['name']}, Quantity: {$equipment['quantity']}\n";
-                    }
-
-                    $contextText .= "\nRECENT REQUESTS:\n";
-                    foreach ($context['requests'] as $request) {
-                        $contextText .= "- #{$request['id']}: {$request['title']} ({$request['status']}) - Created: {$request['created_at']}\n";
-                    }
-
-                    $contextText .= "\nRULES/FAQ:\n";
-                    foreach (array_slice($context['rules'], 0, 5) as $rule) {
-                        $contextText .= "- Rule ID: {$rule['id']}: {$rule['rule']}\n";
-                    }
-
-                    $contextText .= "\nCURRENT FACILITY: ".($context['current_facility']?: 'None')."\n";
-                    $contextText .= "CURRENT EQUIPMENT: ".($context['current_equipment']?: 'None')."\n";
-                    $contextText .= "CURRENT REQUEST: ".($context['current_request']?: 'None')."\n";
-
-                    return $contextText;
-                }
-            }
-        }
-
-        // Check for [TOOL_CALL:get_context] marker format
-        if (str_contains($content, '[TOOL_CALL:get_context]')) {
-            $context = $this->pageContextService->getCurrentPageContext();
-
-            $contextText = "Here is the current page context:\n\n";
-            $contextText .= "FACILITIES:\n";
-            foreach ($context['facilities'] as $facility) {
-                $contextText .= "- ID: {$facility['id']}, Name: {$facility['name']}, Building: {$facility['building']}, Capacity: {$facility['capacity']}\n";
-            }
-
-            $contextText .= "\nEQUIPMENT:\n";
-            foreach ($context['equipment'] as $equipment) {
-                $contextText .= "- ID: {$equipment['id']}, Name: {$equipment['name']}, Quantity: {$equipment['quantity']}\n";
-            }
-
-            $contextText .= "\nRECENT REQUESTS:\n";
-            foreach ($context['requests'] as $request) {
-                $contextText .= "- #{$request['id']}: {$request['title']} ({$request['status']}) - Created: {$request['created_at']}\n";
-            }
-
-            $contextText .= "\nRULES/FAQ:\n";
-            foreach (array_slice($context['rules'], 0, 5) as $rule) {
-                $contextText .= "- Rule ID: {$rule['id']}: {$rule['rule']}\n";
-            }
-
-            $contextText .= "\nCURRENT FACILITY: ".($context['current_facility']?: 'None')."\n";
-            $contextText .= "CURRENT EQUIPMENT: ".($context['current_equipment']?: 'None')."\n";
-            $contextText .= "CURRENT REQUEST: ".($context['current_request']?: 'None')."\n";
-
-            return $contextText;
-        }
-
-        return null; // No tool call detected
+        return null;
     }
 
     private function extractFacilityAndDateFromMessage(?string $message, $facilities): array
@@ -2096,24 +2072,45 @@ SYMTPROMPT;
             }
 
             $sessionMessages = $this->loadSession();
+            $clientPageContext = $request->input('page_context');
+
+            if (! is_array($clientPageContext)) {
+                \Log::warning('Chat request missing page_context payload.', [
+                    'route' => $request->route()?->getName(),
+                    'path' => $request->path(),
+                ]);
+
+                return response()->json([
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => 'Page context is required for this request.',
+                    ],
+                ], 422);
+            }
+
+            $pageContext = $this->pageContextService->getCurrentPageContext($clientPageContext);
             $messages = array_merge($sessionMessages, $incomingMessages);
             $messages = array_merge([[
                 'role' => 'system',
                 'content' => $this->getContextAwareSystemPrompt(),
             ]], $messages);
-            $clientPageContext = $request->input('page_context');
-            if (is_array($clientPageContext)) {
-                $messages = array_merge([[
-                    'role' => 'system',
-                    'content' => "Visible browser page context (the user's current screen):\n".json_encode($clientPageContext, JSON_UNESCAPED_SLASHES),
-                ]], $messages);
-            }
+            $messages = array_merge([[
+                'role' => 'system',
+                'content' => "Current page context (server-resolved):\n".json_encode($pageContext, JSON_UNESCAPED_SLASHES),
+            ]], $messages);
+            $messages = array_merge([[
+                'role' => 'system',
+                'content' => "Visible browser page context (the user's current screen):\n".json_encode($clientPageContext, JSON_UNESCAPED_SLASHES),
+            ]], $messages);
 
-            $assistantReply = $this->processToolCalls($messages, $incomingMessages);
+            $assistantReply = $this->processToolCalls($messages, $request);
 
             if ($assistantReply === null) {
-                // No tool calls, proceed with normal AI chat
-                $assistantReply = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
+                $assistantReply = trim((string) $this->ai->chat($messages, [
+                    'timeout' => 120,
+                    'tools' => [$this->getPageContextToolDefinition()],
+                    'tool_choice' => 'auto',
+                ]));
 
                 if ($assistantReply === '') {
                     return response()->json([

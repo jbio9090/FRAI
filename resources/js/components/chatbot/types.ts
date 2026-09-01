@@ -1,3 +1,5 @@
+import type { ClientPageContext } from './utils/pageContext';
+
 export interface Message {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -13,7 +15,7 @@ export interface AttachedFileInfo {
 
 export interface ChatRequest {
     messages: Message[];
-    page_context?: Record<string, unknown>;
+    page_context: ClientPageContext;
     participant_count?: number;
     booking_context?: string;
     faq_mode?: boolean;

@@ -42,12 +42,12 @@ class PageContextService
 
     private function resolveRouteName(array $page): ?string
     {
-        $routeName = $page['route'] ?? null;
+        $routeName = request()->route()?->getName();
         if (is_string($routeName) && $routeName !== '' && ! str_starts_with($routeName, 'api.')) {
             return $routeName;
         }
 
-        $routeName = request()->route()?->getName();
+        $routeName = $page['route'] ?? null;
         if (is_string($routeName) && $routeName !== '' && ! str_starts_with($routeName, 'api.')) {
             return $routeName;
         }

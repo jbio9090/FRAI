@@ -1,6 +1,6 @@
 import type { ChatRequest } from '../types';
 import { getCsrfToken } from '../utils/csrfToken';
-import { collectPageContext } from '../utils/pageContext';
+import { collectPageContext, type ClientPageContext } from '../utils/pageContext';
 
 function extractBookingPayloadFromText(content: string): string | null {
     let depth = 0;
@@ -51,11 +51,15 @@ interface ChatJsonResponse {
     error?: string;
 }
 
-export async function sendChatMessage(payload: ChatRequest): Promise<{
+export async function sendChatMessage(
+    payload: ChatRequest,
+    pageContextOverride?: ClientPageContext,
+): Promise<{
     content: string;
     bookingPayload: string | null;
     deterministic: Record<string, unknown> | null;
 }> {
+    const pageContext = pageContextOverride ?? collectPageContext();
     const response = await fetch(route('api.chat'), {
         method: 'POST',
         headers: {
@@ -66,7 +70,7 @@ export async function sendChatMessage(payload: ChatRequest): Promise<{
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...payload, page_context: collectPageContext() }),
+        body: JSON.stringify({ ...payload, page_context: pageContext }),
     });
 
     if (response.status === 419) {
@@ -102,7 +106,9 @@ export async function sendChatMessageStream(
     onViolation: (message: string) => void,
     onDone: () => void,
     onError: (message: string) => void,
+    pageContextOverride?: ClientPageContext,
 ): Promise<void> {
+    const pageContext = pageContextOverride ?? collectPageContext();
     const response = await fetch(route('chat.stream'), {
         method: 'POST',
         headers: {
@@ -110,9 +116,10 @@ export async function sendChatMessageStream(
             Accept: 'text/event-stream',
             'X-Requested-With': 'XMLHttpRequest',
             'X-CSRF-TOKEN': getCsrfToken(),
+            'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, page_context: pageContext }),
     });
 
     if (response.status === 419) {
