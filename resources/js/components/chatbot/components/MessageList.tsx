@@ -62,15 +62,28 @@ const isGuidedAssistantMessage = (message: Message): boolean => {
     );
 };
 
-const splitThinkingContent = (content: string): { thought: string | null; answer: string } => {
-    const match = content.match(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/i);
-    if (!match) {
-        return { thought: null, answer: content };
+const stripThinkingContent = (content: string): { thought: string | null; answer: string } => {
+    const parts: string[] = [];
+    let lastIndex = 0;
+    const regex = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(content)) !== null) {
+        parts.push(content.slice(lastIndex, match.index));
+        lastIndex = match.index + match[0].length;
     }
 
+    parts.push(content.slice(lastIndex));
+
+    let answer = parts.join('').replace(/<\/?think(?:ing)?>/gi, ' ');
+    answer = answer.replace(/(?:^|\n)\s*here(?:['’]s)?\s*(?:a\s*)?(?:thinking|reasoning|analysis|thought(?:\s+process)?)\s*(?:process)?\s*[:.-]?\s*/gi, '\n');
+    answer = answer.replace(/(?:^|\n)\s*(?:step\s*\d+|analysis|reasoning|thought\s+process)\s*[:.-]?\s*/gi, '');
+    answer = answer.replace(/(?:^|\n)\s*(?:\d+\.|\d+\))\s*/g, '');
+    answer = answer.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+
     return {
-        thought: match[1].trim(),
-        answer: content.replace(match[0], '').trim(),
+        thought: null,
+        answer: answer || content.trim(),
     };
 };
 
@@ -79,7 +92,7 @@ export default function MessageList({ messages, messagesEndRef, equipmentSelecto
         <>
             {messages.map((msg, index) =>
                 (() => {
-                    const thinking = msg.role === 'assistant' ? splitThinkingContent(msg.content) : { thought: null, answer: msg.content };
+                    const thinking = msg.role === 'assistant' ? stripThinkingContent(msg.content) : { thought: null, answer: msg.content };
                     return (
                         <div
                             key={index}
@@ -112,12 +125,6 @@ export default function MessageList({ messages, messagesEndRef, equipmentSelecto
                                         >
                                             {msg.role}
                                         </Badge>
-                                        {thinking.thought ? (
-                                            <details className="mb-2 rounded-md border border-border/60 bg-background/50 px-2 py-1.5 text-xs text-muted-foreground">
-                                                <summary className="cursor-pointer font-medium select-none">View reasoning</summary>
-                                                <p className="mt-2 whitespace-pre-wrap">{thinking.thought}</p>
-                                            </details>
-                                        ) : null}
                                         <div className="text-sm break-words whitespace-pre-wrap text-card-foreground">
                                             {isGuidedAssistantMessage(msg) ? (
                                                 <TypingText

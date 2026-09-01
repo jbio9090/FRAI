@@ -1,5 +1,6 @@
-﻿import { useEffect, useRef, useState } from 'react';
-import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
+﻿import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useCurrentPageContext } from '@/lib/useCurrentPageContext';
 import ChatInput from './components/ChatInput';
 import MessageList from './components/MessageList';
 import { useChatAPI } from './hooks/useChatAPI';
@@ -16,8 +17,10 @@ export default function Chatbot() {
     const [contextOutput, setContextOutput] = useState<unknown>(null);
     const [contextError, setContextError] = useState<string | null>(null);
     const [isContextLoading, setIsContextLoading] = useState(false);
+    const [debugRawResponse, setDebugRawResponse] = useState<string>('');
     const { messages, addMessage, setMessages, clearMessages } = useMessages();
     const { isLoading, sendMessage } = useChatAPI();
+    const pageContext = useCurrentPageContext();
     const devMode = new URLSearchParams(window.location.search).has('devmode');
 
     useEffect(() => {
@@ -82,6 +85,46 @@ export default function Chatbot() {
         }
     };
 
+    const sanitizeStreamingContent = (value: string): string => {
+        let output = '';
+        let buffer = value;
+        let inThinking = false;
+
+        while (buffer.length > 0) {
+            if (!inThinking) {
+                const openMatch = buffer.match(/<think(?:ing)?>/i);
+                if (!openMatch) {
+                    output += buffer;
+                    break;
+                }
+
+                const openIndex = buffer.indexOf(openMatch[0]);
+                output += buffer.slice(0, openIndex);
+                buffer = buffer.slice(openIndex + openMatch[0].length);
+                inThinking = true;
+            } else {
+                const closeMatch = buffer.match(/<\/think(?:ing)?>/i);
+                if (!closeMatch) {
+                    buffer = '';
+                    break;
+                }
+
+                const closeIndex = buffer.indexOf(closeMatch[0]);
+                buffer = buffer.slice(closeIndex + closeMatch[0].length);
+                inThinking = false;
+            }
+        }
+
+        let cleaned = output;
+        cleaned = cleaned.replace(/<\/?think(?:ing)?>/gi, ' ');
+        cleaned = cleaned.replace(/(?:^|\n)\s*here(?:['’]s)?\s*(?:a\s*)?(?:thinking|reasoning|analysis|thought(?:\s+process)?)\s*(?:process)?\s*[:.-]?\s*/gi, '\n');
+        cleaned = cleaned.replace(/(?:^|\n)\s*(?:step\s*\d+|analysis|reasoning|thought\s+process)\s*[:.-]?\s*/gi, '');
+        cleaned = cleaned.replace(/(?:^|\n)\s*(?:\d+\.|\d+\))\s*/g, '');
+        cleaned = cleaned.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+
+        return cleaned;
+    };
+
     const handleSend = async () => {
         const trimmed = input.trim();
         if (!trimmed || isLoading) {
@@ -98,10 +141,18 @@ export default function Chatbot() {
         addMessage({ role: 'assistant', content: '' });
 
         let streamingContent = '';
+        if (devMode) {
+            setDebugRawResponse('');
+        }
 
         try {
-            await sendMessage(queuedMessages, undefined, undefined, false, (token) => {
+            await sendMessage(queuedMessages, undefined, undefined, false, pageContext, (token) => {
                 streamingContent += token;
+                if (devMode) {
+                    setDebugRawResponse((previous) => previous + token);
+                }
+
+                const visibleContent = sanitizeStreamingContent(streamingContent);
                 setMessages((previous) => {
                     if (previous.length === 0) {
                         return previous;
@@ -111,7 +162,7 @@ export default function Chatbot() {
                     const last = updated[updated.length - 1];
                     updated[updated.length - 1] = {
                         ...last,
-                        content: streamingContent,
+                        content: visibleContent,
                     };
 
                     return updated;
@@ -185,9 +236,20 @@ export default function Chatbot() {
                             </button>
                         </div>
                     </header>
-                    <pre className="min-h-0 flex-1 overflow-auto p-4 text-xs leading-relaxed break-words whitespace-pre-wrap">
-                        {isContextLoading ? 'Loading context…' : (contextError ?? JSON.stringify(contextOutput, null, 2))}
-                    </pre>
+                    <div className="min-h-0 flex-1 overflow-auto p-4">
+                        <div className="mb-4">
+                            <h3 className="mb-2 text-xs font-semibold tracking-[0.2em] text-amber-300 uppercase">Page context</h3>
+                            <pre className="rounded-md border border-amber-300/20 bg-black/20 p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                                {isContextLoading ? 'Loading context…' : (contextError ?? JSON.stringify(contextOutput, null, 2))}
+                            </pre>
+                        </div>
+                        <div>
+                            <h3 className="mb-2 text-xs font-semibold tracking-[0.2em] text-amber-300 uppercase">Raw model output</h3>
+                            <pre className="rounded-md border border-amber-300/20 bg-black/20 p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                                {debugRawResponse || 'No raw model output captured yet.'}
+                            </pre>
+                        </div>
+                    </div>
                 </section>
             ) : null}
             {isOpen ? (

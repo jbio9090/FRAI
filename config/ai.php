@@ -4,15 +4,9 @@ return [
     'provider' => env('AI_PROVIDER', 'nvidia'),
 
     'nvidia' => [
-        'api_key' => env('NVIDIA_API_KEY', env('OPENROUTER_API_KEY')),
-        'model' => env('NVIDIA_MODEL', env('OPENROUTER_MODEL', 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b')),
-        'base_url' => rtrim(env('NVIDIA_BASE_URL', env('OPENROUTER_BASE_URL', 'https://integrate.api.nvidia.com/v1')), '/'),
-    ],
-
-    'openrouter' => [
-        'api_key' => env('OPENROUTER_API_KEY'),
-        'model' => env('OPENROUTER_MODEL', ''),
-        'base_url' => rtrim(env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'), '/'),
+        'api_key' => env('NVIDIA_API_KEY'),
+        'model' => env('NVIDIA_MODEL', 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b'),
+        'base_url' => rtrim(env('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1'), '/'),
     ],
 
     'generate' => [

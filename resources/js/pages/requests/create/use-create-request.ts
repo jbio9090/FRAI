@@ -23,6 +23,7 @@ import type {
 } from './types';
 import { addCalendarDays, clearDraft, draftDiffersFromExisting, formatMaxFileSize, getTodayStart, loadDraft, maxFileSizeBytes, minutesToTime, saveDraft, timeToMinutes } from './utils';
 import { ALLOWED_TYPES } from './utils';
+import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
 
 export function useCreateRequest({ facilities, existingRequest }: Pick<CreateRequestProps, 'facilities' | 'existingRequest'>) {
     const isEditing = !!existingRequest;
@@ -75,6 +76,24 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
     const [borrowableAvailability, setBorrowableAvailability] = useState<BorrowableAvailabilityMap>({});
     const [isExternalOpen, setIsExternalOpen] = useState(false);
     const [isBorrowOpen, setIsBorrowOpen] = useState(false);
+
+    useEffect(() => {
+        setRichPageContext({
+            entity: 'facility_request_draft',
+            facility_id: selectedFacility,
+            dates: selectedDates.map((date) => format(date, 'yyyy-MM-dd')),
+            time_start: currentTimeStart,
+            time_end: currentTimeEnd,
+            equipment_count: selectedEquipment.length,
+            has_conflicts: scheduleConflicts.length > 0,
+            is_editing: isEditing,
+            existing_request_id: existingRequest?.id ?? null,
+        });
+
+        return () => {
+            clearRichPageContext();
+        };
+    }, [existingRequest?.id, isEditing, selectedDates, selectedEquipment.length, selectedFacility, scheduleConflicts.length, currentTimeEnd, currentTimeStart]);
 
     // Edit-in-place state
     const [editingIndex, setEditingIndex] = useState<number | null>(null);

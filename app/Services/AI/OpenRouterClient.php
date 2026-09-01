@@ -11,65 +11,40 @@ class OpenRouterClient
 {
     public function chat(array $messages, array $options = []): string
     {
-        $apiKey = $this->apiKey();
-        $model = $this->model();
+        $response = $this->doChatRequest($messages, false, $options);
 
-        if (trim($apiKey) === '') {
-            throw new RuntimeException('AI API key is not configured.');
-        }
-
-        if (trim($model) === '') {
-            throw new RuntimeException('AI model is not configured.');
-        }
-
-        $timeout = (int) ($options['timeout'] ?? config('ai.generate.timeout', 60));
-        $payload = [
-            'model' => $model,
-            'messages' => $messages,
-            'stream' => false,
-            'temperature' => (float) ($options['temperature'] ?? config('ai.generate.temperature', 0.1)),
-            'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
-        ];
-
-        if ($this->providerName() === 'nvidia') {
-            $payload['chat_template_kwargs'] = ['enable_thinking' => false];
-        }
-
-        $request = Http::timeout($timeout)
-            ->withToken($apiKey)
-            ->withHeaders(array_filter([
-                'Content-Type' => 'application/json',
-                'HTTP-Referer' => $this->providerName() === 'openrouter' ? (string) config('app.url') : null,
-                'X-Title' => $this->providerName() === 'openrouter' ? (string) config('app.name', 'FRAI') : null,
-            ], fn ($value) => $value !== null && $value !== ''));
-
-        $response = $request->post($this->endpoint('/chat/completions'), $payload);
-
-        Log::debug('AI chat response', [
-            'provider' => $this->providerName(),
-            'status' => $response->status(),
-            'body' => substr($response->body(), 0, 500),
-        ]);
-
-        if (! $response->successful()) {
-            Log::warning('AI chat failed', [
+        $toolCalls = $this->extractToolCalls($response);
+        if (! empty($toolCalls)) {
+            Log::debug('AI chat returned tool calls', [
                 'provider' => $this->providerName(),
-                'status' => $response->status(),
-                'body' => substr($response->body(), 0, 1000),
+                'tool_calls' => $toolCalls,
             ]);
-
-            throw new RuntimeException('AI chat request failed with status '.$response->status().'.');
         }
 
-        $content = trim((string) $response->json('choices.0.message.content', ''));
+        $content = trim((string) ($response['choices'][0]['message']['content'] ?? ''));
         if ($content === '') {
             Log::warning('AI chat returned empty content', [
                 'provider' => $this->providerName(),
-                'body' => substr($response->body(), 0, 1000),
+                'body' => substr(json_encode($response), 0, 1000),
             ]);
         }
 
         return $content;
+    }
+
+    public function chatWithTools(array $messages, array $tools, array $options = []): array
+    {
+        $payloadOptions = $options;
+        $payloadOptions['tools'] = $tools;
+        $response = $this->doChatRequest($messages, false, $payloadOptions);
+
+        $message = $response['choices'][0]['message'] ?? [];
+
+        return [
+            'content' => (string) ($message['content'] ?? ''),
+            'tool_calls' => $this->extractToolCalls($response),
+            'raw' => $response,
+        ];
     }
 
     public function chatResponse(array $messages, array $options = []): array
@@ -97,13 +72,7 @@ class OpenRouterClient
         }
 
         $timeout = (int) ($options['timeout'] ?? config('ai.generate.timeout', 60));
-        $payload = [
-            'model' => $model,
-            'messages' => $messages,
-            'stream' => true,
-            'temperature' => (float) ($options['temperature'] ?? config('ai.generate.temperature', 0.1)),
-            'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
-        ];
+        $payload = $this->buildChatPayload($messages, true, $options);
 
         if ($this->providerName() === 'nvidia') {
             $payload['chat_template_kwargs'] = ['enable_thinking' => false];
@@ -119,11 +88,6 @@ class OpenRouterClient
             'Content-Type' => 'application/json',
             'Accept' => 'text/event-stream',
         ];
-
-        if ($this->providerName() === 'openrouter') {
-            $headers['HTTP-Referer'] = (string) config('app.url');
-            $headers['X-Title'] = (string) config('app.name', 'FRAI');
-        }
 
         $response = $client->post($this->endpoint('/chat/completions'), [
             'headers' => $headers,
@@ -169,9 +133,16 @@ class OpenRouterClient
                     continue;
                 }
 
-                $token = (string) ($decoded['choices'][0]['delta']['content']
-                    ?? $decoded['choices'][0]['message']['content']
-                    ?? '');
+                $message = $decoded['choices'][0]['delta'] ?? $decoded['choices'][0]['message'] ?? [];
+                $toolCalls = $this->extractToolCalls($decoded);
+                if (! empty($toolCalls)) {
+                    Log::debug('AI stream returned tool calls', [
+                        'provider' => $this->providerName(),
+                        'tool_calls' => $toolCalls,
+                    ]);
+                }
+
+                $token = (string) ($message['content'] ?? '');
 
                 if ($token === '') {
                     continue;
@@ -200,21 +171,21 @@ class OpenRouterClient
     {
         $providerConfig = $this->providerConfig();
 
-        return trim((string) ($providerConfig['model'] ?? config('ai.openrouter.model', 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b')));
+        return trim((string) ($providerConfig['model'] ?? 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b'));
     }
 
     public function baseUrl(): string
     {
         $providerConfig = $this->providerConfig();
 
-        return rtrim((string) ($providerConfig['base_url'] ?? config('ai.openrouter.base_url', 'https://integrate.api.nvidia.com/v1')), '/');
+        return rtrim((string) ($providerConfig['base_url'] ?? 'https://integrate.api.nvidia.com/v1'), '/');
     }
 
     public function apiKey(): string
     {
         $providerConfig = $this->providerConfig();
 
-        return trim((string) ($providerConfig['api_key'] ?? config('ai.openrouter.api_key', '')));
+        return trim((string) ($providerConfig['api_key'] ?? ''));
     }
 
     public function isConfigured(): bool
@@ -223,28 +194,113 @@ class OpenRouterClient
             && trim($this->model()) !== '';
     }
 
+    private function doChatRequest(array $messages, bool $stream, array $options = []): array
+    {
+        $apiKey = $this->apiKey();
+        $model = $this->model();
+
+        if (trim($apiKey) === '') {
+            throw new RuntimeException('AI API key is not configured.');
+        }
+
+        if (trim($model) === '') {
+            throw new RuntimeException('AI model is not configured.');
+        }
+
+        $timeout = (int) ($options['timeout'] ?? config('ai.generate.timeout', 60));
+        $payload = $this->buildChatPayload($messages, $stream, $options);
+
+        $request = Http::timeout($timeout)
+            ->withToken($apiKey)
+            ->withHeaders([
+                'Content-Type' => 'application/json',
+            ]);
+
+        $response = $request->post($this->endpoint('/chat/completions'), $payload);
+
+        Log::debug('AI chat response', [
+            'provider' => $this->providerName(),
+            'status' => $response->status(),
+            'body' => substr($response->body(), 0, 500),
+        ]);
+
+        if (! $response->successful()) {
+            Log::warning('AI chat failed', [
+                'provider' => $this->providerName(),
+                'status' => $response->status(),
+                'body' => substr($response->body(), 0, 1000),
+            ]);
+
+            throw new RuntimeException('AI chat request failed with status '.$response->status().'.');
+        }
+
+        $decoded = $response->json();
+        if (! is_array($decoded)) {
+            throw new RuntimeException('AI chat response was not valid JSON.');
+        }
+
+        return $decoded;
+    }
+
+    private function buildChatPayload(array $messages, bool $stream, array $options = []): array
+    {
+        $payload = [
+            'model' => $this->model(),
+            'messages' => $messages,
+            'stream' => $stream,
+            'temperature' => (float) ($options['temperature'] ?? config('ai.generate.temperature', 0.1)),
+            'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
+        ];
+
+        if (array_key_exists('tools', $options) && is_array($options['tools']) && $options['tools'] !== []) {
+            $payload['tools'] = $options['tools'];
+        }
+
+        if (array_key_exists('tool_choice', $options)) {
+            $payload['tool_choice'] = $options['tool_choice'];
+        }
+
+        return $payload;
+    }
+
+    private function extractToolCalls(array $response): array
+    {
+        $message = $response['choices'][0]['message'] ?? $response['choices'][0]['delta'] ?? [];
+        if (! is_array($message)) {
+            return [];
+        }
+
+        $toolCalls = $message['tool_calls'] ?? null;
+        if (is_array($toolCalls) && $toolCalls !== []) {
+            return $toolCalls;
+        }
+
+        $legacyFunctionCall = $message['function_call'] ?? null;
+        if (is_array($legacyFunctionCall) && ($legacyFunctionCall['name'] ?? null) !== null) {
+            return [[
+                'type' => 'function',
+                'function' => [
+                    'name' => (string) ($legacyFunctionCall['name'] ?? ''),
+                    'arguments' => is_array($legacyFunctionCall['arguments'] ?? null)
+                        ? json_encode($legacyFunctionCall['arguments'])
+                        : (string) ($legacyFunctionCall['arguments'] ?? '{}'),
+                ],
+            ]];
+        }
+
+        return [];
+    }
+
     private function providerConfig(): array
     {
         $provider = $this->providerName();
         $config = config('ai.'.$provider, []);
 
-        if (is_array($config) && $provider !== 'nvidia') {
+        if (is_array($config)) {
             return $config;
         }
 
-        $nvidiaApiKey = trim((string) ($config['api_key'] ?? ''));
-        if ($nvidiaApiKey !== '') {
-            return $config;
-        }
-
-        $openrouterConfig = is_array(config('ai.openrouter')) ? config('ai.openrouter') : [];
-        $openrouterApiKey = trim((string) ($openrouterConfig['api_key'] ?? ''));
-
-        if ($openrouterApiKey !== '') {
-            return $openrouterConfig;
-        }
-
-        return $config;
+        return [];
     }
 
     private function endpoint(string $path): string

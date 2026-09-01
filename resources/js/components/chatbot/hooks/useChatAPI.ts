@@ -2,6 +2,27 @@ import { useState, useCallback } from 'react';
 import { sendChatMessage } from '../services/chatService';
 import { createRequest } from '../services/requestService';
 import type { Message, ChatRequest, CreateRequestPayload } from '../types';
+import { collectPageContext, type ClientPageContext } from '../utils/pageContext';
+
+const RETRY_DELAY_MS = 2 * 60 * 1000;
+
+function isTransientAiFailure(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+        return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return message.includes('429')
+        || message.includes('rate limit')
+        || message.includes('too many requests')
+        || message.includes('502')
+        || message.includes('503')
+        || message.includes('504')
+        || message.includes('timeout')
+        || message.includes('network')
+        || message.includes('failed to fetch')
+        || message.includes('temporarily unavailable');
+}
 
 function typeOutContent(content: string, onToken?: (token: string) => void): Promise<void> {
     return new Promise((resolve) => {
@@ -35,6 +56,7 @@ export function useChatAPI() {
         participantCount?: number,
         bookingContext?: string,
         faqMode?: boolean,
+        pageContext?: ClientPageContext,
         onToken?: (token: string) => void,
         onBookingPayload?: (json: string) => void,
         onDeterministic?: (payload: Record<string, unknown>) => void,
@@ -42,38 +64,55 @@ export function useChatAPI() {
         setIsLoading(true);
         setError(null);
 
-        return new Promise<string>((resolve, reject) => {
-            const payload: ChatRequest = { messages };
+        const runRequest = async () => {
+            const payload: ChatRequest = {
+                messages,
+                page_context: pageContext ?? collectPageContext(),
+            };
             if (participantCount) payload.participant_count = participantCount;
-            if (bookingContext)   payload.booking_context   = bookingContext;
+            if (bookingContext) payload.booking_context = bookingContext;
             if (faqMode) payload.faq_mode = true;
 
             let fullContent = '';
-            void sendChatMessage(payload)
-                .then(async ({ content, bookingPayload, deterministic }) => {
-                    fullContent = content;
+            let attempt = 0;
 
-                    if (deterministic) {
-                        onDeterministic?.(deterministic);
+            while (true) {
+                try {
+                    const response = await sendChatMessage(payload, pageContext);
+                    fullContent = response.content;
+
+                    if (response.deterministic) {
+                        onDeterministic?.(response.deterministic);
                     }
 
-                    if (bookingPayload) {
-                        onBookingPayload?.(bookingPayload);
+                    if (response.bookingPayload) {
+                        onBookingPayload?.(response.bookingPayload);
                     } else {
-                        await typeOutContent(content, onToken);
+                        await typeOutContent(response.content, onToken);
                     }
 
                     setIsLoading(false);
-                    resolve(fullContent);
-                })
-                .catch((error) => {
+                    setError(null);
+                    return fullContent;
+                } catch (error) {
                     const message = error instanceof Error ? error.message : 'Unknown error occurred';
-                    setIsLoading(false);
-                    setError(message);
-                    reject(error instanceof Error ? error : new Error(message));
-                });
-        });
-    }, []); 
+                    const retryable = isTransientAiFailure(error);
+
+                    if (!retryable || attempt >= 1) {
+                        setIsLoading(false);
+                        setError(message);
+                        throw error instanceof Error ? error : new Error(message);
+                    }
+
+                    attempt += 1;
+                    setError('AI request failed. Retrying automatically in 2 minutes…');
+                    await new Promise((waitResolve) => window.setTimeout(waitResolve, RETRY_DELAY_MS));
+                }
+            }
+        };
+
+        return runRequest();
+    }, []);
 
     const submitRequest = useCallback(async (payload: CreateRequestPayload) => {
         setIsLoading(true);
