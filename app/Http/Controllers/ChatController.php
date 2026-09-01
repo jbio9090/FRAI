@@ -29,6 +29,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ChatController extends Controller
 {
     private const SESSION_TTL_MINUTES = 15;
+    private const MAX_SESSION_MESSAGES = 10;
 
     protected PageContextService $pageContextService;
 
@@ -46,6 +47,11 @@ class ChatController extends Controller
         return 'chat_session_'.Auth::id();
     }
 
+    private function pageContextCacheKey(): string
+    {
+        return 'chat_page_context_'.Auth::id();
+    }
+
     private function faqStateCacheKey(): string
     {
         return 'chat_faq_state_'.Auth::id();
@@ -55,14 +61,49 @@ class ChatController extends Controller
     {
         Cache::put(
             $this->sessionCacheKey(),
-            $userMessages,
+            array_slice($userMessages, -self::MAX_SESSION_MESSAGES),
             now()->addMinutes(self::SESSION_TTL_MINUTES)
         );
     }
 
     private function loadSession(): array
     {
-        return Cache::get($this->sessionCacheKey(), []);
+        $messages = Cache::get($this->sessionCacheKey(), []);
+
+        return is_array($messages)
+            ? array_slice($messages, -self::MAX_SESSION_MESSAGES)
+            : [];
+    }
+
+    private function getServerPageContext(array $clientPageContext): array
+    {
+        $page = array_intersect_key($clientPageContext, array_flip([
+            'url',
+            'path',
+            'route',
+            'component',
+            'title',
+        ]));
+        $fingerprint = implode('|', [
+            (string) ($page['path'] ?? ''),
+            (string) ($page['route'] ?? ''),
+        ]);
+        $cached = Cache::get($this->pageContextCacheKey());
+
+        if (is_array($cached)
+            && ($cached['fingerprint'] ?? null) === $fingerprint
+            && is_array($cached['context'] ?? null)) {
+            return $cached['context'];
+        }
+
+        $context = $this->pageContextService->getCurrentPageContext($page);
+        Cache::put(
+            $this->pageContextCacheKey(),
+            ['fingerprint' => $fingerprint, 'context' => $context],
+            now()->addMinutes(self::SESSION_TTL_MINUTES)
+        );
+
+        return $context;
     }
 
     public function getSession(): JsonResponse
@@ -75,6 +116,7 @@ class ChatController extends Controller
     private function clearSession(): void
     {
         Cache::forget($this->sessionCacheKey());
+        Cache::forget($this->pageContextCacheKey());
         Cache::forget($this->faqStateCacheKey());
     }
 
@@ -192,7 +234,7 @@ class ChatController extends Controller
     private function getContextAwareSystemPrompt(): string
     {
         return <<<'SYMTPROMPT'
-You are an AI assistant for the PLV-GSO Facility Request System. You have access to a tool called `get_context` that can retrieve information about the current page/facility context.
+You are an AI assistant for the PLV-GSO Facility Request System. You have access to a tool called `get_page_context` that can retrieve information about the current page/facility context.
 
 When users ask questions about:
 - Facility availability, bookings, or scheduling
@@ -201,21 +243,32 @@ When users ask questions about:
 - Rules, policies, or FAQ topics
 - Any system-specific knowledge about facilities, equipment, or requests
 
-You MUST call the `get_context` tool first to get the current page context before answering. The tool returns structured information about:
+You MUST call the `get_page_context` tool first to get the current page context before answering. The tool returns structured information about:
 1. Available facilities (ID, name, building, capacity)
 2. Equipment and their assignments
 3. Recent requests
 4. Active rules/FAQ entries
 5. Current selected facility/equipment/request
 
-After calling `get_context`, use the returned information to provide accurate, contextual answers. If the user's question doesn't require page context, you can answer directly without calling the tool.
+After calling `get_page_context`, use the returned information to provide accurate, contextual answers. If the user's question doesn't require page context, you can answer directly without calling the tool.
 
-Format your tool call as a JSON object in your messages:
-{"name": "get_context", "arguments": {"page": true}}
+Use the `get_page_context` tool when you need current page information.
 
 After receiving the tool response, incorporate the context into your answer naturally, citing facility IDs, equipment names, request details, or rule information as relevant to the user's question.
 
 Keep your answers conversational and helpful. Do not cite the tool call or context data unless directly relevant to answering the user's question.
+
+Answer only what the user actually asked. Do not include KPI stats, activity feed entries, or other unrelated tool data unless the user's question specifically calls for it or they ask for more detail.
+
+Keep answers concise — a short list or a couple of sentences is usually enough. Do not restate every field from the tool result; select only what's relevant to the question.
+
+If there's more relevant information available, you may briefly offer to share it, but don't dump it by default.
+
+You have two tools:
+- get_page_context: current page's summary data (KPIs, recent requests list, activity feed).
+- get_request_details: full detail for one specific request by ID (requester, facilities/times, equipment, comments) — use this when the user asks about a particular request or wants more than the summary gives.
+
+If get_request_details returns a "forbidden" error, tell the user the request exists but they don't have permission to view it, and suggest contacting their GSO admin with the request ID. If it returns "not_found", tell them plainly no such request exists.
 SYMTPROMPT;
     }
 
@@ -241,9 +294,33 @@ SYMTPROMPT;
         ];
     }
 
-    private function processToolCalls(array $messages, Request $request): ?string
+    private function getRequestDetailsToolDefinition(): array
     {
-        $result = $this->ai->chatWithTools($messages, [$this->getPageContextToolDefinition()], [
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'get_request_details',
+                'description' => 'Retrieve full details for a specific facility request by its ID, including requester, facilities booked, equipment, status, and comments. Use this when the user asks about a specific request or wants more detail than the page context summary provides.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'request_id' => [
+                            'type' => 'integer',
+                            'description' => 'The ID of the request to fetch details for.',
+                        ],
+                    ],
+                    'required' => ['request_id'],
+                ],
+            ],
+        ];
+    }
+
+    private function processToolCalls(array $messages, Request $request, ?array &$debugInfo = null): ?string
+    {
+        $result = $this->ai->chatWithTools($messages, [
+            $this->getPageContextToolDefinition(),
+            $this->getRequestDetailsToolDefinition(),
+        ], [
             'timeout' => 120,
             'tool_choice' => 'auto',
         ]);
@@ -260,7 +337,38 @@ SYMTPROMPT;
             }
 
             $functionName = (string) ($toolCall['function']['name'] ?? '');
+            if ($functionName === 'get_request_details') {
+                $arguments = $toolCall['function']['arguments'] ?? '{}';
+                $parsedArguments = is_string($arguments) ? json_decode($arguments, true) : $arguments;
+                $requestId = is_array($parsedArguments) ? (int) ($parsedArguments['request_id'] ?? 0) : 0;
+                $requestDetail = $this->getRequestDetail($requestId);
+
+                if ($debugInfo !== null) {
+                    $debugInfo[] = [
+                        'tool' => 'get_request_details',
+                        'arguments' => $parsedArguments,
+                        'result' => $requestDetail,
+                    ];
+                }
+
+                $messages[] = [
+                    'role' => 'tool',
+                    'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
+                    'name' => 'get_request_details',
+                    'content' => json_encode($requestDetail, JSON_UNESCAPED_SLASHES),
+                ];
+
+                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
+
+                return $followUp !== '' ? $followUp : null;
+            }
+
             if ($functionName !== 'get_page_context') {
+                \Log::warning('AI returned an unknown tool call.', [
+                    'tool_name' => $functionName,
+                    'known_tools' => ['get_page_context', 'get_request_details'],
+                ]);
+
                 continue;
             }
 
@@ -277,6 +385,14 @@ SYMTPROMPT;
                 'page' => true,
             ];
 
+            if ($debugInfo !== null) {
+                $debugInfo[] = [
+                    'tool' => 'get_page_context',
+                    'arguments' => $parsedArguments,
+                    'result' => $toolResult,
+                ];
+            }
+
             $messages[] = [
                 'role' => 'tool',
                 'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
@@ -290,6 +406,52 @@ SYMTPROMPT;
         }
 
         return null;
+    }
+
+    private function getRequestDetail(int $requestId): array
+    {
+        $user = Auth::user();
+        $isAdmin = $user->hasRole(['admin', 'Super Admin']);
+        $request = RequestModel::with(['user', 'facilities', 'equipment', 'comments.user', 'processedBy'])
+            ->find($requestId);
+
+        if (! $request) {
+            return [
+                'error' => 'not_found',
+                'message' => 'No request exists with that ID.',
+            ];
+        }
+
+        if (! $isAdmin && $request->user_id !== $user->id) {
+            return [
+                'error' => 'forbidden',
+                'message' => 'This request exists, but you do not have permission to view its details. If you believe you should have access, please contact your GSO admin and reference request ID '.$request->id.'.',
+            ];
+        }
+
+        return [
+            'id' => $request->id,
+            'title' => $request->title,
+            'description' => $request->description,
+            'status' => $request->status?->value,
+            'requester' => $request->user?->name,
+            'facilities' => $request->facilities->map(fn ($facility) => [
+                'name' => $facility->name,
+                'date' => $facility->pivot->date_requested ?? null,
+                'time_start' => $facility->pivot->time_start ?? null,
+                'time_end' => $facility->pivot->time_end ?? null,
+            ])->values(),
+            'equipment' => $request->equipment->map(fn ($equipment) => [
+                'name' => $equipment->name,
+                'quantity_needed' => $equipment->pivot->quantity_needed ?? null,
+            ])->values(),
+            'comments' => $request->comments->map(fn ($comment) => [
+                'author' => $comment->user?->name,
+                'body' => $comment->body,
+                'created_at' => $comment->created_at?->diffForHumans(),
+            ])->values(),
+            'processed_by' => $request->processedBy?->name,
+        ];
     }
 
     private function extractFacilityAndDateFromMessage(?string $message, $facilities): array
@@ -2088,7 +2250,7 @@ SYMTPROMPT;
                 ], 422);
             }
 
-            $pageContext = $this->pageContextService->getCurrentPageContext($clientPageContext);
+            $pageContext = $this->getServerPageContext($clientPageContext);
             $messages = array_merge($sessionMessages, $incomingMessages);
             $messages = array_merge([[
                 'role' => 'system',
@@ -2103,7 +2265,8 @@ SYMTPROMPT;
                 'content' => "Visible browser page context (the user's current screen):\n".json_encode($clientPageContext, JSON_UNESCAPED_SLASHES),
             ]], $messages);
 
-            $assistantReply = $this->processToolCalls($messages, $request);
+            $debugToolCalls = [];
+            $assistantReply = $this->processToolCalls($messages, $request, $debugToolCalls);
 
             if ($assistantReply === null) {
                 $assistantReply = trim((string) $this->ai->chat($messages, [
@@ -2140,12 +2303,22 @@ SYMTPROMPT;
                     && trim($content) !== '';
             })));
 
-            return response()->json([
+            $response = [
                 'message' => [
                     'role' => 'assistant',
                     'content' => $assistantReply,
                 ],
-            ]);
+            ];
+
+            if (
+                $request->boolean('devmode')
+                && Auth::user()->hasRole(['admin', 'Super Admin'])
+                && ! empty($debugToolCalls)
+            ) {
+                $response['debug'] = ['tool_calls' => $debugToolCalls];
+            }
+
+            return response()->json($response);
         } catch (\RuntimeException $e) {
             \Log::error('Chat error: '.$e->getMessage());
 
@@ -2165,22 +2338,72 @@ SYMTPROMPT;
 
     public function stream(Request $request): StreamedResponse
     {
-        $response = $this->chat($request);
-        $payload = $response->getData(true);
-        $content = $payload['message']['content'] ?? 'I did not receive a response from the AI provider.';
+        $incomingMessages = $request->input('messages', []);
+        $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
 
-        return response()->stream(function () use ($content) {
-            echo "data: ".json_encode([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => $content,
-                ],
-            ])."
+        if (! is_string($latestUserMessage) || trim($latestUserMessage) === '') {
+            return response()->stream(function () {
+                echo 'data: '.json_encode([
+                    'error' => 'A user message is required.',
+                ])."\n\n";
+                echo 'data: '.json_encode(['done' => true])."\n\n";
+            }, 422, [
+                'Content-Type' => 'text/event-stream',
+                'Cache-Control' => 'no-cache, no-transform',
+                'Connection' => 'keep-alive',
+            ]);
+        }
 
-";
-            echo "data: ".json_encode(['done' => true])."
+        $clientPageContext = $request->input('page_context');
+        if (! is_array($clientPageContext)) {
+            \Log::warning('Chat stream request missing page_context payload.', [
+                'route' => $request->route()?->getName(),
+                'path' => $request->path(),
+            ]);
 
-";
+            return response()->stream(function () {
+                echo 'data: '.json_encode([
+                    'error' => 'Page context is required for this request.',
+                ])."\n\n";
+                echo 'data: '.json_encode(['done' => true])."\n\n";
+            }, 422, [
+                'Content-Type' => 'text/event-stream',
+                'Cache-Control' => 'no-cache, no-transform',
+                'Connection' => 'keep-alive',
+            ]);
+        }
+
+        $sessionMessages = $this->loadSession();
+        $pageContext = $this->getServerPageContext($clientPageContext);
+        $messages = array_merge($sessionMessages, $incomingMessages);
+        $messages = array_merge([[
+            'role' => 'system',
+            'content' => $this->getContextAwareSystemPrompt(),
+        ]], $messages);
+        $messages = array_merge([[
+            'role' => 'system',
+            'content' => "Current page context (server-resolved):\n".json_encode($pageContext, JSON_UNESCAPED_SLASHES),
+        ]], $messages);
+        $messages = array_merge([[
+            'role' => 'system',
+            'content' => "Visible browser page context (the user's current screen):\n".json_encode($clientPageContext, JSON_UNESCAPED_SLASHES),
+        ]], $messages);
+
+        return response()->stream(function () use ($messages) {
+            $onToken = function (string $token): void {
+                echo 'data: '.json_encode(['token' => $token])."\n\n";
+                $this->flushStreamOutput();
+            };
+
+            $content = $this->ai->streamChat($messages, $onToken, [
+                'timeout' => 120,
+                'tools' => [$this->getPageContextToolDefinition()],
+                'tool_choice' => 'auto',
+            ]);
+
+            $this->storeAssistantReply($messages, $content);
+            echo 'data: '.json_encode(['done' => true])."\n\n";
+            $this->flushStreamOutput();
         }, 200, [
             'Content-Type' => 'text/event-stream',
             'Cache-Control' => 'no-cache, no-transform',

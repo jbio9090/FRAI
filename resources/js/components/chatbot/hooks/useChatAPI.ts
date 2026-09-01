@@ -60,6 +60,8 @@ export function useChatAPI() {
         onToken?: (token: string) => void,
         onBookingPayload?: (json: string) => void,
         onDeterministic?: (payload: Record<string, unknown>) => void,
+        devmode?: boolean,
+        onDebugToolCalls?: (calls: unknown[]) => void,
     ) => {
         setIsLoading(true);
         setError(null);
@@ -78,11 +80,15 @@ export function useChatAPI() {
 
             while (true) {
                 try {
-                    const response = await sendChatMessage(payload, pageContext);
+                    const response = await sendChatMessage(payload, pageContext, devmode);
                     fullContent = response.content;
 
                     if (response.deterministic) {
                         onDeterministic?.(response.deterministic);
+                    }
+
+                    if (response.debug?.tool_calls?.length) {
+                        onDebugToolCalls?.(response.debug.tool_calls);
                     }
 
                     if (response.bookingPayload) {

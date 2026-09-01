@@ -23,10 +23,10 @@ export function collectPageContext(inertiaComponent?: string): ClientPageContext
         .filter(Boolean);
 
     const rich = getRichPageContext();
-    const visibleContent = visibleText(document.querySelector('main') ?? document.body).slice(0, 2000);
-    const currentRoute = route?.current?.() ?? undefined;
+    const visibleContent = visibleText(document.querySelector('main') ?? document.body).slice(0, 800);
+    const currentRoute = typeof route === 'function' ? (typeof route().current === 'function' ? route().current() : undefined) : undefined;
 
-    if (currentRoute && inertiaComponent) {
+    if (currentRoute && typeof currentRoute === 'string' && inertiaComponent) {
         const normalizedRoute = currentRoute.replace(/\./g, '/');
         if (normalizedRoute !== inertiaComponent) {
             console.warn('[pageContext] route/component mismatch', { route: currentRoute, component: inertiaComponent });
@@ -45,7 +45,7 @@ export function collectPageContext(inertiaComponent?: string): ClientPageContext
             .filter((button) => !!(button as HTMLElement).offsetParent)
             .map(visibleText)
             .filter(Boolean)
-            .slice(0, 50),
+            .slice(0, 20),
         visible_tables: Array.from(document.querySelectorAll('table'))
             .filter((table) => !!(table as HTMLElement).offsetParent)
             .map(visibleText)
@@ -58,7 +58,7 @@ export function collectPageContext(inertiaComponent?: string): ClientPageContext
                 label: field.getAttribute('aria-label') || field.getAttribute('name') || field.tagName.toLowerCase(),
                 value: (field as HTMLInputElement).value ?? '',
             }))
-            .slice(0, 50),
+            .slice(0, 20),
         rich: rich ?? null,
     };
 }

@@ -131,7 +131,7 @@ export async function downloadFacilitiesPDF(requestTitle: string, bookings: Faci
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${requestTitle.replace(/\s+/g, '_')}_stickers.pdf`;
+    a.download = `${String(requestTitle || 'request').replace(/\s+/g, '_')}_stickers.pdf`;
     a.click();
     URL.revokeObjectURL(url);
 }

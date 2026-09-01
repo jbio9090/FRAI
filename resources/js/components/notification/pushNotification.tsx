@@ -1,56 +1,40 @@
 import { router, usePage } from '@inertiajs/react';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 export default function PushNotifications() {
-    const { firebaseConfig } = usePage().props as any;
+    const { firebaseConfig } = usePage().props as unknown as { firebaseConfig?: Record<string, unknown> };
     const [permission, setPermission] = useState<NotificationPermission>('default');
     const [isRegistered, setIsRegistered] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSupported, setIsSupported] = useState(false);
-    const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
 
-    useEffect(() => {
-        checkSupport();
+    const isNativePlatform = useCallback((): boolean => {
+        return typeof (window as Window & { Capacitor?: unknown }).Capacitor !== 'undefined';
     }, []);
 
-    const checkSupport = async () => {
-        if (isNativePlatform()) {
-            setIsSupported(true);
-            await checkNativeRegistration();
-        } else if ('serviceWorker' in navigator && 'PushManager' in window) {
-            setIsSupported(true);
-            await checkWebRegistration();
-        }
-    };
+    const getFirebaseApp = useCallback(async () => {
+        const { getApps, initializeApp } = await import('firebase/app');
+        return getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    }, [firebaseConfig]);
 
-    const isNativePlatform = (): boolean => {
-        return typeof (window as any).Capacitor !== 'undefined';
-    };
-
-    const checkNativeRegistration = async () => {
+    const checkNativeRegistration = useCallback(async () => {
         try {
-            const { PushNotifications } = await import('@capacitor/push-notifications');
-            const permission = await PushNotifications.checkPermissions();
-            setPermission(permission.receive as NotificationPermission);
+            const { PushNotifications: CapPush } = await import('@capacitor/push-notifications');
+            const perm = await CapPush.checkPermissions();
+            setPermission(perm.receive as NotificationPermission);
 
-            if (permission.receive === 'granted') {
-                const token = await PushNotifications.getRegistration();
+            if (perm.receive === 'granted') {
+                const token = await CapPush.getRegistration();
                 setIsRegistered(!!token?.token);
             }
         } catch (err) {
             console.error('Error checking native registration:', err);
         }
-    };
+    }, []);
 
-    const getFirebaseApp = async () => {
-        const { getApps, initializeApp } = await import('firebase/app');
-        return getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-    };
-
-    const checkWebRegistration = async () => {
+    const checkWebRegistration = useCallback(async () => {
         try {
             const { getMessaging, getToken } = await import('firebase/messaging');
 
@@ -66,41 +50,56 @@ export default function PushNotifications() {
         } catch (err) {
             console.error('Error checking web registration:', err);
         }
+    }, [getFirebaseApp]);
+
+    const checkSupport = useCallback(async () => {
+        if (isNativePlatform()) {
+            setIsSupported(true);
+            await checkNativeRegistration();
+        } else if ('serviceWorker' in navigator && 'PushManager' in window) {
+            setIsSupported(true);
+            await checkWebRegistration();
+        }
+    }, [isNativePlatform, checkNativeRegistration, checkWebRegistration]);
+
+    useEffect(() => {
+        void checkSupport();
+    }, [checkSupport]);
+
+    const sendTokenToServer = async (token: string, platform: string) => {
+        await router.post('/push/subscribe', {
+            token,
+            platform,
+        }, {
+            preserveState: true,
+            preserveScroll: true,
+            onError: (errors) => {
+                setError('Failed to save device token');
+                console.error(errors);
+            },
+        });
     };
 
-    const requestPermissionAndRegister = async () => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            if (isNativePlatform()) {
-                await registerNative();
-            } else {
-                await registerWeb();
-            }
-        } catch (err) {
-            setError('Failed to enable push notifications');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+    const getPlatform = async (): Promise<string> => {
+        const { Capacitor } = await import('@capacitor/core');
+        return Capacitor.getPlatform();
     };
 
     const registerNative = async () => {
-        const { PushNotifications } = await import('@capacitor/push-notifications');
+        const { PushNotifications: CapPush } = await import('@capacitor/push-notifications');
         const { FCM } = await import('@capacitor-community/fcm');
 
-        const permission = await PushNotifications.requestPermissions();
-        setPermission(permission.receive as NotificationPermission);
+        const perm = await CapPush.requestPermissions();
+        setPermission(perm.receive as NotificationPermission);
 
-        if (permission.receive !== 'granted') {
+        if (perm.receive !== 'granted') {
             setError('Notification permission denied');
             return;
         }
 
-        await PushNotifications.register();
+        await CapPush.register();
 
-        PushNotifications.addListener('registration', async (token) => {
+        CapPush.addListener('registration', async () => {
             try {
                 const fcmToken = await FCM.getToken();
                 await sendTokenToServer(fcmToken.token, await getPlatform());
@@ -111,7 +110,7 @@ export default function PushNotifications() {
             }
         });
 
-        PushNotifications.addListener('registrationError', (err) => {
+        CapPush.addListener('registrationError', (err) => {
             console.error('Registration error:', err);
             setError('Failed to register for push notifications');
         });
@@ -140,8 +139,26 @@ export default function PushNotifications() {
         }
     };
 
+    const requestPermissionAndRegister = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            if (isNativePlatform()) {
+                await registerNative();
+            } else {
+                await registerWeb();
+            }
+        } catch (err) {
+            setError('Failed to enable push notifications');
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const isIOS = (): boolean => {
-        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
     };
 
     const isSafari = (): boolean => {
@@ -150,7 +167,7 @@ export default function PushNotifications() {
 
     const isStandalone = (): boolean => {
         return window.matchMedia('(display-mode: standalone)').matches || 
-               (window.navigator as any).standalone === true;
+               (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
     };
 
     const showIOSInstallPrompt = (): boolean => {
@@ -163,7 +180,7 @@ export default function PushNotifications() {
 
         try {
             if (isNativePlatform()) {
-                const { PushNotifications } = await import('@capacitor/push-notifications');
+                const { PushNotifications: CapPush } = await import('@capacitor/push-notifications');
                 const { FCM } = await import('@capacitor-community/fcm');
 
                 const fcmToken = await FCM.getToken();
@@ -174,7 +191,7 @@ export default function PushNotifications() {
                     preserveScroll: true,
                 });
 
-                await PushNotifications.unregister();
+                await CapPush.unregister();
             } else {
                 const { getMessaging, getToken, deleteToken } = await import('firebase/messaging');
 
@@ -205,25 +222,6 @@ export default function PushNotifications() {
         }
     };
 
-    const getPlatform = async (): Promise<string> => {
-        const { Capacitor } = await import('@capacitor/core');
-        return Capacitor.getPlatform();
-    };
-
-    const sendTokenToServer = async (token: string, platform: string) => {
-        await router.post('/push/subscribe', {
-            token,
-            platform,
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-            onError: (errors) => {
-                setError('Failed to save device token');
-                console.error(errors);
-            },
-        });
-    };
-
     if (!isSupported) {
         return (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -242,29 +240,6 @@ export default function PushNotifications() {
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                     <p className="text-red-800 text-sm">{error}</p>
                 </div>
-            )}
-
-            {isSupported && isIOS() && isSafari() && !isStandalone() && (
-                <button
-                    type="button"
-                    onClick={() => setShowIOSInstallModal(true)}
-                    className="text-blue-600 underline text-sm font-medium"
-                >
-                    Install on iPhone
-                </button>
-            )}
-
-            {isSupported && isIOS() && isSafari() && isStandalone() && isRegistered && (
-                <p className="text-sm text-blue-600 text-center">
-                    Open from Home Screen for push notifications to work. How to install? {" "}
-                    <button
-                        type="button"
-                        onClick={() => setShowIOSInstallModal(true)}
-                        className="underline hover:text-blue-800"
-                    >
-                        How to install
-                    </button>
-                </p>
             )}
 
             {isSupported && !isIOS() && isRegistered && (

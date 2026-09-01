@@ -378,16 +378,16 @@ const SORT_OPTIONS: { label: string; value: SortValue | "" }[] = [
 ];
 
 export default function EquipmentsPage({
-    equipments,
-    facilities,
-    filters,
+    equipments = { data: [], current_page: 1, last_page: 1, per_page: 20, total: 0, from: null, to: null },
+    facilities = [],
+    filters = { search: '', sort: '' },
 }: {
-    equipments: PaginatedEquipments;
-    facilities: Facility[];
-    filters: Filters;
+    equipments?: PaginatedEquipments;
+    facilities?: Facility[];
+    filters?: Filters;
 }) {
-    const [search, setSearch] = useState(filters.search ?? "");
-    const [sortValue, setSortValue] = useState<SortValue | "">(filters.sort as SortValue | "" ?? "");
+    const [search, setSearch] = useState(filters?.search ?? "");
+    const [sortValue, setSortValue] = useState<SortValue | "">((filters?.sort as SortValue | "") ?? "");
     const [addOpen, setAddOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<Equipment | null>(null);
     const [assignTarget, setAssignTarget] = useState<Equipment | null>(null);
@@ -449,21 +449,21 @@ export default function EquipmentsPage({
 
     const enrichedEquipments = useMemo(
         () =>
-            equipments.data.map((eq) => {
-                const assigned = eq.facilities.reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
+            (equipments?.data ?? []).map((eq) => {
+                const assigned = (eq.facilities ?? []).reduce((s, f) => s + (f.pivot?.quantity ?? 0), 0);
                 const over = assigned > eq.quantity;
                 const empty = assigned === 0;
                 return { ...eq, assigned, over, empty };
             }),
-        [equipments.data]
+        [equipments?.data]
     );
 
     const currentSortLabel = SORT_OPTIONS.find((o) => o.value === sortValue)?.label;
 
     const paginationLabel = useMemo(
         () =>
-            `Showing ${equipments.from ?? 0}–${equipments.to ?? 0} of ${equipments.total} equipment`,
-        [equipments.from, equipments.to, equipments.total]
+            `Showing ${equipments?.from ?? 0}–${equipments?.to ?? 0} of ${equipments?.total ?? 0} equipment`,
+        [equipments?.from, equipments?.to, equipments?.total]
     );
 
     return (

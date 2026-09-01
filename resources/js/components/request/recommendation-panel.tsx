@@ -1,7 +1,6 @@
-import { Calendar, Clock, Sparkles, LayoutGrid, Filter, ChevronDown, Check } from 'lucide-react';
+import { Calendar, Clock, Sparkles, LayoutGrid, Filter } from 'lucide-react';
 import moment from 'moment';
 import { motion } from 'motion/react';
-import { useState } from 'react';
 import { useAlternatives } from '@/hooks/use-alternatives';
 import { cn } from '@/lib/utils';
 import type { Request, AlternativeSlot } from '@/types/request';
@@ -44,7 +43,7 @@ function getCapacityBadge(fit: AlternativeSlot['capacity_fit']) {
 }
 
 export function RecommendationPanel({ request, isLoading, variant = 'card' }: RecommendationPanelProps) {
-    const { alternatives, loading: altLoading, error: altError, refetch, includeEquipment, setIncludeEquipment } = useAlternatives({
+    const { alternatives, loading: altLoading, error: altError, refetch, includeEquipment } = useAlternatives({
         requestId: request.id,
         includeEquipment: false,
         enabled: request.status === 'For Reschedule',

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="mock-csrf-token-frai">
+    <link rel="icon" type="image/png" href="/FRAI.png">
+    <title>FRAI - Facility Request with AI</title>
+    <meta name="description" content="Facility request and reservation management system with AI recommendation and chatbot">
+    <meta property="og:title" content="FRAI - Facility Request with AI">
+    <meta property="og:description" content="Facility request and reservation management system with AI recommendation and chatbot">
+    <script type="module">
+        import RefreshRuntime from '/@react-refresh';
+        RefreshRuntime.injectIntoGlobalHook(window);
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+        window.__vite_plugin_react_preamble_installed__ = true;
+    </script>
+    <script>
+        window.Ziggy = {
+            url: window.location.origin,
+            port: 3000,
+            defaults: {},
+            routes: {
+                "dashboard": { "uri": "dashboard", "methods": ["GET", "HEAD"] },
+                "dashboard.calendar": { "uri": "dashboard/calendar", "methods": ["GET", "HEAD"] },
+                "dashboard.chart-data": { "uri": "dashboard/chart-data", "methods": ["GET", "HEAD"] },
+                "dashboard.audit-logs": { "uri": "dashboard/audit-logs", "methods": ["GET", "HEAD"] },
+                "dashboard.pending-requests": { "uri": "dashboard/pending-requests", "methods": ["GET", "HEAD"] },
+                "dashboard.notifications.mark-read": { "uri": "dashboard/notifications/mark-read", "methods": ["POST"] },
+                "requests.index": { "uri": "requests", "methods": ["GET", "HEAD"] },
+                "requests.create": { "uri": "requests/create", "methods": ["GET", "HEAD"] },
+                "requests.store": { "uri": "requests", "methods": ["POST"] },
+                "requests.show": { "uri": "requests/{request}", "methods": ["GET", "HEAD"], "parameters": ["request"] },
+                "requests.edit": { "uri": "requests/{request}/edit", "methods": ["GET", "HEAD"], "parameters": ["request"] },
+                "requests.update": { "uri": "requests/{request}", "methods": ["PUT", "PATCH"], "parameters": ["request"] },
+                "requests.destroy": { "uri": "requests/{request}", "methods": ["DELETE"], "parameters": ["request"] },
+                "requests.approve": { "uri": "requests/{request}/approve", "methods": ["POST"], "parameters": ["request"] },
+                "requests.reject": { "uri": "requests/{request}/reject", "methods": ["POST"], "parameters": ["request"] },
+                "requests.conditional-approve": { "uri": "requests/{request}/conditional-approve", "methods": ["POST"], "parameters": ["request"] },
+                "requests.reschedule": { "uri": "requests/{request}/reschedule", "methods": ["POST"], "parameters": ["request"] },
+                "requests.hold": { "uri": "requests/{request}/hold", "methods": ["POST"], "parameters": ["request"] },
+                "requests.comment": { "uri": "requests/{request}/comment", "methods": ["POST"], "parameters": ["request"] },
+                "requests.alternatives": { "uri": "requests/{request}/alternatives", "methods": ["GET", "HEAD"], "parameters": ["request"] },
+                "requests.recommendation": { "uri": "requests/{request}/recommendation", "methods": ["GET", "HEAD"], "parameters": ["request"] },
+                "requests.audit-logs": { "uri": "requests/{request}/audit-logs", "methods": ["GET", "HEAD"], "parameters": ["request"] },
+                "facilities.index": { "uri": "facilities", "methods": ["GET", "HEAD"] },
+                "facilities.store": { "uri": "facilities", "methods": ["POST"] },
+                "facilities.show": { "uri": "facilities/{facility}", "methods": ["GET", "HEAD"], "parameters": ["facility"] },
+                "facilities.update": { "uri": "facilities/{facility}", "methods": ["PUT", "PATCH"], "parameters": ["facility"] },
+                "facilities.destroy": { "uri": "facilities/{facility}", "methods": ["DELETE"], "parameters": ["facility"] },
+                "facilities.getSchedule": { "uri": "facilities/getSchedule/{facility}/{date}", "methods": ["GET", "HEAD"], "parameters": ["facility", "date"] },
+                "facilities.getCalendarSchedule": { "uri": "facilities/getCalendarSchedule/{id}", "methods": ["GET", "HEAD"], "parameters": ["id"] },
+                "campuses.store": { "uri": "campuses", "methods": ["POST"] },
+                "campuses.destroy": { "uri": "campuses/{campus}", "methods": ["DELETE"], "parameters": ["campus"] },
+                "buildings.store": { "uri": "buildings", "methods": ["POST"] },
+                "buildings.destroy": { "uri": "buildings/{building}", "methods": ["DELETE"], "parameters": ["building"] },
+                "equipments.index": { "uri": "equipments", "methods": ["GET", "HEAD"] },
+                "equipments.store": { "uri": "equipments", "methods": ["POST"] },
+                "equipments.update": { "uri": "equipments/{equipment}", "methods": ["PUT", "PATCH"], "parameters": ["equipment"] },
+                "equipments.destroy": { "uri": "equipments/{equipment}", "methods": ["DELETE"], "parameters": ["equipment"] },
+                "equipments.checkConflicts": { "uri": "equipment/check-conflicts", "methods": ["POST"] },
+                "equipments.availability": { "uri": "equipment/availability", "methods": ["GET", "HEAD"] },
+                "equipments.syncFacilities": { "uri": "equipments/{equipment}/sync-facilities", "methods": ["POST"], "parameters": ["equipment"] },
+                "rules.index": { "uri": "rules", "methods": ["GET", "HEAD"] },
+                "rules.store": { "uri": "rules", "methods": ["POST"] },
+                "rules.update": { "uri": "rules/{rule}", "methods": ["PUT", "PATCH"], "parameters": ["rule"] },
+                "rules.destroy": { "uri": "rules/{rule}", "methods": ["DELETE"], "parameters": ["rule"] },
+                "rules.reorder": { "uri": "rules/reorder", "methods": ["POST"] },
+                "rules.indexRules": { "uri": "rules/index-rules", "methods": ["POST"] },
+                "accounts.index": { "uri": "accounts", "methods": ["GET", "HEAD"] },
+                "accounts.store": { "uri": "accounts", "methods": ["POST"] },
+                "accounts.storeBatch": { "uri": "accounts/batch", "methods": ["POST"] },
+                "accounts.update": { "uri": "accounts/{user}", "methods": ["PUT", "PATCH"], "parameters": ["user"] },
+                "accounts.destroy": { "uri": "accounts/{user}", "methods": ["DELETE"], "parameters": ["user"] },
+                "accounts.restore": { "uri": "accounts/{id}/restore", "methods": ["POST"], "parameters": ["id"] },
+                "accounts.resetPassword": { "uri": "accounts/{user}/reset-password", "methods": ["POST"], "parameters": ["user"] },
+                "accounts.toggleStatus": { "uri": "accounts/{user}/toggle-status", "methods": ["POST"], "parameters": ["user"] },
+                "settings.index": { "uri": "settings", "methods": ["GET", "HEAD"] },
+                "settings.update": { "uri": "settings", "methods": ["PUT", "PATCH"] },
+                "settings.profilePicture": { "uri": "settings/profile-picture", "methods": ["POST"] },
+                "settings.password": { "uri": "settings/password", "methods": ["PUT"] },
+                "settings.request-options": { "uri": "settings/request-options", "methods": ["GET", "HEAD"] },
+                "settings.request-options.update": { "uri": "settings/request-options", "methods": ["PUT"] },
+                "settings.admin-email-notifications": { "uri": "settings/admin-email-notifications", "methods": ["POST"] },
+                "chatbot": { "uri": "chatbot", "methods": ["GET", "HEAD"] },
+                "chat.send": { "uri": "chat", "methods": ["POST"] },
+                "chat.stream": { "uri": "chat/stream", "methods": ["POST"] },
+                "chat.session": { "uri": "chat/session", "methods": ["POST"] },
+                "chat.feedback": { "uri": "chat/{sessionId}/feedback", "methods": ["POST"], "parameters": ["sessionId"] },
+                "chat.logs": { "uri": "chatbot/logs", "methods": ["GET", "HEAD"] },
+                "chat.logs.clear": { "uri": "chatbot/logs/clear", "methods": ["POST"] },
+                "chat.logs.delete": { "uri": "chatbot/logs/{id}", "methods": ["DELETE"], "parameters": ["id"] },
+                "login": { "uri": "login", "methods": ["GET", "HEAD", "POST"] },
+                "logout": { "uri": "logout", "methods": ["POST"] },
+                "push.subscribe": { "uri": "push/subscribe", "methods": ["POST"] },
+                "push.unsubscribe": { "uri": "push/unsubscribe", "methods": ["POST"] }
+            }
+        };
+
+        // Fallback route helper matching Ziggy's API
+        window.route = function(name, params, absolute, config) {
+            var currentConfig = config || window.Ziggy || { routes: {} };
+            var currentPath = (typeof window !== 'undefined' && window.location) ? window.location.pathname : '/';
+
+            // Route handler object if called without arguments: route()
+            if (name === undefined || name === null) {
+                return {
+                    current: function(pattern, params) {
+                        if (!pattern) {
+                            for (var rName in currentConfig.routes) {
+                                var rUri = '/' + (currentConfig.routes[rName].uri || '').replace(/^\//, '');
+                                if (currentPath === rUri || currentPath === rUri.replace(/\/\{[^}]+\}/g, '')) {
+                                    return rName;
+                                }
+                            }
+                            return undefined;
+                        }
+                        var regexStr = '^' + String(pattern).replace(/\./g, '\\.').replace(/\*/g, '.*') + '$';
+                        var regex = new RegExp(regexStr);
+                        for (var rName in currentConfig.routes) {
+                            if (regex.test(rName)) {
+                                var rUri = '/' + (currentConfig.routes[rName].uri || '').replace(/^\//, '');
+                                if (currentPath === rUri || currentPath.startsWith(rUri.split('{')[0])) {
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    },
+                    has: function(pattern) {
+                        return pattern ? Boolean(currentConfig.routes && currentConfig.routes[pattern]) : false;
+                    },
+                    params: (function() {
+                        if (typeof window === 'undefined' || !window.location) return {};
+                        var searchParams = new URLSearchParams(window.location.search);
+                        var obj = {};
+                        searchParams.forEach(function(val, key) { obj[key] = val; });
+                        return obj;
+                    })()
+                };
+            }
+
+            if (typeof name !== 'string') {
+                return '';
+            }
+
+            var routeInfo = currentConfig && currentConfig.routes ? currentConfig.routes[name] : null;
+            if (!routeInfo) {
+                return '/' + name.replace(/\./g, '/').replace(/^\//, '');
+            }
+            var uri = '/' + (routeInfo.uri || '').replace(/^\//, '');
+            if (params !== undefined && params !== null) {
+                if (typeof params === 'object' && !Array.isArray(params)) {
+                    var remaining = {};
+                    for (var k in params) {
+                        if (uri.includes('{' + k + '}')) {
+                            uri = uri.replace('{' + k + '}', encodeURIComponent(params[k]));
+                        } else if (uri.includes('{' + k + '?}')) {
+                            uri = uri.replace('{' + k + '?}', encodeURIComponent(params[k]));
+                        } else {
+                            remaining[k] = params[k];
+                        }
+                    }
+                    if (routeInfo.parameters && routeInfo.parameters.length === 1) {
+                        var paramKey = routeInfo.parameters[0];
+                        if (uri.includes('{' + paramKey + '}') && params.id !== undefined) {
+                            uri = uri.replace('{' + paramKey + '}', encodeURIComponent(params.id));
+                        }
+                    }
+                    var queryKeys = Object.keys(remaining);
+                    if (queryKeys.length > 0) {
+                        var query = queryKeys.map(function(key) {
+                            return encodeURIComponent(key) + '=' + encodeURIComponent(remaining[key]);
+                        }).join('&');
+                        uri += (uri.includes('?') ? '&' : '?') + query;
+                    }
+                } else if (Array.isArray(params)) {
+                    if (routeInfo.parameters) {
+                        routeInfo.parameters.forEach(function(pName, pIdx) {
+                            if (params[pIdx] !== undefined) {
+                                uri = uri.replace('{' + pName + '}', encodeURIComponent(params[pIdx]));
+                                uri = uri.replace('{' + pName + '?}', encodeURIComponent(params[pIdx]));
+                            }
+                        });
+                    }
+                } else {
+                    if (routeInfo.parameters && routeInfo.parameters.length > 0) {
+                        uri = uri.replace('{' + routeInfo.parameters[0] + '}', encodeURIComponent(params));
+                        uri = uri.replace('{' + routeInfo.parameters[0] + '?}', encodeURIComponent(params));
+                    }
+                }
+            }
+            // Clean up any unreplaced optional params
+            uri = uri.replace(/\/\{[a-zA-Z0-9_]+\?\}/g, '');
+            return uri;
+        };
+    </script>
+</head>
+<body class="font-sans antialiased text-neutral-900 dark:text-neutral-100 bg-background min-h-screen">
+    <div id="app" data-page='{"component":"dashboard","props":{"page_title":"Dashboard","breadcrumbs":[{"title":"Dashboard","url":"/dashboard"}],"auth":{"user":{"id":1,"name":"GSO Administrator","email":"gso@example.com","role":"Super Admin","roles":["Super Admin"],"permissions":["view requests","create requests","approve requests","reject requests","manage facilities","manage equipments","manage users","modify rules","view chatbot logs","reset password","create new admins","manage request options"],"is_active":true,"avatar":null}},"stats":{"totalRequests":18,"pendingRequests":4,"approvedRequests":11,"rejectedRequests":3},"recentRequests":[],"userRoles":["Super Admin"],"userPermissions":["view requests","create requests","approve requests","reject requests","manage facilities","manage equipments","manage users","modify rules","view chatbot logs","reset password","create new admins","manage request options"],"isSuperAdmin":true,"canApprove":true,"canCreate":true,"canManageFacilities":true},"url":"/dashboard","version":""}'></div>
+    <script type="module" src="/resources/js/app.tsx"></script>
+</body>
+</html>

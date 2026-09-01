@@ -101,7 +101,7 @@ const emptyForm: UserForm = { username: "", email: "", role: "", profile: null }
 const CSV_HEADERS = ['name', 'email', 'role'];
 const CSV_TEMPLATE = `name,email,role\nJohn Doe,johndoe@example.com,admin\nJane Smith,janesmith@example.com,staff`;
 
-export default function AccountsPage({ users, roles }: Props) {
+export default function AccountsPage({ users = [], roles = [] }: { users?: RowUser[] | { data: RowUser[] }; roles?: string[] }) {
     const reduceMotion = useReducedMotion();
 
     const motionProps = {
@@ -137,7 +137,7 @@ export default function AccountsPage({ users, roles }: Props) {
     const [batchParseError, setBatchParseError] = useState<string>('');
 
     // Server-side listing helpers
-    const userList: RowUser[] = Array.isArray(users) ? users : users.data;
+    const userList: RowUser[] = Array.isArray(users) ? users : (users?.data ?? []);
     const [searchQuery, setSearchQuery] = useState('');
     const [sort, setSort] = useState('');
     const isMounted = useRef(false);

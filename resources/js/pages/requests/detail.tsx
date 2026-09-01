@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { Calendar, Download, Pen, SendHorizontal } from 'lucide-react';
+import { Download, Pen, SendHorizontal } from 'lucide-react';
 import moment from 'moment';
 import { useEffect, useState } from 'react';
 import { ActivityFeed, type AuditLog } from '@/components/activity-feed';
@@ -15,9 +15,9 @@ import StatusTag from '@/components/status-tag';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Spinner } from '@/components/ui/spinner';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
@@ -70,7 +70,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
         if (!auditLogsProp) return;
 
         try {
-            if (Array.isArray(auditLogsProp.data)) {
+            if (Array.isArray(auditLogsProp?.data)) {
                 setAuditLogs(auditLogsProp.data);
                 setCurrentPage(auditLogsProp.current_page ?? 1);
                 setLastPage(auditLogsProp.last_page ?? 1);
@@ -163,7 +163,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
         return (
             <DefaultLayout>
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                    <Spinner size="sm" />
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     Loading request...
                 </div>
             </DefaultLayout>
@@ -256,11 +256,26 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                         <StatusTag requestStatus={request.status} />
 
                         <div className="ml-auto flex items-center gap-2">
-                            {(request.user.id === auth.user.id) && (
+<<<<<<< Updated upstream
+                            {canEdit && (
+=======
+                            {(canEdit || canReschedule) && (
+>>>>>>> Stashed changes
                                 <Link href={route('requests.edit', request.id)}>
-                                    <Button variant="ghost" size="sm" aria-label="Edit request">
+                                    <Button variant="ghost" size="icon-sm" aria-label="Edit request">
                                         <Pen className="h-4 w-4" />
-                                        <span>{ canReschedule ? "Reschedule" : "Edit"}</span>
+                                    </Button>
+                                </Link>
+                            )}
+                            {canReschedule && (
+                                <Link href={route('requests.edit', request.id)}>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1.5 border-[var(--ads-amber)]/40 text-[var(--ads-amber)] hover:bg-[var(--ads-amber-bg)]"
+                                    >
+                                        <Calendar className="h-4 w-4" />
+                                        Reschedule
                                     </Button>
                                 </Link>
                             )}
@@ -601,7 +616,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     <TabsContent value="activity" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
                         {logsLoading ? (
                             <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                                <Spinner size="sm" className="size-3.5" />
+                                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                 Loading activity...
                             </div>
                         ) : (

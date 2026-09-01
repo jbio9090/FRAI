@@ -143,7 +143,7 @@ Run these commands in your terminal to prepare the application:
     php artisan queue:work
     ```
 4.  **Check AI Configuration:**
-    Visit `/chat/test` while signed in to confirm the configured OpenRouter model is visible to the app.
+    Verify the NVIDIA settings in `.env` and run `php artisan config:clear` if needed.
 
 ---
 
@@ -161,7 +161,7 @@ Run these commands in your terminal to prepare the application:
 
 ## Troubleshooting
 * **Database Connection:** Ensure the PostgreSQL service is active on your system. If you use a non-standard port (not 5432), update the `DB_PORT` in your `.env`.
-* **AI Configuration:** Ensure `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` are set in `.env`, then run `php artisan config:clear` if config was cached.
+* **AI Configuration:** Ensure the NVIDIA settings (`NVIDIA_API_KEY`, `NVIDIA_MODEL`, `NVIDIA_BASE_URL`) are set in `.env`, then run `php artisan config:clear` if config was cached.
 * **Clear all caches:** `php artisan optimize:clear`
 
 ---

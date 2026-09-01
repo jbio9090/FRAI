@@ -17,7 +17,11 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
         if (!isNaN(page) && page >= 1 && page <= lastPage) {
             onPageChange(page);
         }
-        side === 'left' ? setEditingLeft(false) : setEditingRight(false);
+        if (side === 'left') {
+            setEditingLeft(false);
+        } else {
+            setEditingRight(false);
+        }
         setInputVal("");
     }
 

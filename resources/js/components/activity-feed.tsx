@@ -49,22 +49,23 @@ const eventLabels: Record<string, string> = {
     "settings.updated": "Settings Updated",
 };
 
-function formatEventLabel(event: string): string {
+function formatEventLabel(event?: string): string {
+    if (!event) return "Event";
     return eventLabels[event] ?? event
         .replace(/^[^.]+\./, "")
         .replace(/_/g, " ")
         .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
-function getEventKind(event: string): EventKind {
-    const e = event.toLowerCase();
+function getEventKind(event?: string): EventKind {
+    const e = (event || "").toLowerCase();
     if (e.includes("comment")) return "comment";
     if (e.includes("tag")) return "tag";
     return "system";
 }
 
-function getEventIcon(event: string) {
-    const e = event.toLowerCase();
+function getEventIcon(event?: string) {
+    const e = (event || "").toLowerCase();
 
     if (e.includes("comment")) return MessageSquare;
     if (e.includes("tag")) return Tag;
@@ -338,7 +339,7 @@ function ChangeDiff({ changes }: { changes: Record<string, FieldChange> }) {
             {entries.map(([field, change]) => (
                 <div key={field} className="flex items-start gap-3 px-3 py-2">
                     <span className="text-xs font-medium text-muted-foreground capitalize shrink-0 w-28 pt-0.5">
-                        {field.replace(/_/g, " ")}
+                        {(field || "").replace(/_/g, " ")}
                     </span>
                     <ChangeFieldValue field={field} change={change} />
                 </div>
@@ -366,7 +367,7 @@ function SystemEntry({ log }: { log: AuditLog }) {
                     <span className="font-semibold text-sm text-foreground">{name}</span>
                     {log.description ? (
                         <span className="text-sm text-muted-foreground">
-                            {log.description.replace(name, "").trim()}
+                            {name ? log.description.replace(name, "").trim() : log.description.trim()}
                         </span>
                     ) : (
                         <span className="text-sm text-muted-foreground">

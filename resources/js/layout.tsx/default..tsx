@@ -18,9 +18,19 @@ interface DashboardProps {
     hasPadding?: boolean;
 }
 
+interface BreadcrumbItemObject {
+    title?: string;
+    label?: string;
+    name?: string;
+    url?: string;
+    href?: string;
+}
+
+type BreadcrumbProp = string | BreadcrumbItemObject;
+
 interface PageProps {
-    breadcrumbs: string[];
-    labeledBreadcrumb: string;
+    breadcrumbs?: BreadcrumbProp[];
+    labeledBreadcrumb?: string | null;
     auth?: {
         user?: {
             notification_unread_count?: number;
@@ -43,7 +53,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
     const page = usePage<PageProps>();
     const breadcrumbs = page.props.breadcrumbs;
     const labeledBreadcrumb = page.props.labeledBreadcrumb;
-    const flash = (page.props as any).flash as { success?: string; error?: string } | undefined;
+    const flash = (page.props as unknown as { flash?: { success?: string; error?: string } }).flash;
 
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
@@ -88,17 +98,28 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                         <BreadcrumbList>
                             {breadcrumbs &&
                                 breadcrumbs.map((breadcrumb, index) => {
-                                    const path = '/' + breadcrumbs.slice(0, index + 1).join('/');
+                                    let label = '';
+                                    let path = '#';
+
+                                    if (typeof breadcrumb === 'string') {
+                                        label = breadcrumb ? breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1) : '';
+                                        path = '/' + (breadcrumbs.slice(0, index + 1) as string[]).join('/');
+                                    } else if (breadcrumb && typeof breadcrumb === 'object') {
+                                        label = breadcrumb.title || breadcrumb.label || breadcrumb.name || '';
+                                        path = breadcrumb.url || breadcrumb.href || '#';
+                                    }
+
                                     const isLast = index === breadcrumbs.length - 1;
+                                    const itemKey = `bc-${index}-${label}`;
 
                                     return (
-                                        <React.Fragment key={breadcrumb + index}>
+                                        <React.Fragment key={itemKey}>
                                             <BreadcrumbItem>
                                                 {isLast && labeledBreadcrumb == null ? (
-                                                    <BreadcrumbPage>{breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1)}</BreadcrumbPage>
+                                                    <BreadcrumbPage>{label}</BreadcrumbPage>
                                                 ) : (
                                                     <BreadcrumbLink href={path}>
-                                                        {breadcrumb.charAt(0).toUpperCase() + breadcrumb.slice(1)}
+                                                        {label}
                                                     </BreadcrumbLink>
                                                 )}
                                             </BreadcrumbItem>
@@ -109,7 +130,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
 
                             {labeledBreadcrumb && (
                                 <React.Fragment key={labeledBreadcrumb}>
-                                    {breadcrumbs.length > 0 && <BreadcrumbSeparator />}
+                                    {breadcrumbs && breadcrumbs.length > 0 && <BreadcrumbSeparator />}
                                     <BreadcrumbItem>
                                         <BreadcrumbPage>{labeledBreadcrumb}</BreadcrumbPage>
                                     </BreadcrumbItem>

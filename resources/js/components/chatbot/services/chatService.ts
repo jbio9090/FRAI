@@ -17,6 +17,16 @@ function extractBookingPayloadFromText(content: string): string | null {
             continue;
         }
 
+        function getServerPageContext(pageContext: ClientPageContext): Pick<ClientPageContext, 'url' | 'path' | 'route' | 'component' | 'title'> {
+            return {
+                url: pageContext.url,
+                path: pageContext.path,
+                route: pageContext.route,
+                component: pageContext.component,
+                title: pageContext.title,
+            };
+        }
+
         if (char !== '}' || depth === 0) {
             continue;
         }
@@ -48,16 +58,19 @@ interface ChatJsonResponse {
     };
     response?: string;
     deterministic?: Record<string, unknown>;
+    debug?: { tool_calls?: unknown[] };
     error?: string;
 }
 
 export async function sendChatMessage(
     payload: ChatRequest,
     pageContextOverride?: ClientPageContext,
+    devmode?: boolean,
 ): Promise<{
     content: string;
     bookingPayload: string | null;
     deterministic: Record<string, unknown> | null;
+    debug: { tool_calls: unknown[] } | null;
 }> {
     const pageContext = pageContextOverride ?? collectPageContext();
     const response = await fetch(route('api.chat'), {
@@ -70,31 +83,27 @@ export async function sendChatMessage(
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...payload, page_context: pageContext }),
+        body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext), devmode: !!devmode }),
     });
 
     if (response.status === 419) {
-        window.location.reload();
-        return {
-            content: '',
-            bookingPayload: null,
-            deterministic: null,
-        };
+        throw new Error('Session timed out. Please try sending your message again.');
     }
 
-    const data = (await response.json().catch(() => null)) as ChatJsonResponse | null;
+    const data = (await response.json().catch(() => null)) as (ChatJsonResponse & { message?: string | { role?: string; content?: string } }) | null;
 
     if (!response.ok) {
-        const message = data?.message?.content ?? data?.error ?? `HTTP error ${response.status}`;
+        const message = typeof data?.message === 'string' ? data.message : (data?.message?.content ?? data?.error ?? `HTTP error ${response.status}`);
         throw new Error(message);
     }
 
-    const content = data?.message?.content ?? data?.response ?? '';
+    const content = (typeof data?.message === 'string' ? data.message : data?.message?.content) ?? data?.response ?? '';
 
     return {
         content,
         bookingPayload: extractBookingPayloadFromText(content),
         deterministic: data?.deterministic ?? null,
+        debug: data?.debug?.tool_calls ? { tool_calls: data.debug.tool_calls } : null,
     };
 }
 
@@ -119,11 +128,11 @@ export async function sendChatMessageStream(
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...payload, page_context: pageContext }),
+        body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext) }),
     });
 
     if (response.status === 419) {
-        window.location.reload();
+        onError('Session timed out. Please try sending your message again.');
         return;
     }
 
@@ -154,13 +163,19 @@ export async function sendChatMessageStream(
             if (!line.startsWith('data: ')) continue;
 
             const jsonLine = line.slice(6).trim();
-            if (!jsonLine) continue;
+            if (!jsonLine || jsonLine === '[DONE]') {
+                if (jsonLine === '[DONE]') {
+                    onDone();
+                }
+                continue;
+            }
 
             try {
                 const event = JSON.parse(jsonLine);
+                const tokenVal = event.token ?? event.text;
 
-                if (event.token) {
-                    const token: string = event.token;
+                if (tokenVal) {
+                    const token: string = String(tokenVal);
                     fullContent += token;
 
                     if (!bookingPayloadEmitted) {
@@ -221,7 +236,9 @@ export async function sendChatMessageStream(
                 if (event.error) {
                     onError(event.error);
                 }
-            } catch {}
+            } catch {
+                // Ignore parse errors on partial stream chunks
+            }
         }
     }
 }
