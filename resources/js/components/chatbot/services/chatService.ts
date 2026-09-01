@@ -17,6 +17,16 @@ function extractBookingPayloadFromText(content: string): string | null {
             continue;
         }
 
+        function getServerPageContext(pageContext: ClientPageContext): Pick<ClientPageContext, 'url' | 'path' | 'route' | 'component' | 'title'> {
+            return {
+                url: pageContext.url,
+                path: pageContext.path,
+                route: pageContext.route,
+                component: pageContext.component,
+                title: pageContext.title,
+            };
+        }
+
         if (char !== '}' || depth === 0) {
             continue;
         }
@@ -70,7 +80,7 @@ export async function sendChatMessage(
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...payload, page_context: pageContext }),
+        body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext) }),
     });
 
     if (response.status === 419) {
@@ -114,7 +124,7 @@ export async function sendChatMessageStream(
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...payload, page_context: pageContext }),
+        body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext) }),
     });
 
     if (response.status === 419) {

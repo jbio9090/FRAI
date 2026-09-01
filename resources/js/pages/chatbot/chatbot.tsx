@@ -1,12 +1,9 @@
-import Chatbot from '@/components/chatbot';
 import DefaultLayout from '@/layout.tsx/default.';
 
 export default function ChatbotPage() {
     return (
         <DefaultLayout hasPadding={false}>
-            <div className="flex min-h-0 flex-1 min-w-0 flex-col px-2 sm:px-4 md:px-6">
-                <Chatbot />
-            </div>
+            <div className="flex min-h-0 flex-1 min-w-0 flex-col px-2 sm:px-4 md:px-6" />
         </DefaultLayout>
     );
 }

@@ -12,7 +12,7 @@ return [
     'generate' => [
         'timeout' => (int) env('AI_GENERATE_TIMEOUT', 60),
         'temperature' => (float) env('AI_GENERATE_TEMPERATURE', 0.1),
-        'max_tokens' => (int) env('AI_GENERATE_MAX_TOKENS', 512),
+        'max_tokens' => (int) env('AI_GENERATE_MAX_TOKENS', 2048),
     ],
 
     'faq' => [

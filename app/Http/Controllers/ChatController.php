@@ -29,6 +29,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ChatController extends Controller
 {
     private const SESSION_TTL_MINUTES = 15;
+    private const MAX_SESSION_MESSAGES = 10;
 
     protected PageContextService $pageContextService;
 
@@ -46,6 +47,11 @@ class ChatController extends Controller
         return 'chat_session_'.Auth::id();
     }
 
+    private function pageContextCacheKey(): string
+    {
+        return 'chat_page_context_'.Auth::id();
+    }
+
     private function faqStateCacheKey(): string
     {
         return 'chat_faq_state_'.Auth::id();
@@ -55,14 +61,49 @@ class ChatController extends Controller
     {
         Cache::put(
             $this->sessionCacheKey(),
-            $userMessages,
+            array_slice($userMessages, -self::MAX_SESSION_MESSAGES),
             now()->addMinutes(self::SESSION_TTL_MINUTES)
         );
     }
 
     private function loadSession(): array
     {
-        return Cache::get($this->sessionCacheKey(), []);
+        $messages = Cache::get($this->sessionCacheKey(), []);
+
+        return is_array($messages)
+            ? array_slice($messages, -self::MAX_SESSION_MESSAGES)
+            : [];
+    }
+
+    private function getServerPageContext(array $clientPageContext): array
+    {
+        $page = array_intersect_key($clientPageContext, array_flip([
+            'url',
+            'path',
+            'route',
+            'component',
+            'title',
+        ]));
+        $fingerprint = implode('|', [
+            (string) ($page['path'] ?? ''),
+            (string) ($page['route'] ?? ''),
+        ]);
+        $cached = Cache::get($this->pageContextCacheKey());
+
+        if (is_array($cached)
+            && ($cached['fingerprint'] ?? null) === $fingerprint
+            && is_array($cached['context'] ?? null)) {
+            return $cached['context'];
+        }
+
+        $context = $this->pageContextService->getCurrentPageContext($page);
+        Cache::put(
+            $this->pageContextCacheKey(),
+            ['fingerprint' => $fingerprint, 'context' => $context],
+            now()->addMinutes(self::SESSION_TTL_MINUTES)
+        );
+
+        return $context;
     }
 
     public function getSession(): JsonResponse
@@ -75,6 +116,7 @@ class ChatController extends Controller
     private function clearSession(): void
     {
         Cache::forget($this->sessionCacheKey());
+        Cache::forget($this->pageContextCacheKey());
         Cache::forget($this->faqStateCacheKey());
     }
 
@@ -2088,7 +2130,7 @@ SYMTPROMPT;
                 ], 422);
             }
 
-            $pageContext = $this->pageContextService->getCurrentPageContext($clientPageContext);
+            $pageContext = $this->getServerPageContext($clientPageContext);
             $messages = array_merge($sessionMessages, $incomingMessages);
             $messages = array_merge([[
                 'role' => 'system',
@@ -2165,22 +2207,72 @@ SYMTPROMPT;
 
     public function stream(Request $request): StreamedResponse
     {
-        $response = $this->chat($request);
-        $payload = $response->getData(true);
-        $content = $payload['message']['content'] ?? 'I did not receive a response from the AI provider.';
+        $incomingMessages = $request->input('messages', []);
+        $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
 
-        return response()->stream(function () use ($content) {
-            echo "data: ".json_encode([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => $content,
-                ],
-            ])."
+        if (! is_string($latestUserMessage) || trim($latestUserMessage) === '') {
+            return response()->stream(function () {
+                echo 'data: '.json_encode([
+                    'error' => 'A user message is required.',
+                ])."\n\n";
+                echo 'data: '.json_encode(['done' => true])."\n\n";
+            }, 422, [
+                'Content-Type' => 'text/event-stream',
+                'Cache-Control' => 'no-cache, no-transform',
+                'Connection' => 'keep-alive',
+            ]);
+        }
 
-";
-            echo "data: ".json_encode(['done' => true])."
+        $clientPageContext = $request->input('page_context');
+        if (! is_array($clientPageContext)) {
+            \Log::warning('Chat stream request missing page_context payload.', [
+                'route' => $request->route()?->getName(),
+                'path' => $request->path(),
+            ]);
 
-";
+            return response()->stream(function () {
+                echo 'data: '.json_encode([
+                    'error' => 'Page context is required for this request.',
+                ])."\n\n";
+                echo 'data: '.json_encode(['done' => true])."\n\n";
+            }, 422, [
+                'Content-Type' => 'text/event-stream',
+                'Cache-Control' => 'no-cache, no-transform',
+                'Connection' => 'keep-alive',
+            ]);
+        }
+
+        $sessionMessages = $this->loadSession();
+        $pageContext = $this->getServerPageContext($clientPageContext);
+        $messages = array_merge($sessionMessages, $incomingMessages);
+        $messages = array_merge([[
+            'role' => 'system',
+            'content' => $this->getContextAwareSystemPrompt(),
+        ]], $messages);
+        $messages = array_merge([[
+            'role' => 'system',
+            'content' => "Current page context (server-resolved):\n".json_encode($pageContext, JSON_UNESCAPED_SLASHES),
+        ]], $messages);
+        $messages = array_merge([[
+            'role' => 'system',
+            'content' => "Visible browser page context (the user's current screen):\n".json_encode($clientPageContext, JSON_UNESCAPED_SLASHES),
+        ]], $messages);
+
+        return response()->stream(function () use ($messages) {
+            $onToken = function (string $token): void {
+                echo 'data: '.json_encode(['token' => $token])."\n\n";
+                $this->flushStreamOutput();
+            };
+
+            $content = $this->ai->streamChat($messages, $onToken, [
+                'timeout' => 120,
+                'tools' => [$this->getPageContextToolDefinition()],
+                'tool_choice' => 'auto',
+            ]);
+
+            $this->storeAssistantReply($messages, $content);
+            echo 'data: '.json_encode(['done' => true])."\n\n";
+            $this->flushStreamOutput();
         }, 200, [
             'Content-Type' => 'text/event-stream',
             'Cache-Control' => 'no-cache, no-transform',

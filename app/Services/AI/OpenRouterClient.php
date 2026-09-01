@@ -74,10 +74,6 @@ class OpenRouterClient
         $timeout = (int) ($options['timeout'] ?? config('ai.generate.timeout', 60));
         $payload = $this->buildChatPayload($messages, true, $options);
 
-        if ($this->providerName() === 'nvidia') {
-            $payload['chat_template_kwargs'] = ['enable_thinking' => false];
-        }
-
         $client = new Client([
             'timeout' => $timeout,
             'connect_timeout' => 15,
@@ -251,6 +247,12 @@ class OpenRouterClient
             'temperature' => (float) ($options['temperature'] ?? config('ai.generate.temperature', 0.1)),
             'max_tokens' => (int) ($options['max_tokens'] ?? config('ai.generate.max_tokens', 512)),
         ];
+
+        if ($this->providerName() === 'nvidia') {
+            $payload['chat_template_kwargs'] = [
+                'enable_thinking' => (bool) ($options['enable_thinking'] ?? false),
+            ];
+        }
 
         if (array_key_exists('tools', $options) && is_array($options['tools']) && $options['tools'] !== []) {
             $payload['tools'] = $options['tools'];
