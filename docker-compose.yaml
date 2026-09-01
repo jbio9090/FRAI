@@ -26,7 +26,6 @@ services:
       DB_DATABASE: laravel
       DB_USERNAME: laravel_user
       DB_PASSWORD: laravel_password
-      OLLAMA_HOST: http://host.docker.internal:11434 
     volumes:
       # The main mount
       - .:/var/www/html
