@@ -5,7 +5,8 @@ export function getCsrfToken(): string {
         if (token) return token;
     }
 
-    const winToken = (window as any).Laravel?.csrfToken || (window as any).csrf_token;
+    const win = window as Window & { Laravel?: { csrfToken?: string }; csrf_token?: string };
+    const winToken = win.Laravel?.csrfToken || win.csrf_token;
     if (winToken) return winToken;
 
     const matches = document.cookie.match(/XSRF-TOKEN=([^;]*)/);

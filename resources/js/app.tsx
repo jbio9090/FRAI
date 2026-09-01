@@ -1,12 +1,11 @@
 import { createInertiaApp } from '@inertiajs/react';
-import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import '../css/app.css';
 
 const appName = import.meta.env.VITE_APP_NAME || 'FRAI';
 
-function setupForegroundPushListener(firebaseConfig: Record<string, any> | undefined): void {
-    const isNative = typeof (window as any).Capacitor !== 'undefined';
+function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | undefined): void {
+    const isNative = typeof (window as Window & { Capacitor?: unknown }).Capacitor !== 'undefined';
     const supportsWebPush = 'serviceWorker' in navigator && 'PushManager' in window;
 
     if (isNative || !supportsWebPush || !firebaseConfig) {
@@ -29,8 +28,6 @@ function setupForegroundPushListener(firebaseConfig: Record<string, any> | undef
             const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
             const messaging = getMessaging(app);
 
-            // Initialize the FCM channel / service worker so onMessage fires on every
-            // page, not only after visiting Settings (the only place getToken runs today).
             try {
                 await getToken(messaging, {
                     vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
@@ -53,7 +50,6 @@ function setupForegroundPushListener(firebaseConfig: Record<string, any> | undef
                 void navigator.serviceWorker.getRegistration().then((registration) => {
                     if (registration) {
                         void registration.showNotification(title, options);
-
                         return;
                     }
 
@@ -68,18 +64,21 @@ function setupForegroundPushListener(firebaseConfig: Record<string, any> | undef
         });
 }
 
+const pages = import.meta.glob('./pages/**/*.tsx', { eager: true });
+
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) =>
-        resolvePageComponent(
-            [`./pages/${name}.tsx`, `./pages/${name}/index.tsx`],
-            import.meta.glob('./pages/**/*.tsx'),
-        ),
+    resolve: (name) => {
+        const page = (pages[`./pages/${name}.tsx`] || pages[`./pages/${name}/index.tsx`]) as { default: React.ComponentType };
+        if (!page) {
+            throw new Error(`Page not found: ${name}`);
+        }
+        return page;
+    },
     setup({ el, App, props }) {
-        setupForegroundPushListener((props as any).firebaseConfig);
+        setupForegroundPushListener((props as unknown as { firebaseConfig?: Record<string, unknown> }).firebaseConfig);
 
         const root = createRoot(el);
-
         root.render(<App {...props} />);
     },
     progress: {

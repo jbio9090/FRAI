@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { Calendar, Download, Pen, SendHorizontal } from 'lucide-react';
+import { Download, Pen, SendHorizontal } from 'lucide-react';
 import moment from 'moment';
 import { useEffect, useState } from 'react';
 import { ActivityFeed, type AuditLog } from '@/components/activity-feed';
@@ -15,6 +15,7 @@ import StatusTag from '@/components/status-tag';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermission } from '@/hooks/use-permission';
@@ -69,7 +70,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
         if (!auditLogsProp) return;
 
         try {
-            if (Array.isArray(auditLogsProp.data)) {
+            if (Array.isArray(auditLogsProp?.data)) {
                 setAuditLogs(auditLogsProp.data);
                 setCurrentPage(auditLogsProp.current_page ?? 1);
                 setLastPage(auditLogsProp.last_page ?? 1);
@@ -255,7 +256,11 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                         <StatusTag requestStatus={request.status} />
 
                         <div className="ml-auto flex items-center gap-2">
+<<<<<<< Updated upstream
                             {canEdit && (
+=======
+                            {(canEdit || canReschedule) && (
+>>>>>>> Stashed changes
                                 <Link href={route('requests.edit', request.id)}>
                                     <Button variant="ghost" size="icon-sm" aria-label="Edit request">
                                         <Pen className="h-4 w-4" />

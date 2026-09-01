@@ -24,9 +24,9 @@ export function collectPageContext(inertiaComponent?: string): ClientPageContext
 
     const rich = getRichPageContext();
     const visibleContent = visibleText(document.querySelector('main') ?? document.body).slice(0, 2000);
-    const currentRoute = route?.current?.() ?? undefined;
+    const currentRoute = typeof route === 'function' ? (typeof route().current === 'function' ? route().current() : undefined) : undefined;
 
-    if (currentRoute && inertiaComponent) {
+    if (currentRoute && typeof currentRoute === 'string' && inertiaComponent) {
         const normalizedRoute = currentRoute.replace(/\./g, '/');
         if (normalizedRoute !== inertiaComponent) {
             console.warn('[pageContext] route/component mismatch', { route: currentRoute, component: inertiaComponent });

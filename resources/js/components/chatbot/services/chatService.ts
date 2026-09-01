@@ -74,22 +74,17 @@ export async function sendChatMessage(
     });
 
     if (response.status === 419) {
-        window.location.reload();
-        return {
-            content: '',
-            bookingPayload: null,
-            deterministic: null,
-        };
+        throw new Error('Session timed out. Please try sending your message again.');
     }
 
-    const data = (await response.json().catch(() => null)) as ChatJsonResponse | null;
+    const data = (await response.json().catch(() => null)) as (ChatJsonResponse & { message?: string | { role?: string; content?: string } }) | null;
 
     if (!response.ok) {
-        const message = data?.message?.content ?? data?.error ?? `HTTP error ${response.status}`;
+        const message = typeof data?.message === 'string' ? data.message : (data?.message?.content ?? data?.error ?? `HTTP error ${response.status}`);
         throw new Error(message);
     }
 
-    const content = data?.message?.content ?? data?.response ?? '';
+    const content = (typeof data?.message === 'string' ? data.message : data?.message?.content) ?? data?.response ?? '';
 
     return {
         content,
@@ -123,7 +118,7 @@ export async function sendChatMessageStream(
     });
 
     if (response.status === 419) {
-        window.location.reload();
+        onError('Session timed out. Please try sending your message again.');
         return;
     }
 
@@ -154,13 +149,19 @@ export async function sendChatMessageStream(
             if (!line.startsWith('data: ')) continue;
 
             const jsonLine = line.slice(6).trim();
-            if (!jsonLine) continue;
+            if (!jsonLine || jsonLine === '[DONE]') {
+                if (jsonLine === '[DONE]') {
+                    onDone();
+                }
+                continue;
+            }
 
             try {
                 const event = JSON.parse(jsonLine);
+                const tokenVal = event.token ?? event.text;
 
-                if (event.token) {
-                    const token: string = event.token;
+                if (tokenVal) {
+                    const token: string = String(tokenVal);
                     fullContent += token;
 
                     if (!bookingPayloadEmitted) {
@@ -221,7 +222,9 @@ export async function sendChatMessageStream(
                 if (event.error) {
                     onError(event.error);
                 }
-            } catch {}
+            } catch {
+                // Ignore parse errors on partial stream chunks
+            }
         }
     }
 }

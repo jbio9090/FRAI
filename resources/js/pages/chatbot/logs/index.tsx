@@ -91,8 +91,20 @@ function prettyJson(value: Record<string, unknown> | null): string {
     return JSON.stringify(value, null, 2);
 }
 
-export default function ChatbotLogsPage({ logs, filters, users, statusOptions, intentOptions }: PageProps) {
-    const [form, setForm] = useState<Filters>(filters);
+export default function ChatbotLogsPage({
+    logs = { data: [], current_page: 1, last_page: 1, total: 0 },
+    filters = { user: '', status: '', intent: '', date: '', search: '' },
+    users = [],
+    statusOptions = ['all', 'success', 'failed', 'fallback'],
+    intentOptions = ['all', 'check_availability', 'create_request', 'policy_inquiry', 'general'],
+}: {
+    logs?: PaginatedLogs;
+    filters?: Filters;
+    users?: LogUser[];
+    statusOptions?: Option[];
+    intentOptions?: Option[];
+}) {
+    const [form, setForm] = useState<Filters>(filters ?? { user: '', status: '', intent: '', date: '', search: '' });
 
     const activeFilterCount = useMemo(() => {
         return Object.values(form).filter(Boolean).length;
@@ -214,11 +226,11 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
 
                 <div className="overflow-hidden rounded-xl border bg-card xl:hidden">
                     <div className="divide-y">
-                        {logs.data.length === 0 && (
+                        {(logs?.data ?? []).length === 0 && (
                             <div className="py-8 text-center text-muted-foreground">No chatbot logs found for the current filters.</div>
                         )}
 
-                        {logs.data.map((log) => (
+                        {(logs?.data ?? []).map((log) => (
                             <div key={`mobile-${log.id}`} className="space-y-3 p-3">
                                 <div className="flex items-start justify-between gap-2">
                                     <div>
@@ -226,7 +238,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                                         <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
                                     </div>
                                     <span className="inline-flex rounded-full border px-2 py-1 text-xs font-medium capitalize">
-                                        {log.status.replace('_', ' ')}
+                                        {(log.status || '').replace('_', ' ')}
                                     </span>
                                 </div>
 
@@ -264,7 +276,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {logs.data.length === 0 && (
+                                {(logs?.data ?? []).length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                                             No chatbot logs found for the current filters.
@@ -272,7 +284,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                                     </TableRow>
                                 )}
 
-                                {logs.data.map((log) => (
+                                {(logs?.data ?? []).map((log) => (
                                     <TableRow key={log.id} className="align-top">
                                         <TableCell className="text-sm text-muted-foreground">
                                             {new Date(log.created_at).toLocaleString()}
@@ -299,7 +311,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                                         </TableCell>
                                         <TableCell>
                                             <span className="inline-flex rounded-full border px-2 py-1 text-xs font-medium capitalize">
-                                                {log.status.replace('_', ' ')}
+                                                {(log.status || '').replace('_', ' ')}
                                             </span>
                                         </TableCell>
                                     </TableRow>
@@ -310,7 +322,7 @@ export default function ChatbotLogsPage({ logs, filters, users, statusOptions, i
                 </div>
 
                 <Accordion type="single" collapsible className="rounded-xl border bg-card px-3 sm:px-4">
-                    {logs.data.map((log) => (
+                    {(logs?.data ?? []).map((log) => (
                         <AccordionItem key={`detail-${log.id}`} value={`log-${log.id}`}>
                             <AccordionTrigger className="text-left hover:no-underline">
                                 <div className="flex flex-col gap-1 pr-4">

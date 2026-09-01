@@ -16,8 +16,7 @@ export async function createRequest(payload: CreateRequestPayload): Promise<{ re
     });
 
     if (response.status === 419) {
-        window.location.reload();
-        return Promise.reject(new Error('CSRF token expired, reloading...'));
+        return Promise.reject(new Error('Session timed out. Please try submitting your request again.'));
     }
 
     if (!response.ok) {

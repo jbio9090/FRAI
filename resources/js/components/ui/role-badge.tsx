@@ -19,17 +19,21 @@ export function RoleBadge({ roles, variant = "default", className }: RoleBadgePr
 
   return (
     <div className={cn("flex flex-wrap items-center gap-1", className)}>
-      {roles.map((role) => (
-        <span
-          key={role}
-          className={cn(
-            "inline-flex items-center rounded-[4px] font-semibold whitespace-nowrap bg-[var(--ads-neutral-bg)] text-[var(--ads-neutral)]",
-            variantStyles[variant],
-          )}
-        >
-          {role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()}
-        </span>
-      ))}
+      {roles.map((role, idx) => {
+        const roleStr = typeof role === 'string' ? role : String((role as any)?.name || role || '');
+        if (!roleStr) return null;
+        return (
+          <span
+            key={`${roleStr}-${idx}`}
+            className={cn(
+              "inline-flex items-center rounded-[4px] font-semibold whitespace-nowrap bg-[var(--ads-neutral-bg)] text-[var(--ads-neutral)]",
+              variantStyles[variant],
+            )}
+          >
+            {roleStr.charAt(0).toUpperCase() + roleStr.slice(1).toLowerCase()}
+          </span>
+        );
+      })}
     </div>
   );
 }

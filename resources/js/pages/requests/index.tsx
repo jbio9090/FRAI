@@ -799,7 +799,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                     <RequestsSkeleton />
                 ) : (
                     <>
-                        {displayRequests && displayRequests.data.length > 9 && (
+                        {displayRequests?.data && displayRequests.data.length > 9 && (
                             <SmartPagination
                                 currentPage={displayRequests.current_page}
                                 lastPage={displayRequests.last_page}
@@ -819,7 +819,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(max(24rem, calc(50% - 0.5rem)), 1fr))' }}
                         >
                             <AnimatePresence mode="popLayout">
-                                {displayRequests && displayRequests.data.length > 0 ? (
+                                {displayRequests?.data && displayRequests.data.length > 0 ? (
                                     displayRequests.data.map((request) => (
                                         <RequestCard
                                             request={request}
@@ -857,7 +857,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                             </AnimatePresence>
                         </div>
 
-                        {displayRequests && displayRequests.data.length > 9 && (
+                        {displayRequests?.data && displayRequests.data.length > 9 && (
                             <SmartPagination
                                 currentPage={displayRequests.current_page}
                                 lastPage={displayRequests.last_page}

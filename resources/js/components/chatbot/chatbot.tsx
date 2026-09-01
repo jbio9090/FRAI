@@ -1,4 +1,4 @@
-﻿import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
+import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCurrentPageContext } from '@/lib/useCurrentPageContext';
 import ChatInput from './components/ChatInput';

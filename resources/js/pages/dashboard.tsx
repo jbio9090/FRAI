@@ -95,33 +95,33 @@ function getInitialTab(): Tab {
 }
 
 export default function Dashboard({
-    pending,
-    initialEvents,
-    buildings,
-    auditLogs: auditLogsProp,
-    auditEvents,
-    breakdown,
-    chartData,
-    notifications: notificationsProp,
-    kpis,
+    pending = { data: [] },
+    initialEvents = [],
+    buildings = [],
+    auditLogs: auditLogsProp = { data: [], current_page: 1, last_page: 1, total: 0 },
+    auditEvents = [],
+    breakdown = [],
+    chartData = [],
+    notifications: notificationsProp = [],
+    kpis = { awaitingDecision: 0, needsAction: 0, approvedThisWeek: 0, eventsToday: 0 },
 }: {
-    pending: { data: FacilityRequest[] };
-    initialEvents: Event[];
-    buildings: string[];
-    auditLogs: { data: AuditLog[]; current_page: number; last_page: number; total: number };
-    auditEvents: { value: string; label: string }[];
-    breakdown: { event: string; label: string; count: number }[];
-    chartData: ChartRow[];
-    notifications: InboxNotification[];
-    kpis: Kpis;
+    pending?: { data: FacilityRequest[] };
+    initialEvents?: Event[];
+    buildings?: string[];
+    auditLogs?: { data: AuditLog[]; current_page: number; last_page: number; total: number };
+    auditEvents?: { value: string; label: string }[];
+    breakdown?: { event: string; label: string; count: number }[];
+    chartData?: ChartRow[];
+    notifications?: InboxNotification[];
+    kpis?: Kpis;
 }) {
-    const [selectedBuildings, setSelectedBuildings] = useState<string[]>(buildings);
+    const [selectedBuildings, setSelectedBuildings] = useState<string[]>(buildings ?? []);
     const [range, setRange] = useState<'day' | 'week' | 'month' | '3months'>('week');
-    const [data, setData] = useState<ChartRow[]>(chartData);
+    const [data, setData] = useState<ChartRow[]>(chartData ?? []);
     const [loading, setLoading] = useState(false);
 
     const [pendingFilter, setPendingFilter] = useState<'all' | 'this_week' | 'this_month'>('this_week');
-    const [pendingRequests, setPendingRequests] = useState<{ data: FacilityRequest[] }>(pending);
+    const [pendingRequests, setPendingRequests] = useState<{ data: FacilityRequest[] }>(pending ?? { data: [] });
     const [pendingLoading, setPendingLoading] = useState(false);
 
     const fetchPendingRequests = async (filter: 'all' | 'this_week' | 'this_month') => {
@@ -129,7 +129,7 @@ export default function Dashboard({
         try {
             const res = await fetch(`/dashboard/pending-requests?filter=${filter}`);
             const data = await res.json();
-            setPendingRequests(data);
+            setPendingRequests(data ?? { data: [] });
         } finally {
             setPendingLoading(false);
         }
@@ -137,10 +137,10 @@ export default function Dashboard({
     const auth = usePage().props.auth;
     const { hasRole } = usePermission();
     const [logsLoading, setLogsLoading] = useState(false);
-    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp.data ?? []);
-    const [currentPage, setCurrentPage] = useState(auditLogsProp.current_page ?? 1);
-    const [lastPage, setLastPage] = useState(auditLogsProp.last_page ?? 1);
-    const [totalLogs, setTotalLogs] = useState(auditLogsProp.total ?? 0);
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(auditLogsProp?.data ?? []);
+    const [currentPage, setCurrentPage] = useState(auditLogsProp?.current_page ?? 1);
+    const [lastPage, setLastPage] = useState(auditLogsProp?.last_page ?? 1);
+    const [totalLogs, setTotalLogs] = useState(auditLogsProp?.total ?? 0);
     const [pieData, setPieData] = useState<{ event: string; label: string; count: number; fill: string }[]>(() =>
         (breakdown ?? []).map((row, i) => ({
             event: row.event,
@@ -234,10 +234,10 @@ export default function Dashboard({
         );
     };
 
-    const pendingConflictRequests = pending.data.filter(
+    const pendingConflictRequests = (pending?.data ?? []).filter(
         (r) => r.pending_conflicts && r.pending_conflicts.length > 0
     );
-    const approvedConflictRequests = pending.data.filter(
+    const approvedConflictRequests = (pending?.data ?? []).filter(
         (r) => r.approved_conflicts && r.approved_conflicts.length > 0
     );
 
