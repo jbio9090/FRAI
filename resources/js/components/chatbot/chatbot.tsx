@@ -18,6 +18,7 @@ export default function Chatbot() {
     const [contextError, setContextError] = useState<string | null>(null);
     const [isContextLoading, setIsContextLoading] = useState(false);
     const [debugRawResponse, setDebugRawResponse] = useState<string>('');
+    const [debugToolCalls, setDebugToolCalls] = useState<unknown[]>([]);
     const { messages, addMessage, setMessages, clearMessages } = useMessages();
     const { isLoading, sendMessage } = useChatAPI();
     const pageContext = useCurrentPageContext();
@@ -143,6 +144,7 @@ export default function Chatbot() {
         let streamingContent = '';
         if (devMode) {
             setDebugRawResponse('');
+            setDebugToolCalls([]);
         }
 
         try {
@@ -166,6 +168,10 @@ export default function Chatbot() {
                     };
 
                     return updated;
+                }, undefined, undefined, devMode, (calls) => {
+                    if (devMode) {
+                        setDebugToolCalls(calls);
+                    }
                 });
             });
         } catch (err) {
@@ -247,6 +253,12 @@ export default function Chatbot() {
                             <h3 className="mb-2 text-xs font-semibold tracking-[0.2em] text-amber-300 uppercase">Raw model output</h3>
                             <pre className="rounded-md border border-amber-300/20 bg-black/20 p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
                                 {debugRawResponse || 'No raw model output captured yet.'}
+                            </pre>
+                        </div>
+                        <div className="mt-4">
+                            <h3 className="mb-2 text-xs font-semibold tracking-[0.2em] text-amber-300 uppercase">Tool calls this turn</h3>
+                            <pre className="rounded-md border border-amber-300/20 bg-black/20 p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                                {debugToolCalls.length ? JSON.stringify(debugToolCalls, null, 2) : 'No tool calls made this turn.'}
                             </pre>
                         </div>
                     </div>

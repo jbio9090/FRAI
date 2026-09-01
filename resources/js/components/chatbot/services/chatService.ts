@@ -58,16 +58,19 @@ interface ChatJsonResponse {
     };
     response?: string;
     deterministic?: Record<string, unknown>;
+    debug?: { tool_calls?: unknown[] };
     error?: string;
 }
 
 export async function sendChatMessage(
     payload: ChatRequest,
     pageContextOverride?: ClientPageContext,
+    devmode?: boolean,
 ): Promise<{
     content: string;
     bookingPayload: string | null;
     deterministic: Record<string, unknown> | null;
+    debug: { tool_calls: unknown[] } | null;
 }> {
     const pageContext = pageContextOverride ?? collectPageContext();
     const response = await fetch(route('api.chat'), {
@@ -80,7 +83,7 @@ export async function sendChatMessage(
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext) }),
+        body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext), devmode: !!devmode }),
     });
 
     if (response.status === 419) {
@@ -100,6 +103,7 @@ export async function sendChatMessage(
         content,
         bookingPayload: extractBookingPayloadFromText(content),
         deterministic: data?.deterministic ?? null,
+        debug: data?.debug?.tool_calls ? { tool_calls: data.debug.tool_calls } : null,
     };
 }
 

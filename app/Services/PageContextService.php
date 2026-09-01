@@ -2,13 +2,22 @@
 
 namespace App\Services;
 
+use App\Enums\RequestStatus;
+use App\Models\AuditLog;
 use App\Models\Equipment;
 use App\Models\Facility;
 use App\Models\Rule as RuleModel;
 use App\Models\Request as RequestModel;
+use App\Models\RequestFacility;
+use Illuminate\Support\Facades\Auth;
 
 class PageContextService
 {
+    public function __construct(
+        private readonly RequestService $requestService,
+        private readonly FacilityService $facilityService,
+    ) {}
+
     /**
      * Get the current page context objects for AI awareness.
      * This gathers data about the currently active facility, equipment,
@@ -186,11 +195,70 @@ class PageContextService
 
     private function dashboardPageContext(): array
     {
+        $user = Auth::user();
+        $isAdmin = $user->hasRole(['admin', 'Super Admin']);
+        $since = now()->subDays(6)->startOfDay();
+
+        $pending = $this->requestService->get([RequestStatus::PENDING]);
+
+        $approvedThisWeek = RequestModel::query()
+            ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
+            ->where('status', RequestStatus::APPROVED->value)
+            ->where(fn ($q) => $q
+                ->where('processed_at', '>=', $since)
+                ->orWhere(fn ($q2) => $q2->whereNull('processed_at')->where('created_at', '>=', $since)))
+            ->count();
+
+        $eventsToday = $isAdmin
+            ? $this->facilityService->getAllSchedule(
+                now()->startOfDay()->format('Y-m-d'),
+                now()->endOfDay()->format('Y-m-d')
+            )->count()
+            : RequestFacility::query()
+                ->whereDate('date_requested', now()->toDateString())
+                ->whereHas('request', fn ($q) => $q->where('user_id', $user->id))
+                ->count();
+
+        $conflictRequestIds = collect($pending->items())
+            ->flatMap(fn ($request) => array_merge(
+                collect($request->pending_conflicts ?? [])->all(),
+                collect($request->approved_conflicts ?? [])->all(),
+            ))
+            ->pluck('request_id')
+            ->filter()
+            ->unique();
+
+        $recentActivity = AuditLog::query()
+            ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
+            ->latest()
+            ->limit(5)
+            ->get()
+            ->map(fn ($log) => [
+                'event' => $log->event?->value ?? (string) $log->event,
+                'description' => $log->description,
+                'when' => $log->created_at?->diffForHumans(),
+            ])
+            ->values();
+
         return [
-            'facilities' => $this->getFacilities(6),
-            'equipment' => $this->getEquipment(6),
-            'requests' => $this->getRecentRequests(6),
-            'rules' => $this->getRules(6),
+            'kpis' => [
+                'awaiting_decision' => $pending->total(),
+                'needs_action' => $conflictRequestIds->count(),
+                'approved_this_week' => $approvedThisWeek,
+                'events_today' => $eventsToday,
+            ],
+            'pending_requests' => collect($pending->items())->map(fn ($request) => [
+                'id' => $request->id,
+                'title' => $request->title,
+                'status' => $request->status?->value ?? (string) $request->status,
+                'requester' => $request->user?->name ?? 'unknown',
+                'facilities' => $request->facilities->map(fn ($facility) => $facility->name)->values(),
+            ])->values(),
+            'recent_activity' => $recentActivity,
+            'facilities' => [],
+            'equipment' => [],
+            'requests' => [],
+            'rules' => [],
         ];
     }
 
