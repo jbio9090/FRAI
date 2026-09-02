@@ -256,11 +256,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                         <StatusTag requestStatus={request.status} />
 
                         <div className="ml-auto flex items-center gap-2">
-<<<<<<< Updated upstream
-                            {canEdit && (
-=======
                             {(canEdit || canReschedule) && (
->>>>>>> Stashed changes
                                 <Link href={route('requests.edit', request.id)}>
                                     <Button variant="ghost" size="icon-sm" aria-label="Edit request">
                                         <Pen className="h-4 w-4" />
