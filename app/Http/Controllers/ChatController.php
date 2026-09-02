@@ -30,6 +30,11 @@ class ChatController extends Controller
     private const SESSION_TTL_MINUTES = 15;
     private const MAX_SESSION_MESSAGES = 10;
 
+    // Bump this string every time a deploy changes the system prompt, tool names,
+    // or tool definitions — this automatically invalidates all existing sessions
+    // without needing to touch the cache manually or wait out the TTL.
+    private const PROMPT_VERSION = 'v2';
+
     protected PageContextService $pageContextService;
 
     public function __construct(
@@ -42,7 +47,7 @@ class ChatController extends Controller
 
     private function sessionCacheKey(): string
     {
-        return 'chat_session_'.Auth::id();
+        return 'chat_session_'.self::PROMPT_VERSION.'_'.Auth::id();
     }
 
     private function pageContextCacheKey(): string
@@ -52,7 +57,7 @@ class ChatController extends Controller
 
     private function faqStateCacheKey(): string
     {
-        return 'chat_faq_state_'.Auth::id();
+        return 'chat_faq_state_'.self::PROMPT_VERSION.'_'.Auth::id();
     }
 
     private function saveSession(array $userMessages): void
