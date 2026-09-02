@@ -6,7 +6,6 @@ import ChevronDownIcon from '@atlaskit/icon/core/chevron-down';
 import ChevronRightIcon from '@atlaskit/icon/core/chevron-right';
 import ClipboardIcon from '@atlaskit/icon/core/clipboard';
 import ClockIcon from '@atlaskit/icon/core/clock';
-import CommentIcon from '@atlaskit/icon/core/comment';
 import ComponentIcon from '@atlaskit/icon/core/component';
 import CrossCircleIcon from '@atlaskit/icon/core/cross-circle';
 import GridIcon from '@atlaskit/icon/core/grid';
@@ -58,8 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: 'Facilities', url: 'facilities', icon: OfficeBuildingIcon },
             { title: 'Equipments', url: 'equipments', icon: ComponentIcon },
             ...(hasPermission('manage users') ? [{ title: 'Accounts', url: 'accounts.index', icon: PersonIcon }] : []),
-            ...(hasPermission('view chatbot logs') ? [{ title: 'Chatbot Logs', url: 'chatbot.logs.index', icon: CommentIcon }] : []),
-            ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
+                        ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
         ],
         navMenu: [
             { title: 'Pending', url: route('requests.index', { status: 'pending' }), status: 'pending', icon: ClockIcon },
