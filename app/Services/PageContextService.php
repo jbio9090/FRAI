@@ -38,7 +38,7 @@ class PageContextService
             'facilities' => [],
             'equipment' => [],
             'requests' => [],
-            'rules' => [],
+            'faq' => $this->getRules(30),
             'current_facility' => $this->getCurrentFacility(),
             'current_equipment' => $this->getCurrentEquipment(),
             'current_request' => $this->getCurrentRequest(),
@@ -129,7 +129,6 @@ class PageContextService
             'facilities' => [],
             'equipment' => [],
             'requests' => [],
-            'rules' => [],
         ];
 
         if (in_array($routeName, ['dashboard'], true)) {
@@ -258,14 +257,14 @@ class PageContextService
             'facilities' => [],
             'equipment' => [],
             'requests' => [],
-            'rules' => [],
         ];
     }
 
     private function rulesPageContext(): array
     {
         return [
-            'rules' => $this->getRules(50),
+            'policy_rules' => $this->getPolicyRules(50),
+            'faq' => $this->getRules(50),
         ];
     }
 
@@ -321,9 +320,22 @@ class PageContextService
 
     private function requestCreatePageContext(): array
     {
+        $pending = RequestModel::with('requestFacilities.facility')
+            ->where('status', \App\Enums\RequestStatus::PENDING->value)
+            ->orderBy('created_at', 'desc')
+            ->take(20)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'title' => $r->title,
+                'facilities' => $r->requestFacilities->map(fn ($rf) => $rf->facility?->name)->filter()->values(),
+            ]);
+
         return [
             'facilities' => $this->getFacilities(50),
             'equipment' => $this->getEquipment(50),
+            'policy_rules' => $this->getPolicyRules(30),
+            'pending_requests_for_conflict_awareness' => $pending,
         ];
     }
 
@@ -377,7 +389,10 @@ class PageContextService
             ];
         }
 
-        $request = RequestModel::with(['requestFacilities.facility', 'equipment'])->find((int) $requestId);
+        $request = RequestModel::with([
+            'user', 'requestFacilities.facility', 'equipment', 'comments.user', 'files', 'processedBy',
+        ])->find((int) $requestId);
+
         if (! $request) {
             return [
                 'requests' => [],
@@ -386,29 +401,54 @@ class PageContextService
             ];
         }
 
+        $recentActivity = \App\Models\AuditLog::where('subject_type', RequestModel::class)
+            ->where('subject_id', $request->id)
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn ($log) => [
+                'event' => $log->event?->value ?? (string) $log->event,
+                'description' => $log->description,
+                'when' => $log->created_at?->diffForHumans(),
+            ])->values();
+
         $detail = [
             'id' => $request->id,
             'title' => $request->title,
+            'description' => $request->description,
             'status' => $request->status?->value ?? 'unknown',
+            'requester' => $request->user?->name,
+            'priority_level' => $request->priority_level?->value,
+            'priority_reason' => $request->priority_reason,
+            'on_hold' => $request->on_hold,
+            'recommended_action' => $request->recommended_action?->value,
+            'recommended_action_reason' => $request->recommended_action_reason,
+            'processed_by' => $request->processedBy?->name,
+            'processed_at' => $request->processed_at?->toDateTimeString(),
             'created_at' => $request->created_at?->toDateTimeString(),
             'updated_at' => $request->updated_at?->toDateTimeString(),
+            'comments' => $request->comments->map(fn ($c) => [
+                'author' => $c->user?->name,
+                'body' => $c->body,
+                'created_at' => $c->created_at?->diffForHumans(),
+            ])->values(),
+            'files' => $request->files->map(fn ($f) => $f->original_name)->values(),
+            'recent_activity' => $recentActivity,
         ];
 
         return [
             'requests' => [$detail],
-            'facilities' => $request->requestFacilities
-                ->map(fn ($requestFacility) => [
-                    'id' => $requestFacility->facility_id,
-                    'name' => $requestFacility->facility?->name ?? 'unknown',
-                ])
-                ->toArray(),
-            'equipment' => $request->equipment
-                ->map(fn ($equipment) => [
-                    'id' => $equipment->id,
-                    'name' => $equipment->name,
-                    'quantity' => $equipment->pivot?->quantity ?? $equipment->quantity,
-                ])
-                ->toArray(),
+            'facilities' => $request->requestFacilities->map(fn ($rf) => [
+                'id' => $rf->facility_id,
+                'name' => $rf->facility?->name ?? 'unknown',
+                'status' => $rf->status ?? 'unknown',
+            ])->toArray(),
+            'equipment' => $request->equipment->map(fn ($e) => [
+                'id' => $e->id,
+                'name' => $e->name,
+                'quantity' => $e->pivot?->quantity_needed ?? $e->quantity,
+            ])->toArray(),
+            'policy_rules' => $this->getPolicyRules(30),
         ];
     }
 
@@ -578,9 +618,25 @@ class PageContextService
         $query = RuleModel::where('forPolicy', 1)
             ->whereNotNull('faq_answer')
             ->whereRaw("TRIM(faq_answer) <> ''")
-            ->select('id', 'rule', 'faq_answer')
+            ->select('id', 'rule as question', 'faq_answer as answer')
             ->orderBy('priority', 'asc')
             ->orderBy('id', 'asc');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        return $query->get()->toArray();
+    }
+
+    /**
+     * Get all policy rules (non-FAQ rules that explain system decisions).
+     */
+    private function getPolicyRules(?int $limit = 30): array
+    {
+        $query = RuleModel::where('forPolicy', 0)
+            ->select('id', 'rule as policy_text', 'priority')
+            ->orderBy('priority', 'asc');
 
         if ($limit !== null) {
             $query->limit($limit);

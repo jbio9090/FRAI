@@ -231,28 +231,42 @@ class ChatController extends Controller
      * For thinking models that support tool use, parse the message for tool call format.
      * Returns the assistant reply content, or null if no tool call was detected.
      */
-    private function getContextAwareSystemPrompt(): string
+     private function getContextAwareSystemPrompt(): string
     {
         return <<<'SYMTPROMPT'
-You are an AI assistant for the PLV-GSO Facility Request System. You have access to a tool called `get_page_context` that can retrieve information about the current page/facility context.
+You are an AI assistant for the PLV-GSO Facility Request System. You have access to tools that can retrieve information about the current page/facility context.
 
 When users ask questions about:
 - Facility availability, bookings, or scheduling
 - Equipment availability or assignments
 - Request status or details
 - Rules, policies, or FAQ topics
+- Why a request was approved, denied, or held
 - Any system-specific knowledge about facilities, equipment, or requests
 
 You MUST call the `get_page_context` tool first to get the current page context before answering. The tool returns structured information about:
 1. Available facilities (ID, name, building, capacity)
 2. Equipment and their assignments
 3. Recent requests
-4. Active rules/FAQ entries
+4. Active rules/FAQ entries and policy rules
 5. Current selected facility/equipment/request
+6. FAQ entries (official frequently-asked-question answers)
+
+**FAQ is Your Primary Source of Truth**
+
+The get_page_context tool result includes a "faq" array — official frequently-asked-question entries with their approved answers. When a user's question matches or relates to an FAQ entry, base your answer on that entry's answer first, even if other page data is also available. Only fall back to page-specific data or general reasoning when no FAQ entry addresses the question.
+
+**Policy Rules Explain System Decisions**
+
+The get_page_context tool also includes a "policy_rules" array (non-FAQ rules). When a user asks why a request was approved, denied, or held, check the request's recommended_action_reason and priority_reason fields first, and cross-reference policy_rules if a specific rule explains the decision.
+
+**Facility Availability Tool**
+
+When a user asks whether a facility is available on a given date/time, use the `check_facility_availability` tool rather than guessing from the pending_requests list — it checks actual conflicts including approved bookings you may not see.
+
+**Important: When listing items from policy_rules or faq arrays, list each entry exactly once, in the order given, and report the count as the actual array length — never estimate or round. Do not add, merge, or duplicate entries.**
 
 After calling `get_page_context`, use the returned information to provide accurate, contextual answers. If the user's question doesn't require page context, you can answer directly without calling the tool.
-
-Use the `get_page_context` tool when you need current page information.
 
 After receiving the tool response, incorporate the context into your answer naturally, citing facility IDs, equipment names, request details, or rule information as relevant to the user's question.
 
@@ -264,9 +278,10 @@ Keep answers concise — a short list or a couple of sentences is usually enough
 
 If there's more relevant information available, you may briefly offer to share it, but don't dump it by default.
 
-You have two tools:
-- get_page_context: current page's summary data (KPIs, recent requests list, activity feed).
+You have three tools:
+- get_page_context: current page's summary data (KPIs, recent requests list, activity feed, policy rules).
 - get_request_details: full detail for one specific request by ID (requester, facilities/times, equipment, comments) — use this when the user asks about a particular request or wants more than the summary gives.
+- check_facility_availability: check if a facility is free on a specific date/time — use this when the user asks about availability.
 
 If get_request_details returns a "forbidden" error, tell the user the request exists but they don't have permission to view it, and suggest contacting their GSO admin with the request ID. If it returns "not_found", tell them plainly no such request exists.
 SYMTPROMPT;
@@ -315,11 +330,33 @@ SYMTPROMPT;
         ];
     }
 
+    private function getFacilityAvailabilityToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'check_facility_availability',
+                'description' => 'Check whether a facility is available for a given date and time range, based on existing pending/approved requests. Use this when the user asks if a facility/room is free or available.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'facility_id' => ['type' => 'integer', 'description' => 'The facility to check.'],
+                        'date' => ['type' => 'string', 'description' => 'Date in YYYY-MM-DD format.'],
+                        'start_time' => ['type' => 'string', 'description' => 'Start time, HH:MM (24h).'],
+                        'end_time' => ['type' => 'string', 'description' => 'End time, HH:MM (24h).'],
+                    ],
+                    'required' => ['facility_id', 'date', 'start_time', 'end_time'],
+                ],
+            ],
+        ];
+    }
+
     private function processToolCalls(array $messages, Request $request, ?array &$debugInfo = null): ?string
     {
         $result = $this->ai->chatWithTools($messages, [
             $this->getPageContextToolDefinition(),
             $this->getRequestDetailsToolDefinition(),
+            $this->getFacilityAvailabilityToolDefinition(),
         ], [
             'timeout' => 120,
             'tool_choice' => 'auto',
@@ -358,15 +395,56 @@ SYMTPROMPT;
                     'content' => json_encode($requestDetail, JSON_UNESCAPED_SLASHES),
                 ];
 
-                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
+                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
 
+                return $followUp !== '' ? $followUp : null;
+            }
+
+            if ($functionName === 'check_facility_availability') {
+                $args = is_string($toolCall['function']['arguments'] ?? '{}')
+                    ? json_decode($toolCall['function']['arguments'], true)
+                    : $toolCall['function']['arguments'];
+
+                $conflicts = RequestModel::conflicting(
+                    (int) ($args['facility_id'] ?? 0),
+                    $args['date'] ?? null,
+                    $args['start_time'] ?? null,
+                    $args['end_time'] ?? null,
+                )->with('user')->get();
+
+                $toolResult = [
+                    'available' => $conflicts->isEmpty(),
+                    'conflicting_requests' => $conflicts->map(fn ($r) => [
+                        'id' => $r->id,
+                        'title' => $r->title,
+                        'status' => $r->status?->value,
+                        'requester' => $r->user?->name,
+                    ])->values(),
+                ];
+
+                if ($debugInfo !== null) {
+                    $debugInfo[] = [
+                        'tool' => 'check_facility_availability',
+                        'arguments' => $args,
+                        'result' => $toolResult,
+                    ];
+                }
+
+                $messages[] = [
+                    'role' => 'tool',
+                    'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
+                    'name' => 'check_facility_availability',
+                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                ];
+
+                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
                 return $followUp !== '' ? $followUp : null;
             }
 
             if ($functionName !== 'get_page_context') {
                 \Log::warning('AI returned an unknown tool call.', [
                     'tool_name' => $functionName,
-                    'known_tools' => ['get_page_context', 'get_request_details'],
+                    'known_tools' => ['get_page_context', 'get_request_details', 'check_facility_availability'],
                 ]);
 
                 continue;
@@ -400,7 +478,7 @@ SYMTPROMPT;
                 'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
             ];
 
-            $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120]));
+            $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
 
             return $followUp !== '' ? $followUp : null;
         }
