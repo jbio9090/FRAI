@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="/FRAI.png">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#0C66E4">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="GSO">
 
@@ -24,7 +24,7 @@
 
     @routes
     @viteReactRefresh
-    @vite(['resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
+    @vite(['resources/js/app.tsx'])
     @inertiaHead
 </head>
 

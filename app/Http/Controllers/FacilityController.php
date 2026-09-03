@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\FacilityStatus;
 use App\Models\Building;
 use App\Models\Campus;
 use App\Models\Facility;
@@ -116,6 +117,7 @@ class FacilityController extends Controller
                     ->whereNull('deleted_at')),
             ],
             'capacity'    => 'required|integer|min:1',
+            'status'      => ['required', Rule::enum(FacilityStatus::class)],
         ]);
 
         $validated['building'] = Building::findOrFail($validated['building_id'])->name;
@@ -147,6 +149,7 @@ class FacilityController extends Controller
                     ->whereNull('deleted_at')),
             ],
             'capacity'    => 'required|integer|min:1',
+            'status'      => ['required', Rule::enum(FacilityStatus::class)],
         ]);
 
         $validated['building'] = Building::findOrFail($validated['building_id'])->name;

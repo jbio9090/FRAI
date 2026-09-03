@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\RequestFacility;
+use App\Enums\FacilityStatus;
 use App\Enums\RequestStatus;
 use Illuminate\Support\Collection;
 
@@ -19,6 +20,9 @@ class FacilityService
                 ]);
             })
             ->where('facility_id', $facility_id)
+            ->whereHas('facility', function ($query) {
+                $query->where('status', FacilityStatus::ACTIVE);
+            })
             ->with(['request:id,title', 'facility:id,name'])
             ->get()
             ->map(function ($booking) {
@@ -45,6 +49,9 @@ class FacilityService
                     RequestStatus::CONDITIONALLY_APPROVED,
                 ]);
             })
+            ->whereHas('facility', function ($query) {
+                $query->where('status', FacilityStatus::ACTIVE);
+            })
             ->with('request:id,title,status')
             ->get()
             ->map(function ($booking) {
@@ -69,6 +76,9 @@ class FacilityService
                     RequestStatus::APPROVED,
                     RequestStatus::CONDITIONALLY_APPROVED,
                 ]);
+            })
+            ->whereHas('facility', function ($query) {
+                $query->where('status', FacilityStatus::ACTIVE);
             })
             ->with(['request:id,title', 'facility:id,name,building'])
             ->get()

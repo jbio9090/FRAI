@@ -80,15 +80,21 @@ export function EquipmentSection({
                             <SelectValue placeholder="Choose a Facility" />
                         </SelectTrigger>
                         <SelectContent>
-                            {facilities.map((facility) => (
-                                <SelectItem key={facility.id} value={facility.id.toString()}>
-                                    <b>{facility.name}</b>
-                                    <div className="flex items-center gap-1 text-muted-foreground">
-                                        <User className="h-3 w-3" />
-                                        <span className="text-xs">{facility.capacity}</span>
-                                    </div>
-                                </SelectItem>
-                            ))}
+                            {facilities.map((facility) => {
+                                const isUnavailable = facility.status === 'unavailable';
+                                return (
+                                    <SelectItem key={facility.id} value={facility.id.toString()} disabled={isUnavailable} className={isUnavailable ? 'pointer-events-none opacity-50 text-muted-foreground' : ''}>
+                                        <b>{facility.name}</b>
+                                        {isUnavailable && (
+                                            <span className="ml-1.5 text-xs text-muted-foreground">(Unavailable)</span>
+                                        )}
+                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                            <User className="h-3 w-3" />
+                                            <span className="text-xs">{facility.capacity}</span>
+                                        </div>
+                                    </SelectItem>
+                                );
+                            })}
                         </SelectContent>
                     </Select>
                 </div>

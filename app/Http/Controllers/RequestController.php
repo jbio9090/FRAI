@@ -59,7 +59,7 @@ class RequestController extends Controller
             )),
             'page_title' => $pageTitle,
             'filters' => ['status' => $statusParam],
-            'facilities' => Facility::select('id', 'name')->orderBy('name')->get(),
+            'facilities' => Facility::select('id', 'name', 'status')->orderBy('name')->get(),
             'requesters' => User::select('id', 'name')->orderBy('name')->get(),
         ]);
     }
@@ -182,7 +182,7 @@ class RequestController extends Controller
             'facilities' => Facility::with([
                 'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name'),
-            ])->select('id', 'name', 'capacity', 'building')->get(),
+            ])->select('id', 'name', 'capacity', 'building', 'status')->get(),
         ]);
     }
 
@@ -330,7 +330,7 @@ class RequestController extends Controller
             'facilities' => Facility::with([
                 'equipment' => fn ($q) => $q->select('equipments.id', 'equipments.name', 'equipments.quantity')
                     ->orderBy('equipments.name'),
-            ])->select('id', 'name', 'capacity', 'building')->get(),
+            ])->select('id', 'name', 'capacity', 'building', 'status')->get(),
             'existingRequest' => $this->service->getEditData($request->id),
             'labeledBreadcrumb' => 'Edit Request',
         ]);

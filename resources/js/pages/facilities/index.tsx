@@ -35,6 +35,7 @@ interface Facility {
     capacity: number;
     campus_id: number | null;
     building_id: number | null;
+    status: 'active' | 'unavailable';
     campus?: Campus | null;
     building_record?: Building | null;
     deleted_at?: string | null;
@@ -115,7 +116,7 @@ const getFacilitySortValue = (facility: Facility, sortKey: SortKey) => {
     return facility[sortKey];
 };
 
-function StatusText({ archived }: { archived: boolean }) {
+function StatusText({ status }: { status: 'active' | 'unavailable' }) {
     const toneStyles = {
         ok: 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]',
         neutral: 'bg-[var(--ads-neutral-bg)] text-[var(--ads-neutral)]',
@@ -125,11 +126,11 @@ function StatusText({ archived }: { archived: boolean }) {
         <span
             className={cn(
                 'inline-flex w-fit items-center gap-1.5 rounded-[4px] px-2 py-0.5 text-xs font-semibold whitespace-nowrap',
-                toneStyles[archived ? 'neutral' : 'ok'],
+                toneStyles[status === 'active' ? 'ok' : 'neutral'],
             )}
         >
             <span className="size-1.5 shrink-0 rounded-full bg-current" />
-            {archived ? 'Archived' : 'Active'}
+            {status === 'active' ? 'Active' : 'Unavailable'}
         </span>
     );
 }
@@ -322,6 +323,7 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
             campus_id: Number(addForm.campus_id),
             building_id: Number(addForm.building_id),
             capacity: Number(addForm.capacity),
+            status: 'active',
         }, {
             onSuccess: () => { setIsAddOpen(false); setAddForm(emptyFacilityForm); },
             onError: () => setIsAddOpen(true),
@@ -423,6 +425,17 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
     const handleArchiveFacility = (e: MouseEvent, id: number) => {
         e.stopPropagation();
         router.delete(route('facility.destroy', id), { preserveScroll: true });
+    };
+
+    const handleToggleStatus = (facility: Facility, checked: boolean) => {
+        router.put(route('facility.update', facility.id), {
+            name: facility.name,
+            campus_id: facility.campus_id,
+            building_id: facility.building_id,
+            capacity: facility.capacity,
+            status: checked ? 'active' : 'unavailable',
+            from: 'facilities_page',
+        }, { preserveScroll: true });
     };
 
     const handleArchiveBuilding = (building: Building) => {
@@ -652,11 +665,17 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
                                             <TableCell>{facility.campus?.name ?? 'Main'}</TableCell>
                                             <TableCell>{facility.building_record?.name ?? facility.building}</TableCell>
                                             <TableCell>{facility.capacity}</TableCell>
-                                            <TableCell><StatusText archived={archived} /></TableCell>
+                                            <TableCell><StatusText status={facility.status} /></TableCell>
                                             {isAdmin && (
                                                 <TableCell className="text-right">
                                                     {!archived && (
                                                         <div className="flex items-center justify-end gap-1">
+                                                            <Switch
+                                                                checked={facility.status === 'active'}
+                                                                onCheckedChange={(checked) => handleToggleStatus(facility, checked)}
+                                                                aria-label={`Toggle status for ${facility.name}`}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
                                                             <Button variant="ghost" size="icon" aria-label={`Edit ${facility.name}`} onClick={(e) => openEditDialog(e, facility)}>
                                                                 <Pencil className="h-4 w-4" />
                                                             </Button>

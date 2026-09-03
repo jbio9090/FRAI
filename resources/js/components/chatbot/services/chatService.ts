@@ -2,6 +2,16 @@ import type { ChatRequest } from '../types';
 import { getCsrfToken } from '../utils/csrfToken';
 import { collectPageContext, type ClientPageContext } from '../utils/pageContext';
 
+function getServerPageContext(pageContext: ClientPageContext): Pick<ClientPageContext, 'url' | 'path' | 'route' | 'component' | 'title'> {
+    return {
+        url: pageContext.url,
+        path: pageContext.path,
+        route: pageContext.route,
+        component: pageContext.component,
+        title: pageContext.title,
+    };
+}
+
 function extractBookingPayloadFromText(content: string): string | null {
     let depth = 0;
     let start = -1;
@@ -15,16 +25,6 @@ function extractBookingPayloadFromText(content: string): string | null {
             }
             depth += 1;
             continue;
-        }
-
-        function getServerPageContext(pageContext: ClientPageContext): Pick<ClientPageContext, 'url' | 'path' | 'route' | 'component' | 'title'> {
-            return {
-                url: pageContext.url,
-                path: pageContext.path,
-                route: pageContext.route,
-                component: pageContext.component,
-                title: pageContext.title,
-            };
         }
 
         if (char !== '}' || depth === 0) {

@@ -4,7 +4,9 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+        "build": "vite build",
+        "dev:node": "tsx server.ts",
+        "build:node": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
         "start": "node dist/server.cjs",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
