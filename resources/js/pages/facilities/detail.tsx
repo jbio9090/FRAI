@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useState, type FormEvent } from 'react';
 import FacilityCalendar from '@/components/FacilityCalendar';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -31,6 +32,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
+import { cn } from '@/lib/utils';
 
 interface Equipment {
     id: number;
@@ -50,6 +52,7 @@ interface Facility {
     name: string;
     building: string;
     capacity: number;
+    status: 'active' | 'unavailable';
     campus_id: number | null;
     building_id: number | null;
     campus?: Campus | null;
@@ -96,6 +99,7 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
     const [campusId, setCampusId] = useState(facility.campus_id ? String(facility.campus_id) : '');
     const [buildingId, setBuildingId] = useState(facility.building_id ? String(facility.building_id) : '');
     const [capacity, setCapacity] = useState(facility.capacity);
+    const [status, setStatus] = useState<'active' | 'unavailable'>(facility.status);
     const filteredBuildings = buildings.filter((building) => String(building.campus_id) === campusId);
     const canSave = isFormValid(name, campusId, buildingId, capacity);
 
@@ -108,12 +112,23 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
             campus_id: Number(campusId),
             building_id: Number(buildingId),
             capacity,
+            status,
         }, {
             onSuccess: () => setIsEditing(false),
         });
     };
 
     const equipments = facility.facility_equipments ?? [];
+
+    const handleToggleStatus = (checked: boolean) => {
+        router.put(route('facility.update', facility.id), {
+            name: facility.name,
+            campus_id: facility.campus_id,
+            building_id: facility.building_id,
+            capacity: facility.capacity,
+            status: checked ? 'active' : 'unavailable',
+        }, { preserveScroll: true });
+    };
 
     const motionProps = {
         initial: reduceMotion ? false : { opacity: 0, y: 6 },
@@ -174,6 +189,24 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
                         <User size={16} />
                         {facility?.capacity ? facility?.capacity + ' capacity' : 'N/A'}
                     </span>
+                    <span
+                        className={cn(
+                            'inline-flex items-center gap-1.5 rounded-[4px] px-2 py-0.5 text-xs font-semibold',
+                            facility.status === 'active'
+                                ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]'
+                                : 'bg-[var(--ads-neutral-bg)] text-[var(--ads-neutral)]',
+                        )}
+                    >
+                        <span className="size-1.5 shrink-0 rounded-full bg-current" />
+                        {facility.status === 'active' ? 'Active' : 'Unavailable'}
+                    </span>
+                    {hasPermission('manage facilities') && (
+                        <Switch
+                            checked={facility.status === 'active'}
+                            onCheckedChange={handleToggleStatus}
+                            aria-label="Toggle facility status"
+                        />
+                    )}
                 </div>
 
                 {isEditing && (

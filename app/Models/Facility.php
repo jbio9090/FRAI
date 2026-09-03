@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\FacilityStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -17,7 +18,15 @@ class Facility extends Model
         'campus_id',
         'building_id',
         'capacity',
+        'status',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'status' => FacilityStatus::class,
+        ];
+    }
 
     public function campus()
     {

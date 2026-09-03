@@ -124,6 +124,7 @@ export interface Facility {
     name: string;
     building: string;
     capacity: number;
+    status?: 'active' | 'unavailable';
 }
 
 export interface RequestsPageProps {

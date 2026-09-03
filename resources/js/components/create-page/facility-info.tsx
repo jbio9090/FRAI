@@ -76,17 +76,23 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
                     <SelectValue placeholder="Choose a facility…" />
                 </SelectTrigger>
                 <SelectContent>
-                    {facilities.map((f) => (
-                        <SelectItem key={f.id} value={f.id.toString()}>
-                            <span className="font-medium">{f.name}</span>
-                            {f.capacity && (
-                                <span className="ml-1.5 flex items-center gap-1 text-xs text-muted-foreground">
-                                    <User className="h-3 w-3" />
-                                    {f.capacity}
-                                </span>
-                            )}
-                        </SelectItem>
-                    ))}
+                            {facilities.map((f) => {
+                                const isUnavailable = f.status === 'unavailable';
+                                return (
+                                    <SelectItem key={f.id} value={f.id.toString()} disabled={isUnavailable} className={isUnavailable ? 'pointer-events-none opacity-50 text-muted-foreground' : ''}>
+                                        <span className="font-medium">{f.name}</span>
+                                        {isUnavailable && (
+                                            <span className="ml-1.5 text-xs text-muted-foreground">(Unavailable)</span>
+                                        )}
+                                        {f.capacity && (
+                                            <span className="ml-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+                                                <User className="h-3 w-3" />
+                                                {f.capacity}
+                                            </span>
+                                        )}
+                                    </SelectItem>
+                        );
+                    })}
                 </SelectContent>
             </Select>
 

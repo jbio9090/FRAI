@@ -1,5 +1,7 @@
 import type { FacilityEquipment } from '@/types/equipment';
 
+export type FacilityStatus = 'active' | 'unavailable';
+
 export interface Facility {
     id: number;
     name: string;
@@ -7,6 +9,7 @@ export interface Facility {
     capacity: number;
     building: string;
     deleted_at?: string | null;
+    status: FacilityStatus;
     campus_id?: number | null;
     building_id?: number | null;
     campus?: {
