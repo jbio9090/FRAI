@@ -39,6 +39,7 @@ import {
     SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { usePermission } from '@/hooks/use-permission';
+import { useIsMobile } from '@/hooks/use-mobile';
 import logo from '@/svg/FRAI.svg';
 import type { SharedData } from '@/types';
 import { Button } from './ui/button';
@@ -49,6 +50,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { hasPermission } = usePermission();
     const { auth } = usePage<SharedData>().props;
     const hasUnreadNotifications = Number(auth.user?.notification_unread_count ?? 0) > 0;
+    const isMobile = useIsMobile();
 
     const data = {
         topNav: [
@@ -220,7 +222,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     </span>
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="min-w-56 rounded-lg" side="top" align="end" sideOffset={4}>
+                            <DropdownMenuContent className={`min-w-56 rounded-lg ${isMobile ? 'z-[60]' : ''}`} side="top" align="end" sideOffset={4}>
                                 <DropdownMenuLabel className="p-0 font-normal">
                                     <div className="flex items-center gap-3 px-1 py-1.5">
                                         <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
