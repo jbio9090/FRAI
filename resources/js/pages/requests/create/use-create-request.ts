@@ -1,6 +1,6 @@
 import { useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type { EquipmentConflict } from '@/types/equipment';
 import type { FacilityEquipment } from '@/types/equipment';
@@ -94,6 +94,18 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
             clearRichPageContext();
         };
     }, [existingRequest?.id, isEditing, selectedDates, selectedEquipment.length, selectedFacility, scheduleConflicts.length, currentTimeEnd, currentTimeStart]);
+
+    // Consolidated conflict-check loading state (counter prevents premature clearing)
+    const [checkingConflicts, setCheckingConflicts] = useState(false);
+    const pendingConflictChecks = useRef(0);
+    const beginConflictCheck = () => {
+        pendingConflictChecks.current += 1;
+        setCheckingConflicts(true);
+    };
+    const endConflictCheck = () => {
+        pendingConflictChecks.current = Math.max(0, pendingConflictChecks.current - 1);
+        if (pendingConflictChecks.current === 0) setCheckingConflicts(false);
+    };
 
     // Edit-in-place state
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -205,29 +217,35 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         const ids = selectedEquipment.map((e) => e.equipment_id);
         if (ids.length > 0) {
             if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+                beginConflictCheck();
                 fetchEquipmentConflicts({
                     equipmentIds: ids,
                     currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
                     timeStart: currentTimeStart,
                     timeEnd: currentTimeEnd,
                     excludeRequestId: existingRequest?.id ?? null,
-                }).then((conflicts) => {
-                    if (conflicts) setEquipmentConflicts(conflicts);
-                });
+                })
+                    .then((conflicts) => {
+                        if (conflicts) setEquipmentConflicts(conflicts);
+                    })
+                    .finally(endConflictCheck);
             }
         } else {
             setEquipmentConflicts({});
         }
 
         if (selectedFacility && selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+            beginConflictCheck();
             fetchEquipmentAvailability({
                 facilityId: selectedFacility,
                 currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
                 timeStart: currentTimeStart,
                 timeEnd: currentTimeEnd,
-            }).then((availability) => {
-                if (availability) setEquipmentAvailability(availability);
-            });
+            })
+                .then((availability) => {
+                    if (availability) setEquipmentAvailability(availability);
+                })
+                .finally(endConflictCheck);
         } else {
             setEquipmentAvailability({});
         }
@@ -235,15 +253,18 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
 
     useEffect(() => {
         if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+            beginConflictCheck();
             fetchBorrowableAvailability({
                 facilities,
                 selectedFacility,
                 currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
                 timeStart: currentTimeStart,
                 timeEnd: currentTimeEnd,
-            }).then((map) => {
-                if (map) setBorrowableAvailability(map);
-            });
+            })
+                .then((map) => {
+                    if (map) setBorrowableAvailability(map);
+                })
+                .finally(endConflictCheck);
         } else {
             setBorrowableAvailability({});
         }
@@ -275,7 +296,8 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
     }, [selectedFacility, selectedDates, currentTimeStart, currentTimeEnd, facilitySchedule]);
 
     const loadSchedule = async (facilityId: number, date: Date) => {
-        setFacilitySchedule(await loadFacilitySchedule(facilityId, date));
+        beginConflictCheck();
+        setFacilitySchedule(await loadFacilitySchedule(facilityId, date).finally(endConflictCheck));
     };
 
     // Fetch alternatives for FOR_RESCHEDULE requests
@@ -449,15 +471,18 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         setSelectedEquipment(updated);
 
         if (updated.length > 0 && selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+            beginConflictCheck();
             fetchEquipmentConflicts({
                 equipmentIds: updated.map((e) => e.equipment_id),
                 currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
                 timeStart: currentTimeStart,
                 timeEnd: currentTimeEnd,
                 excludeRequestId: existingRequest?.id ?? null,
-            }).then((conflicts) => {
-                if (conflicts) setEquipmentConflicts(conflicts);
-            });
+            })
+                .then((conflicts) => {
+                    if (conflicts) setEquipmentConflicts(conflicts);
+                })
+                .finally(endConflictCheck);
         }
     }
 
@@ -709,6 +734,7 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         existingFiles,
         equipmentConflicts,
         equipmentAvailability,
+        checkingConflicts,
         editingIndex,
 
         // alternatives

@@ -1,5 +1,5 @@
 import { router, usePage } from "@inertiajs/react";
-import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Loader2, Search, ArrowDownUp } from "lucide-react";
+import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Search, ArrowDownUp } from "lucide-react";
 import moment from "moment";
 import { motion, useReducedMotion } from "motion/react";
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Spinner } from "@/components/ui/spinner";
 import {
     Table,
     TableBody,
@@ -1011,7 +1012,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                 className="gap-2 w-full sm:w-auto"
                             >
                                 {isBatchSubmitting
-                                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating Accounts…</>
+                                    ? <><Spinner size="sm" /> Creating Accounts…</>
                                     : <><Users className="h-4 w-4" /> Create {validCount > 0 ? validCount : ''} Account{validCount !== 1 ? 's' : ''}</>
                                 }
                             </Button>

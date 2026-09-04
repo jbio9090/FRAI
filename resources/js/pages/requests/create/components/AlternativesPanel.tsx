@@ -1,9 +1,19 @@
-import { LayoutGrid, Filter, Loader2, Clock, Calendar } from 'lucide-react';
+import { LayoutGrid, Filter, Clock, Calendar } from 'lucide-react';
 import moment from 'moment';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 import type { Facility } from '@/pages/requests/create/types';
 import type { AlternativeSlot } from '../use-create-request';
+import { Button } from '@/components/ui/button';
+
+type ToggleKey = 'same_facility' | 'same_time';
+
+const toggleOptions: { key: ToggleKey; label: string; types: readonly string[] }[] = [
+    { key: 'same_facility', label: 'Same Facility', types: ['same_facility_time', 'same_facility_date'] },
+    { key: 'same_time', label: 'Same Time', types: ['different_facility', 'different_facility_date'] },
+];
 
 interface AlternativesPanelProps {
     alternatives: Record<number, AlternativeSlot[]>;
@@ -31,6 +41,7 @@ export function AlternativesPanel({
     editingIndex,
 }: AlternativesPanelProps) {
     const [selectedAlternative, setSelectedAlternative] = useState<string | null>(null);
+    const [activeToggle, setActiveToggle] = useState<ToggleKey>('same_facility');
 
     if (!isEditing || existingRequest?.status !== 'For Reschedule' || editingIndex === null) {
         return null;
@@ -43,6 +54,24 @@ export function AlternativesPanel({
                     <LayoutGrid className="h-4 w-4 text-[var(--ads-ok)]" />
                     <span className="text-sm font-semibold">Suggested Alternatives</span>
                 </div>
+            </div>
+
+            <div className="flex items-center gap-1 mb-3 rounded-md p-1 w-fit">
+                {toggleOptions.map((option) => (
+                    <Button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setActiveToggle(option.key)}
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                            "text-xs p-2", 
+                            activeToggle === option.key ? 'bg-background border-primary text-foreground' : 'text-muted-foreground hover:text-foreground',
+                        )}
+                    >
+                        {option.label}
+                    </Button>
+                ))}
             </div>
 
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer mb-3">
@@ -58,7 +87,7 @@ export function AlternativesPanel({
 
             {alternativesLoading && (
                 <div className="flex flex-col items-center gap-3 py-4">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <Spinner />
                     <div className="h-3 w-full animate-pulse rounded bg-muted" />
                 </div>
             )}
@@ -83,7 +112,8 @@ export function AlternativesPanel({
                             return acc;
                         }, {});
 
-                        const typeOrder = ['same_facility_time', 'same_facility_date', 'different_facility', 'different_facility_date'] as const;
+                        const activeOption = toggleOptions.find((o) => o.key === activeToggle)!;
+                        const typeOrder = activeOption.types;
 
                         function getTypeLabel(type: string) {
                             switch (type) {
@@ -125,13 +155,21 @@ export function AlternativesPanel({
                                                                 }`}
                                                             >
                                                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                                                    <span className="font-medium text-foreground truncate flex gap-1 text-sm">
-                                                                        <Calendar size={14}/>
-                                                                        {moment(slot.date).format('MMM D')}</span>
-                                                                    <span className="flex items-center gap-1 text-foreground shrink-0 text-xs">
-                                                                        <Clock size={14} />
-                                                                        {moment(slot.time_start, 'HH:mm:ss').format('h:mm A')} – {moment(slot.time_end, 'HH:mm:ss').format('h:mm A')}
-                                                                    </span>
+                                                                    {slot.type === 'different_facility' || slot.type === 'different_facility_date' ? (
+                                                                        <span className="font-medium text-foreground truncate flex gap-1 text-sm">
+                                                                            <LayoutGrid size={14}/>
+                                                                            {slot.facility_name}</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="font-medium text-foreground truncate flex gap-1 text-sm">
+                                                                                <Calendar size={14}/>
+                                                                                {moment(slot.date).format('MMM D')}</span>
+                                                                            <span className="flex items-center gap-1 text-foreground shrink-0 text-xs">
+                                                                                <Clock size={14} />
+                                                                                {moment(slot.time_start, 'HH:mm:ss').format('h:mm A')} – {moment(slot.time_end, 'HH:mm:ss').format('h:mm A')}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                                 <div className="flex flex-wrap items-center gap-1.5">
                                                                     <Badge variant={slot.capacity_fit === 'exact' ? 'default' : slot.capacity_fit === 'larger' ? 'secondary' : 'outline'} className="text-[10px] px-2 py-0.5">

@@ -6,7 +6,6 @@ import ChevronDownIcon from '@atlaskit/icon/core/chevron-down';
 import ChevronRightIcon from '@atlaskit/icon/core/chevron-right';
 import ClipboardIcon from '@atlaskit/icon/core/clipboard';
 import ClockIcon from '@atlaskit/icon/core/clock';
-import CommentIcon from '@atlaskit/icon/core/comment';
 import ComponentIcon from '@atlaskit/icon/core/component';
 import CrossCircleIcon from '@atlaskit/icon/core/cross-circle';
 import GridIcon from '@atlaskit/icon/core/grid';
@@ -40,6 +39,7 @@ import {
     SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { usePermission } from '@/hooks/use-permission';
+import { useIsMobile } from '@/hooks/use-mobile';
 import logo from '@/svg/FRAI.svg';
 import type { SharedData } from '@/types';
 import { Button } from './ui/button';
@@ -50,6 +50,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { hasPermission } = usePermission();
     const { auth } = usePage<SharedData>().props;
     const hasUnreadNotifications = Number(auth.user?.notification_unread_count ?? 0) > 0;
+    const isMobile = useIsMobile();
 
     const data = {
         topNav: [
@@ -58,8 +59,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: 'Facilities', url: 'facilities', icon: OfficeBuildingIcon },
             { title: 'Equipments', url: 'equipments', icon: ComponentIcon },
             ...(hasPermission('manage users') ? [{ title: 'Accounts', url: 'accounts.index', icon: PersonIcon }] : []),
-            ...(hasPermission('view chatbot logs') ? [{ title: 'Chatbot Logs', url: 'chatbot.logs.index', icon: CommentIcon }] : []),
-            ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
+                        ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
         ],
         navMenu: [
             { title: 'Pending', url: route('requests.index', { status: 'pending' }), status: 'pending', icon: ClockIcon },
@@ -222,7 +222,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     </span>
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="min-w-56 rounded-lg" side="top" align="end" sideOffset={4}>
+                            <DropdownMenuContent className={`min-w-56 rounded-lg ${isMobile ? 'z-[60]' : ''}`} side="top" align="end" sideOffset={4}>
                                 <DropdownMenuLabel className="p-0 font-normal">
                                     <div className="flex items-center gap-3 px-1 py-1.5">
                                         <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />

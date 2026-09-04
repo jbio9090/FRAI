@@ -160,7 +160,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
 
                 <div
                     className={
-                        'mx-auto flex w-full max-w-7xl flex-1 flex-col justify-start gap-4 overflow-visible' + (hasPadding ? ' p-6 md:p-8' : '')
+                        'mx-auto flex w-full max-w-10xl flex-1 flex-col justify-start gap-4 overflow-visible' + (hasPadding ? ' p-6 md:p-8' : '')
                     }
                 >
                     {children}

@@ -10,7 +10,6 @@ use App\Models\Facility;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
 use App\Services\AI\OpenRouterClient;
-use App\Services\ChatbotLogService;
 use App\Services\PageContextService;
 use App\Services\RAG\FaqMatchingService;
 use App\Services\RequestSettingsService;
@@ -31,10 +30,14 @@ class ChatController extends Controller
     private const SESSION_TTL_MINUTES = 15;
     private const MAX_SESSION_MESSAGES = 10;
 
+    // Bump this string every time a deploy changes the system prompt, tool names,
+    // or tool definitions — this automatically invalidates all existing sessions
+    // without needing to touch the cache manually or wait out the TTL.
+    private const PROMPT_VERSION = 'v2';
+
     protected PageContextService $pageContextService;
 
     public function __construct(
-        protected ChatbotLogService $chatbotLogService,
         protected FaqMatchingService $faqMatchingService,
         protected OpenRouterClient $ai,
         PageContextService $pageContextService
@@ -44,7 +47,7 @@ class ChatController extends Controller
 
     private function sessionCacheKey(): string
     {
-        return 'chat_session_'.Auth::id();
+        return 'chat_session_'.self::PROMPT_VERSION.'_'.Auth::id();
     }
 
     private function pageContextCacheKey(): string
@@ -54,7 +57,7 @@ class ChatController extends Controller
 
     private function faqStateCacheKey(): string
     {
-        return 'chat_faq_state_'.Auth::id();
+        return 'chat_faq_state_'.self::PROMPT_VERSION.'_'.Auth::id();
     }
 
     private function saveSession(array $userMessages): void
@@ -3082,27 +3085,6 @@ SYMTPROMPT;
 
             $this->clearSession();
 
-            $this->chatbotLogService->logSubmissionResult(
-                $validated,
-                [
-                    'passed' => true,
-                    'errors' => [],
-                ],
-                [
-                    'user_message' => $latestUserMessage,
-                    'validation_passed' => true,
-                    'held_count' => $heldCount,
-                    'files_attached' => $fileCount,
-                    'request_id' => $facilityRequest->id,
-                    'selected_facility' => optional($facilityRequest->requestFacilities->first()?->facility)->only(['id', 'name']),
-                    'selected_date' => $validated['facility_bookings'][0]['date'] ?? null,
-                    'selected_time_start' => $validated['facility_bookings'][0]['time_start'] ?? null,
-                    'selected_time_end' => $validated['facility_bookings'][0]['time_end'] ?? null,
-                ],
-                $sessionId,
-                $facilityRequest->id
-            );
-
             return response()->json([
                 'success' => true,
                 'message' => 'Request created successfully'.($heldCount > 0 ? " ({$heldCount} conflicting request(s) put on hold)" : ''),
@@ -3115,34 +3097,10 @@ SYMTPROMPT;
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Log::warning('Validation error in createRequestApi: '.json_encode($e->errors()));
             $errors = $this->expandValidationErrors($e->errors());
-            $failedPayload = is_array($request->all()) ? $request->all() : [];
-            $this->chatbotLogService->logValidationFailure(
-                $failedPayload,
-                [
-                    'passed' => false,
-                    'errors' => $errors,
-                ],
-                [
-                    'user_message' => $latestUserMessage,
-                    'validation_passed' => false,
-                ],
-                $sessionId
-            );
 
             return response()->json(['error' => 'Validation failed', 'errors' => $errors], 422);
         } catch (\Exception $e) {
             \Log::error('Request creation error: '.$e->getMessage());
-            $this->chatbotLogService->logError(
-                $latestUserMessage,
-                $e->getMessage(),
-                [
-                    'request_creation' => true,
-                ],
-                $sessionId,
-                'request_creation',
-                'request_creation',
-                is_array($request->all()) ? $request->all() : null,
-            );
 
             return response()->json([
                 'error' => 'Failed to create request',

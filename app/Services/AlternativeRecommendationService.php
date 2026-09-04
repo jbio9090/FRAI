@@ -126,7 +126,11 @@ class AlternativeRecommendationService
         bool $includeEquipment,
         int $maxResults
     ): array {
-        $slots = $this->generateTimeSlots($date, $bookingWindow);
+        $durationMinutes = max(
+            (int) Carbon::parse($originalStart)->diffInMinutes(Carbon::parse($originalEnd)),
+            1
+        );
+        $slots = $this->generateTimeSlots($date, $bookingWindow, $durationMinutes);
         $results = [];
 
         foreach ($slots as $slot) {
@@ -349,18 +353,21 @@ class AlternativeRecommendationService
         return $results;
     }
 
-    private function generateTimeSlots(string $date, array $bookingWindow): array
+    private function generateTimeSlots(string $date, array $bookingWindow, int $durationMinutes): array
     {
         $slots = [];
         $startTime = Carbon::parse("{$date} {$bookingWindow['start_time']}");
         $endTime = Carbon::parse("{$date} {$bookingWindow['end_time']}");
         $stepMinutes = $bookingWindow['step_minutes'];
 
+        $duration = max($durationMinutes, $stepMinutes);
+
         $current = $startTime->copy();
         while ($current->lt($endTime)) {
-            $slotEnd = $current->copy()->addMinutes($stepMinutes);
+            $slotEnd = $current->copy()->addMinutes($duration);
             if ($slotEnd->gt($endTime)) {
-                $slotEnd = $endTime->copy();
+                $current = $current->copy()->addMinutes($stepMinutes);
+                continue;
             }
 
             $slots[] = [
@@ -368,7 +375,7 @@ class AlternativeRecommendationService
                 'end' => $slotEnd->format('H:i'),
             ];
 
-            $current = $slotEnd->copy();
+            $current = $current->copy()->addMinutes($stepMinutes);
         }
 
         return $slots;

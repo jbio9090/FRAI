@@ -28,8 +28,9 @@
 
 ### Request Lifecycle
 1. **Submission** — User fills a multi-step form at `/requests/create` (facility, equipment, attendees, date/time, priority level). Submitted via `POST /requests` → `RequestController@store` → `RequestService@create`. The form's booking window, time-step, selectable days, and approver list are driven by the admin-configurable request options (`RequestSettingsService`) shared to the frontend.
-2. **Queue Job** — `ProcessRequestRecommendation` is dispatched. The AI recommendation service evaluates each facility booking against rules using OpenRouter (LLM) + pre-computed signals (conflicts, timing, equipment availability)
-3. **Admin Review** — Admin views the request at `/requests/{id}` with full details, AI recommendations, and audit logs
+2. **Queue Job** — `ProcessRequestRecommendation` is dispatched. The AI recommendation service (`AIRecommendationService`) evaluates each facility booking independently against the policy rules (retrieved via pgvector cosine similarity when embeddings are enabled, otherwise by priority order) using the OpenRouter (LLM) + pre-computed signals (conflicts, timing, equipment availability). Each `request_facilities` row gets an `ai_recommended_status` + `ai_recommendation_reason`.
+3. **Rollup** — `ProcessRequestRecommendation::deriveRollupStatus()` combines the per-facility statuses into the request-level `recommended_action`: any `Denied` facility denies the whole request; if every facility agrees on a single status it is used as-is (e.g. all `For Reschedule` → `For Reschedule`); a mix of approved/conditionally-approved outcomes rolls up to `Conditionally Approved`; any other mix rolls up to `Partially Approved`. `Pending` only appears when every facility is genuinely `Pending`.
+4. **Admin Review** — Admin views the request at `/requests/{id}` with full details, AI recommendations, and audit logs
 4. **Decision** — Admin can approve, reject, conditionally approve, or mark for rescheduling. Each action triggers notifications (push + email) to the requester
 5. **Conflict Resolution** — Approval auto-puts conflicting lower-priority requests on hold and displaces equipment bookings as needed
 

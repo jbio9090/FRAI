@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { RoleBadge } from '@/components/ui/role-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Spinner } from '@/components/ui/spinner';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from '@/lib/utils';
@@ -473,7 +474,7 @@ export default function Dashboard({
                                         <div className="flex flex-col">
                                             {pendingLoading ? (
                                                 <div className="flex h-[200px] items-center justify-center">
-                                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                                    <Spinner size="sm" className="size-5" />
                                                 </div>
                                             ) : (
                                                 pendingRequests.data.slice(0, 6).map((request) => (
@@ -604,7 +605,7 @@ export default function Dashboard({
                                         {loading ? (
                                             <div className="flex h-[300px] items-center justify-center">
                                                 <div className="flex flex-col items-center gap-3">
-                                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                                    <Spinner size="sm" className="size-5" />
                                                     <p className="text-sm text-muted-foreground">Fetching data...</p>
                                                 </div>
                                             </div>
@@ -720,7 +721,7 @@ export default function Dashboard({
 
                             {logsLoading ? (
                                 <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                    <Spinner size="sm" className="size-3.5" />
                                     Loading activity...
                                 </div>
                             ) : (

@@ -7,6 +7,7 @@ use App\Jobs\ProcessRequestRecommendation;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFile;
+use App\Models\Rule;
 use App\Models\User;
 use App\Notifications\AdminAiRecommendationReady;
 use App\Notifications\NewPendingRequest;
@@ -402,6 +403,42 @@ class AdminAiRecommendationEmailTest extends TestCase
         Notification::assertNothingSent();
     }
 
+    public function test_recommendation_falls_back_to_priority_rules_when_vector_search_disabled(): void
+    {
+        Notification::fake();
+        $this->setUpRoles();
+
+        $admin = User::factory()->create([
+            'email' => 'admin@example.com',
+            'admin_email_notifications_enabled' => true,
+        ]);
+        $admin->assignRole('admin');
+
+        // Policy rules (forPolicy = 0). On the sqlite test DB vector search is
+        // unavailable, so the engine must fall back to priority ordering and
+        // still produce a recommendation.
+        Rule::create(['rule' => 'Requests must be made at least 3 days in advance.', 'forPolicy' => 0, 'priority' => 0]);
+        Rule::create(['rule' => 'External equipment requires additional approval.', 'forPolicy' => 0, 'priority' => 1]);
+
+        $user = User::factory()->create();
+        $facility = Facility::factory()->create();
+
+        $this->mock(\App\Services\AI\OpenRouterClient::class, function ($mock) {
+            $mock->shouldReceive('chat')->andReturn(
+                json_encode(['status' => 'Approved', 'reason' => 'Priority fallback path.']),
+            );
+        });
+
+        $this->actingAs($user)
+            ->post(route('requests.store'), $this->requestPayload($facility))
+            ->assertRedirect(route('requests.index', ['status' => 'pending']));
+
+        $facilityRequest = FacilityRequest::latest('id')->firstOrFail();
+
+        $this->assertSame(RequestStatus::APPROVED, $facilityRequest->fresh()->recommended_action);
+        Notification::assertSentTo($admin, AdminAiRecommendationReady::class);
+    }
+
     private function setUpRoles(): void
     {
         Permission::findOrCreate('approve requests');
@@ -427,6 +464,48 @@ class AdminAiRecommendationEmailTest extends TestCase
                 'action' => $action,
                 'admin_id' => $admin->id,
             ],
+        );
+    }
+
+    public function test_overall_recommendation_uses_per_facility_status_when_all_facilities_agree(): void
+    {
+        Notification::fake();
+        $this->setUpRoles();
+
+        $admin = User::factory()->create([
+            'email' => 'admin@example.com',
+            'admin_email_notifications_enabled' => true,
+        ]);
+        $admin->assignRole('admin');
+
+        $user = User::factory()->create();
+        $facility = Facility::factory()->create();
+
+        $this->mock(AIRecommendationService::class, function ($mock) {
+            $mock->shouldReceive('recommend')
+                ->once()
+                ->andReturnUsing(function (FacilityRequest $request) {
+                    $requestFacility = $request->requestFacilities()->firstOrFail();
+
+                    return [
+                        $requestFacility->id => [
+                            'status' => RequestStatus::FOR_RESCHEDULE,
+                            'reason' => 'Facility needs rescheduling per policy.',
+                        ],
+                    ];
+                });
+        });
+
+        $this->actingAs($user)
+            ->post(route('requests.store'), $this->requestPayload($facility))
+            ->assertRedirect(route('requests.index', ['status' => 'pending']));
+
+        $facilityRequest = FacilityRequest::latest('id')->firstOrFail();
+
+        $this->assertSame(
+            RequestStatus::FOR_RESCHEDULE,
+            $facilityRequest->fresh()->recommended_action,
+            'Overall recommendation must reflect the agreed per-facility status, not fall back to Pending.'
         );
     }
 

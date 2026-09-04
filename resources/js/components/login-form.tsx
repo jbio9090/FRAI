@@ -9,6 +9,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 
 const MotionButton = motion(Button);
@@ -17,7 +18,7 @@ export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
-  const { data, setData, post, errors } = useForm({
+  const { data, setData, post, processing, errors } = useForm({
     email: '',
     password: '',
   });
@@ -104,6 +105,7 @@ export function LoginForm({
               onMouseMove={handleMouseMove}
               className="relative w-full bg-blue-600 hover:bg-blue-600 text-white border-none overflow-hidden"
               whileTap={{ scale: 0.98 }}
+              disabled={processing}
             >
               <motion.div
                 className="pointer-events-none absolute hover:rounded-full -inset-px opacity-0 transition duration-300 group-hover:opacity-100"
@@ -117,9 +119,13 @@ export function LoginForm({
                   `,
                 }}
               />
-              <span className='relative z-10 font-bold'>
-                Login
-              </span>
+              {processing ? (
+                <Spinner size="sm" className="relative z-10 text-white border-white/30 border-t-white" />
+              ) : (
+                <span className='relative z-10 font-bold'>
+                  Login
+                </span>
+              )}
             </MotionButton>
           </div>
         </Field>
