@@ -12,6 +12,8 @@ use App\Models\Rule as RuleModel;
 use App\Services\AI\OpenRouterClient;
 use App\Services\PageContextService;
 use App\Services\RAG\FaqMatchingService;
+use App\Services\RequestService;
+use App\Services\AlternativeRecommendationService;
 use App\Services\RequestSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,6 +42,8 @@ class ChatController extends Controller
     public function __construct(
         protected FaqMatchingService $faqMatchingService,
         protected OpenRouterClient $ai,
+        protected RequestService $requestService,
+        protected AlternativeRecommendationService $alternativeService,
         PageContextService $pageContextService
     ) {
         $this->pageContextService = $pageContextService;
@@ -267,6 +271,18 @@ The get_page_context tool also includes a "policy_rules" array (non-FAQ rules). 
 
 When a user asks whether a facility is available on a given date/time, use the `check_facility_availability` tool rather than guessing from the pending_requests list — it checks actual conflicts including approved bookings you may not see.
 
+**Per-Facility Recommendation Reasoning**
+
+Within a request's facilities array, each facility includes `ai_recommended_status` and `ai_recommendation_reason` — the AI-generated recommendation for that specific facility booking, which may differ from the request's overall `recommended_action_reason`. When a user asks why a specific facility within a multi-facility request was approved or denied, use that facility's own `ai_recommended_status`/`ai_recommendation_reason` rather than only the request-level rollup reason.
+
+**On-Demand Facilities and Equipment**
+
+On some pages (such as the requests list), facilities and equipment are not preloaded into page context by default, to save tokens. If the user asks about a specific facility or piece of equipment and the facilities/equipment arrays are empty, call `get_page_context` again with `include_facilities` or `include_equipment` set to true.
+
+**Suggested Alternatives (Admin Only)**
+
+`get_suggested_alternatives` finds alternative facilities/times for a specific request, based on availability and priority rules. This tool is restricted to admins. If a non-admin user asks for alternative facility recommendations, explain that this feature is admin-only rather than calling the tool.
+
 **Important: When listing items from policy_rules or faq arrays, list each entry exactly once, in the order given, and report the count as the actual array length — never estimate or round. Do not add, merge, or duplicate entries.**
 
 After calling `get_page_context`, use the returned information to provide accurate, contextual answers. If the user's question doesn't require page context, you can answer directly without calling the tool.
@@ -281,10 +297,11 @@ Keep answers concise — a short list or a couple of sentences is usually enough
 
 If there's more relevant information available, you may briefly offer to share it, but don't dump it by default.
 
-You have three tools:
-- get_page_context: current page's summary data (KPIs, recent requests list, activity feed, policy rules).
+You have five tools:
+- get_page_context: current page's summary data (KPIs, recent requests list, activity feed, policy rules). Supports include_facilities/include_equipment to fetch those on demand.
 - get_request_details: full detail for one specific request by ID (requester, facilities/times, equipment, comments) — use this when the user asks about a particular request or wants more than the summary gives.
 - check_facility_availability: check if a facility is free on a specific date/time — use this when the user asks about availability.
+- get_suggested_alternatives: admin-only. Find alternative facilities/times for a specific request.
 
 If get_request_details returns a "forbidden" error, tell the user the request exists but they don't have permission to view it, and suggest contacting their GSO admin with the request ID. If it returns "not_found", tell them plainly no such request exists.
 SYMTPROMPT;
@@ -304,6 +321,14 @@ SYMTPROMPT;
                             'type' => 'boolean',
                             'description' => 'Whether to fetch the current page context.',
                             'default' => true,
+                        ],
+                        'include_facilities' => [
+                            'type' => 'boolean',
+                            'description' => 'Set true to also fetch the facilities list, if not already included for this page.',
+                        ],
+                        'include_equipment' => [
+                            'type' => 'boolean',
+                            'description' => 'Set true to also fetch the equipment list, if not already included for this page.',
                         ],
                     ],
                     'required' => [],
@@ -349,6 +374,25 @@ SYMTPROMPT;
                         'end_time' => ['type' => 'string', 'description' => 'End time, HH:MM (24h).'],
                     ],
                     'required' => ['facility_id', 'date', 'start_time', 'end_time'],
+                ],
+            ],
+        ];
+    }
+
+    private function getSuggestedAlternativesToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'get_suggested_alternatives',
+                'description' => 'For admins only. Get suggested alternative facilities/times for a specific request, based on availability and priority rules. Use when an admin asks what alternative facility to recommend for a request.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'request_id' => ['type' => 'integer', 'description' => 'The request to find alternatives for.'],
+                        'include_equipment' => ['type' => 'boolean', 'description' => 'Also consider equipment availability.'],
+                    ],
+                    'required' => ['request_id'],
                 ],
             ],
         ];
@@ -444,6 +488,32 @@ SYMTPROMPT;
                 return $followUp !== '' ? $followUp : null;
             }
 
+            if ($functionName === 'get_suggested_alternatives') {
+                $user = Auth::user();
+                if (! $user->hasRole(['admin', 'Super Admin'])) {
+                    $toolResult = ['error' => 'forbidden', 'message' => 'Only admins can request alternative facility suggestions.'];
+                } else {
+                    $requestId = (int) ($parsedArguments['request_id'] ?? 0);
+                    $facilityRequest = \App\Models\Request::with('requestFacilities', 'equipment')->find($requestId);
+
+                    $toolResult = $facilityRequest
+                        ? $this->alternativeService->findAlternatives($facilityRequest, [
+                            'include_equipment' => (bool) ($parsedArguments['include_equipment'] ?? false),
+                        ])
+                        : ['error' => 'not_found', 'message' => 'No request exists with that ID.'];
+                }
+
+                $messages[] = [
+                    'role' => 'tool',
+                    'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
+                    'name' => 'get_suggested_alternatives',
+                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                ];
+
+                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
+                return $followUp !== '' ? $followUp : null;
+            }
+
             if ($functionName !== 'get_page_context') {
                 \Log::warning('AI returned an unknown tool call.', [
                     'tool_name' => $functionName,
@@ -465,6 +535,15 @@ SYMTPROMPT;
                 'context' => $pageContext,
                 'page' => true,
             ];
+
+            // Conditionally merge in facilities/equipment when requested and not already present
+            if (($parsedArguments['include_facilities'] ?? false) && empty($pageContext['facilities'])) {
+                $pageContext['facilities'] = $this->pageContextService->getFacilities(50);
+            }
+
+            if (($parsedArguments['include_equipment'] ?? false) && empty($pageContext['equipment'])) {
+                $pageContext['equipment'] = $this->pageContextService->getEquipment(50);
+            }
 
             if ($debugInfo !== null) {
                 $debugInfo[] = [
@@ -516,11 +595,12 @@ SYMTPROMPT;
             'description' => $request->description,
             'status' => $request->status?->value,
             'requester' => $request->user?->name,
-            'facilities' => $request->facilities->map(fn ($facility) => [
-                'name' => $facility->name,
-                'date' => $facility->pivot->date_requested ?? null,
-                'time_start' => $facility->pivot->time_start ?? null,
-                'time_end' => $facility->pivot->time_end ?? null,
+            'facilities' => $request->requestFacilities->map(fn ($rf) => [
+                'id' => $rf->facility_id,
+                'name' => $rf->facility?->name ?? 'unknown',
+                'status' => $rf->status ?? 'unknown',
+                'ai_recommended_status' => $rf->ai_recommended_status,
+                'ai_recommendation_reason' => $rf->ai_recommendation_reason,
             ])->values(),
             'equipment' => $request->equipment->map(fn ($equipment) => [
                 'name' => $equipment->name,

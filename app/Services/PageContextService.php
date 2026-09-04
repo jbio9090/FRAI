@@ -161,7 +161,7 @@ class PageContextService
         }
 
         if (in_array($routeName, ['requests.index'], true)) {
-            return $this->requestsPageContext(request()->query('status'));
+            return $this->requestsIndexPageContext();
         }
 
         if (in_array($routeName, ['requests.detail', 'requests.edit'], true) || preg_match('#^/requests/(\d+)(?:/|$)#', $path) === 1) {
@@ -449,6 +449,42 @@ class PageContextService
                 'quantity' => $e->pivot?->quantity_needed ?? $e->quantity,
             ])->toArray(),
             'policy_rules' => $this->getPolicyRules(30),
+        ];
+    }
+
+    private function requestsIndexPageContext(): array
+    {
+        $request = request();
+        $statusParam = $request->input('status');
+
+        $statusValues = $statusParam
+            ? collect(explode(',', $statusParam))
+                ->map(fn ($s) => collect(\App\Enums\RequestStatus::cases()))
+                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s)))
+                ->filter()
+                ->values()
+            : collect();
+
+        $results = $this->requestService->get(
+            $statusValues->isNotEmpty() ? $statusValues->all() : null,
+            $request->input('filter', 'this_week'),
+            $request->input('search'),
+            $request->input('sort'),
+            $request->input('order', 'asc'),
+            $request->input('requester'),
+            $request->input('facility'),
+        );
+
+        return [
+            'visible_requests' => collect($results->items())->take(20)->map(fn ($r) => [
+                'id' => $r->id,
+                'title' => $r->title,
+                'status' => $r->status?->value,
+                'requester' => $r->user?->name,
+                'facilities' => $r->requestFacilities->map(fn ($rf) => $rf->facility?->name)->filter()->values(),
+            ])->values(),
+            'facilities' => [],
+            'equipment' => [],
         ];
     }
 
