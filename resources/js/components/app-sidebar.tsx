@@ -15,6 +15,7 @@ import PersonIcon from '@atlaskit/icon/core/person';
 import RefreshIcon from '@atlaskit/icon/core/refresh';
 import SettingsIcon from '@atlaskit/icon/core/settings';
 import { Link, router, usePage } from '@inertiajs/react';
+import { BarChart2 } from 'lucide-react';
 import * as React from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -38,13 +39,30 @@ import {
     SidebarFooter,
     SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { usePermission } from '@/hooks/use-permission';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { usePermission } from '@/hooks/use-permission';
 import logo from '@/svg/FRAI.svg';
 import type { SharedData } from '@/types';
 import { Button } from './ui/button';
 
 const iconRailItem = 'group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center';
+
+function NavIcon({
+  icon: Icon,
+  title,
+}: {
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  title: string;
+}) {
+  const displayName = (Icon as any).displayName || Icon.name || '';
+  const isLucide = displayName === 'BarChart2' || !displayName.includes('Icon');
+
+  if (isLucide) {
+    return <Icon size={18} strokeWidth={2} stroke="currentColor" aria-label={title} />;
+  }
+
+  return <Icon label={title} color="currentColor" />;
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { hasPermission } = usePermission();
@@ -59,7 +77,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: 'Facilities', url: 'facilities', icon: OfficeBuildingIcon },
             { title: 'Equipments', url: 'equipments', icon: ComponentIcon },
             ...(hasPermission('manage users') ? [{ title: 'Accounts', url: 'accounts.index', icon: PersonIcon }] : []),
-                        ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
+            ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
+            ...(hasPermission('approve requests') ? [{ title: 'Reports', url: 'reports.index', icon: BarChart2 }] : []),
         ],
         navMenu: [
             { title: 'Pending', url: route('requests.index', { status: 'pending' }), status: 'pending', icon: ClockIcon },
@@ -138,7 +157,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             <SidebarMenuButton asChild isActive={checkRoute(item.url)} tooltip={item.title}>
                                 <Link href={route(item.url)}>
                                     <span className="relative flex shrink-0">
-                                        <item.icon label={item.title} color="currentColor" />
+                                        <NavIcon icon={item.icon} title={item.title} />
                                         {item.url === 'dashboard' && hasUnreadNotifications && (
                                             <span className="absolute -top-1 -right-1 size-2 rounded-full bg-[var(--primary)]" />
                                         )}

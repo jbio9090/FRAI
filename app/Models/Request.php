@@ -140,11 +140,11 @@ class Request extends Model
     protected static function booted()
     {
         static::updated(function (Request $request) {
-            // If the parent request was changed to APPROVED, ensure child request facilities are approved too
-            if ($request->wasChanged('status') && $request->status === RequestStatus::APPROVED) {
+            // If the parent request was changed to APPROVED or CONDITIONALLY_APPROVED, ensure child request facilities are approved too
+            if ($request->wasChanged('status') && in_array($request->status, [RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])) {
                 // Update any child facility rows that are not explicitly denied
                 $request->requestFacilities()->where('status', '!=', RequestStatus::DENIED)->update([
-                    'status' => RequestStatus::APPROVED,
+                    'status' => $request->status,
                 ]);
             }
         });
