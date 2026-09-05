@@ -44,6 +44,8 @@ class ReportController extends Controller
             'user-activity-over-time' => $this->reportService->getUserActivityOverTimeData($filters),
             'processing-time' => $this->reportService->getProcessingTimeData($filters),
             'kpis' => $this->reportService->getKpis($filters),
+            'kpis-comparison' => $this->reportService->getKpisWithComparison($filters),
+            'methodology' => $this->reportService->getMethodology(),
             default => [],
         };
 

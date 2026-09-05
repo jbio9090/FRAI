@@ -51,6 +51,17 @@ export interface ReportKpis {
   active_conflicts: number;
 }
 
+export interface KpiComparison {
+  current: ReportKpis;
+  previous: ReportKpis;
+  deltas: {
+    total_requests_pct: number | null;
+    approval_rate_pct: number | null;
+    avg_processing_days_pct: number | null;
+    active_conflicts_pct: number | null;
+  };
+}
+
 export interface ReportMeta {
   facilities: { id: number; name: string; building_id: number }[];
   buildings: { id: number; name: string; campus_id: number }[];

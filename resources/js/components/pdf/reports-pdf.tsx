@@ -159,6 +159,39 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: "#94a3b8",
   },
+  methodologySection: {
+    marginTop: 40,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
+  methodologyTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#0f172a",
+    marginBottom: 16,
+  },
+  methodologyItem: {
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: "#f8fafc",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  methodologyItemLabel: {
+    fontSize: 10,
+    fontWeight: 600,
+    color: "#334155",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  methodologyItemValue: {
+    fontSize: 9,
+    color: "#475569",
+    lineHeight: 1.5,
+  },
 });
 
 interface KpiData {
@@ -166,6 +199,16 @@ interface KpiData {
   approval_rate: number;
   avg_processing_days: number;
   active_conflicts: number;
+}
+
+interface MethodologyData {
+  total_requests: string;
+  approval_rate: string;
+  avg_processing_days: string;
+  active_conflicts: string;
+  facility_usage: string;
+  event_types: string;
+  processing_time: string;
 }
 
 interface ChartDataForPdf {
@@ -190,6 +233,7 @@ interface ReportsPdfData {
   };
   kpis: KpiData;
   chartsData: ChartDataForPdf[];
+  methodology?: MethodologyData;
 }
 
 function formatFilterValue(key: string, value: any, meta: any): string {
@@ -224,7 +268,7 @@ function formatFilterValue(key: string, value: any, meta: any): string {
 }
 
 export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta: any }) {
-  const { filters, kpis, chartsData } = data;
+  const { filters, kpis, chartsData, methodology } = data;
 
   const filterTags = Object.entries(filters)
     .filter(([key, value]) => {
@@ -375,10 +419,50 @@ export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta:
             </View>
             <View style={styles.footer}>
               <Text>GSO Facility Management System</Text>
-              <Text>Page {index + 2} of {1 + chartsData.filter((c) => c.data.length > 0).length}</Text>
+              <Text>Page {index + 2} of {1 + chartsData.filter((c) => c.data.length > 0).length + (methodology ? 1 : 0)}</Text>
             </View>
           </Page>
         ))}
+
+        {methodology && (
+          <Page size="A4" style={styles.page}>
+            <View style={styles.methodologySection}>
+              <Text style={styles.methodologyTitle}>Methodology & Definitions</Text>
+              <View style={styles.methodologyItem}>
+                <Text style={styles.methodologyItemLabel}>Total Requests</Text>
+                <Text style={styles.methodologyItemValue}>{methodology.total_requests}</Text>
+              </View>
+              <View style={styles.methodologyItem}>
+                <Text style={styles.methodologyItemLabel}>Approval Rate</Text>
+                <Text style={styles.methodologyItemValue}>{methodology.approval_rate}</Text>
+              </View>
+              <View style={styles.methodologyItem}>
+                <Text style={styles.methodologyItemLabel}>Avg Processing Time</Text>
+                <Text style={styles.methodologyItemValue}>{methodology.avg_processing_days}</Text>
+              </View>
+              <View style={styles.methodologyItem}>
+                <Text style={styles.methodologyItemLabel}>Active Conflicts</Text>
+                <Text style={styles.methodologyItemValue}>{methodology.active_conflicts}</Text>
+              </View>
+              <View style={styles.methodologyItem}>
+                <Text style={styles.methodologyItemLabel}>Facility Usage</Text>
+                <Text style={styles.methodologyItemValue}>{methodology.facility_usage}</Text>
+              </View>
+              <View style={styles.methodologyItem}>
+                <Text style={styles.methodologyItemLabel}>Event Types</Text>
+                <Text style={styles.methodologyItemValue}>{methodology.event_types}</Text>
+              </View>
+              <View style={styles.methodologyItem}>
+                <Text style={styles.methodologyItemLabel}>Processing Time</Text>
+                <Text style={styles.methodologyItemValue}>{methodology.processing_time}</Text>
+              </View>
+            </View>
+            <View style={styles.footer}>
+              <Text>GSO Facility Management System</Text>
+              <Text>Page {1 + chartsData.filter((c) => c.data.length > 0).length + 1} of {1 + chartsData.filter((c) => c.data.length > 0).length + 1}</Text>
+            </View>
+          </Page>
+        )}
     </Document>
   );
 }

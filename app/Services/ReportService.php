@@ -431,8 +431,9 @@ class ReportService
         $end = $filters['end'] ?? Carbon::now()->format('Y-m-d');
 
         $totalRequests = FacilityRequest::query()
-            ->when($start, fn ($q) => $q->where('created_at', '>=', $start))
-            ->when($end, fn ($q) => $q->where('created_at', '<=', $end.' 23:59:59'))
+            ->whereNotNull('processed_at')
+            ->when($start, fn ($q) => $q->where('processed_at', '>=', $start))
+            ->when($end, fn ($q) => $q->where('processed_at', '<=', $end.' 23:59:59'))
             ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
             ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
             ->count();
@@ -465,8 +466,8 @@ class ReportService
         $activeConflicts = FacilityRequest::query()
             ->whereJsonLength('pending_conflict_rf_ids', '>', 0)
             ->orWhereJsonLength('approved_conflict_rf_ids', '>', 0)
-            ->when($start, fn ($q) => $q->where('created_at', '>=', $start))
-            ->when($end, fn ($q) => $q->where('created_at', '<=', $end.' 23:59:59'))
+            ->when($start, fn ($q) => $q->where('processed_at', '>=', $start))
+            ->when($end, fn ($q) => $q->where('processed_at', '<=', $end.' 23:59:59'))
             ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
             ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
             ->count();
@@ -476,6 +477,62 @@ class ReportService
             'approval_rate' => $processedCount > 0 ? round($approvedCount / $processedCount * 100, 1) : 0,
             'avg_processing_days' => $avgProcessingDays ? round((float) $avgProcessingDays, 1) : 0,
             'active_conflicts' => $activeConflicts,
+        ];
+    }
+
+    public function getMethodology(): array
+    {
+        return [
+            'total_requests' => 'Count of requests with processed_at in the selected date range (i.e., requests that received a final decision in this period).',
+            'approval_rate' => '(Approved + Conditionally Approved) / Processed requests × 100. Processed = requests with processed_at not null. Excludes Pending, Denied, For Reschedule, Partially Approved from numerator.',
+            'avg_processing_days' => 'AVG(processed_at - created_at) in calendar days for requests with processed_at in range.',
+            'active_conflicts' => 'Requests currently having pending_conflict_rf_ids or approved_conflict_rf_ids JSON arrays with length > 0.',
+            'facility_usage' => 'Count of request_facility rows with status = Approved or Conditionally Approved, grouped by facility. Uses date_requested by default (configurable via date_type).',
+            'event_types' => 'Count of requests grouped by priority_level (Academic/Organization/University/Government).',
+            'processing_time' => 'Average calendar days from created_at to processed_at per date bucket.',
+        ];
+    }
+
+    public function getKpisWithComparison(array $filters): array
+    {
+        $current = $this->getKpis($filters);
+
+        $start = $filters['start'] ?? Carbon::now()->subDays(30)->format('Y-m-d');
+        $end = $filters['end'] ?? Carbon::now()->format('Y-m-d');
+
+        $periodStart = Carbon::parse($start);
+        $periodEnd = Carbon::parse($end);
+        $diffInDays = $periodStart->diffInDays($periodEnd) + 1;
+
+        $prevStart = $periodStart->copy()->subDays($diffInDays)->format('Y-m-d');
+        $prevEnd = $periodStart->copy()->subDay()->format('Y-m-d');
+
+        $prevFilters = array_merge($filters, [
+            'start' => $prevStart,
+            'end' => $prevEnd,
+        ]);
+
+        $previous = $this->getKpis($prevFilters);
+
+        $deltas = [
+            'total_requests_pct' => $previous['total_requests'] > 0
+                ? round(($current['total_requests'] - $previous['total_requests']) / $previous['total_requests'] * 100, 1)
+                : null,
+            'approval_rate_pct' => $previous['approval_rate'] > 0
+                ? round(($current['approval_rate'] - $previous['approval_rate']) / $previous['approval_rate'] * 100, 1)
+                : null,
+            'avg_processing_days_pct' => $previous['avg_processing_days'] > 0
+                ? round(($current['avg_processing_days'] - $previous['avg_processing_days']) / $previous['avg_processing_days'] * 100, 1)
+                : null,
+            'active_conflicts_pct' => $previous['active_conflicts'] > 0
+                ? round(($current['active_conflicts'] - $previous['active_conflicts']) / $previous['active_conflicts'] * 100, 1)
+                : null,
+        ];
+
+        return [
+            'current' => $current,
+            'previous' => $previous,
+            'deltas' => $deltas,
         ];
     }
 

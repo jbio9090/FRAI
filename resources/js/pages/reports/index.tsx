@@ -31,7 +31,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DefaultLayout from "@/layout.tsx/default.";
 import { formatRequestStatus } from "@/lib/formatters";
-import type { ReportFilters, ReportMeta, ReportKpis, ReportType, ChartDataPoint, Granularity } from "@/types/reports";
+import type { ReportFilters, ReportMeta, ReportKpis, ReportType, ChartDataPoint, Granularity, KpiComparison } from "@/types/reports";
 
 const REPORT_TABS: { id: ReportType; label: string; description: string }[] = [
   { id: "volume", label: "Request Volume", description: "Total requests created over time" },
@@ -70,14 +70,14 @@ function KpiTile({
   icon: Icon,
   iconBg,
   iconColor,
-  trend,
+  delta,
 }: {
   label: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
   iconBg: string;
   iconColor: string;
-  trend?: string;
+  delta?: { value: number; label: string; positive: boolean } | null;
 }) {
   return (
     <Card className="border-border">
@@ -88,8 +88,11 @@ function KpiTile({
             <p className="text-2xl md:text-3xl font-bold tabular-nums text-foreground">
               {value}
             </p>
-            {trend && (
-              <p className="mt-1 text-xs text-muted-foreground">{trend}</p>
+            {delta && (
+              <p className="mt-1 text-xs flex items-center gap-1" style={{ color: delta.positive ? "var(--ads-ok)" : "var(--ads-danger)" }}>
+                <span className="font-medium">{delta.value > 0 ? "+" : ""}{delta.value.toFixed(1)}%</span>
+                <span className="text-muted-foreground">vs. previous period</span>
+              </p>
             )}
           </div>
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: iconBg }}>
@@ -112,6 +115,8 @@ export default function ReportsPage({
   const [activeTab, setActiveTab] = useState<ReportType>("volume");
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [kpis, setKpis] = useState<ReportKpis | null>(null);
+  const [kpiComparison, setKpiComparison] = useState<KpiComparison | null>(null);
+  const [methodology, setMethodology] = useState<Record<string, string> | null>(null);
   const [loading, setLoading] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -203,6 +208,50 @@ export default function ReportsPage({
     } catch (error) {
       console.error("Failed to fetch KPIs:", error);
       setKpis(null);
+    }
+  }, []);
+
+  const fetchKpisComparison = useCallback(async (currentFilters: ReportFilters) => {
+    try {
+      const params = new URLSearchParams({
+        type: "kpis-comparison",
+        start: currentFilters.start,
+        end: currentFilters.end,
+        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
+        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
+        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
+        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
+        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
+      });
+
+      const res = await fetch(`/reports/data?${params.toString()}`);
+      const json = await res.json();
+      setKpiComparison(json.data || null);
+    } catch (error) {
+      console.error("Failed to fetch KPI comparison:", error);
+      setKpiComparison(null);
+    }
+  }, []);
+
+  const fetchMethodology = useCallback(async (currentFilters: ReportFilters) => {
+    try {
+      const params = new URLSearchParams({
+        type: "methodology",
+        start: currentFilters.start,
+        end: currentFilters.end,
+        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
+        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
+        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
+        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
+        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
+      });
+
+      const res = await fetch(`/reports/data?${params.toString()}`);
+      const json = await res.json();
+      return json.data || {};
+    } catch (error) {
+      console.error("Failed to fetch methodology:", error);
+      return {};
     }
   }, []);
 
@@ -316,6 +365,8 @@ export default function ReportsPage({
             backgroundColor: "#ffffff",
             pixelRatio: 2,
             quality: 0.95,
+            skipFonts: true,
+            skipAutoDetect: true,
           });
           images[type] = pngDataUrl;
         } catch (error) {
@@ -333,7 +384,8 @@ export default function ReportsPage({
   useEffect(() => {
     fetchData(activeTab, filters);
     fetchKpis(filters);
-  }, [activeTab, filters, fetchData, fetchKpis]);
+    fetchKpisComparison(filters);
+  }, [activeTab, filters, fetchData, fetchKpis, fetchKpisComparison]);
 
   const handleFilterChange = (newFilters: Partial<ReportFilters>) => {
     setFilters((prev) => ({ ...prev, ...newFilters }));
@@ -486,6 +538,7 @@ export default function ReportsPage({
             showArea={false}
             height={350}
             granularity={filters.granularity}
+            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: "var(--ads-danger)", strokeDasharray: "5 5" }}
           />
         );
       }
@@ -499,6 +552,9 @@ export default function ReportsPage({
     try {
       // Fetch all chart data first
       await fetchAllChartData(filters);
+      // Fetch methodology
+      const methodologyData = await fetchMethodology(filters);
+      setMethodology(methodologyData);
 
       // Wait for state to update and component to re-render with charts
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -526,6 +582,7 @@ export default function ReportsPage({
             data: allChartData[tab.id] || [],
             imageUrl: images[tab.id],
           })),
+          methodology: methodologyData,
         },
         meta
       );
@@ -670,6 +727,7 @@ export default function ReportsPage({
             showArea={false}
             height={350}
             granularity={filters.granularity}
+            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: "var(--ads-danger)", strokeDasharray: "5 5" }}
           />
         )}
       </div>
@@ -724,38 +782,70 @@ export default function ReportsPage({
           />
         )}
 
-        {kpis && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiTile
-              label="Total Requests"
-              value={kpis.total_requests.toLocaleString()}
-              icon={ClipboardList}
-              iconBg="var(--primary)"
-              iconColor="hsl(var(--primary-foreground))"
-            />
-            <KpiTile
-              label="Approval Rate"
-              value={`${kpis.approval_rate}%`}
-              icon={CheckCircle2}
-              iconBg="var(--ads-ok-bg)"
-              iconColor="var(--ads-ok)"
-            />
-            <KpiTile
-              label="Avg Processing Time"
-              value={`${kpis.avg_processing_days} days`}
-              icon={Calendar}
-              iconBg="var(--ads-amber-bg)"
-              iconColor="var(--ads-amber)"
-            />
-            <KpiTile
-              label="Active Conflicts"
-              value={kpis.active_conflicts}
-              icon={AlertTriangle}
-              iconBg="var(--ads-danger-bg)"
-              iconColor="var(--ads-danger)"
-            />
-          </div>
-        )}
+{kpis && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {(() => {
+                const deltas = kpiComparison?.deltas ?? {
+                  total_requests_pct: null,
+                  approval_rate_pct: null,
+                  avg_processing_days_pct: null,
+                  active_conflicts_pct: null,
+                };
+                return (
+                  <>
+                    <KpiTile
+                      label="Total Requests"
+                      value={kpis.total_requests.toLocaleString()}
+                      icon={ClipboardList}
+                      iconBg="var(--primary)"
+                      iconColor="hsl(var(--primary-foreground))"
+                      delta={deltas.total_requests_pct !== null ? {
+                        value: deltas.total_requests_pct,
+                        label: "vs. previous period",
+                        positive: deltas.total_requests_pct >= 0
+                      } : null}
+                    />
+                    <KpiTile
+                      label="Approval Rate"
+                      value={`${kpis.approval_rate}%`}
+                      icon={CheckCircle2}
+                      iconBg="var(--ads-ok-bg)"
+                      iconColor="var(--ads-ok)"
+                      delta={deltas.approval_rate_pct !== null ? {
+                        value: deltas.approval_rate_pct,
+                        label: "vs. previous period",
+                        positive: deltas.approval_rate_pct >= 0
+                      } : null}
+                    />
+                    <KpiTile
+                      label="Avg Processing Time"
+                      value={`${kpis.avg_processing_days} days`}
+                      icon={Calendar}
+                      iconBg="var(--ads-amber-bg)"
+                      iconColor="var(--ads-amber)"
+                      delta={deltas.avg_processing_days_pct !== null ? {
+                        value: deltas.avg_processing_days_pct,
+                        label: "vs. previous period",
+                        positive: deltas.avg_processing_days_pct <= 0
+                      } : null}
+                    />
+                    <KpiTile
+                      label="Active Conflicts"
+                      value={kpis.active_conflicts}
+                      icon={AlertTriangle}
+                      iconBg="var(--ads-danger-bg)"
+                      iconColor="var(--ads-danger)"
+                      delta={deltas.active_conflicts_pct !== null ? {
+                        value: deltas.active_conflicts_pct,
+                        label: "vs. previous period",
+                        positive: deltas.active_conflicts_pct <= 0
+                      } : null}
+                    />
+                  </>
+                );
+              })()}
+            </div>
+          )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList variant="line" className="flex gap-1">

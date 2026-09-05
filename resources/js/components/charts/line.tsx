@@ -48,6 +48,7 @@ interface LineChartProps {
   className?: string;
   height?: number;
   granularity?: Granularity;
+  referenceLine?: { y: number; label: string; stroke?: string; strokeDasharray?: string };
 }
 
 export function LineChart({
@@ -62,6 +63,7 @@ export function LineChart({
   className,
   height = 300,
   granularity = "daily",
+  referenceLine,
 }: LineChartProps) {
   if (!data.length) {
     return (
@@ -108,6 +110,22 @@ export function LineChart({
             tickMargin={10}
             label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: "insideLeft", offset: 10, fill: "var(--muted-foreground)", fontSize: 11 } : undefined}
           />
+          {referenceLine && (
+            <ReferenceLine
+              y={referenceLine.y}
+              label={{
+                value: referenceLine.label,
+                position: "insideStart",
+                offset: 5,
+                fill: referenceLine.stroke ?? "var(--ads-danger)",
+                fontSize: 10,
+                fontWeight: 600,
+              }}
+              stroke={referenceLine.stroke ?? "var(--ads-danger)"}
+              strokeDasharray={referenceLine.strokeDasharray ?? "5 5"}
+              strokeWidth={1.5}
+            />
+          )}
           <ChartTooltip
             cursor={false}
             content={<ChartTooltipContent labelFormatter={(value) => formatAxisDate(value as string, granularity)} />}
@@ -141,6 +159,22 @@ export function LineChart({
             axisLine={false}
             tickMargin={10}
           />
+          {referenceLine && (
+            <ReferenceLine
+              y={referenceLine.y}
+              label={{
+                value: referenceLine.label,
+                position: "insideStart",
+                offset: 5,
+                fill: referenceLine.stroke ?? "var(--ads-danger)",
+                fontSize: 10,
+                fontWeight: 600,
+              }}
+              stroke={referenceLine.stroke ?? "var(--ads-danger)"}
+              strokeDasharray={referenceLine.strokeDasharray ?? "5 5"}
+              strokeWidth={1.5}
+            />
+          )}
           <ChartTooltip
             cursor={false}
             content={<ChartTooltipContent labelFormatter={(value) => formatAxisDate(value as string, granularity)} />}
