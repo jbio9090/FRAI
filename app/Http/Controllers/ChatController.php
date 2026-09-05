@@ -283,7 +283,17 @@ On some pages (such as the requests list), facilities and equipment are not prel
 
 `get_suggested_alternatives` finds alternative facilities/times for a specific request, based on availability and priority rules. This tool is restricted to admins. If a non-admin user asks for alternative facility recommendations, explain that this feature is admin-only rather than calling the tool.
 
-**Important: When listing items from policy_rules or faq arrays, list each entry exactly once, in the order given, and report the count as the actual array length — never estimate or round. Do not add, merge, or duplicate entries.**
+**Important: When listing items from policy_rules or faq arrays, list each entry exactly once, in the order given, and report the count as the actual array length — never estimate or round. Do not add, merge, or duplicate entries.
+
+**Formatting guardrail**
+
+When listing two or more items (requests, facilities, rules, etc.), always format them as a real markdown bullet or numbered list — one item per line, not run together in a paragraph. Do this by default whenever a list is warranted; don't wait for the user to ask for bullets.
+
+For a single fact or short answer, plain prose is fine — don't force a list where one isn't needed.
+
+**"On Hold" is a specific field, not a status**
+
+`on_hold` is a separate boolean field from `status`. A request can have status "For Reschedule", "Pending", etc. AND separately be on_hold (true/false) at the same time — they are not the same thing and must not be conflated. When a user asks which requests are "on hold," filter by the on_hold field being true, not by any particular status value. If on_hold data isn't present in the current context, say so and offer to check a specific request via get_request_details rather than guessing from status.
 
 After calling `get_page_context`, use the returned information to provide accurate, contextual answers. If the user's question doesn't require page context, you can answer directly without calling the tool.
 
@@ -496,11 +506,15 @@ SYMTPROMPT;
                     $requestId = (int) ($parsedArguments['request_id'] ?? 0);
                     $facilityRequest = \App\Models\Request::with('requestFacilities', 'equipment')->find($requestId);
 
-                    $toolResult = $facilityRequest
-                        ? $this->alternativeService->findAlternatives($facilityRequest, [
+                    if (! $facilityRequest) {
+                        $toolResult = ['error' => 'not_found', 'message' => 'No request exists with that ID.'];
+                    } elseif ($facilityRequest->status !== \App\Enums\RequestStatus::FOR_RESCHEDULE) {
+                        $toolResult = ['error' => 'status_gate', 'message' => sprintf('Suggested alternatives are only available for requests with "For Reschedule" status. Current status: %s', $facilityRequest->status?->value ?? 'unknown')];
+                    } else {
+                        $toolResult = $this->alternativeService->findAlternatives($facilityRequest, [
                             'include_equipment' => (bool) ($parsedArguments['include_equipment'] ?? false),
-                        ])
-                        : ['error' => 'not_found', 'message' => 'No request exists with that ID.'];
+                        ]);
+                    }
                 }
 
                 $messages[] = [
@@ -595,6 +609,10 @@ SYMTPROMPT;
             'description' => $request->description,
             'status' => $request->status?->value,
             'requester' => $request->user?->name,
+            'on_hold' => $request->on_hold,
+            'recommended_action' => $request->recommended_action?->value,
+            'recommended_action_reason' => $request->recommended_action_reason,
+            'priority_reason' => $request->priority_reason,
             'facilities' => $request->requestFacilities->map(fn ($rf) => [
                 'id' => $rf->facility_id,
                 'name' => $rf->facility?->name ?? 'unknown',
@@ -612,6 +630,23 @@ SYMTPROMPT;
                 'created_at' => $comment->created_at?->diffForHumans(),
             ])->values(),
             'processed_by' => $request->processedBy?->name,
+            'has_pending_conflicts' => ! empty($request->pending_conflict_rf_ids),
+            'has_approved_conflicts' => ! empty($request->approved_conflict_rf_ids),
+            'conflicting_requests' => \App\Models\RequestFacility::whereIn('id', array_merge(
+        $request->pending_conflict_rf_ids ?? [],
+        $request->approved_conflict_rf_ids ?? []
+    ))
+    ->with(['facility', 'request'])
+    ->get()
+    ->map(fn ($rf) => [
+        'title' => $rf->request?->title,
+        'facility_name' => $rf->facility?->name ?? 'unknown',
+        'date_requested' => $rf->date_requested,
+        'time_start' => $rf->time_start,
+        'time_end' => $rf->time_end,
+        'status' => $rf->status ?? 'unknown',
+    ])
+    ->values(),
         ];
     }
 

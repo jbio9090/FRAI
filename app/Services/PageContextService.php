@@ -423,6 +423,23 @@ class PageContextService
             'on_hold' => $request->on_hold,
             'recommended_action' => $request->recommended_action?->value,
             'recommended_action_reason' => $request->recommended_action_reason,
+            'has_pending_conflicts' => ! empty($request->pending_conflict_rf_ids),
+            'has_approved_conflicts' => ! empty($request->approved_conflict_rf_ids),
+            'conflicting_requests' => \App\Models\RequestFacility::whereIn('id', array_merge(
+        $request->pending_conflict_rf_ids ?? [],
+        $request->approved_conflict_rf_ids ?? []
+    ))
+    ->with(['facility', 'request'])
+    ->get()
+    ->map(fn ($rf) => [
+        'title' => $rf->request?->title,
+        'facility_name' => $rf->facility?->name ?? 'unknown',
+        'date_requested' => $rf->date_requested,
+        'time_start' => $rf->time_start,
+        'time_end' => $rf->time_end,
+        'status' => $rf->status ?? 'unknown',
+    ])
+    ->values(),
             'processed_by' => $request->processedBy?->name,
             'processed_at' => $request->processed_at?->toDateTimeString(),
             'created_at' => $request->created_at?->toDateTimeString(),
@@ -480,6 +497,7 @@ class PageContextService
                 'id' => $r->id,
                 'title' => $r->title,
                 'status' => $r->status?->value,
+                'on_hold' => $r->on_hold,
                 'requester' => $r->user?->name,
                 'facilities' => $r->requestFacilities->map(fn ($rf) => $rf->facility?->name)->filter()->values(),
             ])->values(),
@@ -594,7 +612,7 @@ class PageContextService
     /**
      * Get all facilities with basic info.
      */
-    private function getFacilities(?int $limit = null): array
+    public function getFacilities(?int $limit = null): array
     {
         $query = Facility::select('id', 'name', 'building', 'capacity')
             ->orderBy('name', 'asc');
@@ -609,7 +627,7 @@ class PageContextService
     /**
      * Get all equipment with basic info.
      */
-    private function getEquipment(?int $limit = null): array
+    public function getEquipment(?int $limit = null): array
     {
         $query = Equipment::select('id', 'name', 'quantity')
             ->orderBy('name', 'asc');
