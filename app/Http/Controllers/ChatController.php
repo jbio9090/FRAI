@@ -408,12 +408,30 @@ SYMTPROMPT;
         ];
     }
 
+    private function getMyPermissionsToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'get_my_permissions',
+                'description' => 'Check the current user\'s own roles and permissions. Use this before telling a user they can or cannot do something admin-restricted, instead of guessing.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [],
+                    'required' => [],
+                ],
+            ],
+        ];
+    }
+
     private function processToolCalls(array $messages, Request $request, ?array &$debugInfo = null): ?string
     {
         $result = $this->ai->chatWithTools($messages, [
             $this->getPageContextToolDefinition(),
             $this->getRequestDetailsToolDefinition(),
             $this->getFacilityAvailabilityToolDefinition(),
+            $this->getMyPermissionsToolDefinition(),
+            $this->getSuggestedAlternativesToolDefinition(),
         ], [
             'timeout' => 120,
             'tool_choice' => 'auto',
@@ -528,10 +546,35 @@ SYMTPROMPT;
                 return $followUp !== '' ? $followUp : null;
             }
 
+            if ($functionName === 'get_my_permissions') {
+                $user = Auth::user();
+
+                $toolResult = [
+                    'name' => $user->name,
+                    'roles' => $user->getRoleNames(),
+                    'permissions' => $user->getAllPermissions()->pluck('name')->values(),
+                    'is_admin' => $user->hasRole(['admin', 'Super Admin']),
+                ];
+
+                if ($debugInfo !== null) {
+                    $debugInfo[] = ['tool' => 'get_my_permissions', 'arguments' => [], 'result' => $toolResult];
+                }
+
+                $messages[] = [
+                    'role' => 'tool',
+                    'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
+                    'name' => 'get_my_permissions',
+                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                ];
+
+                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
+                return $followUp !== '' ? $followUp : null;
+            }
+
             if ($functionName !== 'get_page_context') {
                 \Log::warning('AI returned an unknown tool call.', [
                     'tool_name' => $functionName,
-                    'known_tools' => ['get_page_context', 'get_request_details', 'check_facility_availability'],
+                    'known_tools' => ['get_page_context', 'get_request_details', 'check_facility_availability', 'get_my_permissions'],
                 ]);
 
                 continue;
