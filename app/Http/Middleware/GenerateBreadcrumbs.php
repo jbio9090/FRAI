@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Inertia\Inertia;
 
 class GenerateBreadcrumbs
@@ -26,9 +25,9 @@ class GenerateBreadcrumbs
 
     private function generateBreadcrumbs($request)
     {
-        $routes = explode("/", $request->path());
+        $routes = explode('/', $request->path());
 
-        foreach($routes as $key => $route) {
+        foreach ($routes as $key => $route) {
             if (empty($route)) {
                 unset($routes[$key]);
             }

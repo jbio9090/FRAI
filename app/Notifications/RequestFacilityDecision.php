@@ -45,8 +45,12 @@ class RequestFacilityDecision extends Notification implements ShouldQueue
 
         if ($this->date || ($this->timeStart && $this->timeEnd)) {
             $parts = [];
-            if ($this->date) $parts[] = $this->date;
-            if ($this->timeStart && $this->timeEnd) $parts[] = "{$this->timeStart}-{$this->timeEnd}";
+            if ($this->date) {
+                $parts[] = $this->date;
+            }
+            if ($this->timeStart && $this->timeEnd) {
+                $parts[] = "{$this->timeStart}-{$this->timeEnd}";
+            }
             $base .= ' ('.implode(' ', $parts).')';
         }
 

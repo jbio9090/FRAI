@@ -441,6 +441,10 @@ class RequestController extends Controller
         ProcessRequestRecommendation::dispatch($updated);
         ProcessRequestConflicts::dispatch($updated);
 
+        if (in_array($updated->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE])) {
+            $this->notification->notifyAdminsRequestEdited($updated);
+        }
+
         return redirect()->route('requests.detail', $request->id);
     }
 

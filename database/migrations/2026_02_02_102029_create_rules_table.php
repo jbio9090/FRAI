@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('rules', function (Blueprint $table) {
             $table->id();
             $table->timestamps();
-            $table->string("rule");
+            $table->string('rule');
             $table->unsignedInteger('priority')->default(0)->after('rule');
         });
     }

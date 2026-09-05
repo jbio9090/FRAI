@@ -63,9 +63,11 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/requests/{id}/reschedule-alternatives', [RequestController::class, 'storeChosenAlternatives'])
             ->name('requests.reschedule-alternatives.store');
-        Route::get('/requests/{id}/reschedule-alternatives', [RequestController::class, 'getChosenAlternatives'])
-            ->name('requests.reschedule-alternatives.index');
     });
+
+    Route::get('/requests/{id}/reschedule-alternatives', [RequestController::class, 'getChosenAlternatives'])
+        ->name('requests.reschedule-alternatives.index')
+        ->middleware(['permission:view reschedule alternatives']);
 
     Route::get('/requests/{id}/recommendation', function ($id) {
         $request = \App\Models\Request::with('requestFacilities')->findOrFail($id);

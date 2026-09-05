@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\RequestStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
-use App\Enums\RequestStatus;
 
 class Equipment extends Model
 {
@@ -67,7 +67,7 @@ class Equipment extends Model
                     ->where('time_start', '<', $timeEnd)
                     ->where('time_end', '>', $timeStart);
             })
-            ->when($excludeRequestId, fn($q) => $q->where('requests.id', '!=', $excludeRequestId))
+            ->when($excludeRequestId, fn ($q) => $q->where('requests.id', '!=', $excludeRequestId))
             ->sum('request_equipment.quantity_needed');
     }
 
@@ -150,7 +150,7 @@ class Equipment extends Model
             ->where('re.is_borrowed', false)
             ->whereIn('r.status', $approvedStatuses)
             ->where('r.on_hold', false)
-            ->when($excludeRequestId, fn($q) => $q->where('r.id', '!=', $excludeRequestId))
+            ->when($excludeRequestId, fn ($q) => $q->where('r.id', '!=', $excludeRequestId))
             ->whereExists(function ($q) use ($facilityId, $date, $timeStart, $timeEnd) {
                 $q->select(DB::raw(1))
                     ->from('request_facilities as rf')
@@ -169,7 +169,7 @@ class Equipment extends Model
             ->where('re.source_facility_id', $facilityId)
             ->whereIn('r.status', $approvedStatuses)
             ->where('r.on_hold', false)
-            ->when($excludeRequestId, fn($q) => $q->where('r.id', '!=', $excludeRequestId))
+            ->when($excludeRequestId, fn ($q) => $q->where('r.id', '!=', $excludeRequestId))
             ->whereExists(function ($q) use ($date, $timeStart, $timeEnd) {
                 $q->select(DB::raw(1))
                     ->from('request_facilities as rf')

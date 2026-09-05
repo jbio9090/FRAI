@@ -12,7 +12,7 @@ class RequirePasswordChange
         $user = $request->user();
 
         if ($user && $user->force_password_change) {
-            if (!$request->routeIs('password.force.*') && !$request->routeIs('logout')) {
+            if (! $request->routeIs('password.force.*') && ! $request->routeIs('logout')) {
                 return redirect()->route('password.force.edit');
             }
         }

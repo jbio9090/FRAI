@@ -21,19 +21,19 @@ class ChatbotLogController extends Controller
 
         $logs = ChatbotInteractionLog::query()
             ->with(['user:id,name,email', 'facilityRequest:id,title'])
-            ->when($filters['user'] !== '', fn($query) => $query->where('user_id', $filters['user']))
-            ->when($filters['status'] !== '', fn($query) => $query->where('status', $filters['status']))
-            ->when($filters['intent'] !== '', fn($query) => $query->where(function ($subQuery) use ($filters) {
+            ->when($filters['user'] !== '', fn ($query) => $query->where('user_id', $filters['user']))
+            ->when($filters['status'] !== '', fn ($query) => $query->where('status', $filters['status']))
+            ->when($filters['intent'] !== '', fn ($query) => $query->where(function ($subQuery) use ($filters) {
                 $subQuery->where('intent', $filters['intent'])
                     ->orWhere('interaction_type', $filters['intent']);
             }))
-            ->when($filters['date'] !== '', fn($query) => $query->whereDate('created_at', $filters['date']))
+            ->when($filters['date'] !== '', fn ($query) => $query->whereDate('created_at', $filters['date']))
             ->when($filters['search'] !== '', function ($query) use ($filters) {
                 $search = $filters['search'];
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('user_message', 'like', "%{$search}%")
                         ->orWhere('assistant_message', 'like', "%{$search}%")
-                        ->orWhereHas('user', fn($userQuery) => $userQuery->where('name', 'like', "%{$search}%"));
+                        ->orWhereHas('user', fn ($userQuery) => $userQuery->where('name', 'like', "%{$search}%"));
                 });
             })
             ->latest()
@@ -50,7 +50,7 @@ class ChatbotLogController extends Controller
         $intentOptions = ChatbotInteractionLog::query()
             ->select('intent', 'interaction_type')
             ->get()
-            ->flatMap(fn($log) => array_filter([$log->intent, $log->interaction_type]))
+            ->flatMap(fn ($log) => array_filter([$log->intent, $log->interaction_type]))
             ->unique()
             ->sort()
             ->values();

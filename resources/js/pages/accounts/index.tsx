@@ -149,8 +149,8 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
     // Roles available when creating new accounts (remove Super Admin always)
     const addRoleOptions = useMemo(() => {
         const available = roles.filter(r => r !== 'super admin');
-        if (isAdmin) return available.filter(r => r === 'department head');
-        if (isSuperAdmin) return available.filter(r => ['admin', 'department head'].includes(r));
+        if (isAdmin) return available.filter(r => r === 'administrative staff');
+        if (isSuperAdmin) return available.filter(r => ['admin', 'administrative staff'].includes(r));
         return available;
     }, [roles, isAdmin, isSuperAdmin]);
 
@@ -282,7 +282,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
 
         // Admins can only toggle Department Heads
         if (isAdmin) {
-            return rowRole === 'department head';
+            return rowRole === 'administrative staff';
         }
 
         return false;

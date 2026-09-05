@@ -6,9 +6,9 @@ use App\Enums\RequestStatus;
 use App\Models\AuditLog;
 use App\Models\Equipment;
 use App\Models\Facility;
-use App\Models\Rule as RuleModel;
 use App\Models\Request as RequestModel;
 use App\Models\RequestFacility;
+use App\Models\Rule as RuleModel;
 use Illuminate\Support\Facades\Auth;
 
 class PageContextService
@@ -684,6 +684,7 @@ class PageContextService
                 ];
             }
         }
+
         return null;
     }
 
@@ -703,6 +704,7 @@ class PageContextService
                 ];
             }
         }
+
         return null;
     }
 }

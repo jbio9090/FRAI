@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('equipment_id')->constrained('equipments')->onDelete('cascade');
             $table->integer('quantity'); // how many this facility holds
             $table->timestamps();
-            
+
             $table->unique(['facility_id', 'equipment_id']);
         });
     }

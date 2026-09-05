@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 use App\Models\Equipment;
 use App\Models\Facility;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class EquipmentSeeder extends Seeder
 {
@@ -46,7 +46,7 @@ class EquipmentSeeder extends Seeder
         // --- FACILITY EQUIPMENT PIVOT ---
         // Maps how many of each equipment each facility holds
         $facilities = Facility::pluck('id', 'name');
-        $equipment  = Equipment::pluck('id', 'name');
+        $equipment = Equipment::pluck('id', 'name');
 
         $pivot = [
             // Main Auditorium (index 0)
@@ -105,11 +105,11 @@ class EquipmentSeeder extends Seeder
                     ]);
             } else {
                 DB::table('facility_equipment')->insert([
-                    'facility_id'  => $facilityId,
+                    'facility_id' => $facilityId,
                     'equipment_id' => $equipmentId,
-                    'quantity'     => $quantity,
-                    'created_at'   => now(),
-                    'updated_at'   => now(),
+                    'quantity' => $quantity,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
             }
         }

@@ -15,7 +15,7 @@ class CheckIfAccountIsActive
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user() && !$request->user()->is_active) {
+        if ($request->user() && ! $request->user()->is_active) {
             abort(403, 'Your account is inactive. Please contact support.');
         }
 

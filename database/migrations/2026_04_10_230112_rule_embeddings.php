@@ -16,7 +16,7 @@ return new class extends Migration
         Schema::create('rule_embeddings', function (Blueprint $table) use ($driver) {
             $table->id();
             $table->foreignId('rule_id')->constrained('rules');
-            $table->text('content');    
+            $table->text('content');
             if ($driver === 'pgsql') {
                 $table->vector('embedding', 768);
             } else {

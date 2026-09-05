@@ -31,6 +31,6 @@ class ForcePasswordChangeController extends Controller
 
         AuditLogger::passwordSelfUpdated($user);
 
-        return redirect()->route('dashboard'); 
+        return redirect()->route('dashboard');
     }
 }

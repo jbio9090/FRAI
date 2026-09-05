@@ -6,12 +6,11 @@ use App\Enums\FacilityStatus;
 use App\Models\Building;
 use App\Models\Campus;
 use App\Models\Facility;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
 use App\Services\FacilityService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-
+use Inertia\Inertia;
 
 class FacilityController extends Controller
 {
@@ -40,40 +39,40 @@ class FacilityController extends Controller
             ->orderBy('name')
             ->get();
 
-        return Inertia::render("facilities/index", [
-            "facilities" => $facilities,
-            "campuses" => $campuses,
-            "buildings" => $buildings,
-            "activeCampuses" => Campus::orderBy('name')->get(),
-            "activeBuildings" => Building::with('campus')
+        return Inertia::render('facilities/index', [
+            'facilities' => $facilities,
+            'campuses' => $campuses,
+            'buildings' => $buildings,
+            'activeCampuses' => Campus::orderBy('name')->get(),
+            'activeBuildings' => Building::with('campus')
                 ->whereHas('campus', fn ($query) => $query->whereNull('campuses.deleted_at'))
                 ->orderBy('name')
                 ->get(),
-            "showArchived" => $showArchived,
+            'showArchived' => $showArchived,
         ]);
     }
 
     public function detail(int $facility_id)
     {
         $facility = Facility::withTrashed()
-            ->where("id", $facility_id)
-            ->with(["facilityEquipments.equipment", "campus", "buildingRecord"])
+            ->where('id', $facility_id)
+            ->with(['facilityEquipments.equipment', 'campus', 'buildingRecord'])
             ->firstOrFail();
 
-        $facilities = Facility::with("facilityEquipments")->get();
+        $facilities = Facility::with('facilityEquipments')->get();
 
         $start = now()->startOfMonth()->format('Y-m-d');
         $end = now()->endOfMonth()->format('Y-m-d');
 
         $initialEvents = $this->service->getSchedule($facility_id, $start, $end);
 
-        return Inertia::render("facilities/detail", [
-            "facility" => $facility,
-            "initialEvents" => $initialEvents,
-            "labeledBreadcrumb" => $facility->name,
-            "facilities" => $facilities,
-            "campuses" => Campus::orderBy('name')->get(),
-            "buildings" => Building::with('campus')
+        return Inertia::render('facilities/detail', [
+            'facility' => $facility,
+            'initialEvents' => $initialEvents,
+            'labeledBreadcrumb' => $facility->name,
+            'facilities' => $facilities,
+            'campuses' => Campus::orderBy('name')->get(),
+            'buildings' => Building::with('campus')
                 ->whereHas('campus', fn ($query) => $query->whereNull('campuses.deleted_at'))
                 ->orderBy('name')
                 ->get(),
@@ -103,8 +102,8 @@ class FacilityController extends Controller
     public function update(Request $request, Facility $facility): RedirectResponse
     {
         $validated = $request->validate([
-            'name'        => 'required|string|max:255',
-            'campus_id'   => [
+            'name' => 'required|string|max:255',
+            'campus_id' => [
                 'required',
                 'integer',
                 Rule::exists('campuses', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
@@ -116,15 +115,15 @@ class FacilityController extends Controller
                     ->where('campus_id', $request->input('campus_id'))
                     ->whereNull('deleted_at')),
             ],
-            'capacity'    => 'required|integer|min:1',
-            'status'      => ['required', Rule::enum(FacilityStatus::class)],
+            'capacity' => 'required|integer|min:1',
+            'status' => ['required', Rule::enum(FacilityStatus::class)],
         ]);
 
         $validated['building'] = Building::findOrFail($validated['building_id'])->name;
         $facility->update($validated);
 
-        if (!empty($request->input("from"))) {
-            if ($request->input("from") == "facilities_page") {
+        if (! empty($request->input('from'))) {
+            if ($request->input('from') == 'facilities_page') {
                 return redirect()->route('facilities');
             }
         }
@@ -135,8 +134,8 @@ class FacilityController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name'        => 'required|string|max:255',
-            'campus_id'   => [
+            'name' => 'required|string|max:255',
+            'campus_id' => [
                 'required',
                 'integer',
                 Rule::exists('campuses', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
@@ -148,14 +147,14 @@ class FacilityController extends Controller
                     ->where('campus_id', $request->input('campus_id'))
                     ->whereNull('deleted_at')),
             ],
-            'capacity'    => 'required|integer|min:1',
-            'status'      => ['required', Rule::enum(FacilityStatus::class)],
+            'capacity' => 'required|integer|min:1',
+            'status' => ['required', Rule::enum(FacilityStatus::class)],
         ]);
 
         $validated['building'] = Building::findOrFail($validated['building_id'])->name;
         Facility::create($validated);
 
-        return redirect()->back()->with("success", "$validated[name] has been created");
+        return redirect()->back()->with('success', "$validated[name] has been created");
     }
 
     public function storeBuilding(Request $request): RedirectResponse
@@ -251,6 +250,7 @@ class FacilityController extends Controller
     public function destroy(Facility $facility): RedirectResponse
     {
         $facility->delete();
+
         return redirect()->back();
     }
 }

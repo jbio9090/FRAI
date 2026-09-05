@@ -34,13 +34,13 @@ class FileController extends Controller
                     $rest = substr($file->path, strlen('cloudinary://'));
                     [$resource, $publicAndExt] = explode('/', $rest, 2) + [1 => ''];
                     $ext = strtolower(pathinfo($publicAndExt, PATHINFO_EXTENSION) ?: '');
-                    $rawExts = ['pdf','doc','docx','xls','xlsx','ppt','pptx','zip','mp3','mp4','mov','avi','mkv','txt'];
+                    $rawExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'mp3', 'mp4', 'mov', 'avi', 'mkv', 'txt'];
                     if ($resource === 'image' && in_array($ext, $rawExts, true)) {
                         $resource = 'raw';
                     }
                     $publicId = preg_replace('/\.[^.]+$/', '', $publicAndExt);
 
-                    $uploader = new CloudinaryUploader();
+                    $uploader = new CloudinaryUploader;
                     $meta = $uploader->resource($publicId, $resource);
                     $info['admin'] = $meta;
 
@@ -96,14 +96,14 @@ class FileController extends Controller
                     // If the filename extension is a non-image type, prefer
                     // using the `raw` resource type when querying Admin API.
                     $ext = strtolower(pathinfo($publicAndExt, PATHINFO_EXTENSION) ?: '');
-                    $rawExts = ['pdf','doc','docx','xls','xlsx','ppt','pptx','zip','mp3','mp4','mov','avi','mkv','txt'];
+                    $rawExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'mp3', 'mp4', 'mov', 'avi', 'mkv', 'txt'];
                     if ($resource === 'image' && in_array($ext, $rawExts, true)) {
                         $resource = 'raw';
                     }
 
                     $publicId = preg_replace('/\.[^.]+$/', '', $publicAndExt);
 
-                    $uploader = new CloudinaryUploader();
+                    $uploader = new CloudinaryUploader;
                     $meta = $uploader->resource($publicId, $resource);
 
                     $secure = $meta['secure_url'] ?? $meta['url'] ?? null;
@@ -126,9 +126,9 @@ class FileController extends Controller
                             $response = Http::timeout(30)->get($secure);
                             if (! $response->failed()) {
                                 return response($response->body(), 200, [
-                                    'Content-Type'        => $file->mime_type,
-                                    'Content-Disposition' => 'inline; filename="' . addslashes($file->original_name) . '"',
-                                    'Cache-Control'       => 'private, max-age=3600',
+                                    'Content-Type' => $file->mime_type,
+                                    'Content-Disposition' => 'inline; filename="'.addslashes($file->original_name).'"',
+                                    'Cache-Control' => 'private, max-age=3600',
                                     'X-Content-Type-Options' => 'nosniff',
                                 ]);
                             }
@@ -159,13 +159,13 @@ class FileController extends Controller
             }
 
             return response($contents, 200, [
-                'Content-Type'        => $file->mime_type,
-                'Content-Disposition' => 'inline; filename="' . addslashes($file->original_name) . '"',
-                'Cache-Control'       => 'private, max-age=3600',
+                'Content-Type' => $file->mime_type,
+                'Content-Disposition' => 'inline; filename="'.addslashes($file->original_name).'"',
+                'Cache-Control' => 'private, max-age=3600',
                 'X-Content-Type-Options' => 'nosniff',
             ]);
         } catch (\Throwable $e) {
-            abort(502, 'File could not be retrieved from storage: ' . $e->getMessage());
+            abort(502, 'File could not be retrieved from storage: '.$e->getMessage());
         }
     }
 
@@ -216,15 +216,15 @@ class FileController extends Controller
                 }
 
                 return response($contents, 200, [
-                    'Content-Type'        => $file->mime_type,
-                    'Content-Disposition' => 'inline; filename="' . addslashes($file->original_name) . '"',
-                    'Cache-Control'       => 'private, max-age=3600',
+                    'Content-Type' => $file->mime_type,
+                    'Content-Disposition' => 'inline; filename="'.addslashes($file->original_name).'"',
+                    'Cache-Control' => 'private, max-age=3600',
                 ]);
             }
 
             abort(502, 'Cloudinary disk not configured or resource inaccessible.');
         } catch (\Throwable $e) {
-            abort(502, 'File could not be retrieved from storage: ' . $e->getMessage());
+            abort(502, 'File could not be retrieved from storage: '.$e->getMessage());
         }
     }
 }

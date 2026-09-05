@@ -50,7 +50,7 @@ class AlternativeRecommendationServiceTest extends TestCase
         // Ensure request settings exist for the test
         \App\Models\Setting::updateOrCreate(
             ['key' => 'request.booking_window'],
-            ['value' => ['start_time' => '07:00', 'end_time' => '20:00', 'days_of_week' => [1,2,3,4,5], 'step_minutes' => 30]]
+            ['value' => ['start_time' => '07:00', 'end_time' => '20:00', 'days_of_week' => [1, 2, 3, 4, 5], 'step_minutes' => 30]]
         );
         \App\Models\Setting::updateOrCreate(
             ['key' => 'request.min_advance_days'],
@@ -84,7 +84,7 @@ class AlternativeRecommendationServiceTest extends TestCase
 
         foreach ($slots as $slot) {
             $duration = (int) Carbon::parse($slot['time_start'])->diffInMinutes(Carbon::parse($slot['time_end']));
-            $this->assertSame(120, $duration, "Alternative slot duration must match the original 2-hour booking.");
+            $this->assertSame(120, $duration, 'Alternative slot duration must match the original 2-hour booking.');
         }
     }
 

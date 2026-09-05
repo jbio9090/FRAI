@@ -12,7 +12,6 @@ use App\Models\Rule as RuleModel;
 use App\Services\AI\OpenRouterClient;
 use App\Services\PageContextService;
 use App\Services\RAG\FaqMatchingService;
-use App\Services\RequestSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -28,6 +27,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ChatController extends Controller
 {
     private const SESSION_TTL_MINUTES = 15;
+
     private const MAX_SESSION_MESSAGES = 10;
 
     // Bump this string every time a deploy changes the system prompt, tool names,
@@ -234,7 +234,7 @@ class ChatController extends Controller
      * For thinking models that support tool use, parse the message for tool call format.
      * Returns the assistant reply content, or null if no tool call was detected.
      */
-     private function getContextAwareSystemPrompt(): string
+    private function getContextAwareSystemPrompt(): string
     {
         return <<<'SYMTPROMPT'
 You are an AI assistant for the PLV-GSO Facility Request System. You have access to tools that can retrieve information about the current page/facility context.
@@ -441,6 +441,7 @@ SYMTPROMPT;
                 ];
 
                 $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
+
                 return $followUp !== '' ? $followUp : null;
             }
 

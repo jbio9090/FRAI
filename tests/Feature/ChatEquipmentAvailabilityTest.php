@@ -186,7 +186,7 @@ class ChatEquipmentAvailabilityTest extends TestCase
 
         $errorMessage = implode(' ', $submitResponse->json('errors.facility_bookings.0.equipment.0.quantity_needed'));
         $this->assertStringContainsString('only 40 remaining', $errorMessage);
-        $this->assertStringContainsString('facility ID ' . $sourceFacility->id, $errorMessage);
+        $this->assertStringContainsString('facility ID '.$sourceFacility->id, $errorMessage);
     }
 
     public function test_chat_request_submission_auto_resolves_borrow_source_when_source_facility_metadata_is_missing(): void

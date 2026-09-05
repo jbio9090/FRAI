@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use App\Models\Request as RequestModel;
 use App\Enums\RequestStatus;
+use App\Models\Request as RequestModel;
+use Illuminate\Database\Eloquent\Model;
 
 class RequestFacility extends Model
 {

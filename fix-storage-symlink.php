@@ -1,8 +1,9 @@
 <?php
+
 $baseDir = __DIR__;
-$publicDir = $baseDir . '/public';
-$storageDir = $baseDir . '/storage/app/public';
-$symlinkPath = $publicDir . '/storage';
+$publicDir = $baseDir.'/public';
+$storageDir = $baseDir.'/storage/app/public';
+$symlinkPath = $publicDir.'/storage';
 
 echo "Storage Symlink Setup Tool\n";
 echo "==========================\n\n";
@@ -12,7 +13,7 @@ if (is_dir($symlinkPath)) {
     exit(0);
 }
 
-if (!is_dir($storageDir)) {
+if (! is_dir($storageDir)) {
     echo "✗ Storage directory not found at {$storageDir}\n";
     exit(1);
 }
@@ -25,26 +26,26 @@ $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
 
 if ($isWindows) {
     echo "Windows detected - using mklink command\n";
-    
+
     $cmd = sprintf(
         'mklink /D "%s" "%s"',
         $symlinkPath,
         $storageDir
     );
-    
+
     echo "Executing: {$cmd}\n\n";
-    
+
     $output = [];
     $returnCode = 0;
-    exec($cmd . ' 2>&1', $output, $returnCode);
-    
+    exec($cmd.' 2>&1', $output, $returnCode);
+
     foreach ($output as $line) {
         echo "  {$line}\n";
     }
-    
+
     if ($returnCode === 0) {
         echo "\n✓ Symlink created successfully\n";
-        
+
         if (is_link($symlinkPath) || is_dir($symlinkPath)) {
             echo "✓ Symlink verified\n";
             echo "\nFiles will now be accessible at: /storage/{filename}\n";
@@ -60,7 +61,7 @@ if ($isWindows) {
     }
 } else {
     echo "Unix-like system detected - using symlink()\n";
-    
+
     if (@symlink($storageDir, $symlinkPath)) {
         echo "✓ Symlink created successfully\n";
         exit(0);
@@ -69,4 +70,3 @@ if ($isWindows) {
         exit(1);
     }
 }
-?>

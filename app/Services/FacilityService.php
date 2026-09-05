@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\RequestFacility;
 use App\Enums\FacilityStatus;
 use App\Enums\RequestStatus;
+use App\Models\RequestFacility;
 use Illuminate\Support\Collection;
 
 class FacilityService
 {
-    public function getSchedule(int $facility_id, string $start, string $end,): Collection
+    public function getSchedule(int $facility_id, string $start, string $end): Collection
     {
         $events = RequestFacility::query()
             ->whereBetween('date_requested', [$start, $end])
@@ -29,15 +29,14 @@ class FacilityService
                 return [
                     'id' => $booking->id,
                     'title' => $booking->request->title,
-                    'start' => $booking->date_requested . 'T' . $booking->time_start,
-                    'end' => $booking->date_requested . 'T' . $booking->time_end,
+                    'start' => $booking->date_requested.'T'.$booking->time_start,
+                    'end' => $booking->date_requested.'T'.$booking->time_end,
                     'request_id' => $booking->request->id,
                 ];
             });
 
         return $events;
     }
-
 
     public function getDaySchedule(int $facility_id, string $date)
     {
@@ -84,12 +83,12 @@ class FacilityService
             ->get()
             ->map(function ($booking) {
                 return [
-                    'id'         => $booking->id,
-                    'title'      => $booking->facility->name . ' — ' . $booking->request->title,
-                    'start'      => $booking->date_requested . 'T' . $booking->time_start,
-                    'end'        => $booking->date_requested . 'T' . $booking->time_end,
+                    'id' => $booking->id,
+                    'title' => $booking->facility->name.' — '.$booking->request->title,
+                    'start' => $booking->date_requested.'T'.$booking->time_start,
+                    'end' => $booking->date_requested.'T'.$booking->time_end,
                     'request_id' => $booking->request->id,
-                    'building'   => $booking->facility->building,
+                    'building' => $booking->facility->building,
                 ];
             });
     }
