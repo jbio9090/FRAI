@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Models\Request;
 use App\Models\RequestFacility;
+use App\Models\RequestRescheduleSuggestion;
 use App\Models\User;
 use App\Notifications\AdminAiRecommendationReady;
 use App\Notifications\NewPendingRequest;
 use App\Notifications\RequestResult;
 use App\Notifications\Reschedule;
 use App\Notifications\RequestFacilityDecision;
+use App\Notifications\RescheduleAlternativesChosen;
 use App\Enums\RequestStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -156,6 +158,45 @@ class NotificationService
             ));
         } catch (\Exception $e) {
             Log::error('Facility-level notification failed: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+        }
+    }
+
+    public function notifyUserChosenAlternatives(Request $request): void
+    {
+        try {
+            $request->loadMissing(['rescheduleSuggestions.chosenByAdmin']);
+
+            $user = User::findOrFail($request->user_id);
+
+            $alternatives = $request->rescheduleSuggestions
+                ->groupBy('facility_id')
+                ->map(function ($items, $facilityId) {
+                    return [
+                        'facility_id' => $facilityId,
+                        'facility_name' => $items->first()->facility_name,
+                        'options' => $items->map(function ($item) {
+                            return [
+                                'date' => $item->date->format('Y-m-d'),
+                                'time_start' => $item->time_start->format('H:i'),
+                                'time_end' => $item->time_end->format('H:i'),
+                                'type' => $item->type,
+                                'capacity_fit' => $item->capacity_fit,
+                                'equipment_available' => $item->equipment_available,
+                                'chosen_by' => $item->chosenByAdmin->name ?? 'Admin',
+                            ];
+                        })->values()->all(),
+                    ];
+                })->values()->all();
+
+            $user->notify(new RescheduleAlternativesChosen(
+                $request->title,
+                $request->status,
+                route('requests.detail', ['request_id' => $request->id]),
+                $alternatives,
+            ));
+        } catch (\Exception $e) {
+            Log::error('Chosen alternatives notification failed: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
         }
     }

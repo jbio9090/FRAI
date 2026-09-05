@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DefaultLayout from '@/layout.tsx/default.';
-import { AlternativesPanel } from './create/components/AlternativesPanel';
+import { ChosenAlternativesPanel } from './create/components/ChosenAlternativesPanel';
 import { BookingActions } from './create/sections/booking-actions';
 import { DetailsTab } from './create/sections/details-tab';
 import { EquipmentSection } from './create/sections/equipment-section';
@@ -234,19 +234,14 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     {/* ── Desktop: FacilityInfo manages its own facility + date ── */}
                                     <FacilityInfo facilities={facilities} isForSidebar={true} />
 
-{/* ── Alternatives for FOR_RESCHEDULE (Desktop only) ── */}
+{/* ── Chosen Alternatives for FOR_RESCHEDULE (Desktop only) ── */}
                                     <div className="hidden lg:block">
-                                        <AlternativesPanel
-                                            alternatives={alternatives}
-                                            alternativesLoading={alternativesLoading}
-                                            alternativesError={alternativesError}
-                                            includeEquipmentFilter={includeEquipmentFilter}
-                                            setIncludeEquipmentFilter={setIncludeEquipmentFilter}
-                                            applyAlternative={applyAlternative}
+                                        <ChosenAlternativesPanel
                                             facilities={facilities}
                                             isEditing={isEditing}
                                             existingRequest={existingRequest}
                                             editingIndex={editingIndex}
+                                            applyAlternative={applyAlternative}
                                         />
                                     </div>
                                 </div>

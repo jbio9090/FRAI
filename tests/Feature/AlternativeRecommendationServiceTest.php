@@ -10,39 +10,67 @@ use App\Models\User;
 use App\Services\AlternativeRecommendationService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AlternativeRecommendationServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function setUpRoles(): void
+    {
+        Permission::findOrCreate('approve requests');
+        Role::findOrCreate('admin')->givePermissionTo('approve requests');
+        Role::findOrCreate('Super Admin')->givePermissionTo('approve requests');
+    }
+
     private function buildRequest(User $user, string $timeStart, string $timeEnd): FacilityRequest
     {
-        $facility = Facility::factory()->create(['capacity' => 100]);
+        $facility = Facility::factory()->create(['capacity' => 100, 'status' => 'active']);
 
         $request = FacilityRequest::factory()->create([
             'user_id' => $user->id,
             'status' => RequestStatus::FOR_RESCHEDULE,
         ]);
 
+        // Use a date far enough in future to satisfy min_advance_days (default 5)
+        $date = Carbon::today()->addDays(10)->format('Y-m-d');
+
         RequestFacility::create([
             'request_id' => $request->id,
             'facility_id' => $facility->id,
-            'date_requested' => Carbon::today()->addDays(1)->format('Y-m-d'),
+            'date_requested' => $date,
             'time_start' => "{$timeStart}:00",
             'time_end' => "{$timeEnd}:00",
             'expected_capacity' => 10,
+            'status' => RequestStatus::FOR_RESCHEDULE,
         ]);
+
+        // Ensure request settings exist for the test
+        \App\Models\Setting::updateOrCreate(
+            ['key' => 'request.booking_window'],
+            ['value' => ['start_time' => '07:00', 'end_time' => '20:00', 'days_of_week' => [1,2,3,4,5], 'step_minutes' => 30]]
+        );
+        \App\Models\Setting::updateOrCreate(
+            ['key' => 'request.min_advance_days'],
+            ['value' => 0]
+        );
 
         return $request;
     }
 
     public function test_returned_alternative_time_slots_match_original_request_duration(): void
     {
+        $this->setUpRoles();
+
         $user = User::factory()->create();
         $request = $this->buildRequest($user, '09:00', '11:00');
 
-        $this->actingAs($user);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $this->actingAs($admin);
 
         $response = $this->getJson(route('requests.alternatives', $request->id));
         $response->assertOk();

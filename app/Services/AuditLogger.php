@@ -156,6 +156,16 @@ class AuditLogger
         );
     }
 
+    public static function rescheduleAlternativesChosen(FacilityRequest $request, int $count): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::RequestRescheduleAlternativesChosen,
+            description: "Admin selected {$count} reschedule alternative(s) for: \"{$request->title}\"",
+            subject: $request,
+            properties: ['alternatives_count' => $count],
+        );
+    }
+
     public static function requestHoldToggled(FacilityRequest $request, bool $onHold): AuditLog
     {
         return self::log(

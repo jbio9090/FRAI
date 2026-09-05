@@ -136,7 +136,7 @@ export function AlternativesPanel({
                                         return (
                                             <div key={type} className="space-y-2">
                                                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{getTypeLabel(type)}</span>
-                                                <div className="grid gap-1.5 sm:grid-cols-2">
+                                                <div className="space-y-2">
                                                     {typeSlots.map((slot) => {
                                                         const slotKey = `${slot.facility_id}-${slot.date}-${slot.time_start}`;
                                                         const isSelected = selectedAlternative === slotKey;

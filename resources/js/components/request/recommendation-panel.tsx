@@ -1,10 +1,14 @@
-import { Calendar, Clock, Sparkles, LayoutGrid, Filter } from 'lucide-react';
+import { Calendar, Clock, Sparkles, LayoutGrid, Filter, CheckSquare, Send, Loader2 } from 'lucide-react';
 import moment from 'moment';
 import { motion } from 'motion/react';
+import { useState } from 'react';
+import { router, usePage } from '@inertiajs/react';
 import { useAlternatives } from '@/hooks/use-alternatives';
 import { cn } from '@/lib/utils';
 import type { Request, AlternativeSlot } from '@/types/request';
 import StatusTag from '../status-tag';
+import { toast } from 'sonner';
+import { usePermission } from '@/hooks/use-permission';
 
 interface RecommendationPanelProps {
     request: Request;
@@ -42,12 +46,79 @@ function getCapacityBadge(fit: AlternativeSlot['capacity_fit']) {
     return <span className={cn('px-1.5 py-0.5 text-[10px] font-semibold rounded-[4px]', styles[fit])}>{fit}</span>;
 }
 
+function getSlotKey(slot: AlternativeSlot): string {
+    return `${slot.facility_id}-${slot.date}-${slot.time_start}`;
+}
+
 export function RecommendationPanel({ request, isLoading, variant = 'card' }: RecommendationPanelProps) {
-    const { alternatives, loading: altLoading, error: altError, refetch, includeEquipment } = useAlternatives({
+    const auth = usePage().props.auth;
+    const { hasRole } = usePermission();
+    const isAdmin = hasRole('admin') || hasRole('Super Admin');
+
+    const { alternatives, loading: altLoading, error: altError, refetch, includeEquipment, setIncludeEquipment } = useAlternatives({
         requestId: request.id,
         includeEquipment: false,
         enabled: request.status === 'For Reschedule',
     });
+
+    const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSlotToggle = (slot: AlternativeSlot) => {
+        const key = getSlotKey(slot);
+        setSelectedSlots(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    };
+
+    const handleSubmitChosen = async () => {
+        if (selectedSlots.size === 0) {
+            toast.error('Please select at least one alternative');
+            return;
+        }
+
+        if (!alternatives) return;
+
+        setIsSubmitting(true);
+
+        const chosenAlternatives: AlternativeSlot[] = [];
+        Object.values(alternatives.alternatives).flat().forEach(slot => {
+            if (selectedSlots.has(getSlotKey(slot))) {
+                chosenAlternatives.push(slot);
+            }
+        });
+
+        try {
+            const response = await fetch(route('requests.reschedule-alternatives.store', [request.id]), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({ alternatives: chosenAlternatives }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to send alternatives');
+            }
+
+            toast.success('Selected alternatives sent to requester');
+            setSelectedSlots(new Set());
+            refetch();
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to send alternatives');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <div className="flex flex-col gap-3">
@@ -136,13 +207,38 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                 <input
                                     type="checkbox"
                                     checked={includeEquipment}
-                                    onChange={(e) => handleEquipmentToggle(e.target.checked)}
+                                    onChange={(e) => setIncludeEquipment(e.target.checked)}
                                     className="h-3.5 w-3.5 rounded border-border accent-primary"
                                 />
                                 Check equipment availability
                             </label>
                         </div>
                     </div>
+
+                    {isAdmin && selectedSlots.size > 0 && (
+                        <div className="ads-card p-3 bg-primary/5 border-primary/20 flex items-center justify-between gap-3">
+                            <span className="text-sm font-medium text-primary">
+                                {selectedSlots.size} alternative(s) selected
+                            </span>
+                            <button
+                                onClick={handleSubmitChosen}
+                                disabled={isSubmitting}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-[4px] text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Sending...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="h-4 w-4" />
+                                        Send to Requester
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    )}
 
                     {altLoading && (
                         <div className="flex flex-col items-center gap-3 py-4">
@@ -191,36 +287,54 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                                 return (
                                                     <div key={type} className="flex flex-col gap-2">
                                                         <span className="ads-eyebrow text-xs">{getTypeLabel(type)}</span>
-                                                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                                            {typeSlots.map((slot) => (
-                                                                <button
-                                                                    key={`${slot.facility_id}-${slot.date}-${slot.time_start}`}
-                                                                    className="ads-card p-3 text-left hover:border-primary/50 transition-colors"
-                                                                >
-                                                                    <div className="flex items-center justify-between gap-2 mb-2">
-                                                                        {slot.type === 'different_facility' || slot.type === 'different_facility_date' ? (
-                                                                            <span className="flex items-center gap-1 text-sm font-medium truncate">
-                                                                                <LayoutGrid size={11} />
-                                                                                {slot.facility_name}
+                                                        <div className="flex flex-col gap-2">
+                                                            {typeSlots.map((slot) => {
+                                                                const slotKey = getSlotKey(slot);
+                                                                const isSelected = selectedSlots.has(slotKey);
+                                                                return (
+                                                                    <button
+                                                                        key={slotKey}
+                                                                        type="button"
+                                                                        onClick={() => handleSlotToggle(slot)}
+                                                                        className={`group relative flex flex-col p-3 text-left transition-all duration-150 text-xs cursor-pointer border-2 ${
+                                                                            isSelected
+                                                                                ? 'border-primary bg-primary/10'
+                                                                                : 'border-border hover:border-primary/50'
+                                                                        }`}
+                                                                    >
+                                                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                {isAdmin && (
+                                                                                    <CheckSquare
+                                                                                        className={cn('h-4 w-4 flex-shrink-0 transition-colors', isSelected ? 'text-primary' : 'text-muted-foreground')}
+                                                                                        strokeWidth={2.5}
+                                                                                    />
+                                                                                )}
+                                                                                {slot.type === 'different_facility' || slot.type === 'different_facility_date' ? (
+                                                                                    <span className="flex items-center gap-1 text-sm font-medium truncate">
+                                                                                        <LayoutGrid size={11} />
+                                                                                        {slot.facility_name}
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <span className="text-sm font-medium">{formatDate(slot.date)}</span>
+                                                                                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                                                            <Clock size={11} />
+                                                                                            {formatTime(slot.time_start)} – {formatTime(slot.time_end)}
+                                                                                        </span>
+                                                                                    </>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                                                                            {getCapacityBadge(slot.capacity_fit)}
+                                                                            <span className={cn('px-1.5 py-0.5 rounded-[4px]', slot.equipment_available ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]' : 'bg-[var(--ads-muted-bg)] text-[var(--ads-muted)]')}>
+                                                                                {slot.equipment_available ? 'Equipment ✓' : 'Equipment ✗'}
                                                                             </span>
-                                                                        ) : (
-                                                                            <>
-                                                                                <span className="text-sm font-medium">{formatDate(slot.date)}</span>
-                                                                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                                                    <Clock size={11} />
-                                                                                    {formatTime(slot.time_start)} – {formatTime(slot.time_end)}
-                                                                                </span>
-                                                                            </>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                                                                        {getCapacityBadge(slot.capacity_fit)}
-                                                                        <span className={cn('px-1.5 py-0.5 rounded-[4px]', slot.equipment_available ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]' : 'bg-[var(--ads-muted-bg)] text-[var(--ads-muted)]')}>
-                                                                            {slot.equipment_available ? 'Equipment ✓' : 'Equipment ✗'}
-                                                                        </span>
-                                                                    </div>
-                                                                </button>
-                                                            ))}
+                                                                        </div>
+                                                                    </button>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
                                                 );

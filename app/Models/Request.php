@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use App\Models\RequestFacility;
 use App\Models\Facility;
 use App\Models\User;
+use App\Models\RequestRescheduleSuggestion;
 use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -118,6 +119,11 @@ class Request extends Model
     public function processedBy()
     {
         return $this->belongsTo(User::class, 'processed_by');
+    }
+
+    public function rescheduleSuggestions()
+    {
+        return $this->hasMany(RequestRescheduleSuggestion::class, 'request_id');
     }
 
     /* SCOPES */

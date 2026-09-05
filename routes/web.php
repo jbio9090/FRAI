@@ -60,6 +60,11 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/requests/{request}/facilities/{facility}/update-status', [RequestController::class, 'updateFacilityStatus'])
             ->name('requests.facilities.updateStatus');
+
+        Route::post('/requests/{id}/reschedule-alternatives', [RequestController::class, 'storeChosenAlternatives'])
+            ->name('requests.reschedule-alternatives.store');
+        Route::get('/requests/{id}/reschedule-alternatives', [RequestController::class, 'getChosenAlternatives'])
+            ->name('requests.reschedule-alternatives.index');
     });
 
     Route::get('/requests/{id}/recommendation', function ($id) {

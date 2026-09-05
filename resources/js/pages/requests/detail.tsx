@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { Calendar, Download, Pen, SendHorizontal } from 'lucide-react';
+import { Calendar, Download, Pen, SendHorizontal, LayoutGrid, Clock, AlertCircle } from 'lucide-react';
 import moment from 'moment';
 import { useEffect, useState } from 'react';
 import { ActivityFeed, type AuditLog } from '@/components/activity-feed';
@@ -18,13 +18,15 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { usePermission } from '@/hooks/use-permission';
+import { useChosenAlternatives } from '@/hooks/use-chosen-alternatives';
 import DefaultLayout from '@/layout.tsx/default.';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
 import { cn } from '@/lib/utils';
 import { PRIORITY_ACCENT, PRIORITY_LABELS } from '@/types/request';
-import type { Request } from '@/types/request';
+import type { Request, ChosenAlternative } from '@/types/request';
 
 interface DetailProps {
     children?: React.ReactNode;
@@ -397,6 +399,13 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                 </span>
                             </TabsTrigger>
 
+                            {(!isAdmin && request.status === 'For Reschedule') && (
+                                <TabsTrigger value="reschedule-options" className="flex items-center gap-2">
+                                    <LayoutGrid className="h-4 w-4" />
+                                    <span>Reschedule Options</span>
+                                </TabsTrigger>
+                            )}
+
                             {isAdmin && (
                                 <TabsTrigger value="recommendation" className="flex items-center gap-2">
                                     <span>Recommendation</span>
@@ -654,6 +663,14 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                             <p className="text-sm text-muted-foreground">No files attached.</p>
                         )}
                     </TabsContent>
+
+                    {/* Reschedule Options Tab (for requester when status is For Reschedule) */}
+                    {(!isAdmin && request.status === 'For Reschedule') && (
+                        <TabsContent value="reschedule-options" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
+                            <ChosenAlternativesTab request={request} />
+                        </TabsContent>
+                    )}
+
                     {/* Recommendation Tab */}
                     {isAdmin && (
                         <TabsContent value="recommendation" className="mt-6 flex flex-col gap-4 px-6 md:px-8">
@@ -663,6 +680,124 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                 </Tabs>
             </div>
         </DefaultLayout>
+    );
+}
+
+function ChosenAlternativesTab({ request }: { request: Request }) {
+    const { chosenAlternatives, loading, error, refetch } = useChosenAlternatives({
+        requestId: request.id,
+        enabled: request.status === 'For Reschedule',
+    });
+
+    function formatDate(date: string) {
+        return moment(date, ['YYYY-MM-DD', moment.ISO_8601]).format('MMM D, YYYY');
+    }
+
+    function formatTime(time: string) {
+        return moment(time, 'HH:mm:ss').format('h:mm A');
+    }
+
+    function getTypeLabel(type: string): string {
+        switch (type) {
+            case 'same_facility_time':
+                return 'Same Facility - Different Times';
+            case 'same_facility_date':
+                return 'Same Facility - Nearby Dates';
+            case 'different_facility':
+                return 'Other Facilities - Same Date/Time';
+            case 'different_facility_date':
+                return 'Other Facilities - Nearby Dates';
+            default:
+                return type;
+        }
+    }
+
+    function getCapacityBadge(fit: string) {
+        const styles = {
+            exact: 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]',
+            larger: 'bg-[var(--ads-info-bg)] text-[var(--ads-info)]',
+            smaller: 'bg-[var(--ads-warning-bg)] text-[var(--ads-warning)]',
+        };
+        return (
+            <span className={cn('px-1.5 py-0.5 text-[10px] font-semibold rounded-[4px]', styles[fit as keyof typeof styles] || styles.exact)}>
+                {fit}
+            </span>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-4 max-w-3xl">
+            <div className="flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4 text-[var(--ads-ok)]" />
+                <span className="ads-eyebrow">Suggested Reschedule Options</span>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+                An admin has selected the following reschedule options for your request. Review them and choose one when you edit your request.
+            </p>
+
+            {loading && (
+                <div className="flex flex-col items-center gap-3 py-8">
+                    <Spinner />
+                    <div className="h-3 w-full max-w-md animate-pulse rounded bg-muted" />
+                </div>
+            )}
+
+            {error && (
+                <div className="ads-card p-4 text-sm text-destructive flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Failed to load options: {error}
+                    <button onClick={refetch} className="ml-2 underline">Retry</button>
+                </div>
+            )}
+
+            {chosenAlternatives && !loading && Object.keys(chosenAlternatives.alternatives).length > 0 && (
+                <div className="flex flex-col gap-4">
+                    {Object.entries(chosenAlternatives.alternatives).map(([facilityId, slots]) => {
+                        if (!slots.length) return null;
+
+                        return (
+                            <div key={facilityId} className="ads-card flex flex-col gap-3 p-4">
+                                <h4 className="text-sm font-semibold text-foreground">{slots[0].facility_name}</h4>
+                                <div className="flex flex-col gap-2">
+                                    {slots.map((slot) => (
+                                        <div key={`${slot.facility_id}-${slot.date}-${slot.time_start}`} className="ads-card p-3 border-border hover:bg-muted/30 transition-colors">
+                                            <div className="flex items-center justify-between gap-2 mb-2">
+                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                    <span className="font-medium truncate">{formatDate(slot.date)}</span>
+                                                    <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                                                        <Clock size={11} />
+                                                        {formatTime(slot.time_start)} – {formatTime(slot.time_end)}
+                                                    </span>
+                                                </div>
+                                                <span className="text-xs text-muted-foreground shrink-0">{getTypeLabel(slot.type)}</span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                                                {getCapacityBadge(slot.capacity_fit)}
+                                                <span className={cn('px-1.5 py-0.5 rounded-[4px]', slot.equipment_available ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]' : 'bg-[var(--ads-muted-bg)] text-[var(--ads-muted)]')}>
+                                                    {slot.equipment_available ? 'Equipment ✓' : 'Equipment ✗'}
+                                                </span>
+                                                <span className="px-1.5 py-0.5 rounded-[4px] bg-[var(--ads-neutral-bg)] text-[var(--ads-neutral)]">
+                                                    Suggested by {slot.chosen_by_admin.name}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {chosenAlternatives && !loading && Object.keys(chosenAlternatives.alternatives).length === 0 && (
+                <div className="ads-card p-6 text-center text-sm text-muted-foreground">
+                    <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                    <p>No reschedule options have been suggested by an admin yet.</p>
+                    <p className="mt-1 text-xs">Please check back later or contact the admin.</p>
+                </div>
+            )}
+        </div>
     );
 }
 

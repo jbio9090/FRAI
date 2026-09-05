@@ -10,6 +10,7 @@ use App\Models\AuditLog;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
+use App\Models\RequestRescheduleSuggestion;
 use App\Models\User;
 use App\Services\AlternativeRecommendationService;
 use App\Services\AuditLogger;
@@ -222,10 +223,7 @@ class RequestController extends Controller
             'requestFacilities.externalEquipments',
         ])->findOrFail($request_id);
 
-        abort_unless(
-            $request->user_id === auth()->id() || auth()->user()->can('approve requests'),
-            403
-        );
+        abort_unless(auth()->user()->can('approve requests'), 403);
 
         abort_unless($request->status === RequestStatus::FOR_RESCHEDULE, 400);
 
@@ -239,6 +237,101 @@ class RequestController extends Controller
         $alternatives = $this->alternativeService->findAlternatives($request, $options);
 
         return response()->json($alternatives);
+    }
+
+    public function storeChosenAlternatives(Request $httpRequest, int $id)
+    {
+        $facilityRequest = FacilityRequest::findOrFail($id);
+
+        abort_unless($facilityRequest->status === RequestStatus::FOR_RESCHEDULE, 400);
+        abort_unless(auth()->user()->can('approve requests'), 403);
+
+        $validated = $httpRequest->validate([
+            'alternatives' => ['required', 'array', 'min:1'],
+            'alternatives.*.facility_id' => ['required', 'integer', 'exists:facilities,id'],
+            'alternatives.*.facility_name' => ['required', 'string'],
+            'alternatives.*.date' => ['required', 'date'],
+            'alternatives.*.time_start' => ['required', 'date_format:H:i'],
+            'alternatives.*.time_end' => ['required', 'date_format:H:i', 'after:alternatives.*.time_start'],
+            'alternatives.*.type' => ['required', 'string', 'in:same_facility_time,same_facility_date,different_facility,different_facility_date'],
+            'alternatives.*.facility_capacity' => ['required', 'integer', 'min:1'],
+            'alternatives.*.capacity_fit' => ['required', 'string', 'in:exact,larger,smaller'],
+            'alternatives.*.equipment_available' => ['required', 'boolean'],
+        ]);
+
+        DB::transaction(function () use ($facilityRequest, $validated) {
+            $facilityRequest->rescheduleSuggestions()->delete();
+
+            foreach ($validated['alternatives'] as $alt) {
+                RequestRescheduleSuggestion::create([
+                    'request_id' => $facilityRequest->id,
+                    'chosen_by_admin_id' => auth()->id(),
+                    'facility_id' => $alt['facility_id'],
+                    'facility_name' => $alt['facility_name'],
+                    'date' => $alt['date'],
+                    'time_start' => $alt['time_start'],
+                    'time_end' => $alt['time_end'],
+                    'type' => $alt['type'],
+                    'facility_capacity' => $alt['facility_capacity'],
+                    'capacity_fit' => $alt['capacity_fit'],
+                    'equipment_available' => $alt['equipment_available'],
+                ]);
+            }
+
+            $this->auditLogger::rescheduleAlternativesChosen($facilityRequest, count($validated['alternatives']));
+        });
+
+        $this->notification->notifyUserChosenAlternatives($facilityRequest->fresh());
+
+        return response()->json([
+            'message' => 'Chosen alternatives sent to requester.',
+            'count' => count($validated['alternatives']),
+        ]);
+    }
+
+    public function getChosenAlternatives(int $id)
+    {
+        $facilityRequest = FacilityRequest::findOrFail($id);
+
+        abort_unless(
+            $facilityRequest->user_id === auth()->id() || auth()->user()->can('approve requests'),
+            403
+        );
+
+        abort_unless($facilityRequest->status === RequestStatus::FOR_RESCHEDULE, 400);
+
+        $suggestions = $facilityRequest->rescheduleSuggestions()
+            ->with('chosenByAdmin:id,name')
+            ->orderBy('facility_id')
+            ->orderBy('date')
+            ->orderBy('time_start')
+            ->get()
+            ->groupBy('facility_id')
+            ->map(function ($items) {
+                return $items->map(function ($item) {
+                    return [
+                        'id' => $item->id,
+                        'facility_id' => $item->facility_id,
+                        'facility_name' => $item->facility_name,
+                        'date' => $item->date->format('Y-m-d'),
+                        'time_start' => $item->time_start->format('H:i:s'),
+                        'time_end' => $item->time_end->format('H:i:s'),
+                        'type' => $item->type,
+                        'facility_capacity' => $item->facility_capacity,
+                        'capacity_fit' => $item->capacity_fit,
+                        'equipment_available' => $item->equipment_available,
+                        'chosen_by_admin' => [
+                            'id' => $item->chosenByAdmin->id,
+                            'name' => $item->chosenByAdmin->name,
+                        ],
+                        'chosen_at' => $item->created_at->toIso8601String(),
+                    ];
+                })->values()->all();
+            });
+
+        return response()->json([
+            'alternatives' => $suggestions,
+        ]);
     }
 
     public function store(FacilityFormRequest $request)

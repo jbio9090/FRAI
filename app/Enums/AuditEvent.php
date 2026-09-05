@@ -14,6 +14,7 @@ enum AuditEvent: string
     case RequestDenied               = 'request.denied';
     case RequestConditionallyApproved = 'request.conditionally_approved';
     case RequestMarkedForReschedule = 'request.marked_for_reschedule';
+    case RequestRescheduleAlternativesChosen = 'request.reschedule_alternatives_chosen';
 
     case RequestHeld                 = 'request.held';
     case RequestCommentAdded         = 'request.comment_added';
@@ -41,6 +42,7 @@ enum AuditEvent: string
             self::RequestHeld             => 'Request Held',
             self::RequestCommentAdded     => 'Comment Added',
             self::RequestMarkedForReschedule   => 'Marked Reschedule',
+            self::RequestRescheduleAlternativesChosen => 'Reschedule Alternatives Chosen',
             self::RequestFileUploaded => 'File Uploaded',
             self::RequestFileRemoved  => 'File Removed',
             self::AuthPasswordResetInitiated => 'Password Reset (Admin)',

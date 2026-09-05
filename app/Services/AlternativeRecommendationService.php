@@ -153,7 +153,7 @@ class AlternativeRecommendationService
             }
 
             $facility = Facility::find($facilityId);
-            if (!$facility) continue;
+            if (!$facility || $facility->status !== \App\Enums\FacilityStatus::ACTIVE) continue;
 
             $results[] = [
                 'facility_id' => $facilityId,
@@ -216,7 +216,7 @@ class AlternativeRecommendationService
                 }
 
                 $facility = Facility::find($facilityId);
-                if (!$facility) continue;
+                if (!$facility || $facility->status !== \App\Enums\FacilityStatus::ACTIVE) continue;
 
                 $results[] = [
                     'facility_id' => $facilityId,
@@ -249,6 +249,7 @@ class AlternativeRecommendationService
     ): array {
         $facilities = Facility::where('id', '!=', $currentFacilityId)
             ->where('capacity', '>=', $expectedCapacity)
+            ->where('status', 'active')
             ->get();
 
         $results = [];
@@ -299,6 +300,7 @@ class AlternativeRecommendationService
     ): array {
         $facilities = Facility::where('id', '!=', $currentFacilityId)
             ->where('capacity', '>=', $expectedCapacity)
+            ->where('status', 'active')
             ->get();
 
         $results = [];
