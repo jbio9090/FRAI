@@ -1,7 +1,7 @@
 "use client";
 
 import { parseISO, format } from "date-fns";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, Cell } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +43,10 @@ export function StackedBarChart({
   data,
   config,
   categories,
-  title,
-  description,
   dateKey = "date",
   yAxisLabel,
   className,
   height = 300,
-  stacked = true,
   granularity = "daily",
 }: StackedBarChartProps) {
   if (!data.length) {
@@ -61,20 +58,16 @@ export function StackedBarChart({
   }
 
   const chartConfig: ChartConfig = { ...config };
-  categories.forEach((cat, i) => {
-    chartConfig[cat] = {
-      label: cat,
-      color: `var(--chart-${(i % 5) + 1})`,
-    };
-  });
 
   const barFill = (index: number) => `var(--chart-${(index % 5) + 1})`;
 
   const tickFormatter = (value: string) => formatAxisDate(value, granularity);
 
+  const getLabel = (key: string) => chartConfig[key]?.label ?? key;
+
   return (
     <ChartContainer config={chartConfig} className={cn("w-full", className)} initialDimension={{ width: 600, height }}>
-      <BarChart data={data} margin={{ top: 10, right: 30, left: 40, bottom: 0 }} layout="vertical">
+      <BarChart data={data} margin={{ top: 10, right: 30, left: 40, bottom: 60 }} layout="vertical">
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
         <XAxis
           type="number"
@@ -96,9 +89,13 @@ export function StackedBarChart({
         />
         <ChartTooltip
           cursor={false}
-          content={<ChartTooltipContent nameKey={dateKey} labelFormatter={(value) => formatAxisDate(value as string, granularity)} />}
+          content={<ChartTooltipContent nameKey={dateKey} labelFormatter={(value) => formatAxisDate(value as string, granularity)} nameFormatter={(key) => getLabel(key)} />}
         />
-        <Legend verticalAlign="top" height={36} />
+        <Legend
+          verticalAlign="top"
+          height={36}
+          formatter={(key) => getLabel(key)}
+        />
         {categories.map((category, index) => (
           <Bar
             key={category}

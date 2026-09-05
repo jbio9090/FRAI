@@ -1,29 +1,24 @@
 "use client";
 
-import { usePage } from "@inertiajs/react";
 import { format, parseISO } from "date-fns";
+import { toPng } from "html-to-image";
 import {
   BarChart2,
   Calendar,
-  ChevronDown,
   Download,
-  Filter,
   Loader2,
-  X,
-  Building2,
-  MapPin,
-  User,
   ClipboardList,
   AlertTriangle,
   CheckCircle2,
+  Filter,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
 import { PieChart, Pie, Cell } from "recharts";
-import { GroupedBarChart } from "@/components/charts/grouped-bar";
 import { LineChart } from "@/components/charts/line";
 import { StackedBarChart } from "@/components/charts/stacked-bar";
 import { downloadReportsPdf } from "@/components/pdf/reports-pdf";
-import { Badge } from "@/components/ui/badge";
+import { FilterPanel } from "@/components/reports/filter-panel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,23 +30,15 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DefaultLayout from "@/layout.tsx/default.";
-import { cn } from "@/lib/utils";
+import { formatRequestStatus } from "@/lib/formatters";
 import type { ReportFilters, ReportMeta, ReportKpis, ReportType, ChartDataPoint, Granularity } from "@/types/reports";
-import { FilterPanel } from "@/components/reports/filter-panel";
 
 const REPORT_TABS: { id: ReportType; label: string; description: string }[] = [
   { id: "volume", label: "Request Volume", description: "Total requests created over time" },
   { id: "approval-rate", label: "Status Breakdown", description: "Requests by status over time" },
   { id: "facility-utilization", label: "Facility Usage", description: "Total bookings per facility" },
-  { id: "priority-distribution", label: "Event Type Distribution", description: "Requests by event type" },
-  { id: "conflict-analysis", label: "Conflict Analysis", description: "Time and equipment conflicts over time" },
+  { id: "priority-distribution", label: "Event Types", description: "Requests by event type" },
   { id: "processing-time", label: "Processing Time", description: "Average days from creation to decision" },
-];
-
-const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
 ];
 
 const CHART_COLORS = [
@@ -60,6 +47,7 @@ const CHART_COLORS = [
   "var(--chart-3)",
   "var(--chart-4)",
   "var(--chart-5)",
+  "var(--chart-6)",
 ];
 
 function formatDisplayDate(dateStr: string, granularity: Granularity): string {
@@ -125,9 +113,26 @@ export default function ReportsPage({
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [kpis, setKpis] = useState<ReportKpis | null>(null);
   const [loading, setLoading] = useState(false);
-  const [kpisLoading, setKpisLoading] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [allChartData, setAllChartData] = useState<Record<ReportType, ChartDataPoint[]>>({
+    volume: [],
+    "approval-rate": [],
+    "facility-utilization": [],
+    "priority-distribution": [],
+    "processing-time": [],
+    "user-activity": [],
+    "equipment-usage": [],
+  });
+  const [allFacilityPieData, setAllFacilityPieData] = useState<ChartDataPoint[]>([]);
+
+  const volumeRef = useRef<HTMLDivElement>(null);
+  const approvalRateRef = useRef<HTMLDivElement>(null);
+  const facilityUtilizationRef = useRef<HTMLDivElement>(null);
+  const priorityDistributionRef = useRef<HTMLDivElement>(null);
+  const processingTimeRef = useRef<HTMLDivElement>(null);
+  const userActivityRef = useRef<HTMLDivElement>(null);
+  const equipmentUsageRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(async (type: ReportType, currentFilters: ReportFilters) => {
     setLoading(true);
@@ -180,7 +185,6 @@ export default function ReportsPage({
   const [facilityPieData, setFacilityPieData] = useState<ChartDataPoint[]>([]);
 
   const fetchKpis = useCallback(async (currentFilters: ReportFilters) => {
-    setKpisLoading(true);
     try {
       const params = new URLSearchParams({
         type: "kpis",
@@ -199,10 +203,132 @@ export default function ReportsPage({
     } catch (error) {
       console.error("Failed to fetch KPIs:", error);
       setKpis(null);
-    } finally {
-      setKpisLoading(false);
     }
   }, []);
+
+  const fetchAllChartData = useCallback(async (currentFilters: ReportFilters) => {
+    const types: ReportType[] = [
+      "volume",
+      "approval-rate",
+      "facility-utilization",
+      "priority-distribution",
+      "processing-time",
+      "user-activity",
+      "equipment-usage",
+    ];
+
+    const results: Record<ReportType, ChartDataPoint[]> = {
+      volume: [],
+      "approval-rate": [],
+      "facility-utilization": [],
+      "priority-distribution": [],
+      "processing-time": [],
+      "user-activity": [],
+      "equipment-usage": [],
+    };
+
+    await Promise.all(
+      types.map(async (type) => {
+        try {
+          const params = new URLSearchParams({
+            type,
+            start: currentFilters.start,
+            end: currentFilters.end,
+            granularity: currentFilters.granularity,
+            ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
+            ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
+            ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
+            ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
+            ...(currentFilters.statuses?.length && { statuses: currentFilters.statuses.join(",") }),
+            ...(currentFilters.priorityLevel !== undefined && { priority_level: String(currentFilters.priorityLevel) }),
+            ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
+          });
+
+          const res = await fetch(`/reports/data?${params.toString()}`);
+          const json = await res.json();
+          results[type] = json.data || [];
+        } catch (error) {
+          console.error(`Failed to fetch ${type} data:`, error);
+          results[type] = [];
+        }
+      })
+    );
+
+    // Also fetch facility usage pie data
+    try {
+      const pieParams = new URLSearchParams({
+        type: "facility-usage-pie",
+        start: currentFilters.start,
+        end: currentFilters.end,
+        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
+        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
+        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
+        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
+        ...(currentFilters.statuses?.length && { statuses: currentFilters.statuses.join(",") }),
+        ...(currentFilters.priorityLevel !== undefined && { priority_level: String(currentFilters.priorityLevel) }),
+        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
+      });
+      const pieRes = await fetch(`/reports/data?${pieParams.toString()}`);
+      const pieJson = await pieRes.json();
+      setAllFacilityPieData(pieJson.data || []);
+    } catch (error) {
+      console.error("Failed to fetch facility-usage-pie data:", error);
+      setAllFacilityPieData([]);
+    }
+
+    flushSync(() => {
+      setAllChartData(results);
+    });
+  }, []);
+
+  const captureChartImages = async () => {
+    const images: Record<ReportType, string> = {
+      volume: "",
+      "approval-rate": "",
+      "facility-utilization": "",
+      "equipment-usage": "",
+      "priority-distribution": "",
+      "user-activity": "",
+      "processing-time": "",
+    };
+
+    const chartConfigs: { type: ReportType; ref: React.RefObject<HTMLDivElement | null>; data: ChartDataPoint[] }[] = [
+      { type: "volume", ref: volumeRef, data: allChartData.volume },
+      { type: "approval-rate", ref: approvalRateRef, data: allChartData["approval-rate"] },
+      { type: "facility-utilization", ref: facilityUtilizationRef, data: allFacilityPieData },
+      { type: "priority-distribution", ref: priorityDistributionRef, data: allChartData["priority-distribution"] },
+      { type: "processing-time", ref: processingTimeRef, data: allChartData["processing-time"] },
+    ];
+
+    for (const { type, ref, data } of chartConfigs) {
+      // Check if ref is attached
+      if (!ref.current) {
+        console.warn(`Ref not attached for ${type} chart`);
+        images[type] = "";
+        continue;
+      }
+      
+      if (data.length > 0) {
+        try {
+          // Delay to ensure Recharts is fully rendered
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          const pngDataUrl = await toPng(ref.current!, {
+            backgroundColor: "#ffffff",
+            pixelRatio: 2,
+            quality: 0.95,
+          });
+          images[type] = pngDataUrl;
+        } catch (error) {
+          console.error(`Failed to capture ${type} chart:`, error);
+          images[type] = "";
+        }
+      } else {
+        images[type] = "";
+      }
+    }
+
+    return images;
+  };
 
   useEffect(() => {
     fetchData(activeTab, filters);
@@ -216,39 +342,6 @@ export default function ReportsPage({
   const resetFilters = () => {
     setFilters(defaultFilters);
   };
-
-  const hasActiveFilters = useMemo(() => {
-    return (
-      filters.facilityIds?.length ||
-      filters.buildingIds?.length ||
-      filters.campusIds?.length ||
-      filters.statuses?.length ||
-      filters.priorityLevel !== undefined ||
-      filters.userId !== undefined
-    );
-  }, [filters]);
-
-  const getFacilitiesForBuildings = (buildingIds: number[]) => {
-    return meta.facilities.filter((f) => buildingIds.includes(f.building_id));
-  };
-
-  const getBuildingsForCampuses = (campusIds: number[]) => {
-    return meta.buildings.filter((b) => campusIds.includes(b.campus_id));
-  };
-
-  const availableFacilities = useMemo(() => {
-    if (filters.buildingIds?.length) {
-      return getFacilitiesForBuildings(filters.buildingIds);
-    }
-    return meta.facilities;
-  }, [filters.buildingIds, meta.facilities, meta.buildings]);
-
-  const availableBuildings = useMemo(() => {
-    if (filters.campusIds?.length) {
-      return getBuildingsForCampuses(filters.campusIds);
-    }
-    return meta.buildings;
-  }, [filters.campusIds, meta.buildings, meta.campuses]);
 
   const renderChart = () => {
     const dataToCheck = activeTab === "facility-utilization" ? facilityPieData : chartData;
@@ -284,28 +377,25 @@ export default function ReportsPage({
         );
       }
       case "approval-rate": {
-        const statuses = [
-          { key: "pending", label: "Pending", color: "var(--ads-amber)" },
-          { key: "approved", label: "Approved", color: "var(--ads-ok)" },
-          { key: "conditionally_approved", label: "Conditionally Approved", color: "var(--chart-5)" },
-          { key: "partially_approved", label: "Partially Approved", color: "var(--chart-3)" },
-          { key: "denied", label: "Denied", color: "var(--ads-danger)" },
-          { key: "on_hold", label: "On Hold", color: "var(--ads-neutral)" },
-          { key: "for_reschedule", label: "For Reschedule", color: "var(--chart-2)" },
-        ];
+        const statusKeys = [
+          "pending",
+          "approved",
+          "conditionally_approved",
+          "partially_approved",
+          "denied",
+          "for_reschedule",
+        ] as const;
         const config: ChartConfig = {};
         const categories: string[] = [];
-        statuses.forEach((s) => {
-          config[s.key] = { label: s.label, color: s.color };
-          categories.push(s.key);
+        statusKeys.forEach((key, i) => {
+          config[key] = { label: formatRequestStatus(key), color: CHART_COLORS[i % CHART_COLORS.length] };
+          categories.push(key);
         });
         return (
           <StackedBarChart
             data={chartData as ChartDataPoint[]}
             config={config}
             categories={categories}
-            title="Request Status Breakdown"
-            description="Requests by status over time"
             yAxisLabel="Requests"
             height={350}
             granularity={filters.granularity}
@@ -344,42 +434,42 @@ export default function ReportsPage({
         );
       }
       case "priority-distribution": {
-        const categories = [...new Set((chartData as ChartDataPoint[]).map((d) => d.category).filter(Boolean))];
+        // Aggregate data across all dates to get total per category
+        const aggregated = (chartData as ChartDataPoint[]).reduce((acc, d) => {
+          if (d.category) {
+            acc[d.category] = (acc[d.category] || 0) + d.value;
+          }
+          return acc;
+        }, {} as Record<string, number>);
+        const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
+        const categories = [...new Set(pieData.map((d) => d.category).filter(Boolean))];
         const config: ChartConfig = {};
         categories.forEach((cat, i) => {
           config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
         });
         return (
-          <GroupedBarChart
-            data={chartData as ChartDataPoint[]}
-            config={config}
-            title="Event Type Distribution"
-            description="Requests by event type"
-            yAxisLabel="Requests"
-            height={350}
-            categoryKey="category"
-            valueKey="value"
-            dateKey="date"
-            granularity={filters.granularity}
-          />
-        );
-      }
-      case "conflict-analysis": {
-        const config: ChartConfig = {
-          time_conflicts: { label: "Time Conflicts", color: "var(--chart-1)" },
-          equipment_conflicts: { label: "Equipment Conflicts", color: "var(--chart-2)" },
-        };
-        return (
-          <StackedBarChart
-            data={chartData as ChartDataPoint[]}
-            config={config}
-            categories={["time_conflicts", "equipment_conflicts"]}
-            title="Conflict Analysis"
-            description="Time and equipment conflicts over time"
-            yAxisLabel="Conflicts"
-            height={350}
-            granularity={filters.granularity}
-          />
+          <div className="space-y-4">
+            <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
+              <PieChart>
+                <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="category"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  label={({ category, value }) => `${category}: ${value}`}
+                  labelLine={false}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+          </div>
         );
       }
       case "processing-time": {
@@ -407,6 +497,19 @@ export default function ReportsPage({
   const handleExportPdf = async () => {
     setPdfGenerating(true);
     try {
+      // Fetch all chart data first
+      await fetchAllChartData(filters);
+
+      // Wait for state to update and component to re-render with charts
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Force multiple frames for refs to attach and Recharts to render
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      // Extra delay for Recharts internal rendering
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Capture chart images from off-screen render
+      const images = await captureChartImages();
+
       await downloadReportsPdf(
         {
           filters,
@@ -420,7 +523,8 @@ export default function ReportsPage({
             type: tab.id,
             title: tab.label,
             description: tab.description,
-            data: activeTab === tab.id ? chartData : [],
+            data: allChartData[tab.id] || [],
+            imageUrl: images[tab.id],
           })),
         },
         meta
@@ -435,34 +539,190 @@ export default function ReportsPage({
 
   const dateRangeLabel = `${formatDisplayDate(filters.start, filters.granularity)} – ${formatDisplayDate(filters.end, filters.granularity)}`;
 
+  // Off-screen chart rendering for PDF export
+  const offScreenCharts = (
+    <div
+      style={{
+        position: "fixed",
+        left: -9999,
+        top: -9999,
+        width: 800,
+        height: 600,
+        opacity: 0,
+        pointerEvents: "none",
+        zIndex: -1,
+      }}
+      aria-hidden="true"
+    >
+      <div ref={volumeRef} style={{ width: 800, height: 400 }}>
+        {allChartData.volume.length > 0 && (
+          <LineChart
+            data={allChartData.volume as ChartDataPoint[]}
+            config={{ value: { label: "Requests", color: "var(--chart-1)" } }}
+            title="Request Volume"
+            description="Total requests created over time"
+            yAxisLabel="Requests"
+            height={350}
+            granularity={filters.granularity}
+          />
+        )}
+      </div>
+      <div ref={approvalRateRef} style={{ width: 800, height: 400 }}>
+        {allChartData["approval-rate"].length > 0 && (() => {
+          const statusKeys = [
+            "pending", "approved", "conditionally_approved", "partially_approved", "denied", "for_reschedule",
+          ] as const;
+          const config: ChartConfig = {};
+          const categories: string[] = [];
+          statusKeys.forEach((key, i) => {
+            config[key] = { label: formatRequestStatus(key), color: CHART_COLORS[i % CHART_COLORS.length] };
+            categories.push(key);
+          });
+          return (
+            <StackedBarChart
+              data={allChartData["approval-rate"] as ChartDataPoint[]}
+              config={config}
+              categories={categories}
+              yAxisLabel="Requests"
+              height={350}
+              granularity={filters.granularity}
+            />
+          );
+        })()}
+      </div>
+      <div ref={facilityUtilizationRef} style={{ width: 400, height: 350 }}>
+        {allFacilityPieData.length > 0 && (() => {
+          const categories = [...new Set(allFacilityPieData.map((d) => d.category).filter(Boolean))];
+          const config: ChartConfig = {};
+          categories.forEach((cat, i) => {
+            config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+          });
+          return (
+            <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
+              <PieChart>
+                <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Pie
+                  data={allFacilityPieData as ChartDataPoint[]}
+                  dataKey="value"
+                  nameKey="category"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  label={({ category, value }) => `${category}: ${value}`}
+                  labelLine={false}
+                >
+                  {allFacilityPieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+          );
+        })()}
+      </div>
+      <div ref={priorityDistributionRef} style={{ width: 400, height: 350 }}>
+        {allChartData["priority-distribution"].length > 0 && (() => {
+          const aggregated = (allChartData["priority-distribution"] as ChartDataPoint[]).reduce((acc, d) => {
+            if (d.category) {
+              acc[d.category] = (acc[d.category] || 0) + d.value;
+            }
+            return acc;
+          }, {} as Record<string, number>);
+          const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
+          const categories = [...new Set(pieData.map((d) => d.category).filter(Boolean))];
+          const config: ChartConfig = {};
+          categories.forEach((cat, i) => {
+            config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+          });
+          return (
+            <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
+              <PieChart>
+                <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="category"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  label={({ category, value }) => `${category}: ${value}`}
+                  labelLine={false}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+          );
+        })()}
+      </div>
+      <div ref={processingTimeRef} style={{ width: 800, height: 400 }}>
+        {allChartData["processing-time"].length > 0 && (
+          <LineChart
+            data={allChartData["processing-time"] as ChartDataPoint[]}
+            config={{ value: { label: "Avg Days", color: "var(--chart-1)" } }}
+            title="Processing Time"
+            description="Average days from creation to final decision"
+            yAxisLabel="Days"
+            showArea={false}
+            height={350}
+            granularity={filters.granularity}
+          />
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <DefaultLayout>
+      {offScreenCharts}
       <div className="flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <p className="ads-eyebrow">GSO Reports · {dateRangeLabel}</p>
             <h1 className="font-display text-2xl font-semibold tracking-tight mt-1">Reports</h1>
           </div>
-          <Button onClick={handleExportPdf} disabled={pdfGenerating} className="gap-2">
-            <Download className="h-4 w-4" />
-            {pdfGenerating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              "Export PDF"
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="gap-2"
+            >
+              <Filter className="h-4 w-4" />
+              {showFilters ? "Hide Filters" : "Show Filters"}
+            </Button>
+            <Button
+              onClick={handleExportPdf}
+              disabled={pdfGenerating || loading}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              {pdfGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : loading ? (
+                "Preparing data..."
+              ) : (
+                "Export PDF"
+              )}
+            </Button>
+          </div>
         </div>
 
-        <FilterPanel
-          filters={filters}
-          defaultFilters={defaultFilters}
-          meta={meta}
-          onFiltersChange={handleFilterChange}
-          onReset={resetFilters}
-        />
+        {showFilters && (
+          <FilterPanel
+            filters={filters}
+            defaultFilters={defaultFilters}
+            meta={meta}
+            onFiltersChange={handleFilterChange}
+            onReset={resetFilters}
+          />
+        )}
 
         {kpis && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

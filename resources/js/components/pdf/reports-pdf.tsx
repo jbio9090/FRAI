@@ -173,6 +173,7 @@ interface ChartDataForPdf {
   title: string;
   description: string;
   data: any[];
+  imageUrl?: string;
 }
 
 interface ReportsPdfData {
@@ -302,6 +303,11 @@ export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta:
               <Text style={{ fontSize: 10, color: "#64748b", marginBottom: 8 }}>
                 Data points: {chart.data.length}
               </Text>
+              {chart.imageUrl && (
+                <View style={{ marginBottom: 16 }}>
+                  <Image src={chart.imageUrl} style={styles.chartImage} />
+                </View>
+              )}
               {chart.type === "user-activity" && chart.data.length > 0 && (
                 <View style={styles.tableContainer}>
                   <View style={styles.tableHeader}>
@@ -383,7 +389,7 @@ export async function downloadReportsPdf(data: ReportsPdfData, meta: any) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `gso-reports-${data.filters.start}_to_${data.filters.end}.pdf`;
+  a.download = `GSO_REPORT_${data.filters.start}_to_${data.filters.end}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }

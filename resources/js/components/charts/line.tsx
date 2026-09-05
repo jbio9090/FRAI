@@ -83,7 +83,7 @@ export function LineChart({
   return (
     <ChartContainer config={config} className={cn("w-full", className)} initialDimension={{ width: 600, height }}>
       {showArea ? (
-        <AreaChart data={chartData} margin={{ top: 10, right: 16, left: 40, bottom: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 16, left: 40, bottom: 60 }}>
           <defs>
             <linearGradient id="fill-area" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
@@ -123,7 +123,7 @@ export function LineChart({
           />
         </AreaChart>
       ) : (
-        <RechartsLineChart data={chartData} margin={{ top: 10, right: 16, left: 40, bottom: 0 }}>
+        <RechartsLineChart data={chartData} margin={{ top: 10, right: 16, left: 40, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey={dateKey}

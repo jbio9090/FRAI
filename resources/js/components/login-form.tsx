@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 
-const MotionButton = motion(Button);
+const MotionButton = motion.create(Button);
 
 export function LoginForm({
   className,

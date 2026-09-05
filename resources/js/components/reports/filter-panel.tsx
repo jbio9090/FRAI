@@ -2,15 +2,15 @@
 
 import { Calendar, Filter, X, ChevronDown, ChevronUp, Building2, MapPin, Users, ClipboardList, Settings } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ReportFilters, Granularity } from "@/types/reports";
 
@@ -249,7 +249,7 @@ export function FilterPanel({
               )}
             </div>
 
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-1">
               {renderSection(
                 "Granularity",
                 <Settings className="h-4 w-4 text-muted-foreground" />,
@@ -274,7 +274,7 @@ export function FilterPanel({
               )}
             </div>
 
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-3">
               {renderSection(
                 "Location",
                 <MapPin className="h-4 w-4 text-muted-foreground" />,

@@ -58,7 +58,6 @@ class ReportService
             RequestStatus::APPROVED->value,
             RequestStatus::CONDITIONALLY_APPROVED->value,
             RequestStatus::DENIED->value,
-            RequestStatus::ON_HOLD->value,
             RequestStatus::FOR_RESCHEDULE->value,
             RequestStatus::PARTIALLY_APPROVED->value,
         ];
@@ -238,7 +237,8 @@ class ReportService
             ->get();
 
         return $results->map(function ($row) use ($filters) {
-            $priority = PriorityLevel::tryFrom($row->priority_level);
+            $priorityValue = $row->priority_level instanceof PriorityLevel ? $row->priority_level->value : $row->priority_level;
+            $priority = PriorityLevel::tryFrom($priorityValue);
 
             return [
                 'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
@@ -279,7 +279,7 @@ class ReportService
             ->join('request_facilities as rf2', function ($join) {
                 $join->on('rf1.facility_id', '=', 'rf2.facility_id')
                     ->on('rf1.date_requested', '=', 'rf2.date_requested')
-                    ->where('rf1.id', '<', 'rf2.id');
+                    ->whereRaw('rf1.id < rf2.id');
             })
             ->join('requests as r2', 'rf2.request_id', '=', 'r2.id')
             ->whereIn('rf1.status', [RequestStatus::PENDING->value, RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
@@ -317,7 +317,7 @@ class ReportService
             ->join('requests as r1', 'rf1.request_id', '=', 'r1.id')
             ->join('request_equipment as re2', function ($join) {
                 $join->on('re1.equipment_id', '=', 're2.equipment_id')
-                    ->where('re1.request_facility_id', '<', 're2.request_facility_id');
+                    ->whereRaw('re1.request_facility_id < re2.request_facility_id');
             })
             ->join('request_facilities as rf2', 're2.request_facility_id', '=', 'rf2.id')
             ->join('requests as r2', 'rf2.request_id', '=', 'r2.id')
@@ -325,7 +325,7 @@ class ReportService
             ->whereIn('rf2.status', [RequestStatus::PENDING->value, RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
             ->where('r1.on_hold', false)
             ->where('r2.on_hold', false)
-            ->where('rf1.date_requested', '=', 'rf2.date_requested')
+            ->whereRaw('rf1.date_requested = rf2.date_requested')
             ->whereRaw('rf1.time_start < rf2.time_end AND rf1.time_end > rf2.time_start')
             ->when($filters['start'] ?? null, fn ($q) => $q->where('rf1.date_requested', '>=', $filters['start']))
             ->when($filters['end'] ?? null, fn ($q) => $q->where('rf1.date_requested', '<=', $filters['end']));

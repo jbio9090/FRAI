@@ -228,6 +228,7 @@
     --chart-3: #e56910;
     --chart-4: #ae3e86;
     --chart-5: #4c6b1f;
+    --chart-6: #c9372c;
     --sidebar: #ffffff;
     --sidebar-foreground: #292a2e;
     --sidebar-primary: #0c66e4;
@@ -349,6 +350,7 @@
     --chart-3: #faa53d;
     --chart-4: #da62ac;
     --chart-5: #7ee2b8;
+    --chart-6: #f87462;
 
     /* Sidebar - slightly darker than main content for depth */
     --sidebar: #161a1d;

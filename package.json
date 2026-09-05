@@ -64,6 +64,7 @@
         "express": "^5.2.1",
         "firebase": "^12.16.0",
         "globals": "^15.14.0",
+        "html-to-image": "^1.11.13",
         "laravel-vite-plugin": "^2.0",
         "lucide-react": "^0.563.0",
         "moment": "^2.30.1",

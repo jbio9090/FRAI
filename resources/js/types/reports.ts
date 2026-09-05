@@ -6,7 +6,6 @@ export type ReportType =
   | 'facility-utilization'
   | 'equipment-usage'
   | 'priority-distribution'
-  | 'conflict-analysis'
   | 'user-activity'
   | 'processing-time';
 
