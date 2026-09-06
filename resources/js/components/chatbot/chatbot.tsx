@@ -148,32 +148,43 @@ export default function Chatbot() {
         }
 
         try {
-            await sendMessage(queuedMessages, undefined, undefined, false, pageContext, (token) => {
-                streamingContent += token;
-                if (devMode) {
-                    setDebugRawResponse((previous) => previous + token);
-                }
-
-                const visibleContent = sanitizeStreamingContent(streamingContent);
-                setMessages((previous) => {
-                    if (previous.length === 0) {
-                        return previous;
+            await sendMessage(
+                queuedMessages,
+                undefined,
+                undefined,
+                false,
+                pageContext,
+                (token) => {
+                    streamingContent += token;
+                    if (devMode) {
+                        setDebugRawResponse((previous) => previous + token);
                     }
 
-                    const updated = [...previous];
-                    const last = updated[updated.length - 1];
-                    updated[updated.length - 1] = {
-                        ...last,
-                        content: visibleContent,
-                    };
+                    const visibleContent = sanitizeStreamingContent(streamingContent);
+                    setMessages((previous) => {
+                        if (previous.length === 0) {
+                            return previous;
+                        }
 
-                    return updated;
-                }, undefined, undefined, devMode, (calls) => {
+                        const updated = [...previous];
+                        const last = updated[updated.length - 1];
+                        updated[updated.length - 1] = {
+                            ...last,
+                            content: visibleContent,
+                        };
+
+                        return updated;
+                    });
+                },
+                undefined,
+                undefined,
+                devMode,
+                (calls) => {
                     if (devMode) {
                         setDebugToolCalls(calls);
                     }
-                });
-            });
+                },
+            );
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Unable to send message.';
             setError(message);

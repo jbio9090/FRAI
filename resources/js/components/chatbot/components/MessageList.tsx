@@ -1,6 +1,7 @@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import ReactMarkdown from 'react-markdown';
 import type { Message } from '../types';
 import TypingText from './TypingText';
 
@@ -63,9 +64,16 @@ const isGuidedAssistantMessage = (message: Message): boolean => {
 };
 
 const stripThinkingContent = (content: string): { thought: string | null; answer: string } => {
+    const regex = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
+
+    if (!regex.test(content)) {
+        // No thinking tags present — return content untouched, don't mangle formatting.
+        return { thought: null, answer: content };
+    }
+
     const parts: string[] = [];
     let lastIndex = 0;
-    const regex = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
+    regex.lastIndex = 0; // reset after .test() advanced it
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(content)) !== null) {
@@ -76,10 +84,12 @@ const stripThinkingContent = (content: string): { thought: string | null; answer
     parts.push(content.slice(lastIndex));
 
     let answer = parts.join('').replace(/<\/?think(?:ing)?>/gi, ' ');
-    answer = answer.replace(/(?:^|\n)\s*here(?:['’]s)?\s*(?:a\s*)?(?:thinking|reasoning|analysis|thought(?:\s+process)?)\s*(?:process)?\s*[:.-]?\s*/gi, '\n');
-    answer = answer.replace(/(?:^|\n)\s*(?:step\s*\d+|analysis|reasoning|thought\s+process)\s*[:.-]?\s*/gi, '');
-    answer = answer.replace(/(?:^|\n)\s*(?:\d+\.|\d+\))\s*/g, '');
-    answer = answer.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+    // Removed destructive substitutions that were overly aggressive outside thinking cleanup:
+    // - /(?:^|\n)\s*here(?:['’]s)?\s*(?:a\s*)?(?:thinking|reasoning|analysis|thought(?:\s+process)?)\s*(?:process)?\s*[:.-]?\s*/gi
+    // - /(?:^|\n)\s*(?:step\s\d+|analysis|reasoning|thought\s+process)\s*[:.-]?\s*/gi
+    // - /(?:\d+\.|\d+\))\s*/g
+    // - /\n{3,}/g -> '\n\n' and /\s{2,}/g -> ' '
+    answer = answer.trim();
 
     return {
         thought: null,
@@ -99,16 +109,12 @@ export default function MessageList({ messages, messagesEndRef, equipmentSelecto
                             className={`flex animate-in gap-2 fade-in sm:gap-3 lg:gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
                             <div
-                                className={`flex max-w-[92%] gap-2 sm:max-w-[82%] sm:gap-3 lg:max-w-[72%] ${
-                                    msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'
-                                }`}
+                                className={`flex max-w-[92%] gap-2 sm:max-w-[82%] sm:gap-3 lg:max-w-[72%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                             >
                                 {/* Avatar */}
                                 <Avatar className="h-8 w-8 flex-shrink-0 rounded-lg sm:h-10 sm:w-10">
                                     <AvatarFallback
-                                        className={`rounded-lg text-sm font-bold ${
-                                            msg.role === 'user' ? 'bg-muted text-muted-foreground' : 'bg-secondary text-secondary-foreground'
-                                        }`}
+                                        className={`rounded-lg text-sm font-bold ${msg.role === 'user' ? 'bg-muted text-muted-foreground' : 'bg-secondary text-secondary-foreground'}`}
                                     >
                                         {msg.role === 'user' ? 'U' : 'AI'}
                                     </AvatarFallback>
@@ -133,7 +139,11 @@ export default function MessageList({ messages, messagesEndRef, equipmentSelecto
                                                     showCursor
                                                 />
                                             ) : (
-                                                getDisplayContent({ ...msg, content: thinking.answer }, equipmentSelectorActive)
+                                                <div className="prose prose-sm dark:prose-invert max-w-none">
+                                                <ReactMarkdown>
+                                                    {getDisplayContent({ ...msg, content: thinking.answer }, equipmentSelectorActive)}
+                                                </ReactMarkdown>
+                                                </div>
                                             )}
                                         </div>
                                     </CardContent>
@@ -143,7 +153,6 @@ export default function MessageList({ messages, messagesEndRef, equipmentSelecto
                     );
                 })(),
             )}
-
             <div ref={messagesEndRef} />
         </>
     );
