@@ -426,29 +426,29 @@ class PageContextService
             'has_pending_conflicts' => ! empty($request->pending_conflict_rf_ids),
             'has_approved_conflicts' => ! empty($request->approved_conflict_rf_ids),
             'conflicting_requests' => \App\Models\RequestFacility::whereIn('id', array_merge(
-        $request->pending_conflict_rf_ids ?? [],
-        $request->approved_conflict_rf_ids ?? []
-    ))
-    ->with(['facility', 'request'])
-    ->get()
-    ->map(fn ($rf) => [
-        'title' => $rf->request?->title,
-        'facility_name' => $rf->facility?->name ?? 'unknown',
-        'date_requested' => $rf->date_requested,
-        'time_start' => $rf->time_start,
-        'time_end' => $rf->time_end,
-        'status' => $rf->status ?? 'unknown',
-    ])
-    ->values(),
+                $request->pending_conflict_rf_ids ?? [],
+                $request->approved_conflict_rf_ids ?? []
+            ))
+                ->with(['facility', 'request'])
+                ->get()
+                ->map(fn ($rf) => [
+                            'title' => $rf->request?->title,
+                            'facility_name' => $rf->facility?->name ?? 'unknown',
+                            'date_requested' => $rf->date_requested,
+                            'time_start' => $rf->time_start,
+                            'time_end' => $rf->time_end,
+                            'status' => $rf->status ?? 'unknown',
+                        ])
+                ->values(),
             'processed_by' => $request->processedBy?->name,
             'processed_at' => $request->processed_at?->toDateTimeString(),
             'created_at' => $request->created_at?->toDateTimeString(),
             'updated_at' => $request->updated_at?->toDateTimeString(),
             'comments' => $request->comments->map(fn ($c) => [
-                'author' => $c->user?->name,
-                'body' => $c->body,
-                'created_at' => $c->created_at?->diffForHumans(),
-            ])->values(),
+                        'author' => $c->user?->name,
+                        'body' => $c->body,
+                        'created_at' => $c->created_at?->diffForHumans(),
+                    ])->values(),
             'files' => $request->files->map(fn ($f) => $f->original_name)->values(),
             'recent_activity' => $recentActivity,
         ];
@@ -477,7 +477,7 @@ class PageContextService
         $statusValues = $statusParam
             ? collect(explode(',', $statusParam))
                 ->map(fn ($s) => collect(\App\Enums\RequestStatus::cases()))
-                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s)))
+                ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s)))
                 ->filter()
                 ->values()
             : collect();
