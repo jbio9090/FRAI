@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AuditEvent;
+use App\Enums\RequestStatus;
+use App\Models\AuditLog;
+use App\Models\Request as FacilityRequest;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -60,6 +64,90 @@ class AccountController extends Controller
             'roles' => Role::pluck('name')->map(fn ($role) => strtolower($role)),
             'archived' => $archived,
         ]);
+    }
+
+    public function show(Request $request, User $user)
+    {
+        $actor = $request->user();
+
+        if ($msg = $this->canEditUser($actor, $user)) {
+            abort(403, $msg);
+        }
+
+        $auditRange = $this->resolveRange($request->input('audit_range', 'week'));
+        $auditEvent = $request->input('audit_event');
+        $auditSearch = $request->input('audit_search');
+        $auditSort = $request->input('audit_sort', 'newest');
+
+        $auditLogs = AuditLog::with('user')
+            ->where('user_id', $user->id)
+            ->when($auditEvent, fn ($q) => $q->where('event', $auditEvent))
+            ->when($auditSearch, fn ($q) => $q->where('description', 'ILIKE', "%{$auditSearch}%"))
+            ->whereBetween('created_at', $auditRange)
+            ->orderBy('created_at', $auditSort === 'oldest' ? 'asc' : 'desc')
+            ->paginate(15)->appends($request->query());
+
+        $requestStatus = $request->input('request_status');
+        $requestSearch = $request->input('request_search');
+        $requestSort = $request->input('request_sort', 'created_at');
+        $requestOrder = $request->input('request_order', 'desc');
+
+        $requests = FacilityRequest::with([
+            'user',
+            'facilities',
+            'facility',
+            'requestFacilities.facility',
+            'requestFacilities.equipment',
+            'equipment',
+            'comments.user',
+            'files',
+        ])
+            ->where('user_id', $user->id)
+            ->when($requestStatus, fn ($q) => $q->where('status', $requestStatus))
+            ->when($requestSearch, fn ($q) => $q->where(function ($sq) use ($requestSearch) {
+                $sq->where('title', 'ILIKE', "%{$requestSearch}%")
+                    ->orWhere('description', 'ILIKE', "%{$requestSearch}%");
+            }))
+            ->orderBy($requestSort, $requestOrder)
+            ->paginate(15)->appends($request->query());
+
+        $auditEvents = collect(AuditEvent::cases())
+            ->filter(fn ($c) => $c !== AuditEvent::Unknown)
+            ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()])
+            ->values();
+
+        $requestStatuses = collect(RequestStatus::cases())
+            ->map(fn ($c) => ['value' => $c->value, 'label' => $c->value])
+            ->values();
+
+        return Inertia::render('accounts/detail', [
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->roles->first()?->name,
+                'roles' => $user->roles->pluck('name')->toArray(),
+                'profile' => $user->profile,
+                'is_active' => $user->is_active,
+                'created_at' => $user->created_at?->toISOString(),
+                'deleted_at' => $user->deleted_at?->toISOString(),
+            ],
+            'audit_logs' => $auditLogs,
+            'requests' => $requests,
+            'audit_events' => $auditEvents,
+            'request_statuses' => $requestStatuses,
+            'can_edit_own' => $actor->id === $user->id,
+        ]);
+    }
+
+    private function resolveRange(string $range): array
+    {
+        return match ($range) {
+            'day' => [now()->startOfDay(), now()->endOfDay()],
+            'month' => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
+            '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
+            default => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
+        };
     }
 
     public function store(Request $request): RedirectResponse

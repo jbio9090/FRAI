@@ -1,5 +1,5 @@
-import { router, usePage } from "@inertiajs/react";
-import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Search, ArrowDownUp } from "lucide-react";
+import { router, Link, usePage } from "@inertiajs/react";
+import { UserPlus2, Trash2, Pencil, UserPen, Check, Copy, AlertTriangle, Key, Upload, Download, Users, FileText, CircleAlert, CircleCheck, Search, ArrowDownUp, Eye } from "lucide-react";
 import moment from "moment";
 import { motion, useReducedMotion } from "motion/react";
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RoleBadge } from '@/components/ui/role-badge';
 import {
     Select,
     SelectContent,
@@ -285,6 +286,17 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             return rowRole === 'administrative staff';
         }
 
+        return false;
+    };
+
+    const canEditUser = (rowUser: RowUser): boolean => {
+        // Allow self-view for all authenticated users
+        if (rowUser.id === auth.user.id) return true;
+        
+        const rowRole = (rowUser.role ?? '').toLowerCase();
+        if (rowRole === 'super admin') return false;
+        if (isSuperAdmin) return rowUser.id !== auth.user.id;
+        if (isAdmin) return rowRole === 'administrative staff';
         return false;
     };
 
@@ -1057,18 +1069,6 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border bg-card">
-                {!Array.isArray(users) && users.last_page > 1 && (
-                    <SmartPagination
-                        currentPage={users.current_page}
-                        lastPage={users.last_page}
-                        onPageChange={(page) =>
-                            router.get(route('accounts.index'), { page, search: searchQuery, sort: sort === 'none' ? '' : sort, archived: activeTab === 'archived' ? 1 : '' }, { preserveState: true, preserveScroll: true })
-                        }
-                        className={'my-4 px-4 py-0 md:px-6'}
-                    />
-                )}
-
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -1115,7 +1115,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                     <TableCell>{rowUser.email}</TableCell>
                                     <TableCell>{moment(rowUser.created_at).format("MMMM D, YYYY h:mm A")}</TableCell>
                                     {activeTab === 'archived' && (<TableCell>{moment(rowUser.deleted_at).format("MMMM D, YYYY h:mm A")}</TableCell>)}
-                                    <TableCell className="capitalize">{rowUser.role}</TableCell>
+                                    <TableCell><RoleBadge roles={[rowUser.role]} variant="sm" /></TableCell>
 
                                     {/* Status toggle cell */}
                                     {(isAdmin || isSuperAdmin) && activeTab !== 'archived' && (
@@ -1139,6 +1139,18 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                     <TableCell className="flex gap-1 justify-end">
                                         {activeTab === 'archived' ? (
                                             <>
+                                                {canEditUser(rowUser) && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        asChild
+                                                        title="View Details"
+                                                    >
+                                                        <Link href={route('accounts.show', rowUser.id)}>
+                                                            <Eye className="h-4 w-4" />
+                                                        </Link>
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
@@ -1150,6 +1162,19 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                             </>
                                         ) : (
                                             <>
+                                                {canEditUser(rowUser) && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        asChild
+                                                        title="View Details"
+                                                    >
+                                                        <Link href={route('accounts.show', rowUser.id)}>
+                                                            <Eye className="h-4 w-4" />
+                                                        </Link>
+                                                    </Button>
+                                                )}
+
                                                 {hasRole("Super Admin") && (
                                                     <Button
                                                         variant="ghost"
@@ -1199,7 +1224,6 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                         className={'my-5 px-4 md:px-6'}
                     />
                 )}
-                </div>
                 </motion.div>
             </div>
         </DefaultLayout>
