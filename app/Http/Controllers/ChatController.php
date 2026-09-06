@@ -424,61 +424,25 @@ SYMTPROMPT;
         ];
     }
 
-    private function processToolCalls(array $messages, Request $request, ?array &$debugInfo = null): ?string
+    private function executeToolCall(string $functionName, array $parsedArguments, Request $request): array
     {
-        $result = $this->ai->chatWithTools($messages, [
-            $this->getPageContextToolDefinition(),
-            $this->getRequestDetailsToolDefinition(),
-            $this->getFacilityAvailabilityToolDefinition(),
-            $this->getMyPermissionsToolDefinition(),
-            $this->getSuggestedAlternativesToolDefinition(),
-        ], [
-            'timeout' => 120,
-            'tool_choice' => 'auto',
-        ]);
-
-        $toolCalls = $result['tool_calls'] ?? [];
-        if (empty($toolCalls)) {
-            return $result['content'] !== '' ? trim((string) $result['content']) : null;
-        }
-
-        foreach ($toolCalls as $toolCall) {
-            $callType = $toolCall['type'] ?? null;
-            if ($callType !== 'function') {
-                continue;
-            }
-
-            $functionName = (string) ($toolCall['function']['name'] ?? '');
-            if ($functionName === 'get_request_details') {
-                $arguments = $toolCall['function']['arguments'] ?? '{}';
-                $parsedArguments = is_string($arguments) ? json_decode($arguments, true) : $arguments;
+        switch ($functionName) {
+            case 'get_request_details': {
                 $requestId = is_array($parsedArguments) ? (int) ($parsedArguments['request_id'] ?? 0) : 0;
                 $requestDetail = $this->getRequestDetail($requestId);
 
-                if ($debugInfo !== null) {
-                    $debugInfo[] = [
-                        'tool' => 'get_request_details',
-                        'arguments' => $parsedArguments,
-                        'result' => $requestDetail,
-                    ];
-                }
-
-                $messages[] = [
-                    'role' => 'tool',
-                    'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
-                    'name' => 'get_request_details',
+                return [
                     'content' => json_encode($requestDetail, JSON_UNESCAPED_SLASHES),
+                    'debug' => [
+                        'tool' => 'get_request_details',
+                        'arguments' => ['request_id' => $requestId],
+                        'result' => $requestDetail,
+                    ],
                 ];
-
-                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
-
-                return $followUp !== '' ? $followUp : null;
             }
 
-            if ($functionName === 'check_facility_availability') {
-                $args = is_string($toolCall['function']['arguments'] ?? '{}')
-                    ? json_decode($toolCall['function']['arguments'], true)
-                    : $toolCall['function']['arguments'];
+            case 'check_facility_availability': {
+                $args = $parsedArguments;
 
                 $conflicts = RequestModel::conflicting(
                     (int) ($args['facility_id'] ?? 0),
@@ -497,56 +461,72 @@ SYMTPROMPT;
                     ])->values(),
                 ];
 
-                if ($debugInfo !== null) {
-                    $debugInfo[] = [
+                return [
+                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                    'debug' => [
                         'tool' => 'check_facility_availability',
                         'arguments' => $args,
                         'result' => $toolResult,
-                    ];
-                }
-
-                $messages[] = [
-                    'role' => 'tool',
-                    'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
-                    'name' => 'check_facility_availability',
-                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                    ],
                 ];
-
-                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
-                return $followUp !== '' ? $followUp : null;
             }
 
-            if ($functionName === 'get_suggested_alternatives') {
+            case 'get_suggested_alternatives': {
                 $user = Auth::user();
                 if (! $user->hasRole(['admin', 'Super Admin'])) {
                     $toolResult = ['error' => 'forbidden', 'message' => 'Only admins can request alternative facility suggestions.'];
-                } else {
-                    $requestId = (int) ($parsedArguments['request_id'] ?? 0);
-                    $facilityRequest = \App\Models\Request::with('requestFacilities', 'equipment')->find($requestId);
-
-                    if (! $facilityRequest) {
-                        $toolResult = ['error' => 'not_found', 'message' => 'No request exists with that ID.'];
-                    } elseif ($facilityRequest->status !== \App\Enums\RequestStatus::FOR_RESCHEDULE) {
-                        $toolResult = ['error' => 'status_gate', 'message' => sprintf('Suggested alternatives are only available for requests with "For Reschedule" status. Current status: %s', $facilityRequest->status?->value ?? 'unknown')];
-                    } else {
-                        $toolResult = $this->alternativeService->findAlternatives($facilityRequest, [
-                            'include_equipment' => (bool) ($parsedArguments['include_equipment'] ?? false),
-                        ]);
-                    }
+                    return [
+                        'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                        'debug' => [
+                            'tool' => 'get_suggested_alternatives',
+                            'arguments' => $parsedArguments,
+                            'result' => $toolResult,
+                        ],
+                    ];
                 }
 
-                $messages[] = [
-                    'role' => 'tool',
-                    'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
-                    'name' => 'get_suggested_alternatives',
-                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
-                ];
+                $requestId = (int) ($parsedArguments['request_id'] ?? 0);
+                $facilityRequest = \App\Models\Request::with('requestFacilities', 'equipment')->find($requestId);
 
-                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
-                return $followUp !== '' ? $followUp : null;
+                if (! $facilityRequest) {
+                    $toolResult = ['error' => 'not_found', 'message' => 'No request exists with that ID.'];
+                    return [
+                        'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                        'debug' => [
+                            'tool' => 'get_suggested_alternatives',
+                            'arguments' => $parsedArguments,
+                            'result' => $toolResult,
+                        ],
+                    ];
+                }
+
+                if ($facilityRequest->status !== \App\Enums\RequestStatus::FOR_RESCHEDULE) {
+                    $toolResult = ['error' => 'status_gate', 'message' => sprintf('Suggested alternatives are only available for requests with "For Reschedule" status. Current status: %s', $facilityRequest->status?->value ?? 'unknown')];
+                    return [
+                        'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                        'debug' => [
+                            'tool' => 'get_suggested_alternatives',
+                            'arguments' => $parsedArguments,
+                            'result' => $toolResult,
+                        ],
+                    ];
+                }
+
+                $toolResult = $this->alternativeService->findAlternatives($facilityRequest, [
+                    'include_equipment' => (bool) ($parsedArguments['include_equipment'] ?? false),
+                ]);
+
+                return [
+                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                    'debug' => [
+                        'tool' => 'get_suggested_alternatives',
+                        'arguments' => $parsedArguments,
+                        'result' => $toolResult,
+                    ],
+                ];
             }
 
-            if ($functionName === 'get_my_permissions') {
+            case 'get_my_permissions': {
                 $user = Auth::user();
 
                 $toolResult = [
@@ -556,73 +536,123 @@ SYMTPROMPT;
                     'is_admin' => $user->hasRole(['admin', 'Super Admin']),
                 ];
 
+                return [
+                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                    'debug' => [
+                        'tool' => 'get_my_permissions',
+                        'arguments' => [],
+                        'result' => $toolResult,
+                    ],
+                ];
+            }
+
+            case 'get_page_context': {
+                $arguments = $parsedArguments;
+                $fetchPageContext = is_array($arguments) ? (bool) ($arguments['page'] ?? true) : true;
+                if (! $fetchPageContext) {
+                    return [
+                        'content' => null,
+                        'debug' => [
+                            'tool' => 'get_page_context',
+                            'arguments' => $arguments,
+                            'result' => ['fetched' => false],
+                        ],
+                    ];
+                }
+
+                $pageContext = $this->pageContextService->getCurrentPageContext($request->input('page_context', []));
+                $toolResult = [
+                    'context' => $pageContext,
+                    'page' => true,
+                ];
+
+                // Conditionally merge in facilities/equipment when requested and not already present
+                if (($arguments['include_facilities'] ?? false) && empty($pageContext['facilities'])) {
+                    $pageContext['facilities'] = $this->pageContextService->getFacilities(50);
+                }
+
+                if (($arguments['include_equipment'] ?? false) && empty($pageContext['equipment'])) {
+                    $pageContext['equipment'] = $this->pageContextService->getEquipment(50);
+                }
+
+                return [
+                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
+                    'debug' => [
+                        'tool' => 'get_page_context',
+                        'arguments' => $arguments,
+                        'result' => $toolResult,
+                    ],
+                ];
+            }
+
+            default: return [
+                'content' => json_encode(['error' => 'unknown_tool', 'message' => sprintf('No handler for tool: %s', $functionName)]),
+                'debug' => [
+                    'tool' => $functionName,
+                    'arguments' => $parsedArguments,
+                    'result' => ['error' => 'unknown_tool'],
+                ],
+            ];
+        }
+    }
+
+    private function processToolCalls(array $messages, Request $request, ?array &$debugInfo = null): ?string
+    {
+        $tools = [
+            $this->getPageContextToolDefinition(),
+            $this->getRequestDetailsToolDefinition(),
+            $this->getFacilityAvailabilityToolDefinition(),
+            $this->getSuggestedAlternativesToolDefinition(),
+            $this->getMyPermissionsToolDefinition(),
+        ];
+
+        $maxRounds = 4;
+
+        for ($round = 0; $round < $maxRounds; $round++) {
+            $result = $this->ai->chatWithTools($messages, $tools, [
+                'timeout' => 120,
+                'tool_choice' => 'auto',
+                'temperature' => 0,
+            ]);
+
+            $toolCalls = $result['tool_calls'] ?? [];
+
+            if (empty($toolCalls)) {
+                $content = trim((string) ($result['content'] ?? ''));
+                return $content !== '' ? $content : null;
+            }
+
+            $messages[] = [
+                'role' => 'assistant',
+                'content' => $result['content'] ?? '',
+                'tool_calls' => $toolCalls,
+            ];
+
+            foreach ($toolCalls as $toolCall) {
+                if (($toolCall['type'] ?? null) !== 'function') {
+                    continue;
+                }
+
+                $functionName = (string) ($toolCall['function']['name'] ?? '');
+                $arguments = $toolCall['function']['arguments'] ?? '{}';
+                $parsedArguments = is_string($arguments) ? json_decode($arguments, true) : $arguments;
+
+                $toolResult = $this->executeToolCall($functionName, $parsedArguments, $request);
+
                 if ($debugInfo !== null) {
-                    $debugInfo[] = ['tool' => 'get_my_permissions', 'arguments' => [], 'result' => $toolResult];
+                    $debugInfo[] = ['tool' => $functionName, 'arguments' => $parsedArguments, 'result' => $toolResult];
                 }
 
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
-                    'name' => 'get_my_permissions',
-                    'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
-                ];
-
-                $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
-                return $followUp !== '' ? $followUp : null;
-            }
-
-            if ($functionName !== 'get_page_context') {
-                \Log::warning('AI returned an unknown tool call.', [
-                    'tool_name' => $functionName,
-                    'known_tools' => ['get_page_context', 'get_request_details', 'check_facility_availability', 'get_my_permissions'],
-                ]);
-
-                continue;
-            }
-
-            $arguments = $toolCall['function']['arguments'] ?? '{}';
-            $parsedArguments = is_string($arguments) ? json_decode($arguments, true) : $arguments;
-            $fetchPageContext = is_array($parsedArguments) ? (bool) ($parsedArguments['page'] ?? true) : true;
-            if (! $fetchPageContext) {
-                return null;
-            }
-
-            $pageContext = $this->pageContextService->getCurrentPageContext($request->input('page_context', []));
-            $toolResult = [
-                'context' => $pageContext,
-                'page' => true,
-            ];
-
-            // Conditionally merge in facilities/equipment when requested and not already present
-            if (($parsedArguments['include_facilities'] ?? false) && empty($pageContext['facilities'])) {
-                $pageContext['facilities'] = $this->pageContextService->getFacilities(50);
-            }
-
-            if (($parsedArguments['include_equipment'] ?? false) && empty($pageContext['equipment'])) {
-                $pageContext['equipment'] = $this->pageContextService->getEquipment(50);
-            }
-
-            if ($debugInfo !== null) {
-                $debugInfo[] = [
-                    'tool' => 'get_page_context',
-                    'arguments' => $parsedArguments,
-                    'result' => $toolResult,
+                    'name' => $functionName,
+                    'content' => json_encode($toolResult['content'], JSON_UNESCAPED_SLASHES),
                 ];
             }
-
-            $messages[] = [
-                'role' => 'tool',
-                'tool_call_id' => (string) ($toolCall['id'] ?? 'call_'.time()),
-                'name' => 'get_page_context',
-                'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
-            ];
-
-            $followUp = trim((string) $this->ai->chat($messages, ['timeout' => 120, 'temperature' => 0]));
-
-            return $followUp !== '' ? $followUp : null;
         }
 
-        return null;
+        return null; // exceeded max rounds without a final answer
     }
 
     private function getRequestDetail(int $requestId): array
