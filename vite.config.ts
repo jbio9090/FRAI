@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 import fs from 'node:fs';
 import { homedir } from 'node:os';
 
-const herdDomain = 'gso.test';
+const herdDomain = 'plv-gso-github.test';
 const herdCertPath = path.join(homedir(), '.config', 'herd', 'certs', `${herdDomain}.crt`);
 const herdKeyPath = path.join(homedir(), '.config', 'herd', 'certs', `${herdDomain}.key`);
 
@@ -16,11 +16,7 @@ export default defineConfig({
             input: ['resources/js/app.tsx'],
             refresh: true,
         }),
-        react({
-            babel: {
-                plugins: ['babel-plugin-react-compiler'],
-            },
-        }),
+        react(),
         tailwindcss(),
     ],
     esbuild: {
