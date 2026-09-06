@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { useChosenAlternatives } from '@/hooks/use-chosen-alternatives';
 import { cn } from '@/lib/utils';
 import type { Facility } from '@/pages/requests/create/types';
 import type { ChosenAlternative } from '@/types/request';
-import { useChosenAlternatives } from '@/hooks/use-chosen-alternatives';
 
 interface ChosenAlternativesPanelProps {
     facilities: Facility[];

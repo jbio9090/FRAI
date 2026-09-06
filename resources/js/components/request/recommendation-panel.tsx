@@ -1,14 +1,14 @@
+import { router, usePage } from '@inertiajs/react';
 import { Calendar, Clock, Sparkles, LayoutGrid, Filter, CheckSquare, Send, Loader2 } from 'lucide-react';
 import moment from 'moment';
 import { motion } from 'motion/react';
 import { useState } from 'react';
-import { router, usePage } from '@inertiajs/react';
+import { toast } from 'sonner';
 import { useAlternatives } from '@/hooks/use-alternatives';
+import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
 import type { Request, AlternativeSlot } from '@/types/request';
 import StatusTag from '../status-tag';
-import { toast } from 'sonner';
-import { usePermission } from '@/hooks/use-permission';
 
 interface RecommendationPanelProps {
     request: Request;

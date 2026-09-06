@@ -12,15 +12,15 @@ import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
 import { RecommendationPanel } from '@/components/request/recommendation-panel';
 import SmartPagination from '@/components/SmartPagination';
 import StatusTag from '@/components/status-tag';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { usePermission } from '@/hooks/use-permission';
 import { useChosenAlternatives } from '@/hooks/use-chosen-alternatives';
+import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
@@ -258,10 +258,11 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                         <StatusTag requestStatus={request.status} />
 
                         <div className="ml-auto flex items-center gap-2">
-                            {(canEdit || canReschedule) && (
+                            {canEdit && (
                                 <Link href={route('requests.edit', request.id)}>
-                                    <Button variant="ghost" size="icon-sm" aria-label="Edit request">
+                                    <Button variant="outline" size="sm" className="gap-1.5">
                                         <Pen className="h-4 w-4" />
+                                        <span>Edit</span>
                                     </Button>
                                 </Link>
                             )}

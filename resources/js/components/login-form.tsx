@@ -50,8 +50,8 @@ export function LoginForm({
         </div>
 
         <div className="flex flex-col items-center gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">Login to your account</h1>
-          <p className="text-muted-foreground text-sm text-balance">
+          <h1 className="text-2xl font-bold tracking-tight w-full text-center">Login to your account</h1>
+          <p className="text-muted-foreground text-sm text-balance w-full text-center hidden sm:block">
             Enter your email below to login to your account
           </p>
         </div>
