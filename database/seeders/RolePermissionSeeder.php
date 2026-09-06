@@ -2,11 +2,11 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\Models\Permission;
 use App\Models\User;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class RolePermissionSeeder extends Seeder
 {
@@ -20,6 +20,7 @@ class RolePermissionSeeder extends Seeder
         Permission::updateOrCreate(['name' => 'create requests']);
         Permission::updateOrCreate(['name' => 'approve requests']);
         Permission::updateOrCreate(['name' => 'reject requests']);
+        Permission::updateOrCreate(['name' => 'view reschedule alternatives']);
         Permission::updateOrCreate(['name' => 'manage facilities']);
         Permission::updateOrCreate(['name' => 'manage equipments']);
         Permission::updateOrCreate(['name' => 'manage users']);
@@ -29,10 +30,9 @@ class RolePermissionSeeder extends Seeder
         Permission::updateOrCreate(['name' => 'create new admins']);
         Permission::updateOrCreate(['name' => 'manage request options']);
 
-
         // Create roles and assign permissions
-        $userRole = Role::updateOrCreate(['name' => 'Department Head']);
-        $userRole->givePermissionTo(['view requests', 'create requests']);
+        $userRole = Role::updateOrCreate(['name' => 'Administrative Staff']);
+        $userRole->givePermissionTo(['view requests', 'create requests', 'view reschedule alternatives']);
 
         $adminRole = Role::updateOrCreate(['name' => 'admin']);
         $adminRole->givePermissionTo(Permission::all());
@@ -58,6 +58,6 @@ class RolePermissionSeeder extends Seeder
             ['email' => 'user@example.com'],
             ['name' => 'Regular User', 'password' => Hash::make('password')]
         );
-        $regularUser->assignRole('Department Head');
+        $regularUser->assignRole('Administrative Staff');
     }
 }

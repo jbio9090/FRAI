@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\Facility;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Equipment>
@@ -18,9 +18,9 @@ class EquipmentFactory extends Factory
     public function definition(): array
     {
         return [
-            "name" => fake()->name(),
-            "quantity" => fake()->randomDigit(),
-            "facility_id" => Facility::factory(),
+            'name' => fake()->name(),
+            'quantity' => fake()->randomDigit(),
+            'facility_id' => Facility::factory(),
         ];
     }
 }

@@ -88,9 +88,9 @@ class DashboardController extends Controller
             'auditEvents' => collect(AuditEvent::cases())
                 ->filter(fn ($case) => $case !== AuditEvent::Unknown)
                 ->map(fn ($case) => [
-                'value' => $case->value,
-                'label' => $case->label(),
-            ])->values(),
+                    'value' => $case->value,
+                    'label' => $case->label(),
+                ])->values(),
             'breakdown' => $this->eventBreakdown($request, $auditRange),
             'chartData' => $chartData,
             'pending' => $pending,

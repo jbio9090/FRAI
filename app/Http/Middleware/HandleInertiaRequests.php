@@ -2,9 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\RequestSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
-use App\Services\RequestSettingsService;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -54,20 +54,20 @@ class HandleInertiaRequests extends Middleware
                 ] : null,
             ],
             'breadcrumbs' => $this->getBreadcrumbs($request),
-            'flash' => fn() => [
+            'flash' => fn () => [
                 'success' => session('success'),
                 'error' => session('error'),
                 'temp_password_reset' => session('temp_password_reset'),
             ],
             'requestOptions' => RequestSettingsService::all(),
             'firebaseConfig' => [
-                'apiKey'            => config('services.firebase.api_key'),
-                'authDomain'        => config('services.firebase.auth_domain'),
-                'projectId'         => config('services.firebase.project_id'),
-                'storageBucket'     => config('services.firebase.storage_bucket'),
+                'apiKey' => config('services.firebase.api_key'),
+                'authDomain' => config('services.firebase.auth_domain'),
+                'projectId' => config('services.firebase.project_id'),
+                'storageBucket' => config('services.firebase.storage_bucket'),
                 'messagingSenderId' => config('services.firebase.messaging_sender_id'),
-                'appId'             => config('services.firebase.app_id'),
-                'measurementId'     => config('services.firebase.measurement_id'),
+                'appId' => config('services.firebase.app_id'),
+                'measurementId' => config('services.firebase.measurement_id'),
             ],
         ]);
     }

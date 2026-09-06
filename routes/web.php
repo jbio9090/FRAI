@@ -6,13 +6,14 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\FacilityController;
+use App\Http\Controllers\FileController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RequestController;
 use App\Http\Controllers\RequestSettingsController;
 use App\Http\Controllers\RulesController;
 use App\Http\Controllers\SettingsController;
-use App\Http\Controllers\FileController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -59,7 +60,14 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/requests/{request}/facilities/{facility}/update-status', [RequestController::class, 'updateFacilityStatus'])
             ->name('requests.facilities.updateStatus');
+
+        Route::post('/requests/{id}/reschedule-alternatives', [RequestController::class, 'storeChosenAlternatives'])
+            ->name('requests.reschedule-alternatives.store');
     });
+
+    Route::get('/requests/{id}/reschedule-alternatives', [RequestController::class, 'getChosenAlternatives'])
+        ->name('requests.reschedule-alternatives.index')
+        ->middleware(['permission:view reschedule alternatives']);
 
     Route::get('/requests/{id}/recommendation', function ($id) {
         $request = \App\Models\Request::with('requestFacilities')->findOrFail($id);
@@ -68,7 +76,7 @@ Route::middleware('auth')->group(function () {
             'recommended_action' => $request->getRawOriginal('recommended_action'),
             'recommended_action_reason' => $request->recommended_action_reason,
             'request_status' => $request->getRawOriginal('status'),
-            'request_facilities' => $request->requestFacilities->map(fn($rf) => [
+            'request_facilities' => $request->requestFacilities->map(fn ($rf) => [
                 'id' => $rf->id,
                 'facility_id' => $rf->facility_id,
                 'status' => $rf->getRawOriginal('status'),
@@ -132,6 +140,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('permission:manage users')->group(function () {
         Route::get('/accounts', [AccountController::class, 'index'])->name('accounts.index');
+        Route::get('/accounts/{user}', [AccountController::class, 'show'])->name('accounts.show');
         Route::post('/accounts/create', [AccountController::class, 'store'])->name('accounts.store');
         Route::put('/accounts/{user}', [AccountController::class, 'update'])->name('accounts.update');
         Route::delete('/accounts/{user}', [AccountController::class, 'destroy'])->name('accounts.destroy');
@@ -165,6 +174,13 @@ Route::middleware('auth')->group(function () {
         Route::delete('/buildings/{building}', [FacilityController::class, 'destroyBuilding'])->name('buildings.destroy');
         Route::delete('/facilities/{facility}', [FacilityController::class, 'destroy'])->name('facility.destroy');
     });
+
+    // Reports (admin only)
+    Route::middleware(['permission:approve requests'])->group(function () {
+        Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('/reports/data', [ReportController::class, 'getData'])->name('reports.data');
+        Route::get('/reports/meta', [ReportController::class, 'getMeta'])->name('reports.meta');
+    });
     // chatbot
     Route::get('/chatbot', function () {
         return Inertia::render('chatbot/chatbot');
@@ -180,7 +196,6 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/api/db/create-request', [ChatController::class, 'createRequestApi'])->name('api.db.create.request');
 });
-
 
 Route::get('/files/{file}/stream', [FileController::class, 'stream'])
     ->middleware('auth')

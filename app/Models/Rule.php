@@ -10,7 +10,7 @@ class Rule extends Model
     /** @use HasFactory<\Database\Factories\RulesFactory> */
     use HasFactory;
 
-    protected $fillable = ["rule", "priority", "forPolicy", "faq_answer"];
+    protected $fillable = ['rule', 'priority', 'forPolicy', 'faq_answer'];
 
     protected $casts = [
         'forPolicy' => 'integer',

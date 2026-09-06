@@ -2,11 +2,11 @@ import { LayoutGrid, Filter, Clock, Calendar } from 'lucide-react';
 import moment from 'moment';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { Facility } from '@/pages/requests/create/types';
 import type { AlternativeSlot } from '../use-create-request';
-import { Button } from '@/components/ui/button';
 
 type ToggleKey = 'same_facility' | 'same_time';
 
@@ -136,7 +136,7 @@ export function AlternativesPanel({
                                         return (
                                             <div key={type} className="space-y-2">
                                                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{getTypeLabel(type)}</span>
-                                                <div className="grid gap-1.5 sm:grid-cols-2">
+                                                <div className="space-y-2">
                                                     {typeSlots.map((slot) => {
                                                         const slotKey = `${slot.facility_id}-${slot.date}-${slot.time_start}`;
                                                         const isSelected = selectedAlternative === slotKey;

@@ -2,22 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
-use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
-use App\Models\User;
-use Illuminate\Http\RedirectResponse;
-use Spatie\Permission\Models\Role;
+use Intervention\Image\ImageManager;
 
 class SettingsController extends Controller
 {
     public function index()
     {
-        return Inertia::render("settings/index");
+        return Inertia::render('settings/index');
     }
 
     public function updateProfilePicture(Request $request)
@@ -35,7 +34,7 @@ class SettingsController extends Controller
             }
         }
 
-        $filename = $user->id . '_' . time() . '.webp';
+        $filename = $user->id.'_'.time().'.webp';
 
         $manager = ImageManager::usingDriver(Driver::class);
 
@@ -93,14 +92,14 @@ class SettingsController extends Controller
     public function changePassword(Request $request)
     {
         $request->validate([
-            'current_password'      => ['required'],
-            'password'              => ['required', 'min:8', 'confirmed', 'different:current_password'],
+            'current_password' => ['required'],
+            'password' => ['required', 'min:8', 'confirmed', 'different:current_password'],
             'password_confirmation' => ['required'],
         ]);
 
         $user = Auth::user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return back()->withErrors(['current_password' => 'The current password is incorrect.']);
         }
 
@@ -116,15 +115,17 @@ class SettingsController extends Controller
 
     public function updateOwnAccountDetails(Request $request, User $user): RedirectResponse
     {
-        if ($user->id !== Auth::user()->id) abort(403, "This is not your account bro");
+        if ($user->id !== Auth::user()->id) {
+            abort(403, 'This is not your account bro');
+        }
 
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users,email,' . $user->id,
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,'.$user->id,
         ]);
 
         $user->update([
-            'name'  => $validated['name'],
+            'name' => $validated['name'],
             'email' => $validated['email'],
         ]);
 

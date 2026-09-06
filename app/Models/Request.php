@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
-use App\Models\RequestFacility;
-use App\Models\Facility;
-use App\Models\User;
 use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Request extends Model
 {
@@ -32,8 +29,8 @@ class Request extends Model
         'on_hold',
         'priority_reason',
         'held_by_request_id',
-        "processed_by",
-        "processed_at",
+        'processed_by',
+        'processed_at',
         'pending_conflict_rf_ids',
         'approved_conflict_rf_ids',
         'approved_by',
@@ -42,14 +39,14 @@ class Request extends Model
     ];
 
     protected $casts = [
-        'status'         => RequestStatus::class,
-        'on_hold'        => 'boolean',
+        'status' => RequestStatus::class,
+        'on_hold' => 'boolean',
         'priority_level' => PriorityLevel::class,
-        'processed_at'   => 'datetime',
+        'processed_at' => 'datetime',
         'pending_conflict_rf_ids' => 'array',
         'approved_conflict_rf_ids' => 'array',
         'approved_by' => 'array',
-        'pending_equipment_conflict_request_ids'  => 'array',
+        'pending_equipment_conflict_request_ids' => 'array',
         'approved_equipment_conflict_request_ids' => 'array',
         'recommended_action' => RequestStatus::class,
     ];
@@ -120,6 +117,11 @@ class Request extends Model
         return $this->belongsTo(User::class, 'processed_by');
     }
 
+    public function rescheduleSuggestions()
+    {
+        return $this->hasMany(RequestRescheduleSuggestion::class, 'request_id');
+    }
+
     /* SCOPES */
 
     public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)
@@ -140,11 +142,11 @@ class Request extends Model
     protected static function booted()
     {
         static::updated(function (Request $request) {
-            // If the parent request was changed to APPROVED, ensure child request facilities are approved too
-            if ($request->wasChanged('status') && $request->status === RequestStatus::APPROVED) {
+            // If the parent request was changed to APPROVED or CONDITIONALLY_APPROVED, ensure child request facilities are approved too
+            if ($request->wasChanged('status') && in_array($request->status, [RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])) {
                 // Update any child facility rows that are not explicitly denied
                 $request->requestFacilities()->where('status', '!=', RequestStatus::DENIED)->update([
-                    'status' => RequestStatus::APPROVED,
+                    'status' => $request->status,
                 ]);
             }
         });

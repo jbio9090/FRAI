@@ -1112,6 +1112,7 @@ class RequestService
             [RequestStatus::PENDING, RequestStatus::APPROVED],
             null
         );
+
         return empty($conflicts);
     }
 }

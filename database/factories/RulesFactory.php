@@ -17,9 +17,9 @@ class RulesFactory extends Factory
     public function definition(): array
     {
         return [
-            "rule" => fake()->sentence(),
-            "forPolicy" => 0,
-            "faq_answer" => null,
+            'rule' => fake()->sentence(),
+            'forPolicy' => 0,
+            'faq_answer' => null,
         ];
     }
 }

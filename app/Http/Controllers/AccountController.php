@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use App\Enums\AuditEvent;
+use App\Enums\RequestStatus;
 use App\Models\AuditLog;
-use Illuminate\Container\Attributes\Auth;
+use App\Models\Request as FacilityRequest;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -30,7 +31,7 @@ class AccountController extends Controller
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ILIKE', "%{$search}%")
-                  ->orWhere('email', 'ILIKE', "%{$search}%");
+                    ->orWhere('email', 'ILIKE', "%{$search}%");
             });
         }
 
@@ -47,12 +48,12 @@ class AccountController extends Controller
         $users = $query->paginate($perPage)->appends($request->query());
 
         // Transform collection items for the frontend
-        $users->getCollection()->transform(fn($user) => [
-            'id'        => $user->id,
-            'name'      => $user->name,
-            'email'     => $user->email,
-            'role'      => $user->roles->first()?->name,
-            'profile'   => $user->profile,
+        $users->getCollection()->transform(fn ($user) => [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->roles->first()?->name,
+            'profile' => $user->profile,
             'is_active' => $user->is_active,
             'created_at' => $user->created_at,
             'deleted_at' => $user->deleted_at,
@@ -60,26 +61,110 @@ class AccountController extends Controller
 
         return Inertia::render('accounts/index', [
             'users' => $users,
-            'roles' => Role::pluck('name')->map(fn($role) => strtolower($role)),
+            'roles' => Role::pluck('name')->map(fn ($role) => strtolower($role)),
             'archived' => $archived,
         ]);
+    }
+
+    public function show(Request $request, User $user)
+    {
+        $actor = $request->user();
+
+        if ($msg = $this->canEditUser($actor, $user)) {
+            abort(403, $msg);
+        }
+
+        $auditRange = $this->resolveRange($request->input('audit_range', 'week'));
+        $auditEvent = $request->input('audit_event');
+        $auditSearch = $request->input('audit_search');
+        $auditSort = $request->input('audit_sort', 'newest');
+
+        $auditLogs = AuditLog::with('user')
+            ->where('user_id', $user->id)
+            ->when($auditEvent, fn ($q) => $q->where('event', $auditEvent))
+            ->when($auditSearch, fn ($q) => $q->where('description', 'ILIKE', "%{$auditSearch}%"))
+            ->whereBetween('created_at', $auditRange)
+            ->orderBy('created_at', $auditSort === 'oldest' ? 'asc' : 'desc')
+            ->paginate(15)->appends($request->query());
+
+        $requestStatus = $request->input('request_status');
+        $requestSearch = $request->input('request_search');
+        $requestSort = $request->input('request_sort', 'created_at');
+        $requestOrder = $request->input('request_order', 'desc');
+
+        $requests = FacilityRequest::with([
+            'user',
+            'facilities',
+            'facility',
+            'requestFacilities.facility',
+            'requestFacilities.equipment',
+            'equipment',
+            'comments.user',
+            'files',
+        ])
+            ->where('user_id', $user->id)
+            ->when($requestStatus, fn ($q) => $q->where('status', $requestStatus))
+            ->when($requestSearch, fn ($q) => $q->where(function ($sq) use ($requestSearch) {
+                $sq->where('title', 'ILIKE', "%{$requestSearch}%")
+                    ->orWhere('description', 'ILIKE', "%{$requestSearch}%");
+            }))
+            ->orderBy($requestSort, $requestOrder)
+            ->paginate(15)->appends($request->query());
+
+        $auditEvents = collect(AuditEvent::cases())
+            ->filter(fn ($c) => $c !== AuditEvent::Unknown)
+            ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()])
+            ->values();
+
+        $requestStatuses = collect(RequestStatus::cases())
+            ->map(fn ($c) => ['value' => $c->value, 'label' => $c->value])
+            ->values();
+
+        return Inertia::render('accounts/detail', [
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->roles->first()?->name,
+                'roles' => $user->roles->pluck('name')->toArray(),
+                'profile' => $user->profile,
+                'is_active' => $user->is_active,
+                'created_at' => $user->created_at?->toISOString(),
+                'deleted_at' => $user->deleted_at?->toISOString(),
+            ],
+            'audit_logs' => $auditLogs,
+            'requests' => $requests,
+            'audit_events' => $auditEvents,
+            'request_statuses' => $requestStatuses,
+            'can_edit_own' => $actor->id === $user->id,
+        ]);
+    }
+
+    private function resolveRange(string $range): array
+    {
+        return match ($range) {
+            'day' => [now()->startOfDay(), now()->endOfDay()],
+            'month' => [now()->startOfMonth()->startOfDay(), now()->endOfMonth()->endOfDay()],
+            '3months' => [now()->subMonths(3)->startOfDay(), now()->endOfDay()],
+            default => [now()->subDays(6)->startOfDay(), now()->endOfDay()],
+        };
     }
 
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users,email',
-            'role'     => [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'role' => [
                 'required',
                 'string',
                 function ($attribute, $value, $fail) {
-                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                    if (! Role::where('name', 'ILIKE', $value)->exists()) {
                         $fail("The selected role {$value} is invalid.");
                     }
                 },
             ],
-            'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'profile' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
         $actor = $request->user();
@@ -106,7 +191,7 @@ class AccountController extends Controller
         $user = User::create($validated);
         $user->assignRole($role->name);
 
-        return redirect()->route("accounts.index")
+        return redirect()->route('accounts.index')
             ->with('temp_password_reset', [
                 'temp_password' => $tempPassword,
                 'target_user' => $user->name,
@@ -127,14 +212,14 @@ class AccountController extends Controller
     public function batchStore(Request $request): RedirectResponse
     {
         $request->validate([
-            'accounts'          => 'required|array|min:1|max:500',
-            'accounts.*.name'   => 'required|string|max:255',
-            'accounts.*.email'  => 'required|email|max:255',
-            'accounts.*.role'   => [
+            'accounts' => 'required|array|min:1|max:500',
+            'accounts.*.name' => 'required|string|max:255',
+            'accounts.*.email' => 'required|email|max:255',
+            'accounts.*.role' => [
                 'required',
                 'string',
                 function ($attribute, $value, $fail) {
-                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                    if (! Role::where('name', 'ILIKE', $value)->exists()) {
                         $fail("The selected role {$value} is invalid.");
                     }
                 },
@@ -142,7 +227,7 @@ class AccountController extends Controller
         ]);
 
         $created = [];
-        $failed  = [];
+        $failed = [];
 
         $actor = $request->user();
 
@@ -156,33 +241,36 @@ class AccountController extends Controller
 
             if ($validator->fails()) {
                 $failed[] = [
-                    'row'    => $rowNumber,
-                    'name'   => $account['name'],
-                    'email'  => $account['email'],
-                    'reason' => 'Email already exists: ' . $account['email'],
+                    'row' => $rowNumber,
+                    'name' => $account['name'],
+                    'email' => $account['email'],
+                    'reason' => 'Email already exists: '.$account['email'],
                 ];
+
                 continue;
             }
 
             $alreadyCreated = collect($created)->pluck('email')->contains($account['email']);
             if ($alreadyCreated) {
                 $failed[] = [
-                    'row'    => $rowNumber,
-                    'name'   => $account['name'],
-                    'email'  => $account['email'],
-                    'reason' => 'Duplicate email in CSV: ' . $account['email'],
+                    'row' => $rowNumber,
+                    'name' => $account['name'],
+                    'email' => $account['email'],
+                    'reason' => 'Duplicate email in CSV: '.$account['email'],
                 ];
+
                 continue;
             }
 
             // role permission check (per-row)
             if ($msg = $this->canAssignRole($actor, $role->name)) {
                 $failed[] = [
-                    'row'    => $rowNumber,
-                    'name'   => $account['name'],
-                    'email'  => $account['email'],
+                    'row' => $rowNumber,
+                    'name' => $account['name'],
+                    'email' => $account['email'],
                     'reason' => $msg,
                 ];
+
                 continue;
             }
 
@@ -191,9 +279,9 @@ class AccountController extends Controller
 
                 $user = DB::transaction(function () use ($account, $tempPassword, $role) {
                     $user = User::create([
-                        'name'                  => $account['name'],
-                        'email'                 => $account['email'],
-                        'password'              => Hash::make($tempPassword),
+                        'name' => $account['name'],
+                        'email' => $account['email'],
+                        'password' => Hash::make($tempPassword),
                         'force_password_change' => true,
                     ]);
 
@@ -205,16 +293,16 @@ class AccountController extends Controller
                 });
 
                 $created[] = [
-                    'name'          => $user->name,
-                    'email'         => $user->email,
+                    'name' => $user->name,
+                    'email' => $user->email,
                     'temp_password' => $tempPassword,
                 ];
             } catch (\Throwable $e) {
                 $failed[] = [
-                    'row'    => $rowNumber,
-                    'name'   => $account['name'],
-                    'email'  => $account['email'],
-                    'reason' => 'Unexpected error: ' . $e->getMessage(),
+                    'row' => $rowNumber,
+                    'name' => $account['name'],
+                    'email' => $account['email'],
+                    'reason' => 'Unexpected error: '.$e->getMessage(),
                 ];
             }
         }
@@ -227,19 +315,19 @@ class AccountController extends Controller
     public function update(Request $request, User $user): RedirectResponse
     {
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users,email,' . $user->id,
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,'.$user->id,
             'password' => 'nullable|string|min:8',
-            'role'     => [
+            'role' => [
                 'required',
                 'string',
                 function ($attribute, $value, $fail) {
-                    if (!Role::where('name', 'ILIKE', $value)->exists()) {
+                    if (! Role::where('name', 'ILIKE', $value)->exists()) {
                         $fail("The selected role {$value} is invalid.");
                     }
                 },
             ],
-            'profile'  => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'profile' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
         $actor = $request->user();
@@ -271,11 +359,11 @@ class AccountController extends Controller
         }
 
         $updateData = [
-            'name'  => $validated['name'],
+            'name' => $validated['name'],
             'email' => $validated['email'],
         ];
 
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $updateData['password'] = Hash::make($validated['password']);
         }
 
@@ -290,7 +378,7 @@ class AccountController extends Controller
      *
      * Rules:
      *  - Super Admins can toggle anyone except themselves.
-     *  - Admins can only toggle Department Heads.
+     *  - Admins can only toggle Administrative Staff.
      *  - No one can toggle a Super Admin account.
      */
     public function toggleStatus(Request $request, User $user): RedirectResponse
@@ -323,15 +411,17 @@ class AccountController extends Controller
             if ($actor->id === $target->id) {
                 return 'You cannot deactivate your own account.';
             }
+
             return null;
         }
 
-        // Admins can only toggle Department Heads
+        // Admins can only toggle Administrative Staff
         if ($actor->hasRole('admin')) {
-            if ($target->hasRole('Department Head')) {
+            if ($target->hasRole('Administrative Staff')) {
                 return null;
             }
-            return 'Admins may only change the status of Department Head accounts.';
+
+            return 'Admins may only change the status of Administrative Staff accounts.';
         }
 
         return 'You are not authorized to change account status.';
@@ -351,15 +441,15 @@ class AccountController extends Controller
             return 'Assigning the Super Admin role is not allowed through the account management interface.';
         }
 
-        // Super Admins may create 'admin' and 'department head' accounts.
+        // Super Admins may create 'admin' and 'administrative staff' accounts.
         if ($actor->hasRole('Super Admin')) {
-            if (! in_array($normalized, ['admin', 'department head'], true)) {
-                return 'Super Admins may only create admin and Department Head accounts.';
+            if (! in_array($normalized, ['admin', 'administrative staff'], true)) {
+                return 'Super Admins may only create admin and Administrative Staff accounts.';
             }
         } elseif ($actor->hasRole('admin')) {
-            // Regular admins may only create 'department head' accounts.
-            if ($normalized !== 'department head') {
-                return 'Admins may only create Department Head accounts.';
+            // Regular admins may only create 'administrative staff' accounts.
+            if ($normalized !== 'administrative staff') {
+                return 'Admins may only create Administrative Staff accounts.';
             }
         } else {
             return 'You are not authorized to assign roles.';
@@ -385,13 +475,14 @@ class AccountController extends Controller
             return null;
         }
 
-        // Admins may only edit Department Head users (not other Admins — that requires Super Admin)
+        // Admins may only edit Administrative Staff users (not other Admins — that requires Super Admin)
         if ($actor->hasRole('admin')) {
-            $targetRoles = $target->roles->pluck('name')->map(fn($r) => strtolower($r))->toArray();
-            if (in_array('department head', $targetRoles, true)) {
+            $targetRoles = $target->roles->pluck('name')->map(fn ($r) => strtolower($r))->toArray();
+            if (in_array('administrative staff', $targetRoles, true)) {
                 return null;
             }
-            return 'Admins may only edit Department Head accounts. Editing Admin accounts requires Super Admin privileges.';
+
+            return 'Admins may only edit Administrative Staff accounts. Editing Admin accounts requires Super Admin privileges.';
         }
 
         return 'You are not authorized to edit accounts.';
@@ -428,7 +519,7 @@ class AccountController extends Controller
 
         if ($admin->id === $user->id) {
             return back()->withErrors([
-                'error' => 'You cannot reset your own password from the account management table. Please use your profile settings.'
+                'error' => 'You cannot reset your own password from the account management table. Please use your profile settings.',
             ]);
         }
         $admin = $request->user();

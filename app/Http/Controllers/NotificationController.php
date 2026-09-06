@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\DeviceToken;
 use App\Notifications\TestPushNotification;
 use Illuminate\Http\Request;
 

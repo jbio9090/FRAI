@@ -1,4 +1,5 @@
 export type * from './auth';
+export type * from './reports';
 
 import type { Auth } from './auth';
 

@@ -4,7 +4,6 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useState, type FormEvent } from 'react';
 import FacilityCalendar from '@/components/FacilityCalendar';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -21,6 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
     Table,
     TableBody,

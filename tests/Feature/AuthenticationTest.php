@@ -2,10 +2,10 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
 {
@@ -17,7 +17,7 @@ class AuthenticationTest extends TestCase
 
         $response->assertOk();
         $response->assertInertia(
-            fn(Assert $page) => $page
+            fn (Assert $page) => $page
                 ->component('login') // Your Inertia component name
         );
     }
@@ -26,12 +26,12 @@ class AuthenticationTest extends TestCase
     {
         $user = User::factory()->create([
             'email' => 'test@example.com',
-            'password' => bcrypt('password123')
+            'password' => bcrypt('password123'),
         ]);
 
         $response = $this->post(route('login'), [
             'email' => 'test@example.com',
-            'password' => 'password123'
+            'password' => 'password123',
         ]);
 
         $response->assertRedirect(route('dashboard'));
@@ -42,7 +42,7 @@ class AuthenticationTest extends TestCase
     {
         $response = $this->from(route('login.show'))->post(route('login'), [
             'email' => 'missing@example.com',
-            'password' => 'wrong-password'
+            'password' => 'wrong-password',
         ]);
 
         $response->assertRedirect(route('login.show'));
@@ -67,7 +67,7 @@ class AuthenticationTest extends TestCase
             ->get(route('dashboard'));
 
         $response->assertInertia(
-            fn(Assert $page) => $page
+            fn (Assert $page) => $page
                 ->component('dashboard')
                 ->has('auth.user')
                 ->where('auth.user.email', $user->email)

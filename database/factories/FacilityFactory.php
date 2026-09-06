@@ -30,6 +30,7 @@ class FacilityFactory extends Factory
             'campus_id' => $campus->id,
             'building_id' => $building->id,
             'capacity' => fake()->numberBetween(100, 500),
+            'status' => 'active',
         ];
     }
 }

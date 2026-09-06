@@ -172,3 +172,36 @@ export interface AlternativesResponse {
         per_facility: boolean;
     };
 }
+
+export interface ChosenAlternative {
+    id: number;
+    facility_id: number;
+    facility_name: string;
+    date: string;
+    time_start: string;
+    time_end: string;
+    type: 'same_facility_time' | 'same_facility_date' | 'different_facility' | 'different_facility_date';
+    facility_capacity: number;
+    capacity_fit: 'exact' | 'larger' | 'smaller';
+    equipment_available: boolean;
+    chosen_by_admin: { id: number; name: string };
+    chosen_at: string;
+}
+
+export interface ChosenAlternativesResponse {
+    alternatives: Record<number, ChosenAlternative[]>;
+}
+
+export interface ChosenAlternativeGroup {
+    facility_id: number;
+    facility_name: string;
+    options: Array<{
+        date: string;
+        time_start: string;
+        time_end: string;
+        type: string;
+        capacity_fit: string;
+        equipment_available: boolean;
+        chosen_by: string;
+    }>;
+}

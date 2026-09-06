@@ -8,7 +8,7 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
-     * 
+     *
      * priority_level: 0 = normal, 1 = school event, 2 = government/high-priority
      * on_hold: true if this request was put on hold due to a higher-priority conflict
      * priority_reason: text description of why this request has priority (from AI context)

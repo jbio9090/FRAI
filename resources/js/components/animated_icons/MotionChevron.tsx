@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { motion } from 'motion/react';
 
-const Chevron = motion(ChevronDown);
+const Chevron = motion.create(ChevronDown);
 
 interface ChevronProps {
     openCollapsible: boolean;

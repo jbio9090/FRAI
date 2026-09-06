@@ -2,12 +2,11 @@
 
 namespace App\Services;
 
-use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
+use App\Models\Equipment;
+use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
-use App\Models\Facility;
-use App\Models\Equipment;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -15,7 +14,9 @@ use Illuminate\Support\Facades\Cache;
 class AlternativeRecommendationService
 {
     private const DATE_RANGE_DAYS = 7;
+
     private const CACHE_TTL = 300;
+
     private const MAX_RESULTS_PER_CATEGORY = 5;
 
     public function __construct(
@@ -134,7 +135,9 @@ class AlternativeRecommendationService
         $results = [];
 
         foreach ($slots as $slot) {
-            if (count($results) >= $maxResults) break;
+            if (count($results) >= $maxResults) {
+                break;
+            }
 
             if ($slot['start'] === $originalStart && $slot['end'] === $originalEnd) {
                 continue;
@@ -144,16 +147,18 @@ class AlternativeRecommendationService
                 continue;
             }
 
-            if (!$this->isFacilityAvailable($facilityId, $date, $slot['start'], $slot['end'])) {
+            if (! $this->isFacilityAvailable($facilityId, $date, $slot['start'], $slot['end'])) {
                 continue;
             }
 
-            if ($includeEquipment && !$this->isEquipmentAvailable($equipmentIds, $date, $slot['start'], $slot['end'])) {
+            if ($includeEquipment && ! $this->isEquipmentAvailable($equipmentIds, $date, $slot['start'], $slot['end'])) {
                 continue;
             }
 
             $facility = Facility::find($facilityId);
-            if (!$facility) continue;
+            if (! $facility || $facility->status !== \App\Enums\FacilityStatus::ACTIVE) {
+                continue;
+            }
 
             $results[] = [
                 'facility_id' => $facilityId,
@@ -188,10 +193,14 @@ class AlternativeRecommendationService
         $originalDateCarbon = Carbon::parse($originalDate);
 
         for ($i = 1; $i <= self::DATE_RANGE_DAYS; $i++) {
-            if (count($results) >= $maxResults) break;
+            if (count($results) >= $maxResults) {
+                break;
+            }
 
             foreach ([$originalDateCarbon->copy()->subDays($i), $originalDateCarbon->copy()->addDays($i)] as $candidateDate) {
-                if (count($results) >= $maxResults) break;
+                if (count($results) >= $maxResults) {
+                    break;
+                }
 
                 $dateStr = $candidateDate->format('Y-m-d');
 
@@ -199,7 +208,7 @@ class AlternativeRecommendationService
                     continue;
                 }
 
-                if (!in_array($candidateDate->dayOfWeek, $bookingWindow['days_of_week'], true)) {
+                if (! in_array($candidateDate->dayOfWeek, $bookingWindow['days_of_week'], true)) {
                     continue;
                 }
 
@@ -207,16 +216,18 @@ class AlternativeRecommendationService
                     continue;
                 }
 
-                if (!$this->isFacilityAvailable($facilityId, $dateStr, $originalStart, $originalEnd)) {
+                if (! $this->isFacilityAvailable($facilityId, $dateStr, $originalStart, $originalEnd)) {
                     continue;
                 }
 
-                if ($includeEquipment && !$this->isEquipmentAvailable($equipmentIds, $dateStr, $originalStart, $originalEnd)) {
+                if ($includeEquipment && ! $this->isEquipmentAvailable($equipmentIds, $dateStr, $originalStart, $originalEnd)) {
                     continue;
                 }
 
                 $facility = Facility::find($facilityId);
-                if (!$facility) continue;
+                if (! $facility || $facility->status !== \App\Enums\FacilityStatus::ACTIVE) {
+                    continue;
+                }
 
                 $results[] = [
                     'facility_id' => $facilityId,
@@ -249,22 +260,25 @@ class AlternativeRecommendationService
     ): array {
         $facilities = Facility::where('id', '!=', $currentFacilityId)
             ->where('capacity', '>=', $expectedCapacity)
+            ->where('status', 'active')
             ->get();
 
         $results = [];
 
         foreach ($facilities as $facility) {
-            if (count($results) >= $maxResults) break;
+            if (count($results) >= $maxResults) {
+                break;
+            }
 
             if ($this->hasHigherPriorityConflict($facility->id, $date, $originalStart, $originalEnd, $higherPriorityPending)) {
                 continue;
             }
 
-            if (!$this->isFacilityAvailable($facility->id, $date, $originalStart, $originalEnd)) {
+            if (! $this->isFacilityAvailable($facility->id, $date, $originalStart, $originalEnd)) {
                 continue;
             }
 
-            if ($includeEquipment && !$this->isEquipmentAvailable($equipmentIds, $date, $originalStart, $originalEnd)) {
+            if ($includeEquipment && ! $this->isEquipmentAvailable($equipmentIds, $date, $originalStart, $originalEnd)) {
                 continue;
             }
 
@@ -299,16 +313,21 @@ class AlternativeRecommendationService
     ): array {
         $facilities = Facility::where('id', '!=', $currentFacilityId)
             ->where('capacity', '>=', $expectedCapacity)
+            ->where('status', 'active')
             ->get();
 
         $results = [];
         $originalDateCarbon = Carbon::parse($originalDate);
 
         for ($i = 1; $i <= self::DATE_RANGE_DAYS; $i++) {
-            if (count($results) >= $maxResults) break;
+            if (count($results) >= $maxResults) {
+                break;
+            }
 
             foreach ([$originalDateCarbon->copy()->subDays($i), $originalDateCarbon->copy()->addDays($i)] as $candidateDate) {
-                if (count($results) >= $maxResults) break;
+                if (count($results) >= $maxResults) {
+                    break;
+                }
 
                 $dateStr = $candidateDate->format('Y-m-d');
 
@@ -316,22 +335,24 @@ class AlternativeRecommendationService
                     continue;
                 }
 
-                if (!in_array($candidateDate->dayOfWeek, $bookingWindow['days_of_week'], true)) {
+                if (! in_array($candidateDate->dayOfWeek, $bookingWindow['days_of_week'], true)) {
                     continue;
                 }
 
                 foreach ($facilities as $facility) {
-                    if (count($results) >= $maxResults) break;
+                    if (count($results) >= $maxResults) {
+                        break;
+                    }
 
                     if ($this->hasHigherPriorityConflict($facility->id, $dateStr, $originalStart, $originalEnd, $higherPriorityPending)) {
                         continue;
                     }
 
-                    if (!$this->isFacilityAvailable($facility->id, $dateStr, $originalStart, $originalEnd)) {
+                    if (! $this->isFacilityAvailable($facility->id, $dateStr, $originalStart, $originalEnd)) {
                         continue;
                     }
 
-                    if ($includeEquipment && !$this->isEquipmentAvailable($equipmentIds, $dateStr, $originalStart, $originalEnd)) {
+                    if ($includeEquipment && ! $this->isEquipmentAvailable($equipmentIds, $dateStr, $originalStart, $originalEnd)) {
                         continue;
                     }
 
@@ -367,6 +388,7 @@ class AlternativeRecommendationService
             $slotEnd = $current->copy()->addMinutes($duration);
             if ($slotEnd->gt($endTime)) {
                 $current = $current->copy()->addMinutes($stepMinutes);
+
                 continue;
             }
 
@@ -399,8 +421,12 @@ class AlternativeRecommendationService
     ): bool {
         foreach ($higherPriorityPending as $pending) {
             foreach ($pending->requestFacilities as $pendingRf) {
-                if ($pendingRf->facility_id !== $facilityId) continue;
-                if ($pendingRf->date_requested !== $date) continue;
+                if ($pendingRf->facility_id !== $facilityId) {
+                    continue;
+                }
+                if ($pendingRf->date_requested !== $date) {
+                    continue;
+                }
 
                 $pendingStart = substr($pendingRf->time_start, 0, 5);
                 $pendingEnd = substr($pendingRf->time_end, 0, 5);
@@ -410,6 +436,7 @@ class AlternativeRecommendationService
                 }
             }
         }
+
         return false;
     }
 
@@ -426,22 +453,28 @@ class AlternativeRecommendationService
 
         foreach ($equipmentIds as $eqId) {
             $equipment = Equipment::find($eqId);
-            if (!$equipment) continue;
+            if (! $equipment) {
+                continue;
+            }
             if ($equipment->quantityAvailable($date, $start, $end) <= 0) {
                 return false;
             }
         }
+
         return true;
     }
 
     private function buildCapacityLabel(int $facilityCapacity, int $expectedCapacity): string
     {
-        if ($facilityCapacity === $expectedCapacity) return 'exact';
+        if ($facilityCapacity === $expectedCapacity) {
+            return 'exact';
+        }
+
         return $facilityCapacity > $expectedCapacity ? 'larger' : 'smaller';
     }
 
     private function buildCacheKey(int $requestId, bool $includeEquipment, int $maxResults): string
     {
-        return "alternatives:{$requestId}:eq" . ($includeEquipment ? '1' : '0') . ":max{$maxResults}";
+        return "alternatives:{$requestId}:eq".($includeEquipment ? '1' : '0').":max{$maxResults}";
     }
 }

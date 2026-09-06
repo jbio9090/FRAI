@@ -2,17 +2,20 @@
 
 namespace App\Services;
 
+use App\Enums\RequestStatus;
 use App\Models\Request;
 use App\Models\RequestFacility;
 use App\Models\User;
 use App\Notifications\AdminAiRecommendationReady;
 use App\Notifications\NewPendingRequest;
+use App\Notifications\RequestEditedByRequester;
+use App\Notifications\RequestFacilityDecision;
 use App\Notifications\RequestResult;
 use App\Notifications\Reschedule;
-use App\Notifications\RequestFacilityDecision;
-use App\Enums\RequestStatus;
+use App\Notifications\RescheduleAlternativesChosen;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 
 class NotificationService
 {
@@ -40,7 +43,7 @@ class NotificationService
                 ));
             }
         } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
+            Log::error('Push notification failed: '.$e->getMessage());
         }
     }
 
@@ -53,11 +56,11 @@ class NotificationService
                 ->where('admin_email_notifications_enabled', true)
                 ->whereNotNull('email')
                 ->get()
-                ->filter(fn(User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))
-                ->each(fn(User $user) => $user->notify(new AdminAiRecommendationReady($request)));
+                ->filter(fn (User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))
+                ->each(fn (User $user) => $user->notify(new AdminAiRecommendationReady($request)));
         } catch (\Exception $e) {
-            Log::error('Admin AI recommendation email notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Admin AI recommendation email notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 
@@ -71,8 +74,8 @@ class NotificationService
                 route('requests.detail', ['request_id' => $request->id])
             ));
         } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Push notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 
@@ -84,7 +87,7 @@ class NotificationService
             $facilityNames = $request->facilities->pluck('name')->join(', ');
             $dates = $request->requestFacilities->pluck('date_requested')->join(', ');
             $times = $request->requestFacilities
-                ->map(fn($rf) => Carbon::parse($rf->time_start)->format('g:i A') . ' - ' . Carbon::parse($rf->time_end)->format('g:i A'))
+                ->map(fn ($rf) => Carbon::parse($rf->time_start)->format('g:i A').' - '.Carbon::parse($rf->time_end)->format('g:i A'))
                 ->join(', ');
 
             $user->notify(new Reschedule(
@@ -96,8 +99,8 @@ class NotificationService
                 $times,
             ));
         } catch (\Exception $e) {
-            Log::error('Push notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Push notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 
@@ -113,8 +116,8 @@ class NotificationService
                 route('requests.detail', ['request_id' => $targetRequest->id]),
             ));
         } catch (\Exception $e) {
-            Log::error('On-hold notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('On-hold notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 
@@ -155,8 +158,81 @@ class NotificationService
                 $timeEnd
             ));
         } catch (\Exception $e) {
-            Log::error('Facility-level notification failed: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Facility-level notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
+        }
+    }
+
+    public function notifyUserChosenAlternatives(Request $request): void
+    {
+        try {
+            $request->loadMissing(['rescheduleSuggestions.chosenByAdmin']);
+
+            $user = User::findOrFail($request->user_id);
+
+            $alternatives = $request->rescheduleSuggestions
+                ->groupBy('facility_id')
+                ->map(function ($items, $facilityId) {
+                    return [
+                        'facility_id' => $facilityId,
+                        'facility_name' => $items->first()->facility_name,
+                        'options' => $items->map(function ($item) {
+                            return [
+                                'date' => $item->date->format('Y-m-d'),
+                                'time_start' => $item->time_start->format('H:i'),
+                                'time_end' => $item->time_end->format('H:i'),
+                                'type' => $item->type,
+                                'capacity_fit' => $item->capacity_fit,
+                                'equipment_available' => $item->equipment_available,
+                                'chosen_by' => $item->chosenByAdmin->name ?? 'Admin',
+                            ];
+                        })->values()->all(),
+                    ];
+                })->values()->all();
+
+            $user->notify(new RescheduleAlternativesChosen(
+                $request->title,
+                $request->status,
+                route('requests.detail', ['request_id' => $request->id]),
+                $alternatives,
+            ));
+        } catch (\Exception $e) {
+            Log::error('Chosen alternatives notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
+        }
+    }
+
+    public function notifyAdminsRequestEdited(Request $request): void
+    {
+        try {
+            $request->loadMissing('user');
+
+            $rateLimitKey = "request-edited-{$request->id}";
+            if (RateLimiter::tooManyAttempts($rateLimitKey, 1)) {
+                Log::info('Rate limited: request edited notification skipped', [
+                    'request_id' => $request->id,
+                ]);
+
+                return;
+            }
+
+            RateLimiter::hit($rateLimitKey, 300);
+
+            $admins = User::role(['admin', 'Super Admin'])->get();
+            $status = $request->status->value;
+
+            foreach ($admins as $user) {
+                $user->notify(new RequestEditedByRequester(
+                    $request->title,
+                    $request->user->name,
+                    route('requests.detail', ['request_id' => $request->id]),
+                    $request->id,
+                    $status
+                ));
+            }
+        } catch (\Exception $e) {
+            Log::error('Request edited admin notification failed: '.$e->getMessage());
+            Log::error('Stack trace: '.$e->getTraceAsString());
         }
     }
 }

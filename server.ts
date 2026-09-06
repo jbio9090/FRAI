@@ -12,7 +12,7 @@ interface User {
     id: number;
     name: string;
     email: string;
-    role: 'Super Admin' | 'admin' | 'Department Head';
+    role: 'Super Admin' | 'admin' | 'Administrative Staff';
     roles: string[];
     permissions: string[];
     is_active: boolean;
@@ -173,8 +173,8 @@ const users: User[] = [
         id: 3,
         name: 'Prof. Marcus Brody',
         email: 'user@example.com',
-        role: 'Department Head',
-        roles: ['Department Head'],
+        role: 'Administrative Staff',
+        roles: ['Administrative Staff'],
         permissions: ['view requests', 'create requests'],
         is_active: true,
         avatar: null,
@@ -354,7 +354,7 @@ const rules: Rule[] = [
     {
         id: 9,
         title: 'Who is required to approve facility reservation requests?',
-        content: 'Standard workflows route through Department Heads, College Deans, Office of Student Affairs (OSA), and the General Services Office (GSO) for final facility handover.',
+        content: 'Standard workflows route through Administrative Staff, College Deans, Office of Student Affairs (OSA), and the General Services Office (GSO) for final facility handover.',
         forPolicy: 1,
         order: 4,
         category: 'Approvals'
@@ -362,7 +362,7 @@ const rules: Rule[] = [
 ];
 
 const settingsData = {
-    approvers: ['Faculty Adviser', 'Department Head', 'College Dean', 'OSA Director', 'VP Academic Affairs', 'GSO Administrator'],
+    approvers: ['Faculty Adviser', 'Administrative Staff', 'College Dean', 'OSA Director', 'VP Academic Affairs', 'GSO Administrator'],
     booking_window: {
         start_time: '07:00',
         end_time: '21:00',
@@ -448,7 +448,7 @@ const requests: FacilityReservationRequest[] = [
         user_id: 3,
         user: users[2],
         approvers: [
-            { name: 'Department Head', status: 'Approved' },
+            { name: 'Administrative Staff', status: 'Approved' },
             { name: 'College Dean', status: 'Pending' },
             { name: 'OSA Director', status: 'Pending' },
             { name: 'GSO Administrator', status: 'Pending' }
@@ -511,7 +511,7 @@ const requests: FacilityReservationRequest[] = [
         user_id: 2,
         user: users[1],
         approvers: [
-            { name: 'Department Head', status: 'Approved' },
+            { name: 'Administrative Staff', status: 'Approved' },
             { name: 'College Dean', status: 'Approved' },
             { name: 'OSA Director', status: 'Approved' },
             { name: 'GSO Administrator', status: 'Approved' }
@@ -560,7 +560,7 @@ const requests: FacilityReservationRequest[] = [
         user_id: 3,
         user: users[2],
         approvers: [
-            { name: 'Department Head', status: 'Approved' },
+            { name: 'Administrative Staff', status: 'Approved' },
             { name: 'College Dean', status: 'Rejected' },
             { name: 'OSA Director', status: 'Pending' }
         ],
@@ -1466,8 +1466,8 @@ async function startServer() {
             id: newId,
             name,
             email,
-            role: role || 'Department Head',
-            roles: [role || 'Department Head'],
+            role: role || 'Administrative Staff',
+            roles: [role || 'Administrative Staff'],
             permissions: role === 'admin' || role === 'Super Admin'
                 ? ['view requests', 'create requests', 'approve requests', 'reject requests', 'manage facilities']
                 : ['view requests', 'create requests'],

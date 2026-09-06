@@ -29,4 +29,4 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-
+vite-dev.log   

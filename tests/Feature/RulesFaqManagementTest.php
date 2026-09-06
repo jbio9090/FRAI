@@ -92,4 +92,3 @@ class RulesFaqManagementTest extends TestCase
         return $user;
     }
 }
-

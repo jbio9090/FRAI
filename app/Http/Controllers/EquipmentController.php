@@ -2,28 +2,27 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\RequestStatus;
 use App\Models\Equipment;
 use App\Models\Facility;
-use App\Models\FacilityEquipment;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Illuminate\Http\JsonResponse;
 use App\Models\Request as FacilityRequest;
-use App\Enums\RequestStatus;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class EquipmentController extends Controller
 {
     public function index(Request $request)
     {
         $search = trim($request->input('search', ''));
-        $sort   = $request->input('sort', '');
+        $sort = $request->input('sort', '');
 
         $query = Equipment::with('facilities');
 
         if ($search) {
-            $query->whereRaw('LOWER(name) LIKE ?', ['%' . mb_strtolower($search) . '%']);
+            $query->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($search).'%']);
         }
 
         switch ($sort) {
@@ -56,9 +55,9 @@ class EquipmentController extends Controller
         return Inertia::render('equipments/index', [
             'equipments' => $equipments,
             'facilities' => Facility::select('id', 'name')->orderBy('name')->get(),
-            'filters'    => [
+            'filters' => [
                 'search' => $search,
-                'sort'   => $sort,
+                'sort' => $sort,
             ],
         ]);
     }
@@ -66,7 +65,7 @@ class EquipmentController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
+            'name' => 'required|string|max:255',
             'quantity' => 'required|integer|min:1',
         ]);
 
@@ -78,7 +77,7 @@ class EquipmentController extends Controller
     public function update(Request $request, Equipment $equipment)
     {
         $validated = $request->validate([
-            'name'     => 'required|string|max:255',
+            'name' => 'required|string|max:255',
             'quantity' => 'required|integer|min:1',
         ]);
 
@@ -98,17 +97,17 @@ class EquipmentController extends Controller
     public function syncFacilities(Request $request, Equipment $equipment)
     {
         $validated = $request->validate([
-            'assignments'                => 'array',
-            'assignments.*.facility_id'  => [
+            'assignments' => 'array',
+            'assignments.*.facility_id' => [
                 'required',
                 Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
             ],
-            'assignments.*.quantity'     => 'required|integer|min:1',
+            'assignments.*.quantity' => 'required|integer|min:1',
         ]);
 
         $sync = collect($validated['assignments'] ?? [])
-            ->mapWithKeys(fn($a) => [
-                $a['facility_id'] => ['quantity' => $a['quantity']]
+            ->mapWithKeys(fn ($a) => [
+                $a['facility_id'] => ['quantity' => $a['quantity']],
             ])->all();
 
         $equipment->facilities()->sync($sync);
@@ -119,25 +118,25 @@ class EquipmentController extends Controller
     public function checkConflicts(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'equipment_ids'      => 'required|array',
-            'equipment_ids.*'    => 'integer|exists:equipments,id',
-            'date'               => 'required|date',
-            'time_start'         => 'required|string',
-            'time_end'           => 'required|string',
+            'equipment_ids' => 'required|array',
+            'equipment_ids.*' => 'integer|exists:equipments,id',
+            'date' => 'required|date',
+            'time_start' => 'required|string',
+            'time_end' => 'required|string',
             'exclude_request_id' => 'nullable|integer',
         ]);
 
-        $date      = Carbon::parse($validated['date'])->format('Y-m-d');
+        $date = Carbon::parse($validated['date'])->format('Y-m-d');
         $timeStart = substr($validated['time_start'], 0, 5);
-        $timeEnd   = substr($validated['time_end'], 0, 5);
+        $timeEnd = substr($validated['time_end'], 0, 5);
 
         $conflictingRequests = FacilityRequest::whereIn('status', [RequestStatus::PENDING, RequestStatus::APPROVED])
             ->where('on_hold', false)
-            ->when($validated['exclude_request_id'] ?? null, fn($q, $id) => $q->where('id', '!=', $id))
-            ->whereHas('equipment', fn($q) => $q->whereIn('equipments.id', $validated['equipment_ids']))
+            ->when($validated['exclude_request_id'] ?? null, fn ($q, $id) => $q->where('id', '!=', $id))
+            ->whereHas('equipment', fn ($q) => $q->whereIn('equipments.id', $validated['equipment_ids']))
             ->whereHas(
                 'requestFacilities',
-                fn($q) => $q
+                fn ($q) => $q
                     ->where('date_requested', $date)
                     ->where('time_start', '<', $timeEnd)
                     ->where('time_end', '>', $timeStart)
@@ -150,10 +149,10 @@ class EquipmentController extends Controller
             $overlapping = $conflict->equipment->pluck('id')->intersect($validated['equipment_ids']);
             foreach ($overlapping as $eqId) {
                 $byEquipment[$eqId][] = [
-                    'request_id'    => $conflict->id,
+                    'request_id' => $conflict->id,
                     'request_title' => $conflict->title,
-                    'requester'     => $conflict->user->name,
-                    'status'        => $conflict->status->value,
+                    'requester' => $conflict->user->name,
+                    'status' => $conflict->status->value,
                 ];
             }
         }
@@ -169,14 +168,14 @@ class EquipmentController extends Controller
                 'integer',
                 Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
             ],
-            'date'        => 'required|date',
-            'time_start'  => 'required|string',
-            'time_end'    => 'required|string',
+            'date' => 'required|date',
+            'time_start' => 'required|string',
+            'time_end' => 'required|string',
         ]);
 
-        $date       = Carbon::parse($validated['date'])->format('Y-m-d');
-        $timeStart  = substr($validated['time_start'], 0, 5);
-        $timeEnd    = substr($validated['time_end'], 0, 5);
+        $date = Carbon::parse($validated['date'])->format('Y-m-d');
+        $timeStart = substr($validated['time_start'], 0, 5);
+        $timeEnd = substr($validated['time_end'], 0, 5);
         $facilityId = (int) $validated['facility_id'];
 
         $facility = Facility::findOrFail($facilityId);
@@ -192,11 +191,11 @@ class EquipmentController extends Controller
                 );
 
                 return [
-                    'equipment_id'       => $equipment->id,
-                    'equipment_name'     => $equipment->name,
-                    'total_quantity'     => $totalInFacility,
+                    'equipment_id' => $equipment->id,
+                    'equipment_name' => $equipment->name,
+                    'total_quantity' => $totalInFacility,
                     'available_quantity' => max(0, $available),
-                    'is_limited'         => $available < $totalInFacility,
+                    'is_limited' => $available < $totalInFacility,
                 ];
             })
             ->values();

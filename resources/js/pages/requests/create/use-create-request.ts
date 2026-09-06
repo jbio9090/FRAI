@@ -2,6 +2,7 @@ import { useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
 import type { EquipmentConflict } from '@/types/equipment';
 import type { FacilityEquipment } from '@/types/equipment';
 import type { AlternativeSlot } from '@/types/request';
@@ -23,7 +24,6 @@ import type {
 } from './types';
 import { addCalendarDays, clearDraft, draftDiffersFromExisting, formatMaxFileSize, getTodayStart, loadDraft, maxFileSizeBytes, minutesToTime, saveDraft, timeToMinutes } from './utils';
 import { ALLOWED_TYPES } from './utils';
-import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
 
 export function useCreateRequest({ facilities, existingRequest }: Pick<CreateRequestProps, 'facilities' | 'existingRequest'>) {
     const isEditing = !!existingRequest;

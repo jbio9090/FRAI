@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\AuditLogger;
-use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Auth;
-use Inertia\Inertia;
 use App\Models\User;
+use App\Services\AuditLogger;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
 
 class LoginController extends Controller
 {
@@ -25,7 +25,6 @@ class LoginController extends Controller
         return Inertia::render('login');
     }
 
-
     public function authenticate(Request $request): RedirectResponse
     {
         $credentials = $request->validate([
@@ -35,7 +34,7 @@ class LoginController extends Controller
 
         $user = User::where('email', $credentials['email'])->first();
 
-        if ($user && !$user->is_active) {
+        if ($user && ! $user->is_active) {
             throw ValidationException::withMessages([
                 'email' => 'Your account is inactive. Please contact support.',
             ]);
@@ -44,25 +43,27 @@ class LoginController extends Controller
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
             $this->auditLogger::loginSucceeded(Auth::id(), $credentials['email']);
+
             return redirect()->intended('/');
         }
 
         $this->auditLogger::loginFailed($credentials['email']);
+
         return back()->withErrors([
             'email' => 'Authentication failed. Please check your credentials',
         ])->onlyInput('email');
     }
 
-
     public function logout(Request $request)
     {
         $userId = Auth::id();
-        $email  = Auth::user()->email;
+        $email = Auth::user()->email;
         $this->auditLogger::loggedOut($userId, $email);
 
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        return redirect("/login");
+
+        return redirect('/login');
     }
 }

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 class StorageService
 {
     protected bool $useCloudinary = false;
+
     protected ?CloudinaryUploader $cloudinary = null;
 
     public function __construct()
@@ -26,7 +27,7 @@ class StorageService
         }
 
         try {
-            $this->cloudinary = new CloudinaryUploader();
+            $this->cloudinary = new CloudinaryUploader;
         } catch (\Throwable $e) {
             $this->useCloudinary = false;
             $this->cloudinary = null;
@@ -38,10 +39,12 @@ class StorageService
         $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($file, 'profiles');
+
             return $res['secure_url'] ?? $res['url'] ?? '';
         }
 
         $path = $file->store('profiles', 'public');
+
         return basename($path);
     }
 
@@ -50,12 +53,14 @@ class StorageService
         $this->ensureCloudinary();
         if ($this->useCloudinary && $this->cloudinary) {
             $res = $this->cloudinary->uploadFile($localPath, 'profiles');
+
             return $res['secure_url'] ?? $res['url'] ?? '';
         }
 
         $contents = file_get_contents($localPath);
         $filename = basename($localPath);
-        Storage::disk('public')->put('profiles/' . $filename, $contents);
+        Storage::disk('public')->put('profiles/'.$filename, $contents);
+
         return $filename;
     }
 
@@ -76,21 +81,22 @@ class StorageService
 
             return [
                 // Store the canonical delivery URL directly — no manual reconstruction needed.
-                'path'          => $secureUrl,
-                'url'           => $secureUrl,
-                'public_id'     => $res['public_id'] ?? null,
+                'path' => $secureUrl,
+                'url' => $secureUrl,
+                'public_id' => $res['public_id'] ?? null,
                 'resource_type' => $res['resource_type'] ?? 'raw',
-                'mime_type'     => $file->getClientMimeType(),
-                'size'          => $res['bytes'] ?? $file->getSize(),
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $res['bytes'] ?? $file->getSize(),
             ];
         }
 
         $path = $file->store($folder, 'public');
+
         return [
-            'path'      => $path,
-            'url'       => Storage::disk('public')->url($path),
+            'path' => $path,
+            'url' => Storage::disk('public')->url($path),
             'mime_type' => $file->getClientMimeType(),
-            'size'      => $file->getSize(),
+            'size' => $file->getSize(),
         ];
     }
 
@@ -102,7 +108,7 @@ class StorageService
      */
     public function uploadRequestFileFromLocalPath(string $relativePath, string $folder = 'request-files'): array
     {
-        $full = storage_path('app/public/' . ltrim($relativePath, '/'));
+        $full = storage_path('app/public/'.ltrim($relativePath, '/'));
         if (! file_exists($full)) {
             throw new \RuntimeException("Local file not found: {$full}");
         }
@@ -114,26 +120,26 @@ class StorageService
 
             return [
                 // Store the canonical delivery URL directly — no manual reconstruction needed.
-                'path'          => $secureUrl,
-                'url'           => $secureUrl,
-                'public_id'     => $res['public_id'] ?? null,
+                'path' => $secureUrl,
+                'url' => $secureUrl,
+                'public_id' => $res['public_id'] ?? null,
                 'resource_type' => $res['resource_type'] ?? 'raw',
-                'mime_type'     => mime_content_type($full) ?: 'application/octet-stream',
-                'size'          => $res['bytes'] ?? filesize($full),
+                'mime_type' => mime_content_type($full) ?: 'application/octet-stream',
+                'size' => $res['bytes'] ?? filesize($full),
             ];
         }
 
         // fallback: move/copy within public disk
         $contents = file_get_contents($full);
         $filename = basename($full);
-        $permanent = $folder . '/' . $filename;
+        $permanent = $folder.'/'.$filename;
         Storage::disk('public')->put($permanent, $contents);
 
         return [
-            'path'      => $permanent,
-            'url'       => Storage::disk('public')->url($permanent),
+            'path' => $permanent,
+            'url' => Storage::disk('public')->url($permanent),
             'mime_type' => mime_content_type($full) ?: 'application/octet-stream',
-            'size'      => filesize($full),
+            'size' => filesize($full),
         ];
     }
 
@@ -153,6 +159,7 @@ class StorageService
                 if ($publicId) {
                     $this->cloudinary->destroy($publicId, $resource);
                 }
+
                 return;
             }
         }
@@ -165,8 +172,10 @@ class StorageService
                 [$resource, $publicAndMaybeExt] = explode('/', $rest, 2) + [1 => ''];
                 $publicId = preg_replace('/\.[^.]+$/', '', $publicAndMaybeExt);
                 $this->cloudinary->destroy($publicId, $resource);
+
                 return;
             }
+
             // If cloudinary isn't available, nothing to do for remote-only resources.
             return;
         }
@@ -183,9 +192,6 @@ class StorageService
      * method just returns it as-is.  Older uploads used the 'cloudinary://' scheme;
      * those are handled by reconstructing a delivery URL (best-effort, kept for
      * backward compatibility).  Local-disk paths go through Storage::disk('public').
-     *
-     * @param string $path
-     * @return string|null
      */
     public function getPublicUrl(string $path): ?string
     {
@@ -203,7 +209,7 @@ class StorageService
             // Promote image→raw when the public-id has a non-image extension so
             // Cloudinary serves the file via the correct delivery pipeline.
             $ext = strtolower(pathinfo($publicAndMaybeExt, PATHINFO_EXTENSION) ?: '');
-            $rawExts = ['pdf','doc','docx','xls','xlsx','ppt','pptx','zip','mp3','mp4','mov','avi','mkv','txt'];
+            $rawExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'mp3', 'mp4', 'mov', 'avi', 'mkv', 'txt'];
             if ($resource === 'image' && in_array($ext, $rawExts, true)) {
                 $resource = 'raw';
             }
@@ -211,11 +217,12 @@ class StorageService
             $cloudUrl = env('CLOUDINARY_URL');
             if ($cloudUrl) {
                 $parts = parse_url($cloudUrl);
-                $cloud  = $parts['host'] ?? null;
+                $cloud = $parts['host'] ?? null;
                 if ($cloud) {
                     return "https://res.cloudinary.com/{$cloud}/{$resource}/upload/{$publicAndMaybeExt}";
                 }
             }
+
             return null;
         }
 
@@ -228,12 +235,15 @@ class StorageService
         $parts = parse_url($url);
         $path = $parts['path'] ?? '';
         $pos = strpos($path, '/upload/');
-        if ($pos === false) return null;
+        if ($pos === false) {
+            return null;
+        }
         $after = substr($path, $pos + strlen('/upload/'));
         // strip version prefix v12345/
         $after = preg_replace('/^v\d+\//', '', $after);
         $after = ltrim($after, '/');
         $public = preg_replace('/\.[^.]+$/', '', $after);
+
         return $public ?: null;
     }
 }

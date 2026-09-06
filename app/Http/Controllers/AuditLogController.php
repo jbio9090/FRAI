@@ -2,13 +2,4 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AuditLog;
-use App\Enums\AuditEvent;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Carbon\Carbon;
-
-class AuditLogController extends Controller
-{
-
-}
+class AuditLogController extends Controller {}
