@@ -87,7 +87,7 @@ export async function sendChatMessage(
     });
 
     if (response.status === 419) {
-        throw new Error('Session timed out. Please try sending your message again.');
+        throw new Error('Session timed out. Please try refreshing the page.');
     }
 
     const data = (await response.json().catch(() => null)) as (ChatJsonResponse & { message?: string | { role?: string; content?: string } }) | null;
@@ -132,7 +132,7 @@ export async function sendChatMessageStream(
     });
 
     if (response.status === 419) {
-        onError('Session timed out. Please try sending your message again.');
+        onError('Session timed out. Please try refreshing the page.');
         return;
     }
 
