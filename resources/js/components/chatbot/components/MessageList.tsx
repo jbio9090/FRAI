@@ -1,7 +1,7 @@
+import ReactMarkdown from 'react-markdown';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import ReactMarkdown from 'react-markdown';
 import type { Message } from '../types';
 import TypingText from './TypingText';
 

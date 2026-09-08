@@ -122,11 +122,13 @@ class SettingsController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,'.$user->id,
+            'position' => 'nullable|string|max:100',
         ]);
 
         $user->update([
             'name' => $validated['name'],
             'email' => $validated['email'],
+            'position' => $validated['position'],
         ]);
 
         return redirect()->route('settings');

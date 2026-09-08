@@ -40,6 +40,7 @@ import type { User } from "@/types";
 
 interface RowUser extends User {
     is_active: boolean;
+    position?: string;
 }
 
 interface PaginatedUsers {
@@ -1075,6 +1076,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                             <TableHead className="w-[50px]"></TableHead>
                             <TableHead>Name</TableHead>
                             <TableHead>Email</TableHead>
+                            <TableHead>Position</TableHead>
                             <TableHead>Created At</TableHead>
                             {activeTab === 'archived' && (<TableHead>Deleted At</TableHead>)}
                             <TableHead>Role</TableHead>
@@ -1113,6 +1115,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                         )}
                                     </TableCell>
                                     <TableCell>{rowUser.email}</TableCell>
+                                    <TableCell>{rowUser.position ?? '—'}</TableCell>
                                     <TableCell>{moment(rowUser.created_at).format("MMMM D, YYYY h:mm A")}</TableCell>
                                     {activeTab === 'archived' && (<TableCell>{moment(rowUser.deleted_at).format("MMMM D, YYYY h:mm A")}</TableCell>)}
                                     <TableCell><RoleBadge roles={[rowUser.role]} variant="sm" /></TableCell>

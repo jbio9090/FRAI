@@ -40,6 +40,7 @@ interface PageProps extends Record<string, unknown> {
             profile: string;
             roles: string[];
             email: string;
+            position?: string;
             admin_email_notifications_enabled: boolean;
         };
     };
@@ -64,6 +65,7 @@ export default function Settings() {
     } = useForm({
         name: auth.user.name,
         email: auth.user.email,
+        position: auth.user.position ?? '',
     });
 
     const handleUpdateDetails = () => {
@@ -340,6 +342,19 @@ export default function Settings() {
                                 />
                                 {detailsErrors.email && (
                                     <span className="text-xs text-destructive">{detailsErrors.email}</span>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Position</Label>
+                                <Input
+                                    value={detailsData.position}
+                                    onChange={e => setDetailsData('position', e.target.value)}
+                                    placeholder="Your position"
+                                    disabled={detailsProcessing}
+                                />
+                                {detailsErrors.position && (
+                                    <span className="text-xs text-destructive">{detailsErrors.position}</span>
                                 )}
                             </div>
                         </div>

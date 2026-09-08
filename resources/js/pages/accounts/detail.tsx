@@ -1,5 +1,4 @@
 import { router, Link, usePage } from '@inertiajs/react';
-import { route } from 'ziggy-js';
 import {
     Eye, Mail, Calendar, Shield, User, Key, ArrowLeft,
     Search, Filter, ArrowDownUp, ChevronLeft, ChevronRight,
@@ -7,11 +6,13 @@ import {
 } from 'lucide-react';
 import moment from 'moment';
 import { useState, useEffect, useMemo, useRef } from 'react';
-import AvatarWithInitials from '@/components/avatar-with-initials';
+import { route } from 'ziggy-js';
 import { ActivityFeed } from '@/components/activity-feed';
 import type { AuditLog } from '@/components/activity-feed';
+import AvatarWithInitials from '@/components/avatar-with-initials';
 import RequestCard from '@/components/request-card';
 import SmartPagination from '@/components/SmartPagination';
+import StatusTag from '@/components/status-tag';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,6 @@ import { RoleBadge } from '@/components/ui/role-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import StatusTag from '@/components/status-tag';
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { cn } from '@/lib/utils';
@@ -175,6 +175,9 @@ export default function AccountDetailPage({
                         <div className="flex-1 min-w-0">
                             <h2 className="font-display text-xl font-semibold">{user.name}</h2>
                             <p className="text-sm text-muted-foreground">{user.email}</p>
+                            {user.position && (
+                                <p className="text-sm text-muted-foreground mt-1">{user.position}</p>
+                            )}
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <RoleBadge roles={[user.role]} variant="default" />
                                 <span className={cn(
