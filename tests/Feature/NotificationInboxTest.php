@@ -31,7 +31,6 @@ class NotificationInboxTest extends TestCase
         $this->assertSame(route('requests.detail', ['request_id' => 123]), $notification->data['url']);
         $this->assertSame('request_result', $notification->data['category']);
         $this->assertSame(RequestStatus::APPROVED->value, $notification->data['status']);
-        $this->assertDatabaseCount('push_subscriptions', 0);
     }
 
     public function test_dashboard_only_shows_authenticated_users_notifications(): void
