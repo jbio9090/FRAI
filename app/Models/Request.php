@@ -124,13 +124,20 @@ class Request extends Model
 
     /* SCOPES */
 
-    public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)
+    public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end, $crossFacility = false)
     {
-        return $query->whereExists(function ($exists) use ($facilityId, $date, $start, $end) {
-            $exists->from('request_facilities')
-                ->whereColumn('request_facilities.request_id', 'requests.id')
-                ->where('request_facilities.facility_id', $facilityId)
-                ->where('request_facilities.date_requested', $date)
+        $query->whereExists(function ($exists) use ($facilityId, $date, $start, $end, $crossFacility) {
+            $exists->from('request_facilities');
+
+            // Always reference request_facilities.request_id to requests.id
+            $exists->whereColumn('request_facilities.request_id', 'requests.id');
+
+            // Only filter by facility_id when not doing cross-facility check
+            if (! $crossFacility) {
+                $exists->where('request_facilities.facility_id', $facilityId);
+            }
+
+            $exists->where('request_facilities.date_requested', $date)
                 ->where(function ($q) use ($start, $end) {
                     $q->whereBetween('time_start', [$start, $end])
                         ->orWhereBetween('time_end', [$start, $end])

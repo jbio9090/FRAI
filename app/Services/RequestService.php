@@ -396,22 +396,42 @@ class RequestService
         }
     }
 
-    public function checkForConflicts(array $bookings, array $statuses = [RequestStatus::APPROVED], ?int $excludeRequestId = null): array
+    public function checkForConflicts(array $bookings, ?array $statuses = null, ?int $excludeRequestId = null, ?bool $crossFacility = false): array
     {
         $conflicts = [];
 
+        if ($statuses === null) {
+            $statuses = [RequestStatus::APPROVED];
+        }
+
+        // Enhance status enum conversion to always produce plain strings
+        $statusValues = collect($statuses)->map(function ($s) use ($statusValues) {
+            if ($s instanceof RequestStatus) {
+                return $s->value;
+            }
+            if (is_string($s)) {
+                return $s;
+            }
+            return (string) $s;
+        })->toArray();
         $facilityIds = collect($bookings)->pluck('facility_id')->unique();
         $dates = collect($bookings)->pluck('date')->map(fn ($d) => Carbon::parse($d)->format('Y-m-d'))->unique();
 
-        $existingBookings = RequestFacility::whereIn('facility_id', $facilityIds)
-            ->whereIn('date_requested', $dates)
-            ->whereIn('status', $statuses)
+        // Build query - optionally skip facility filtering for cross-facility checks
+        $query = RequestFacility::whereIn('date_requested', $dates)
+            ->whereIn('status', $statusValues)
             ->whereHas('request', function ($query) use ($excludeRequestId) {
                 $query->where('on_hold', false)
                     ->when($excludeRequestId, fn ($q) => $q->where('id', '!=', $excludeRequestId));
             })
-            ->with(['facility', 'request'])
-            ->get();
+            ->with(['facility', 'request']);
+
+        // Only filter by facility_id when not doing cross-facility check
+        if (! $crossFacility) {
+            $query->whereIn('facility_id', $facilityIds);
+        }
+
+        $existingBookings = $query->get();
 
         foreach ($bookings as $booking) {
             $requestedDate = Carbon::parse($booking['date'])->format('Y-m-d');
@@ -427,22 +447,23 @@ class RequestService
                 $existingEnd = $this->parseBookingDateTime($requestedDate, $existing->time_end);
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
-                    $status = $existing->request->status;
+                    $status = $existing->request?->status ?? $existing->status;
+                    $statusValue = $status instanceof RequestStatus ? $status->value : $status;
                     $conflicts[] = [
                         'request_id' => $existing->request_id,
                         'request_facility_id' => $existing->id,
-                        'request_title' => $existing->request->title,
+                        'request_title' => $existing->request?->title ?? $existing->title,
                         'date' => $existing->date_requested,
                         'time_start' => $existing->time_start,
                         'time_end' => $existing->time_end,
-                        'status' => $status,
+                        'status' => $statusValue,
                         'message' => sprintf(
                             'Time conflict for %s on %s: Your booking (%s - %s) overlaps with an existing %s booking (%s - %s)',
                             $existing->facility->name,
                             Carbon::parse($requestedDate)->format('F j, Y'),
                             $requestedStart->format('g:i A'),
                             $requestedEnd->format('g:i A'),
-                            strtolower($status->value),
+                            strtolower($statusValue),
                             $existingStart->format('g:i A'),
                             $existingEnd->format('g:i A')
                         ),
@@ -1102,15 +1123,20 @@ class RequestService
 
     public function isSlotAvailable(int $facilityId, string $date, string $start, string $end): bool
     {
+        // Checks for conflicts with both PENDING and APPROVED requests
+        // Cross-facility checking enabled to detect conflicts even when facility_id differs
         $conflicts = $this->checkForConflicts(
-            [[
-                'facility_id' => $facilityId,
-                'date' => $date,
-                'time_start' => $start,
-                'time_end' => $end,
-            ]],
+            [
+                [
+                    'facility_id' => $facilityId,
+                    'date' => $date,
+                    'time_start' => $start,
+                    'time_end' => $end,
+                ],
+            ],
             [RequestStatus::PENDING, RequestStatus::APPROVED],
-            null
+            null,
+            true  // Enable cross-facility conflict detection
         );
 
         return empty($conflicts);

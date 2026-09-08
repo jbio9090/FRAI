@@ -443,11 +443,14 @@ SYMTPROMPT;
             case 'check_facility_availability':
                 $args = $parsedArguments;
 
+                // Enable cross-facility conflict detection to catch bookings
+                // in other facilities (e.g., MPH 6C vs MPHC 6C)
                 $conflicts = RequestModel::conflicting(
                     (int) ($args['facility_id'] ?? 0),
                     $args['date'] ?? null,
                     $args['start_time'] ?? null,
                     $args['end_time'] ?? null,
+                    true,  // crossFacility: detect conflicts even with different facility_id
                 )->with('user')->get();
 
                 $toolResult = [
