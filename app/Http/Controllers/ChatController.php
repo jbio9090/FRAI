@@ -10,10 +10,10 @@ use App\Models\Facility;
 use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
 use App\Services\AI\OpenRouterClient;
-use App\Services\AlternativeRecommendationService;
 use App\Services\PageContextService;
 use App\Services\RAG\FaqMatchingService;
 use App\Services\RequestService;
+use App\Services\AlternativeRecommendationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -427,7 +427,7 @@ SYMTPROMPT;
     private function executeToolCall(string $functionName, array $parsedArguments, Request $request): array
     {
         switch ($functionName) {
-            case 'get_request_details':
+            case 'get_request_details': {
                 $requestId = is_array($parsedArguments) ? (int) ($parsedArguments['request_id'] ?? 0) : 0;
                 $requestDetail = $this->getRequestDetail($requestId);
 
@@ -439,8 +439,9 @@ SYMTPROMPT;
                         'result' => $requestDetail,
                     ],
                 ];
+            }
 
-            case 'check_facility_availability':
+            case 'check_facility_availability': {
                 $args = $parsedArguments;
 
                 $conflicts = RequestModel::conflicting(
@@ -468,12 +469,12 @@ SYMTPROMPT;
                         'result' => $toolResult,
                     ],
                 ];
+            }
 
-            case 'get_suggested_alternatives':
+            case 'get_suggested_alternatives': {
                 $user = Auth::user();
                 if (! $user->hasRole(['admin', 'Super Admin'])) {
                     $toolResult = ['error' => 'forbidden', 'message' => 'Only admins can request alternative facility suggestions.'];
-
                     return [
                         'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
                         'debug' => [
@@ -489,7 +490,6 @@ SYMTPROMPT;
 
                 if (! $facilityRequest) {
                     $toolResult = ['error' => 'not_found', 'message' => 'No request exists with that ID.'];
-
                     return [
                         'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
                         'debug' => [
@@ -502,7 +502,6 @@ SYMTPROMPT;
 
                 if ($facilityRequest->status !== \App\Enums\RequestStatus::FOR_RESCHEDULE) {
                     $toolResult = ['error' => 'status_gate', 'message' => sprintf('Suggested alternatives are only available for requests with "For Reschedule" status. Current status: %s', $facilityRequest->status?->value ?? 'unknown')];
-
                     return [
                         'content' => json_encode($toolResult, JSON_UNESCAPED_SLASHES),
                         'debug' => [
@@ -525,8 +524,9 @@ SYMTPROMPT;
                         'result' => $toolResult,
                     ],
                 ];
+            }
 
-            case 'get_my_permissions':
+            case 'get_my_permissions': {
                 $user = Auth::user();
 
                 $toolResult = [
@@ -544,8 +544,9 @@ SYMTPROMPT;
                         'result' => $toolResult,
                     ],
                 ];
+            }
 
-            case 'get_page_context':
+            case 'get_page_context': {
                 $arguments = $parsedArguments;
                 $fetchPageContext = is_array($arguments) ? (bool) ($arguments['page'] ?? true) : true;
                 if (! $fetchPageContext) {
@@ -582,6 +583,7 @@ SYMTPROMPT;
                         'result' => $toolResult,
                     ],
                 ];
+            }
 
             default: return [
                 'content' => json_encode(['error' => 'unknown_tool', 'message' => sprintf('No handler for tool: %s', $functionName)]),
@@ -617,7 +619,6 @@ SYMTPROMPT;
 
             if (empty($toolCalls)) {
                 $content = trim((string) ($result['content'] ?? ''));
-
                 return $content !== '' ? $content : null;
             }
 
@@ -705,20 +706,20 @@ SYMTPROMPT;
             'has_pending_conflicts' => ! empty($request->pending_conflict_rf_ids),
             'has_approved_conflicts' => ! empty($request->approved_conflict_rf_ids),
             'conflicting_requests' => \App\Models\RequestFacility::whereIn('id', array_merge(
-                $request->pending_conflict_rf_ids ?? [],
-                $request->approved_conflict_rf_ids ?? []
-            ))
-                ->with(['facility', 'request'])
-                ->get()
-                ->map(fn ($rf) => [
-                            'title' => $rf->request?->title,
-                            'facility_name' => $rf->facility?->name ?? 'unknown',
-                            'date_requested' => $rf->date_requested,
-                            'time_start' => $rf->time_start,
-                            'time_end' => $rf->time_end,
-                            'status' => $rf->status ?? 'unknown',
-                        ])
-                ->values(),
+        $request->pending_conflict_rf_ids ?? [],
+        $request->approved_conflict_rf_ids ?? []
+    ))
+    ->with(['facility', 'request'])
+    ->get()
+    ->map(fn ($rf) => [
+        'title' => $rf->request?->title,
+        'facility_name' => $rf->facility?->name ?? 'unknown',
+        'date_requested' => $rf->date_requested,
+        'time_start' => $rf->time_start,
+        'time_end' => $rf->time_end,
+        'status' => $rf->status ?? 'unknown',
+    ])
+    ->values(),
         ];
     }
 
