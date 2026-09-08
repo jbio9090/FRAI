@@ -232,9 +232,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     className="cursor-pointer gap-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                                 >
                                     <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
-<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+<div className="flex flex-col text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
     <span className="truncate font-semibold">{auth.user.name}</span>
-    <RoleBadge roles={auth.user.roles} variant="sm" />
+    <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
 </div>
                                     <span className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
                                         <ChevronDownIcon label="Account menu" color="currentColor" />
@@ -247,7 +247,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                         <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
 <div className="grid flex-1 text-left text-sm leading-tight">
     <span className="truncate font-semibold">{auth.user.name}</span>
-    <RoleBadge roles={auth.user.roles} variant="sm" />
+    <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
 </div>
                                     </div>
                                 </DropdownMenuLabel>

@@ -175,11 +175,8 @@ export default function AccountDetailPage({
                         <div className="flex-1 min-w-0">
                             <h2 className="font-display text-xl font-semibold">{user.name}</h2>
                             <p className="text-sm text-muted-foreground">{user.email}</p>
-                            {user.position && (
-                                <p className="text-sm text-muted-foreground mt-1">{user.position}</p>
-                            )}
                             <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <RoleBadge roles={[user.role]} variant="default" />
+                                <RoleBadge roles={[user.role]} position={user.position} variant="default" />
                                 <span className={cn(
                                     'inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[11px] font-semibold',
                                     user.is_active

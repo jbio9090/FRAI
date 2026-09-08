@@ -305,7 +305,7 @@ export default function Dashboard({
                                 </h1>
                             </div>
                             <div className="flex items-center gap-2">
-                                <RoleBadge roles={roles} />
+                                <RoleBadge roles={roles} position={auth.user.position} />
                                 <Button size="sm" asChild>
                                     <Link href={route('request.create')}>
                                         <CirclePlus className="h-4 w-4" />

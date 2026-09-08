@@ -128,7 +128,7 @@ class SettingsController extends Controller
         $user->update([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'position' => $validated['position'],
+            'position' => trim((string) ($validated['position'] ?? '')) ?: null,
         ]);
 
         return redirect()->route('settings');
