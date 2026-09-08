@@ -124,19 +124,30 @@ class Request extends Model
 
     /* SCOPES */
 
-    public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)
+    public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end, $crossFacility = false)
     {
-        return $query->where('facility_id', $facilityId)
-            ->where('date', $date)
-            ->where(function ($q) use ($start, $end) {
-                $q->whereBetween('start_time', [$start, $end])
-                    ->orWhereBetween('end_time', [$start, $end])
-                    ->orWhere(function ($inner) use ($start, $end) {
-                        $inner->where('start_time', '<=', $start)
-                            ->where('end_time', '>=', $end);
-                    });
-            })
-            ->whereIn('status', ['Pending', 'Approved']);
+        $query->whereExists(function ($exists) use ($facilityId, $date, $start, $end, $crossFacility) {
+            $exists->from('request_facilities');
+
+            // Always reference request_facilities.request_id to requests.id
+            $exists->whereColumn('request_facilities.request_id', 'requests.id');
+
+            // Only filter by facility_id when not doing cross-facility check
+            if (! $crossFacility) {
+                $exists->where('request_facilities.facility_id', $facilityId);
+            }
+
+            $exists->where('request_facilities.date_requested', $date)
+                ->where(function ($q) use ($start, $end) {
+                    $q->whereBetween('time_start', [$start, $end])
+                        ->orWhereBetween('time_end', [$start, $end])
+                        ->orWhere(function ($inner) use ($start, $end) {
+                            $inner->where('time_start', '<=', $start)
+                                ->where('time_end', '>=', $end);
+                        });
+                });
+        })
+        ->whereIn('status', ['Pending', 'Approved']);
     }
 
     protected static function booted()
