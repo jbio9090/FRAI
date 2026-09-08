@@ -249,7 +249,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                         </TabsContent>
                     </Tabs>
 
-                    <div className="sticky bottom-0 z-5 -mx-6 flex justify-end gap-4 border-t border-border bg-background/80 px-6 py-4 backdrop-blur-sm md:-mx-8 md:px-8">
+                    <div className="sticky bottom-0 z-5 -mx-6 flex justify-start gap-4 border-t border-border bg-background/80 px-6 py-4 backdrop-blur-sm md:-mx-8 md:px-8">
                         <Button type="button" variant="outline" size="lg" className="text-md font-semibold" onClick={() => window.history.back()}>
                             Cancel
                         </Button>
