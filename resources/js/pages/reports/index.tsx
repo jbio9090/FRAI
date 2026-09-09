@@ -304,6 +304,7 @@ export default function ReportsPage({
     );
 
     // Also fetch facility usage pie data
+    let pieData: ChartDataPoint[] = [];
     try {
       const pieParams = new URLSearchParams({
         type: "facility-usage-pie",
@@ -319,18 +320,64 @@ export default function ReportsPage({
       });
       const pieRes = await fetch(`/reports/data?${pieParams.toString()}`);
       const pieJson = await pieRes.json();
-      setAllFacilityPieData(pieJson.data || []);
+      pieData = pieJson.data || [];
+      setAllFacilityPieData(pieData);
     } catch (error) {
       console.error("Failed to fetch facility-usage-pie data:", error);
+      pieData = [];
       setAllFacilityPieData([]);
     }
 
     flushSync(() => {
       setAllChartData(results);
     });
+
+    // Return fresh data so callers don't read stale React state
+    // (the closure's `allChartData` is still empty on first export).
+    return { results, pieData };
   }, []);
 
-  const captureChartImages = async () => {
+  const waitForOffscreenCharts = async (
+    freshData: Record<ReportType, ChartDataPoint[]>,
+    freshPieData: ChartDataPoint[],
+    timeoutMs = 8000
+  ) => {
+    const start = Date.now();
+    const refsByType: Partial<Record<ReportType, React.RefObject<HTMLDivElement | null>>> = {
+      volume: volumeRef,
+      "approval-rate": approvalRateRef,
+      "facility-utilization": facilityUtilizationRef,
+      "priority-distribution": priorityDistributionRef,
+      "processing-time": processingTimeRef,
+    };
+    const hasData = (type: ReportType) =>
+      (type === "facility-utilization" ? freshPieData : freshData[type] ?? []).length > 0;
+
+    // Poll until every chart with data has rendered an <svg>, so html-to-image
+    // captures real content instead of an empty container on first export.
+    for (;;) {
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      );
+      const pending = (Object.keys(refsByType) as ReportType[]).filter((type) => {
+        if (!hasData(type)) return false;
+        const el = refsByType[type]?.current;
+        if (!el) return true;
+        return !el.querySelector("svg");
+      });
+      if (pending.length === 0) return;
+      if (Date.now() - start > timeoutMs) {
+        console.warn(`Timed out waiting for off-screen charts: ${pending.join(", ")}`);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  };
+
+  const captureChartImages = async (
+    freshData?: Record<ReportType, ChartDataPoint[]>,
+    freshPieData?: ChartDataPoint[]
+  ) => {
     const images: Record<ReportType, string> = {
       volume: "",
       "approval-rate": "",
@@ -341,12 +388,18 @@ export default function ReportsPage({
       "processing-time": "",
     };
 
+    // Prefer explicitly passed fresh data; fall back to state for other callers.
+    // Reading `allChartData` directly here would use a stale closure on the
+    // first export (state hasn't re-rendered yet when this runs).
+    const source = freshData ?? allChartData;
+    const pieSource = freshPieData ?? allFacilityPieData;
+
     const chartConfigs: { type: ReportType; ref: React.RefObject<HTMLDivElement | null>; data: ChartDataPoint[] }[] = [
-      { type: "volume", ref: volumeRef, data: allChartData.volume },
-      { type: "approval-rate", ref: approvalRateRef, data: allChartData["approval-rate"] },
-      { type: "facility-utilization", ref: facilityUtilizationRef, data: allFacilityPieData },
-      { type: "priority-distribution", ref: priorityDistributionRef, data: allChartData["priority-distribution"] },
-      { type: "processing-time", ref: processingTimeRef, data: allChartData["processing-time"] },
+      { type: "volume", ref: volumeRef, data: source.volume },
+      { type: "approval-rate", ref: approvalRateRef, data: source["approval-rate"] },
+      { type: "facility-utilization", ref: facilityUtilizationRef, data: pieSource },
+      { type: "priority-distribution", ref: priorityDistributionRef, data: source["priority-distribution"] },
+      { type: "processing-time", ref: processingTimeRef, data: source["processing-time"] },
     ];
 
     for (const { type, ref, data } of chartConfigs) {
@@ -364,9 +417,7 @@ export default function ReportsPage({
           const pngDataUrl = await toPng(ref.current!, {
             backgroundColor: "#ffffff",
             pixelRatio: 2,
-            quality: 0.95,
             skipFonts: true,
-            skipAutoDetect: true,
           });
           images[type] = pngDataUrl;
         } catch (error) {
@@ -550,21 +601,21 @@ export default function ReportsPage({
   const handleExportPdf = async () => {
     setPdfGenerating(true);
     try {
-      // Fetch all chart data first
-      await fetchAllChartData(filters);
+      // Fetch all chart data first. Use the RETURNED data directly instead of
+      // `allChartData` state, which is still stale (empty) on first export.
+      const { results: freshCharts, pieData: freshPie } = await fetchAllChartData(filters);
       // Fetch methodology
       const methodologyData = await fetchMethodology(filters);
       setMethodology(methodologyData);
 
-      // Wait for state to update and component to re-render with charts
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      // Force multiple frames for refs to attach and Recharts to render
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      // Wait for off-screen charts to re-render with the fresh data, then
+      // capture images. Polls for <svg> so first export isn't blank.
+      await waitForOffscreenCharts(freshCharts, freshPie);
       // Extra delay for Recharts internal rendering
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Capture chart images from off-screen render
-      const images = await captureChartImages();
+      const images = await captureChartImages(freshCharts, freshPie);
 
       await downloadReportsPdf(
         {
@@ -579,7 +630,7 @@ export default function ReportsPage({
             type: tab.id,
             title: tab.label,
             description: tab.description,
-            data: allChartData[tab.id] || [],
+            data: tab.id === "facility-utilization" ? freshPie : freshCharts[tab.id] || [],
             imageUrl: images[tab.id],
           })),
           methodology: methodologyData,
