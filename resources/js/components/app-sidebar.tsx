@@ -39,7 +39,6 @@ import {
     SidebarFooter,
     SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { usePermission } from '@/hooks/use-permission';
 import logo from '@/svg/FRAI.svg';
 import type { SharedData } from '@/types';
@@ -47,28 +46,21 @@ import { Button } from './ui/button';
 
 const iconRailItem = 'group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center';
 
-function NavIcon({
-  icon: Icon,
-  title,
-}: {
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  title: string;
-}) {
-  const displayName = (Icon as any).displayName || Icon.name || '';
-  const isLucide = displayName === 'BarChart2' || !displayName.includes('Icon');
+function NavIcon({ icon: Icon, title }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; title: string }) {
+    const displayName = (Icon as any).displayName || Icon.name || '';
+    const isLucide = displayName === 'BarChart2' || !displayName.includes('Icon');
 
-  if (isLucide) {
-    return <Icon size={18} strokeWidth={2} stroke="currentColor" aria-label={title} />;
-  }
+    if (isLucide) {
+        return <Icon size={18} strokeWidth={2} stroke="currentColor" aria-label={title} />;
+    }
 
-  return <Icon label={title} color="currentColor" />;
+    return <Icon label={title} color="currentColor" />;
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { hasPermission } = usePermission();
     const { auth } = usePage<SharedData>().props;
     const hasUnreadNotifications = Number(auth.user?.notification_unread_count ?? 0) > 0;
-    const isMobile = useIsMobile();
 
     const data = {
         topNav: [
@@ -222,9 +214,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             {/* ── Footer ────────────────────────────────────────────────── */}
             <SidebarSeparator className="mx-0" />
             <SidebarFooter className="px-2 group-data-[collapsible=icon]:px-0">
-                <SidebarMenu className="pb-4">
+                {/* Desktop / tablet: avatar dropdown popup. Hidden on <md where the sidebar is a modal Sheet
+                    and a portaled DropdownMenu fights the Dialog focus-trap / overlay stacking. */}
+                <SidebarMenu className="hidden pb-4 md:flex">
                     <SidebarMenuItem className={iconRailItem}>
-                        <DropdownMenu>
+                        <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                                 <SidebarMenuButton
                                     size="lg"
@@ -232,23 +226,30 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                     className="cursor-pointer gap-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                                 >
                                     <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
-<div className="flex flex-col text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-    <span className="truncate font-semibold">{auth.user.name}</span>
-    <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
-</div>
+                                    <div className="flex flex-col text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                                        <span className="truncate font-semibold">{auth.user.name}</span>
+                                        <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
+                                    </div>
                                     <span className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
                                         <ChevronDownIcon label="Account menu" color="currentColor" />
                                     </span>
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className={`min-w-56 rounded-lg ${isMobile ? 'z-[60]' : ''}`} side="top" align="end" sideOffset={4}>
+                            <DropdownMenuContent
+                                className="z-[70] min-w-56 rounded-lg"
+                                side="top"
+                                align="end"
+                                sideOffset={8}
+                                collisionPadding={12}
+                                avoidCollisions={true}
+                            >
                                 <DropdownMenuLabel className="p-0 font-normal">
                                     <div className="flex items-center gap-3 px-1 py-1.5">
                                         <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
-<div className="grid flex-1 text-left text-sm leading-tight">
-    <span className="truncate font-semibold">{auth.user.name}</span>
-    <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
-</div>
+                                        <div className="grid flex-1 text-left text-sm leading-tight">
+                                            <span className="truncate font-semibold">{auth.user.name}</span>
+                                            <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
+                                        </div>
                                     </div>
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
@@ -264,6 +265,32 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
+                    </SidebarMenuItem>
+                </SidebarMenu>
+                {/* Mobile (<md): inline actions, no portal/popup so nothing can get trapped behind the Sheet overlay. */}
+                <SidebarMenu className="pb-4 md:hidden">
+                    <SidebarMenuItem className="px-2">
+                        <div className="flex items-center gap-2 rounded-md p-2">
+                            <AvatarWithInitials username={auth.user.name} avatarSrc={auth.user.profile} size="sm" />
+                            <div className="flex flex-col text-left text-sm leading-tight">
+                                <span className="truncate font-semibold">{auth.user.name}</span>
+                                <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
+                            </div>
+                        </div>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem className="px-2">
+                        <SidebarMenuButton asChild>
+                            <Link href={route('settings')}>
+                                <SettingsIcon label="Settings" color="currentColor" />
+                                <span>Settings</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem className="px-2">
+                        <SidebarMenuButton onClick={handleLogout} className="cursor-pointer">
+                            <LogOutIcon label="Log out" color="currentColor" />
+                            <span>Logout</span>
+                        </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarFooter>
