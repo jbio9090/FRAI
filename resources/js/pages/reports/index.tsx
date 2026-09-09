@@ -14,8 +14,8 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { flushSync } from "react-dom";
-import { PieChart, Pie, Cell } from "recharts";
-import { LineChart } from "@/components/charts/line";
+import { PieChart, Pie, Cell, Legend } from "recharts";
+import { DiscreteBarChart } from "@/components/charts/discrete-bar";
 import { StackedBarChart } from "@/components/charts/stacked-bar";
 import { downloadReportsPdf } from "@/components/pdf/reports-pdf";
 import { FilterPanel } from "@/components/reports/filter-panel";
@@ -31,6 +31,13 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DefaultLayout from "@/layout.tsx/default.";
 import { formatRequestStatus } from "@/lib/formatters";
+import {
+  PROCESSING_BAR_COLOR,
+  SLA_LINE_COLOR,
+  VOLUME_BAR_COLOR,
+  categoryColor,
+  sortedCategoryNames,
+} from "@/lib/report-palette";
 import type { ReportFilters, ReportMeta, ReportKpis, ReportType, ChartDataPoint, Granularity, KpiComparison } from "@/types/reports";
 
 const REPORT_TABS: { id: ReportType; label: string; description: string }[] = [
@@ -465,17 +472,16 @@ export default function ReportsPage({
     switch (activeTab) {
       case "volume": {
         const config: ChartConfig = {
-          value: { label: "Requests", color: "var(--chart-1)" },
+          value: { label: "Requests", color: VOLUME_BAR_COLOR },
         };
         return (
-          <LineChart
+          <DiscreteBarChart
             data={chartData as ChartDataPoint[]}
             config={config}
-            title="Request Volume"
-            description="Total requests created over time"
             yAxisLabel="Requests"
             height={350}
             granularity={filters.granularity}
+            barColor={VOLUME_BAR_COLOR}
           />
         );
       }
@@ -506,29 +512,30 @@ export default function ReportsPage({
         );
       }
       case "facility-utilization": {
-        const categories = [...new Set((facilityPieData as ChartDataPoint[]).map((d) => d.category).filter(Boolean))];
+        const categories = sortedCategoryNames(facilityPieData as ChartDataPoint[]);
         const config: ChartConfig = {};
-        categories.forEach((cat, i) => {
-          config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+        categories.forEach((cat) => {
+          config[cat] = { label: cat, color: categoryColor(cat, categories) };
         });
         return (
           <div className="space-y-4">
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={facilityPieData as ChartDataPoint[]}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {facilityPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -545,29 +552,30 @@ export default function ReportsPage({
           return acc;
         }, {} as Record<string, number>);
         const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
-        const categories = [...new Set(pieData.map((d) => d.category).filter(Boolean))];
+        const categories = sortedCategoryNames(pieData);
         const config: ChartConfig = {};
-        categories.forEach((cat, i) => {
-          config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+        categories.forEach((cat) => {
+          config[cat] = { label: cat, color: categoryColor(cat, categories) };
         });
         return (
           <div className="space-y-4">
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={pieData}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -577,19 +585,17 @@ export default function ReportsPage({
       }
       case "processing-time": {
         const config: ChartConfig = {
-          value: { label: "Avg Days", color: "var(--chart-1)" },
+          value: { label: "Avg Days", color: PROCESSING_BAR_COLOR },
         };
         return (
-          <LineChart
+          <DiscreteBarChart
             data={chartData as ChartDataPoint[]}
             config={config}
-            title="Processing Time"
-            description="Average days from creation to final decision"
             yAxisLabel="Days"
-            showArea={false}
             height={350}
             granularity={filters.granularity}
-            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: "var(--ads-danger)", strokeDasharray: "5 5" }}
+            barColor={PROCESSING_BAR_COLOR}
+            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: SLA_LINE_COLOR, strokeDasharray: "5 5" }}
           />
         );
       }
@@ -625,6 +631,12 @@ export default function ReportsPage({
             approval_rate: 0,
             avg_processing_days: 0,
             active_conflicts: 0,
+          },
+          kpiDeltas: kpiComparison?.deltas ?? {
+            total_requests_pct: null,
+            approval_rate_pct: null,
+            avg_processing_days_pct: null,
+            active_conflicts_pct: null,
           },
           chartsData: REPORT_TABS.map((tab) => ({
             type: tab.id,
@@ -664,14 +676,13 @@ export default function ReportsPage({
     >
       <div ref={volumeRef} style={{ width: 800, height: 400 }}>
         {allChartData.volume.length > 0 && (
-          <LineChart
+          <DiscreteBarChart
             data={allChartData.volume as ChartDataPoint[]}
-            config={{ value: { label: "Requests", color: "var(--chart-1)" } }}
-            title="Request Volume"
-            description="Total requests created over time"
+            config={{ value: { label: "Requests", color: VOLUME_BAR_COLOR } }}
             yAxisLabel="Requests"
             height={350}
             granularity={filters.granularity}
+            barColor={VOLUME_BAR_COLOR}
           />
         )}
       </div>
@@ -700,28 +711,29 @@ export default function ReportsPage({
       </div>
       <div ref={facilityUtilizationRef} style={{ width: 400, height: 350 }}>
         {allFacilityPieData.length > 0 && (() => {
-          const categories = [...new Set(allFacilityPieData.map((d) => d.category).filter(Boolean))];
+          const categories = sortedCategoryNames(allFacilityPieData);
           const config: ChartConfig = {};
-          categories.forEach((cat, i) => {
-            config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+          categories.forEach((cat) => {
+            config[cat] = { label: cat, color: categoryColor(cat, categories) };
           });
           return (
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={allFacilityPieData as ChartDataPoint[]}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {allFacilityPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -738,28 +750,29 @@ export default function ReportsPage({
             return acc;
           }, {} as Record<string, number>);
           const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
-          const categories = [...new Set(pieData.map((d) => d.category).filter(Boolean))];
+          const categories = sortedCategoryNames(pieData);
           const config: ChartConfig = {};
-          categories.forEach((cat, i) => {
-            config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+          categories.forEach((cat) => {
+            config[cat] = { label: cat, color: categoryColor(cat, categories) };
           });
           return (
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={pieData}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -769,16 +782,14 @@ export default function ReportsPage({
       </div>
       <div ref={processingTimeRef} style={{ width: 800, height: 400 }}>
         {allChartData["processing-time"].length > 0 && (
-          <LineChart
+          <DiscreteBarChart
             data={allChartData["processing-time"] as ChartDataPoint[]}
-            config={{ value: { label: "Avg Days", color: "var(--chart-1)" } }}
-            title="Processing Time"
-            description="Average days from creation to final decision"
+            config={{ value: { label: "Avg Days", color: PROCESSING_BAR_COLOR } }}
             yAxisLabel="Days"
-            showArea={false}
             height={350}
             granularity={filters.granularity}
-            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: "var(--ads-danger)", strokeDasharray: "5 5" }}
+            barColor={PROCESSING_BAR_COLOR}
+            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: SLA_LINE_COLOR, strokeDasharray: "5 5" }}
           />
         )}
       </div>
