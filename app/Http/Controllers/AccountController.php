@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\AuditEvent;
 use App\Enums\RequestStatus;
 use App\Models\AuditLog;
-use App\Models\Request as FacilityRequest;
 use App\Models\User;
+use App\Services\RequestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +18,10 @@ use Spatie\Permission\Models\Role;
 
 class AccountController extends Controller
 {
+    public function __construct(
+        protected RequestService $requestService,
+    ) {}
+
     public function index(Request $request)
     {
         $perPage = (int) $request->input('per_page', 10);
@@ -93,24 +97,24 @@ class AccountController extends Controller
         $requestSort = $request->input('request_sort', 'created_at');
         $requestOrder = $request->input('request_order', 'desc');
 
-        $requests = FacilityRequest::with([
-            'user',
-            'facilities',
-            'facility',
-            'requestFacilities.facility',
-            'requestFacilities.equipment',
-            'equipment',
-            'comments.user',
-            'files',
-        ])
-            ->where('user_id', $user->id)
-            ->when($requestStatus, fn ($q) => $q->where('status', $requestStatus))
-            ->when($requestSearch, fn ($q) => $q->where(function ($sq) use ($requestSearch) {
-                $sq->where('title', 'ILIKE', "%{$requestSearch}%")
-                    ->orWhere('description', 'ILIKE', "%{$requestSearch}%");
-            }))
-            ->orderBy($requestSort, $requestOrder)
-            ->paginate(15)->appends($request->query());
+        $statusValues = $requestStatus
+            ? collect(explode(',', $requestStatus))
+                ->map(fn ($s) => collect(RequestStatus::cases())
+                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s))))
+                ->filter()
+                ->values()
+                ->all()
+            : null;
+
+        $requests = $this->requestService->getForUser(
+            $user->id,
+            $statusValues,
+            $request->input('filter', 'this_week'),
+            $requestSearch,
+            $requestSort,
+            $requestOrder,
+            15
+        );
 
         $auditEvents = collect(AuditEvent::cases())
             ->filter(fn ($c) => $c !== AuditEvent::Unknown)

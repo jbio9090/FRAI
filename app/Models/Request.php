@@ -38,6 +38,11 @@ class Request extends Model
         'approved_equipment_conflict_request_ids',
     ];
 
+    protected $appends = [
+        'pending_conflicts',
+        'approved_conflicts',
+    ];
+
     protected $casts = [
         'status' => RequestStatus::class,
         'on_hold' => 'boolean',
@@ -147,7 +152,7 @@ class Request extends Model
                         });
                 });
         })
-        ->whereIn('status', ['Pending', 'Approved']);
+            ->whereIn('status', ['Pending', 'Approved']);
     }
 
     protected static function booted()
@@ -199,5 +204,69 @@ class Request extends Model
         }
 
         return true;
+    }
+
+    public function getPendingConflictsAttribute(): array
+    {
+        $conflicts = $this->getRelationValue('pending_conflicts');
+        if (! $conflicts) {
+            return [];
+        }
+
+        return $conflicts->map(function ($rf) {
+            return [
+                'id' => $rf->id,
+                'facility_id' => $rf->facility_id,
+                'request_id' => $rf->request_id,
+                'date_requested' => $rf->date_requested,
+                'time_start' => $rf->time_start,
+                'time_end' => $rf->time_end,
+                'request' => $rf->request ? [
+                    'id' => $rf->request->id,
+                    'title' => $rf->request->title,
+                    'status' => $rf->request->status?->value ?? (string) $rf->request->status,
+                    'user' => $rf->request->user ? [
+                        'id' => $rf->request->user->id,
+                        'name' => $rf->request->user->name,
+                    ] : null,
+                ] : null,
+                'facility' => $rf->facility ? [
+                    'id' => $rf->facility->id,
+                    'name' => $rf->facility->name,
+                ] : null,
+            ];
+        })->toArray();
+    }
+
+    public function getApprovedConflictsAttribute(): array
+    {
+        $conflicts = $this->getRelationValue('approved_conflicts');
+        if (! $conflicts) {
+            return [];
+        }
+
+        return $conflicts->map(function ($rf) {
+            return [
+                'id' => $rf->id,
+                'facility_id' => $rf->facility_id,
+                'request_id' => $rf->request_id,
+                'date_requested' => $rf->date_requested,
+                'time_start' => $rf->time_start,
+                'time_end' => $rf->time_end,
+                'request' => $rf->request ? [
+                    'id' => $rf->request->id,
+                    'title' => $rf->request->title,
+                    'status' => $rf->request->status?->value ?? (string) $rf->request->status,
+                    'user' => $rf->request->user ? [
+                        'id' => $rf->request->user->id,
+                        'name' => $rf->request->user->name,
+                    ] : null,
+                ] : null,
+                'facility' => $rf->facility ? [
+                    'id' => $rf->facility->id,
+                    'name' => $rf->facility->name,
+                ] : null,
+            ];
+        })->toArray();
     }
 }

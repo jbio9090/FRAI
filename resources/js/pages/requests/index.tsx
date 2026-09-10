@@ -21,6 +21,7 @@ import moment from 'moment';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { downloadBulkFacilitiesPDF, type BulkFacilityBookingEntry } from '@/components/pdf/FacilitiesPDF';
 import RequestCard from '@/components/request-card';
 import RequestsSkeleton from '@/components/skeleton/RequestIndexSkeleton';
 import SmartPagination from '@/components/SmartPagination';
@@ -937,6 +938,38 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         >
                             <Download size={14} />
                             <span>CSV</span>
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                                const selectedRequests = (requests?.data ?? []).filter((r) => selected.includes(r.id));
+                                const bookings: BulkFacilityBookingEntry[] = selectedRequests.flatMap((req) =>
+                                    req.request_facilities.map((rf) => ({
+                                        requestTitle: req.title,
+                                        facility_name: req.facilities.find((f) => f.id === rf.facility_id)?.name ?? 'Unknown Facility',
+                                        date: rf.date_requested,
+                                        time_start: rf.time_start,
+                                        time_end: rf.time_end,
+                                        has_outsiders: rf.has_outsiders ?? false,
+                                        expected_capacity: rf.expected_capacity ?? null,
+                                    })),
+                                );
+
+                                try {
+                                    const stickerCount = await downloadBulkFacilitiesPDF(
+                                        bookings,
+                                        `Requests Facilities-${moment().format('YYYY-MM-DD')}.pdf`,
+                                    );
+                                    toast.success(`Exported ${stickerCount} booking(s) from ${selectedRequests.length} request(s) to PDF`);
+                                } catch {
+                                    toast.error('No facility bookings to export.');
+                                }
+                            }}
+                        >
+                            <Download size={14} />
+                            <span>PDF</span>
                         </Button>
 
                         <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen((p) => !p)}>

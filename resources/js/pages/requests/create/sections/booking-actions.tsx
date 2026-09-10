@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { PlusCircleIcon } from 'lucide-react';
 
 interface BookingActionsProps {
     facilityBookingsLength: number;
@@ -30,11 +31,12 @@ export function BookingActions({
                 )}
                 <Button
                     type="button"
-                    variant="secondary"
                     onClick={addFacilityBooking}
+                    variant={"outline"}
                     disabled={!canSaveFacilityBooking}
                     className={'w-full ' + (editingIndex !== null ? 'col-span-2' : 'col-span-full')}
                 >
+                    <PlusCircleIcon />
                     {editingIndex !== null
                         ? 'Save changes to facility booking'
                         : selectedDates.length > 1

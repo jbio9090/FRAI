@@ -159,6 +159,121 @@ class RequestService
         return $paginated;
     }
 
+    public function getForUser(
+        int $userId,
+        ?array $statuses,
+        string $filter = 'this_week',
+        ?string $search = null,
+        ?string $sort = null,
+        string $order = 'asc',
+        int $perPage = 15,
+    ) {
+        $user = Auth::user();
+        $order = in_array($order, ['asc', 'desc']) ? $order : 'asc';
+
+        $query = $user->hasRole(['admin', 'Super Admin'])
+            ? FacilityRequest::with([
+                'user',
+                'processedBy',
+                'facilities',
+                'files',
+                'comments.user',
+                'requestFacilities',
+                'requestFacilities.externalEquipments',
+                'equipment' => fn ($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
+                'equipment.facilities',
+            ])
+            : FacilityRequest::with([
+                'user',
+                'processedBy',
+                'facilities',
+                'files',
+                'comments.user',
+                'requestFacilities',
+                'requestFacilities.externalEquipments',
+                'equipment' => fn ($q) => $q->withPivot(['quantity_needed', 'is_borrowed', 'source_facility_id']),
+                'equipment.facilities',
+            ])->where('requests.user_id', $userId);
+
+        $query->where('requests.user_id', $userId);
+
+        $query = match ($filter) {
+            'today' => $query->whereDate('requests.updated_at', Carbon::today()),
+            'this_week' => $query->where('requests.updated_at', '>=', Carbon::now()->subWeek()),
+            'this_month' => $query->where('requests.updated_at', '>=', Carbon::now()->subMonth()),
+            default => $query,
+        };
+
+        if (! empty($statuses)) {
+            $statusArray = is_array($statuses) ? $statuses : (is_iterable($statuses) ? (array) $statuses : [$statuses]);
+            $statusValues = array_map(fn ($s) => $s instanceof \BackedEnum ? $s->value : $s, $statusArray);
+
+            $query->where(function ($q) use ($statusValues) {
+                $q->whereIn('requests.status', $statusValues)
+                    ->orWhereHas('requestFacilities', fn ($q2) => $q2->whereIn('status', $statusValues));
+            });
+        }
+
+        if ($search) {
+            $query->where('title', 'like', "%{$search}%");
+        }
+
+        $sortMap = [
+            'created_at' => 'requests.created_at',
+            'priority_level' => 'requests.priority_level',
+            'title' => 'requests.title',
+            'user_name' => 'users.name',
+        ];
+
+        if ($sort && isset($sortMap[$sort])) {
+            if ($sort === 'user_name') {
+                $query->join('users', 'requests.user_id', '=', 'users.id')
+                    ->orderBy('users.name', $order);
+            } else {
+                $query->orderBy($sortMap[$sort], $order);
+            }
+        } else {
+            $query->latest();
+        }
+
+        $paginated = $query->paginate($perPage);
+
+        $paginated->getCollection()->transform(function ($request) {
+            $allRfIds = array_unique(array_merge(
+                $request->pending_conflict_rf_ids ?? [],
+                $request->approved_conflict_rf_ids ?? [],
+            ));
+
+            $conflictRfs = $allRfIds
+                ? RequestFacility::whereIn('id', $allRfIds)
+                    ->with(['request.user', 'facility'])
+                    ->get()
+                    ->keyBy('id')
+                : collect();
+
+            $request->setRelation(
+                'pending_conflicts',
+                collect($request->pending_conflict_rf_ids ?? [])
+                    ->map(fn ($id) => $conflictRfs->get($id))
+                    ->filter()->values()
+            );
+
+            $request->setRelation(
+                'approved_conflicts',
+                collect($request->approved_conflict_rf_ids ?? [])
+                    ->map(fn ($id) => $conflictRfs->get($id))
+                    ->filter()->values()
+            );
+
+            $this->loadEquipmentConflictRelations($request);
+            $this->attachPerFacilityEquipment($request);
+
+            return $request;
+        });
+
+        return $paginated;
+    }
+
     public function getDetail(int $request_id)
     {
         $request = FacilityRequest::with([
@@ -405,13 +520,14 @@ class RequestService
         }
 
         // Enhance status enum conversion to always produce plain strings
-        $statusValues = collect($statuses)->map(function ($s) use ($statusValues) {
+        $statusValues = collect($statuses)->map(function ($s) {
             if ($s instanceof RequestStatus) {
                 return $s->value;
             }
             if (is_string($s)) {
                 return $s;
             }
+
             return (string) $s;
         })->toArray();
         $facilityIds = collect($bookings)->pluck('facility_id')->unique();
@@ -502,8 +618,8 @@ class RequestService
             $request->id
         );
 
-        $pendingConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::PENDING)->values();
-        $approvedConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED)->values();
+        $pendingConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::PENDING->value)->values();
+        $approvedConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED->value)->values();
 
         $pendingConflictRfIds = $pendingConflicts->pluck('request_facility_id')->unique()->values()->toArray();
         $approvedConflictRfIds = $approvedConflicts->pluck('request_facility_id')->unique()->values()->toArray();
@@ -515,11 +631,11 @@ class RequestService
         );
 
         $pendingEquipmentRequestIds = collect($equipmentConflicts)
-            ->filter(fn ($c) => $c['status'] === RequestStatus::PENDING)
+            ->filter(fn ($c) => $c['status'] === RequestStatus::PENDING->value)
             ->pluck('request_id')->unique()->values()->toArray();
 
         $approvedEquipmentRequestIds = collect($equipmentConflicts)
-            ->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED)
+            ->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED->value)
             ->pluck('request_id')->unique()->values()->toArray();
 
         $request->update([

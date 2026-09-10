@@ -787,7 +787,6 @@ export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta:
     <Document>
       {/* Cover: summary + KPIs + filters */}
       <Page size="A4" style={styles.page}>
-        <Text style={styles.eyebrow}>GSO Facility Requests Report</Text>
         <Text style={styles.title}>
           {format(new Date(filters.start), "MMMM d, yyyy")} – {format(new Date(filters.end), "MMMM d, yyyy")}
         </Text>
