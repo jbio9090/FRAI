@@ -1,5 +1,6 @@
 import AddIcon from '@atlaskit/icon/core/add';
 import BookWithBookmarkIcon from '@atlaskit/icon/core/book-with-bookmark';
+import ChartBarIcon from '@atlaskit/icon/core/chart-bar';
 import CheckCircleIcon from '@atlaskit/icon/core/check-circle';
 import CheckMarkIcon from '@atlaskit/icon/core/check-mark';
 import ChevronDownIcon from '@atlaskit/icon/core/chevron-down';
@@ -15,7 +16,6 @@ import PersonIcon from '@atlaskit/icon/core/person';
 import RefreshIcon from '@atlaskit/icon/core/refresh';
 import SettingsIcon from '@atlaskit/icon/core/settings';
 import { Link, router, usePage } from '@inertiajs/react';
-import { BarChart2 } from 'lucide-react';
 import * as React from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -46,14 +46,7 @@ import { Button } from './ui/button';
 
 const iconRailItem = 'group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center';
 
-function NavIcon({ icon: Icon, title }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; title: string }) {
-    const displayName = (Icon as any).displayName || Icon.name || '';
-    const isLucide = displayName === 'BarChart2' || !displayName.includes('Icon');
-
-    if (isLucide) {
-        return <Icon size={18} strokeWidth={2} stroke="currentColor" aria-label={title} />;
-    }
-
+function NavIcon({ icon: Icon, title }: { icon: React.ComponentType<{ label: string; color: string }>; title: string }) {
     return <Icon label={title} color="currentColor" />;
 }
 
@@ -70,7 +63,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: 'Equipments', url: 'equipments', icon: ComponentIcon },
             ...(hasPermission('manage users') ? [{ title: 'Accounts', url: 'accounts.index', icon: PersonIcon }] : []),
             ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
-            ...(hasPermission('approve requests') ? [{ title: 'Reports', url: 'reports.index', icon: BarChart2 }] : []),
+            ...(hasPermission('approve requests') ? [{ title: 'Reports', url: 'reports.index', icon: ChartBarIcon }] : []),
         ],
         navMenu: [
             { title: 'Pending', url: route('requests.index', { status: 'pending' }), status: 'pending', icon: ClockIcon },
