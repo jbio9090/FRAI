@@ -75,8 +75,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
     const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string[]>([]);
-    const [pendingConflictFilter, setPendingConflictFilter] = useState(false);
-    const [approvedConflictFilter, setApprovedConflictFilter] = useState(false);
+    const [pendingConflictFilter, setPendingConflictFilter] = useState(route().params.has_pending_conflicts === '1');
+    const [approvedConflictFilter, setApprovedConflictFilter] = useState(route().params.has_approved_conflicts === '1');
     const hasLoadedOnce = useRef(false);
     const staleRequests = useRef<PaginatedRequests | null>(null);
 
@@ -312,7 +312,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         )}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-72 p-0" align="start">
+                                <PopoverContent className="w-80 p-0" align="start">
                                     <div className="flex max-h-96 flex-col gap-4 overflow-y-auto p-3">
                                         <div className="flex flex-col gap-2">
                                             <div className="flex items-center justify-between">

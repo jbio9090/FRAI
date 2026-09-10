@@ -19,6 +19,7 @@ import { DiscreteBarChart } from "@/components/charts/discrete-bar";
 import { StackedBarChart } from "@/components/charts/stacked-bar";
 import { downloadReportsPdf } from "@/components/pdf/reports-pdf";
 import { FilterPanel } from "@/components/reports/filter-panel";
+import StatTile from "@/components/stat-tile";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -71,44 +72,12 @@ function formatDisplayDate(dateStr: string, granularity: Granularity): string {
   }
 }
 
-function KpiTile({
-  label,
-  value,
-  icon: Icon,
-  iconBg,
-  iconColor,
-  delta,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
-  iconBg: string;
-  iconColor: string;
-  delta?: { value: number; label: string; positive: boolean } | null;
-}) {
-  return (
-    <Card className="border-border">
-      <CardContent className="p-5 md:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="ads-eyebrow mb-1">{label}</p>
-            <p className="text-2xl md:text-3xl font-bold tabular-nums text-foreground">
-              {value}
-            </p>
-            {delta && (
-              <p className="mt-1 text-xs flex items-center gap-1" style={{ color: delta.positive ? "var(--ads-ok)" : "var(--ads-danger)" }}>
-                <span className="font-medium">{delta.value > 0 ? "+" : ""}{delta.value.toFixed(1)}%</span>
-                <span className="text-muted-foreground">vs. previous period</span>
-              </p>
-            )}
-          </div>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: iconBg }}>
-            <Icon className="h-5 w-5" style={{ color: iconColor }} strokeWidth={2} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function formatDeltaSub(pct: number | null | undefined): string | undefined {
+  if (pct === null || pct === undefined) {
+    return undefined;
+  }
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct.toFixed(1)}% vs prev period`;
 }
 
 export default function ReportsPage({
@@ -845,7 +814,7 @@ export default function ReportsPage({
         )}
 
 {kpis && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {(() => {
                 const deltas = kpiComparison?.deltas ?? {
                   total_requests_pct: null,
@@ -855,53 +824,30 @@ export default function ReportsPage({
                 };
                 return (
                   <>
-                    <KpiTile
+                    <StatTile
+                      icon={ClipboardList}
                       label="Total Requests"
                       value={kpis.total_requests.toLocaleString()}
-                      icon={ClipboardList}
-                      iconBg="var(--primary)"
-                      iconColor="hsl(var(--primary-foreground))"
-                      delta={deltas.total_requests_pct !== null ? {
-                        value: deltas.total_requests_pct,
-                        label: "vs. previous period",
-                        positive: deltas.total_requests_pct >= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.total_requests_pct)}
                     />
-                    <KpiTile
+                    <StatTile
+                      icon={CheckCircle2}
                       label="Approval Rate"
                       value={`${kpis.approval_rate}%`}
-                      icon={CheckCircle2}
-                      iconBg="var(--ads-ok-bg)"
-                      iconColor="var(--ads-ok)"
-                      delta={deltas.approval_rate_pct !== null ? {
-                        value: deltas.approval_rate_pct,
-                        label: "vs. previous period",
-                        positive: deltas.approval_rate_pct >= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.approval_rate_pct)}
                     />
-                    <KpiTile
+                    <StatTile
+                      icon={Calendar}
                       label="Avg Processing Time"
                       value={`${kpis.avg_processing_days} days`}
-                      icon={Calendar}
-                      iconBg="var(--ads-amber-bg)"
-                      iconColor="var(--ads-amber)"
-                      delta={deltas.avg_processing_days_pct !== null ? {
-                        value: deltas.avg_processing_days_pct,
-                        label: "vs. previous period",
-                        positive: deltas.avg_processing_days_pct <= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.avg_processing_days_pct)}
                     />
-                    <KpiTile
+                    <StatTile
+                      icon={AlertTriangle}
                       label="Active Conflicts"
                       value={kpis.active_conflicts}
-                      icon={AlertTriangle}
-                      iconBg="var(--ads-danger-bg)"
-                      iconColor="var(--ads-danger)"
-                      delta={deltas.active_conflicts_pct !== null ? {
-                        value: deltas.active_conflicts_pct,
-                        label: "vs. previous period",
-                        positive: deltas.active_conflicts_pct <= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.active_conflicts_pct)}
+                      variant={kpis.active_conflicts > 0 ? "warning" : "default"}
                     />
                   </>
                 );
