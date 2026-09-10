@@ -856,7 +856,7 @@ export default function ReportsPage({
           )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList variant="line" className="flex gap-1">
+          <TabsList variant="line" scrollable className="flex gap-1">
             {REPORT_TABS.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id} className="px-3 py-1.5 text-sm font-medium">
                 {tab.label}

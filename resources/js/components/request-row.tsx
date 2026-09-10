@@ -16,7 +16,10 @@ export default function RequestRow({ request, className }: { request: Request; c
     return (
         <Link
             href={route('requests.detail', request.id)}
-            className={cn('flex items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50', className)}
+            className={cn(
+                'flex min-w-0 items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50',
+                className,
+            )}
         >
             <span
                 className="hidden shrink-0 items-center rounded-[4px] px-2 py-0.5 text-[11px] font-semibold sm:inline-flex"

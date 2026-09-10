@@ -273,7 +273,7 @@ export default function Dashboard({
     }
 
     const roles = auth.user.roles?.length ? auth.user.roles : ['Member'];
-    const cardClass = 'rounded-lg border-border shadow-none';
+    const cardClass = 'min-w-0 overflow-hidden rounded-lg border-border shadow-none';
 
     return (
         <DefaultLayout hasPadding={false}>
@@ -408,10 +408,10 @@ export default function Dashboard({
                         )}
 
                         {/* Queue + live activity */}
-                        <div className="grid items-start gap-4 lg:grid-cols-[5fr_3fr]">
+                        <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[5fr_3fr]">
                             <Card className={cardClass}>
-                                <CardHeader className="flex w-full items-start justify-between space-y-0 border-b border-border">
-                                    <div>
+                                <CardHeader className="flex w-full items-start justify-between gap-3 space-y-0 border-b border-border min-h-18">
+                                    <div className="min-w-0">
                                         <CardTitle className="text-sm font-semibold">
                                             {isAdmin ? 'Pending requests' : 'Your pending requests'}
                                         </CardTitle>
@@ -419,7 +419,7 @@ export default function Dashboard({
                                             {isAdmin ? 'Awaiting a decision' : 'Requests still being processed'}
                                         </CardDescription>
                                     </div>
-                                    <div className="flex flex-col items-center gap-2">
+                                    <div className="flex shrink-0 flex-col items-center gap-2">
                                         <Button variant="outline" size="xs" className="w-[5.5rem] justify-center" asChild>
                                             <Link href={route('requests.index', { status: 'pending' })}>
                                                 View all
@@ -487,8 +487,8 @@ export default function Dashboard({
                             </Card>
 
                             <Card className={cardClass}>
-                                <CardHeader className="flex items-start justify-between space-y-0 border-b border-border">
-                                    <div>
+                                <CardHeader className="flex items-start justify-between gap-3 space-y-0 border-b border-border min-h-18">
+                                    <div className="min-w-0">
                                         <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
                                             <Activity className="h-4 w-4 text-[var(--ads-ok)]" />
                                             Live activity
@@ -498,7 +498,7 @@ export default function Dashboard({
                                     <Button
                                         variant="outline"
                                         size="xs"
-                                        className="w-[5.5rem] justify-center"
+                                        className="w-[5.5rem] shrink-0 justify-center"
                                         onClick={() => setActiveTab('activity')}
                                     >
                                         View all

@@ -104,11 +104,13 @@ class ProcessRequestRecommendation implements ShouldQueue
 
     private function deriveRollupReason(array $recommendations): string
     {
-        return collect($recommendations)
+        $joined = collect($recommendations)
             ->pluck('reason')
             ->filter()
             ->unique()
             ->values()
             ->join(' ');
+
+        return AIRecommendationService::toConciseParagraph($joined);
     }
 }

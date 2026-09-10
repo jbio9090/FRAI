@@ -93,7 +93,7 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
                         <p className="ads-eyebrow">Request configuration</p>
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Request Options</h1>
                         <p className="text-sm text-muted-foreground">
-                            Defaults for new facility requests, also used when the chatbot helps with booking.
+                            Defaults for new facility requests. Will not affect already sent requests.
                         </p>
                     </div>
                 </motion.div>

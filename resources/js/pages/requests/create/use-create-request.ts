@@ -22,7 +22,18 @@ import type {
     FacilityBooking,
     FacilityScheduleData,
 } from './types';
-import { addCalendarDays, clearDraft, draftDiffersFromExisting, formatMaxFileSize, getTodayStart, loadDraft, maxFileSizeBytes, minutesToTime, saveDraft, timeToMinutes } from './utils';
+import {
+    addCalendarDays,
+    clearDraft,
+    draftDiffersFromExisting,
+    formatMaxFileSize,
+    getTodayStart,
+    loadDraft,
+    maxFileSizeBytes,
+    minutesToTime,
+    saveDraft,
+    timeToMinutes,
+} from './utils';
 import { ALLOWED_TYPES } from './utils';
 
 export function useCreateRequest({ facilities, existingRequest }: Pick<CreateRequestProps, 'facilities' | 'existingRequest'>) {
@@ -93,7 +104,16 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         return () => {
             clearRichPageContext();
         };
-    }, [existingRequest?.id, isEditing, selectedDates, selectedEquipment.length, selectedFacility, scheduleConflicts.length, currentTimeEnd, currentTimeStart]);
+    }, [
+        existingRequest?.id,
+        isEditing,
+        selectedDates,
+        selectedEquipment.length,
+        selectedFacility,
+        scheduleConflicts.length,
+        currentTimeEnd,
+        currentTimeStart,
+    ]);
 
     // Consolidated conflict-check loading state (counter prevents premature clearing)
     const [checkingConflicts, setCheckingConflicts] = useState(false);
@@ -667,8 +687,22 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
 
         const options = {
             forceFormData: true,
+            // Success toast is handled globally via flash.success in DefaultLayout.
             onSuccess: () => clearDraft(existingRequest?.id),
-            onError: (errs) => console.log('validation errors:', errs),
+            onError: (errs: Record<string, string>) => {
+                const messages = Object.values(errs ?? {});
+                toast.error(isEditing ? 'Failed to save changes' : 'Failed to submit request', {
+                    description:
+                        messages.length > 0
+                            ? `${messages.length} field${messages.length === 1 ? '' : 's'} need${messages.length === 1 ? 's' : ''} attention. ${messages.slice(0, 2).join(' ')}`
+                            : 'Please check the form and try again.',
+                    duration: 5000,
+                    position: 'top-right',
+                });
+                requestAnimationFrame(() => {
+                    document.getElementById('form-errors')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            },
         };
 
         if (isEditing) {

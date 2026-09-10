@@ -101,6 +101,16 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         availableEquipment,
     } = useCreateRequest({ facilities, existingRequest });
 
+    const facilityBookingsError =
+        (errors.facility_bookings as string | undefined) ??
+        Object.entries(errors)
+            .filter(([key]) => key.startsWith('facility_bookings.'))
+            .map(([, msg]) => msg as string)[0];
+
+    const facilityBookingDetailErrors = Object.entries(errors)
+        .filter(([key]) => key.startsWith('facility_bookings.'))
+        .map(([key, msg]) => ({ key, msg: msg as string }));
+
     return (
         <DefaultLayout>
             <AlertDialog
@@ -127,7 +137,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
             <div className="relative w-full">
                 <form onSubmit={submit} className="flex flex-col gap-6 space-y-8">
                     {Object.keys(errors).length > 0 && (
-                        <Alert variant="destructive" className="mt-0 mb-0 max-w-2xl border-destructive bg-destructive/4">
+                        <Alert id="form-errors" variant="destructive" className="mt-0 mb-0 max-w-2xl border-destructive bg-destructive/4">
                             <AlertCircleIcon />
                             <AlertTitle>Error with submission. Please properly fill in all the details.</AlertTitle>
                             <AlertDescription>
@@ -217,7 +227,16 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         addFacilityBooking={addFacilityBooking}
                                         canSaveFacilityBooking={canSaveFacilityBooking}
                                         selectedDates={selectedDates}
+                                        bookingError={facilityBookingsError}
                                     />
+
+                                    {facilityBookingDetailErrors.length > 0 && (
+                                        <ul className="space-y-1 text-sm text-destructive">
+                                            {facilityBookingDetailErrors.map(({ key, msg }) => (
+                                                <li key={key}>{msg}</li>
+                                            ))}
+                                        </ul>
+                                    )}
 
                                     {data.facility_bookings.length > 0 && (
                                         <BookingCardList
@@ -234,7 +253,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                     {/* ── Desktop: FacilityInfo manages its own facility + date ── */}
                                     <FacilityInfo facilities={facilities} isForSidebar={true} />
 
-{/* ── Chosen Alternatives for FOR_RESCHEDULE (Desktop only) ── */}
+                                    {/* ── Chosen Alternatives for FOR_RESCHEDULE (Desktop only) ── */}
                                     <div className="hidden lg:block">
                                         <ChosenAlternativesPanel
                                             facilities={facilities}
