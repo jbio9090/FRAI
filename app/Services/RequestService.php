@@ -345,8 +345,14 @@ class RequestService
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
 
             if ($priorityLevel === PriorityLevel::Government) {
-                return $this->approve($facilityRequest->id);
+                $approved = $this->approve($facilityRequest->id);
+
+                $this->detectAndStoreConflicts($approved);
+
+                return $approved->fresh() ?? $approved;
             }
+
+            $this->detectAndStoreConflicts($facilityRequest);
 
             $this->auditLogger::requestCreated($facilityRequest);
 
@@ -405,6 +411,7 @@ class RequestService
                 ])->toArray();
 
             $facilityRequest->equipment()->detach();
+            $deletedRfIds = $facilityRequest->requestFacilities()->pluck('id')->toArray();
             $facilityRequest->requestFacilities()->delete();
 
             $keptIds = array_map('intval', $validated['existing_file_ids'] ?? []);
@@ -426,7 +433,11 @@ class RequestService
 
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
 
+            $this->purgeDeletedConflictRefs($deletedRfIds, $facilityRequest->id);
+
             $facilityRequest->load('requestFacilities.facility');
+
+            $this->detectAndStoreConflicts($facilityRequest);
 
             $newBookings = $facilityRequest->requestFacilities
                 ->map(fn ($rf) => [
@@ -697,6 +708,31 @@ class RequestService
                 'pending_conflict_rf_ids' => array_values(array_diff($candidate->pending_conflict_rf_ids ?? [], $savedRfIds)),
             ]);
         }
+    }
+
+    private function purgeDeletedConflictRefs(array $deletedRfIds, int $excludeRequestId): void
+    {
+        if (empty($deletedRfIds)) {
+            return;
+        }
+
+        FacilityRequest::where('id', '!=', $excludeRequestId)
+            ->where(function ($query) {
+                $query->whereNotNull('pending_conflict_rf_ids')
+                    ->orWhereNotNull('approved_conflict_rf_ids');
+            })
+            ->get(['id', 'pending_conflict_rf_ids', 'approved_conflict_rf_ids'])
+            ->each(function ($candidate) use ($deletedRfIds) {
+                $pending = array_values(array_diff($candidate->pending_conflict_rf_ids ?? [], $deletedRfIds));
+                $approved = array_values(array_diff($candidate->approved_conflict_rf_ids ?? [], $deletedRfIds));
+
+                if ($pending !== ($candidate->pending_conflict_rf_ids ?? []) || $approved !== ($candidate->approved_conflict_rf_ids ?? [])) {
+                    $candidate->update([
+                        'pending_conflict_rf_ids' => $pending,
+                        'approved_conflict_rf_ids' => $approved,
+                    ]);
+                }
+            });
     }
 
     public function approve(int $request_id): FacilityRequest

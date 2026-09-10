@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Models\Request as FacilityRequest;
 use App\Services\NotificationService;
-use App\Services\RequestService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
@@ -31,10 +30,11 @@ class ProcessRequestConflicts implements ShouldQueue, ShouldQueueAfterCommit
         return [5, 15];
     }
 
-    public function handle(RequestService $service, NotificationService $notification): void
+    public function handle(NotificationService $notification): void
     {
-        $service->detectAndStoreConflicts($this->request);
-
+        // Conflict detection already runs synchronously in RequestService::create()
+        // and RequestService::update(). This job only sends the admin notification
+        // asynchronously so the submit response is not delayed by it.
         $this->request->loadMissing('user');
 
         $notification->notifyAdmin(
