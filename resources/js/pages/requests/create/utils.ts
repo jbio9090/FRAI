@@ -1,4 +1,5 @@
-import type { DraftData, ExistingRequest } from './types';
+import type { EquipmentConflict } from '@/types/equipment';
+import type { BookingSchedule, DraftData, ExistingRequest } from './types';
 
 export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -105,4 +106,74 @@ export function draftDiffersFromExisting(draft: DraftData, existing: ExistingReq
     if (draft.priority_reason !== existing.priority_reason) return true;
     if (JSON.stringify(draft.facility_bookings) !== JSON.stringify(existing.facility_bookings)) return true;
     return false;
+}
+
+export function doTimeRangesOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
+    return timeToMinutes(startA) < timeToMinutes(endB) && timeToMinutes(endA) > timeToMinutes(startB);
+}
+
+export function filterOverlappingSchedules(bookings: BookingSchedule[], startTime: string, endTime: string): BookingSchedule[] {
+    return bookings.filter((booking) => {
+        if (booking.status !== 'Approved' && booking.status !== 'Conditionally Approved') {
+            return false;
+        }
+
+        return doTimeRangesOverlap(startTime, endTime, booking.time_start, booking.time_end);
+    });
+}
+
+function scheduleConflictKey(conflict: BookingSchedule): string {
+    if (conflict.request_id !== undefined && conflict.request_id !== null) {
+        return `${conflict.request_id}|${conflict.time_start}|${conflict.time_end}`;
+    }
+
+    return `${conflict.request_title}|${conflict.time_start}|${conflict.time_end}|${conflict.status}`;
+}
+
+export function mergeScheduleConflicts(existing: BookingSchedule[], incoming: BookingSchedule[]): BookingSchedule[] {
+    if (incoming.length === 0) return existing;
+
+    const seen = new Set(existing.map(scheduleConflictKey));
+    const merged = [...existing];
+    let added = false;
+
+    for (const conflict of incoming) {
+        const key = scheduleConflictKey(conflict);
+        if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(conflict);
+            added = true;
+        }
+    }
+
+    return added ? merged : existing;
+}
+
+export function mergeEquipmentConflicts(
+    existing: Record<number, EquipmentConflict[]>,
+    incoming: Record<number, EquipmentConflict[]>,
+): Record<number, EquipmentConflict[]> {
+    const merged: Record<number, EquipmentConflict[]> = { ...existing };
+    let changed = false;
+
+    for (const [equipmentIdKey, conflicts] of Object.entries(incoming)) {
+        const equipmentId = Number(equipmentIdKey);
+        const current = merged[equipmentId] ?? [];
+        const seen = new Set(current.map((conflict) => conflict.request_id));
+        const next = [...current];
+
+        for (const conflict of conflicts) {
+            if (!seen.has(conflict.request_id)) {
+                seen.add(conflict.request_id);
+                next.push(conflict);
+            }
+        }
+
+        if (next.length !== current.length) {
+            merged[equipmentId] = next;
+            changed = true;
+        }
+    }
+
+    return changed ? merged : existing;
 }
