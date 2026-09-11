@@ -1,5 +1,5 @@
 import type { EquipmentConflict } from '@/types/equipment';
-import type { BookingSchedule, DraftData, ExistingRequest } from './types';
+import type { BookingSchedule, DraftData, ExistingRequest, FacilityBooking } from './types';
 
 export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -104,7 +104,10 @@ export function draftDiffersFromExisting(draft: DraftData, existing: ExistingReq
     if (draft.description !== existing.description) return true;
     if (draft.priority_level !== existing.priority_level) return true;
     if (draft.priority_reason !== existing.priority_reason) return true;
-    if (JSON.stringify(draft.facility_bookings) !== JSON.stringify(existing.facility_bookings)) return true;
+    // Conflict badges are re-derived from fresh scans; ignore them so
+    // conflict-only drift doesn't spuriously show/hide the draft banner.
+    if (JSON.stringify(stripBookingConflicts(draft.facility_bookings)) !== JSON.stringify(stripBookingConflicts(existing.facility_bookings)))
+        return true;
     return false;
 }
 
@@ -176,4 +179,36 @@ export function mergeEquipmentConflicts(
     }
 
     return changed ? merged : existing;
+}
+
+export function scheduleCacheKey(facilityId: number, dateKey: string): string {
+    return `${facilityId}|${dateKey}`;
+}
+
+export function sameTimeWindow(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+    return timeToMinutes(aStart) === timeToMinutes(bStart) && timeToMinutes(aEnd) === timeToMinutes(bEnd);
+}
+
+export function countBookingConflicts(booking: Pick<FacilityBooking, 'conflicts' | 'equipment_conflicts'>): number {
+    return (booking.conflicts?.length ?? 0) + Object.values(booking.equipment_conflicts ?? {}).reduce((sum, conflicts) => sum + conflicts.length, 0);
+}
+
+export function stripBookingConflicts(bookings: FacilityBooking[]): FacilityBooking[] {
+    return bookings.map((booking) => ({ ...booking, conflicts: [], equipment_conflicts: {} }));
+}
+
+export function isSameBookingForm(a: FacilityBooking, b: FacilityBooking): boolean {
+    return (
+        a.facility_id === b.facility_id &&
+        a.date === b.date &&
+        a.time_start === b.time_start &&
+        a.time_end === b.time_end &&
+        a.facility_name === b.facility_name &&
+        a.expected_capacity === b.expected_capacity &&
+        a.facility_capacity === b.facility_capacity &&
+        a.has_outsiders === b.has_outsiders &&
+        JSON.stringify(a.equipment) === JSON.stringify(b.equipment) &&
+        JSON.stringify(a.borrowed_equipment) === JSON.stringify(b.borrowed_equipment) &&
+        JSON.stringify(a.external_equipment) === JSON.stringify(b.external_equipment)
+    );
 }

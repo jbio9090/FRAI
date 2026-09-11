@@ -44,6 +44,14 @@ class ProcessRequestRecommendation implements ShouldQueue
             'equipment',
         ]);
 
+        // A newer conflict decision (hold / for-reschedule) may have landed
+        // after dispatch. Never let a stale AI rollup overwrite it.
+        if ($this->request->fresh()->on_hold) {
+            Log::info("ProcessRequestRecommendation: Request#{$this->request->id} is on hold. Skipping rollup.");
+
+            return;
+        }
+
         $recommendations = $aiService->recommend($this->request);
 
         if (empty($recommendations)) {

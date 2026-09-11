@@ -29,6 +29,42 @@ class RequestController extends Controller
         protected AlternativeRecommendationService $alternativeService,
     ) {}
 
+    /**
+     * Notify every request displaced by an approval (time + equipment losers).
+     * Runs after the service transaction commits so queued pushes see
+     * committed data. One push per affected request.
+     */
+    private function notifyNewlyHeldRequests(FacilityRequest $winner, array $heldIds): void
+    {
+        $heldIds = array_values(array_unique(array_map('intval', $heldIds)));
+
+        if (empty($heldIds)) {
+            return;
+        }
+
+        $winner = $winner->fresh() ?? $winner;
+
+        foreach (FacilityRequest::whereIn('id', $heldIds)->get() as $loser) {
+            $this->notification->notifyOnHold($loser, $winner, 'Overridden by approved request: "'.$winner->title.'"');
+        }
+    }
+
+    /**
+     * Notify requests whose hold was lifted by a deny/reschedule transition.
+     */
+    private function notifyReleasedRequests(array $releasedIds): void
+    {
+        $releasedIds = array_values(array_unique(array_map('intval', $releasedIds)));
+
+        if (empty($releasedIds)) {
+            return;
+        }
+
+        foreach (FacilityRequest::whereIn('id', $releasedIds)->get() as $released) {
+            $this->notification->notifyUser($released);
+        }
+    }
+
     public function index(Request $request)
     {
         $statusParam = $request->input('status');
@@ -94,25 +130,10 @@ class RequestController extends Controller
         if ($action === 'approve') {
             // The service already loops through requestFacilities and updates them
             $facilityRequest = $this->service->approve($id);
-            $this->auditLogger::requestApproved($facilityRequest);
         } else {
-            // Update the parent request
-            $facilityRequest->update([
-                'status' => $statusMap[$action],
-                'processed_by' => auth()->id(),
-                'processed_at' => now(),
-            ]);
-
-            // individual facilties
-            $facilityRequest->requestFacilities()
-                ->update(['status' => $statusMap[$action]]);
-
-            match ($action) {
-                'reject' => $this->auditLogger::requestDenied($facilityRequest),
-                'conditionally_approve' => $this->auditLogger::requestConditionallyApproved($facilityRequest),
-                'for_reschedule' => $this->auditLogger::requestMarkedForReschedule($facilityRequest),
-                default => null,
-            };
+            // Service flips parent + facility rows together and cleans up
+            // conflict references / holds on terminal transitions.
+            $facilityRequest = $this->service->applyStatusTransition($id, $statusMap[$action]);
         }
 
         $facilityRequest->comments()->create([
@@ -121,6 +142,8 @@ class RequestController extends Controller
         ]);
 
         $this->notification->notifyUser($facilityRequest);
+        $this->notifyNewlyHeldRequests($facilityRequest, $facilityRequest->getAttribute('held_request_ids') ?? []);
+        $this->notifyReleasedRequests($facilityRequest->getAttribute('released_request_ids') ?? []);
 
         return back()->with('success', ucfirst(str_replace('_', ' ', $action)).' successful');
     }
@@ -137,6 +160,7 @@ class RequestController extends Controller
         ]);
 
         $this->notification->notifyUser($facilityRequest);
+        $this->notifyNewlyHeldRequests($facilityRequest, $facilityRequest->getAttribute('held_request_ids') ?? []);
 
         $message = $facilityRequest->on_hold
             ? 'Request placed on hold due to a higher-priority conflict.'
@@ -148,15 +172,14 @@ class RequestController extends Controller
     public function reject(Request $request, $id)
     {
         $commentBody = $request->input('comment', 'Your request has been denied.');
-        $facilityRequest = FacilityRequest::findOrFail($id);
-
-        $facilityRequest->update(['status' => RequestStatus::DENIED]);
+        $facilityRequest = $this->service->applyStatusTransition((int) $id, RequestStatus::DENIED);
         $facilityRequest->comments()->create([
             'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
         $this->notification->notifyUser($facilityRequest);
+        $this->notifyReleasedRequests($facilityRequest->getAttribute('released_request_ids') ?? []);
 
         return redirect()->back()->with('success', 'Request rejected successfully.');
     }
@@ -164,15 +187,14 @@ class RequestController extends Controller
     public function conditionally_approve(Request $request, $id)
     {
         $commentBody = $request->input('comment', 'Your request has been conditionally approved.');
-        $facilityRequest = FacilityRequest::findOrFail($id);
-
-        $facilityRequest->update(['status' => RequestStatus::CONDITIONALLY_APPROVED]);
+        $facilityRequest = $this->service->applyStatusTransition((int) $id, RequestStatus::CONDITIONALLY_APPROVED);
         $facilityRequest->comments()->create([
             'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
         $this->notification->notifyUser($facilityRequest);
+        $this->notifyReleasedRequests($facilityRequest->getAttribute('released_request_ids') ?? []);
 
         return redirect()->back()->with('success', 'Request conditionally approved successfully.');
     }
@@ -349,12 +371,16 @@ class RequestController extends Controller
 
     public function hold($id)
     {
-        $facilityRequest = \App\Models\Request::findOrFail($id);
+        $facilityRequest = $this->service->toggleHold((int) $id);
 
-        $facilityRequest->on_hold = ! $facilityRequest->on_hold;
-        $facilityRequest->save();
-
-        $this->auditLogger::requestHoldToggled($facilityRequest, $facilityRequest->on_hold);
+        if ($facilityRequest->on_hold) {
+            $heldBy = $facilityRequest->held_by_request_id
+                ? (FacilityRequest::find($facilityRequest->held_by_request_id) ?? $facilityRequest)
+                : $facilityRequest;
+            $this->notification->notifyOnHold($facilityRequest, $heldBy, 'Manually placed on hold.');
+        } else {
+            $this->notification->notifyUser($facilityRequest);
+        }
 
         return back()->with('success', $facilityRequest->on_hold ? 'Request placed on hold.' : 'Request removed from hold.');
     }
@@ -371,12 +397,14 @@ class RequestController extends Controller
         $statusMap = [
             'reject' => RequestStatus::DENIED,
             'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
+            'for_reschedule' => RequestStatus::FOR_RESCHEDULE,
         ];
 
         $defaultCommentMap = [
             'approve' => 'Your request has been approved.',
             'reject' => 'Your request has been denied.',
             'conditionally_approve' => 'Your request has been conditionally approved.',
+            'for_reschedule' => 'Your request has been marked for rescheduling.',
         ];
 
         $action = $validated['action'];
@@ -384,34 +412,52 @@ class RequestController extends Controller
 
         $facilityRequests = FacilityRequest::whereIn('id', $validated['ids'])->get();
 
-        foreach ($facilityRequests as $facilityRequest) {
-            if ($action === 'approve') {
-                $facilityRequest = $this->service->approve($facilityRequest->id);
-
-                $body = $commentBody ?? (
-                    $facilityRequest->on_hold
-                    ? 'Request placed on hold due to a higher-priority conflict.'
-                    : 'Your request has been approved.'
-                );
-            } elseif ($action !== 'comment') {
-                $facilityRequest->update(['status' => $statusMap[$action]]);
-                $facilityRequest->requestFacilities()->update(['status' => $statusMap[$action]]);
-                $body = $commentBody ?? $defaultCommentMap[$action];
-            } else {
-                $body = $commentBody;
+        DB::transaction(function () use ($facilityRequests, $action, $commentBody) {
+            foreach ($facilityRequests as $facilityRequest) {
+                $this->applyBulkAction($facilityRequest, $action, $commentBody);
             }
-
-            if ($body) {
-                $facilityRequest->comments()->create([
-                    'user_id' => auth()->id(),
-                    'body' => $body,
-                ]);
-            }
-
-            $this->notification->notifyUser($facilityRequest);
-        }
+        });
 
         return redirect()->back()->with('success', ucfirst(str_replace('_', ' ', $action)).' applied to '.count($facilityRequests).' request(s).');
+    }
+
+    private function applyBulkAction(FacilityRequest $facilityRequest, string $action, ?string $commentBody): void
+    {
+        if ($action === 'approve') {
+            $facilityRequest = $this->service->approve($facilityRequest->id);
+
+            $body = $commentBody ?? (
+                $facilityRequest->on_hold
+                ? 'Request placed on hold due to a higher-priority conflict.'
+                : 'Your request has been approved.'
+            );
+        } elseif ($action !== 'comment') {
+            $statusMap = [
+                'reject' => RequestStatus::DENIED,
+                'conditionally_approve' => RequestStatus::CONDITIONALLY_APPROVED,
+                'for_reschedule' => RequestStatus::FOR_RESCHEDULE,
+            ];
+            $defaultCommentMap = [
+                'reject' => 'Your request has been denied.',
+                'conditionally_approve' => 'Your request has been conditionally approved.',
+                'for_reschedule' => 'Your request has been marked for rescheduling.',
+            ];
+            $facilityRequest = $this->service->applyStatusTransition($facilityRequest->id, $statusMap[$action]);
+            $body = $commentBody ?? $defaultCommentMap[$action];
+        } else {
+            $body = $commentBody;
+        }
+
+        if ($body) {
+            $facilityRequest->comments()->create([
+                'user_id' => auth()->id(),
+                'body' => $body,
+            ]);
+        }
+
+        $this->notification->notifyUser($facilityRequest);
+        $this->notifyNewlyHeldRequests($facilityRequest, $facilityRequest->getAttribute('held_request_ids') ?? []);
+        $this->notifyReleasedRequests($facilityRequest->getAttribute('released_request_ids') ?? []);
     }
 
     public function edit(FacilityRequest $request)
@@ -469,16 +515,14 @@ class RequestController extends Controller
     public function forReschedule(Request $request, $id)
     {
         $commentBody = $request->input('comment', 'Your request has been marked for rescheduling.');
-        $facilityRequest = FacilityRequest::findOrFail($id);
-
-        $facilityRequest->update(['status' => RequestStatus::FOR_RESCHEDULE]);
+        $facilityRequest = $this->service->applyStatusTransition((int) $id, RequestStatus::FOR_RESCHEDULE);
         $facilityRequest->comments()->create([
             'body' => $commentBody,
             'user_id' => auth()->id(),
         ]);
 
-        $this->auditLogger::requestMarkedForReschedule($facilityRequest);
         $this->notification->notifyUser($facilityRequest);
+        $this->notifyReleasedRequests($facilityRequest->getAttribute('released_request_ids') ?? []);
 
         return redirect()->back()->with('success', 'Request marked for rescheduling.');
     }
@@ -511,28 +555,17 @@ class RequestController extends Controller
 
             // Notify the request owner about the facility-level decision
             $this->notification->notifyUserFacilityDecision($facilityRequest, $approvedRf);
+            $this->notifyNewlyHeldRequests($facilityRequest, $approvedRf->getAttribute('held_request_ids') ?? []);
         } else {
             $rf->update(['status' => $statusMap[$validated['action']]]);
 
-            $facilityRequest = FacilityRequest::findOrFail($requestId);
+            // Recompute the aggregate parent status with the shared service
+            // logic (handles mixed/conditional states consistently).
+            $facilityRequest = $this->service->refreshParentStatus($requestId);
 
-            $allFacilityStatuses = $facilityRequest->requestFacilities()->pluck('status');
-            $uniqueStatuses = $allFacilityStatuses->unique();
-            $totalFacilities = $allFacilityStatuses->count();
-
-            if ($uniqueStatuses->count() === 1) {
-                $facilityRequest->update([
-                    'status' => $uniqueStatuses->first(),
-                ]);
-            } else {
-                $hasApproved = $allFacilityStatuses->contains(fn ($s) => $s === RequestStatus::APPROVED || $s === RequestStatus::APPROVED->value);
-
-                if ($hasApproved && $totalFacilities >= 2) {
-                    $facilityRequest->update([
-                        'status' => RequestStatus::PARTIALLY_APPROVED,
-                    ]);
-                }
-            }
+            // Non-approve decisions also change the booking, so its owner is
+            // notified just like the approve path above.
+            $this->notification->notifyUserFacilityDecision($facilityRequest, $rf->fresh());
         }
 
         $facilityRequest->comments()->create([
@@ -571,6 +604,8 @@ class RequestController extends Controller
             ]);
 
             $this->notification->notifyUser($facilityRequest);
+
+            $this->notifyNewlyHeldRequests($facilityRequest, $facilityRequest->getAttribute('held_request_ids') ?? []);
 
             return response()->view('requests.email-action-result', [
                 'title' => 'Request Approved',
@@ -630,6 +665,8 @@ class RequestController extends Controller
             ]);
 
             $this->notification->notifyUser($facilityRequest);
+
+            $this->notifyNewlyHeldRequests($facilityRequest, $facilityRequest->getAttribute('held_request_ids') ?? []);
 
             return response()->json(['message' => 'Request Approved']);
         }

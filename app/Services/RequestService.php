@@ -13,9 +13,34 @@ use Illuminate\Support\Facades\DB;
 
 class RequestService
 {
+    /**
+     * Statuses that block a slot for conflict detection. Conditionally
+     * Approved occupies the slot just like Approved, so every detection
+     * and approve-time scan must include it.
+     */
+    public const BLOCKING_STATUSES = [
+        RequestStatus::PENDING,
+        RequestStatus::APPROVED,
+        RequestStatus::CONDITIONALLY_APPROVED,
+    ];
+
     public function __construct(
         protected AuditLogger $auditLogger,
     ) {}
+
+    /**
+     * Normalize stored conflict id arrays (JSON casts mix ints and strings).
+     *
+     * @return array<int>
+     */
+    public static function normalizeConflictIds(mixed $ids): array
+    {
+        if (! is_array($ids)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map('intval', $ids)));
+    }
 
     public function get(
         ?array $statuses,
@@ -344,15 +369,16 @@ class RequestService
 
             $this->syncBookingsAndEquipment($facilityRequest, $validated['facility_bookings']);
 
+            // Detect before any approval: approve() puts losers on hold, and
+            // on-hold requests are excluded from scans, so detecting after
+            // would come back empty and mislabel the buckets.
+            $this->detectAndStoreConflicts($facilityRequest);
+
             if ($priorityLevel === PriorityLevel::Government) {
                 $approved = $this->approve($facilityRequest->id);
 
-                $this->detectAndStoreConflicts($approved);
-
                 return $approved->fresh() ?? $approved;
             }
-
-            $this->detectAndStoreConflicts($facilityRequest);
 
             $this->auditLogger::requestCreated($facilityRequest);
 
@@ -367,6 +393,18 @@ class RequestService
 
             abort_if($facilityRequest->user_id !== Auth::id(), 403);
             abort_if(! in_array($facilityRequest->status, [RequestStatus::PENDING, RequestStatus::FOR_RESCHEDULE]), 403);
+
+            // Self-resubmit after a conflict hold: a hold with a holder is a
+            // "go reschedule" signal, and resubmitting is exactly that — so
+            // release it and recompute conflicts from scratch. A manual hold
+            // (no holder) still blocks editing.
+            if ($facilityRequest->on_hold && $facilityRequest->held_by_request_id !== null) {
+                $facilityRequest->update([
+                    'on_hold' => false,
+                    'held_by_request_id' => null,
+                ]);
+            }
+
             abort_if($facilityRequest->on_hold, 403);
 
             $original = $facilityRequest->only([
@@ -574,7 +612,9 @@ class RequestService
                 $existingEnd = $this->parseBookingDateTime($requestedDate, $existing->time_end);
 
                 if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
-                    $status = $existing->request?->status ?? $existing->status;
+                    // Classify by the booking row's own status: per-facility
+                    // decisions can leave it diverged from the parent request.
+                    $status = $existing->status ?? $existing->request?->status;
                     $statusValue = $status instanceof RequestStatus ? $status->value : $status;
                     $conflicts[] = [
                         'request_id' => $existing->request_id,
@@ -625,38 +665,37 @@ class RequestService
 
         $conflicts = $this->checkForConflicts(
             $bookings,
-            [RequestStatus::PENDING, RequestStatus::APPROVED],
+            self::BLOCKING_STATUSES,
             $request->id
         );
 
         $pendingConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::PENDING->value)->values();
-        $approvedConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED->value)->values();
+        // Approved and Conditionally Approved both occupy the slot.
+        $approvedConflicts = collect($conflicts)->filter(fn ($c) => in_array($c['status'], [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value], true))->values();
 
-        $pendingConflictRfIds = $pendingConflicts->pluck('request_facility_id')->unique()->values()->toArray();
-        $approvedConflictRfIds = $approvedConflicts->pluck('request_facility_id')->unique()->values()->toArray();
+        $pendingConflictRfIds = self::normalizeConflictIds($pendingConflicts->pluck('request_facility_id')->all());
+        $approvedConflictRfIds = self::normalizeConflictIds($approvedConflicts->pluck('request_facility_id')->all());
 
         $equipmentConflicts = $this->checkForEquipmentConflicts(
             $bookings,
-            [RequestStatus::PENDING, RequestStatus::APPROVED],
+            self::BLOCKING_STATUSES,
             $request->id
         );
 
-        $pendingEquipmentRequestIds = collect($equipmentConflicts)
-            ->filter(fn ($c) => $c['status'] === RequestStatus::PENDING->value)
-            ->pluck('request_id')->unique()->values()->toArray();
+        $pendingEquipmentConflicts = collect($equipmentConflicts)->filter(fn ($c) => $c['status'] === RequestStatus::PENDING->value)->values();
+        $approvedEquipmentConflicts = collect($equipmentConflicts)->filter(fn ($c) => in_array($c['status'], [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value], true))->values();
 
-        $approvedEquipmentRequestIds = collect($equipmentConflicts)
-            ->filter(fn ($c) => $c['status'] === RequestStatus::APPROVED->value)
-            ->pluck('request_id')->unique()->values()->toArray();
+        $pendingEquipmentRequestIds = self::normalizeConflictIds($pendingEquipmentConflicts->pluck('request_id')->all());
+        $approvedEquipmentRequestIds = self::normalizeConflictIds($approvedEquipmentConflicts->pluck('request_id')->all());
 
         $request->update([
-            'pending_conflict_rf_ids' => $pendingConflictRfIds ?: [],
-            'approved_conflict_rf_ids' => $approvedConflictRfIds ?: [],
-            'pending_equipment_conflict_request_ids' => $pendingEquipmentRequestIds ?: [],
-            'approved_equipment_conflict_request_ids' => $approvedEquipmentRequestIds ?: [],
+            'pending_conflict_rf_ids' => $pendingConflictRfIds,
+            'approved_conflict_rf_ids' => $approvedConflictRfIds,
+            'pending_equipment_conflict_request_ids' => $pendingEquipmentRequestIds,
+            'approved_equipment_conflict_request_ids' => $approvedEquipmentRequestIds,
         ]);
 
-        $savedRequestRfIds = $request->requestFacilities()->pluck('id')->toArray();
+        $savedRequestRfIds = $request->requestFacilities()->pluck('id')->map(fn ($id) => (int) $id)->all();
 
         $pendingConflicts
             ->pluck('request_id')
@@ -667,7 +706,7 @@ class RequestService
                     return;
                 }
 
-                $existing = $conflictingRequest->pending_conflict_rf_ids ?? [];
+                $existing = self::normalizeConflictIds($conflictingRequest->pending_conflict_rf_ids ?? []);
                 $merged = array_values(array_unique(array_merge($existing, $savedRequestRfIds)));
 
                 $conflictingRequest->update([
@@ -677,12 +716,33 @@ class RequestService
                 ]);
             });
 
-        $this->removeStalePendingConflictRefs($request, $pendingConflictRfIds);
+        // Promote equipment conflicts to the other side, mirroring time
+        // conflicts: only the pending side records the ids.
+        $pendingEquipmentConflicts
+            ->pluck('request_id')
+            ->unique()
+            ->each(function ($conflictingRequestId) use ($request) {
+                $conflictingRequest = FacilityRequest::find($conflictingRequestId);
+                if (! $conflictingRequest) {
+                    return;
+                }
+
+                $existing = self::normalizeConflictIds($conflictingRequest->pending_equipment_conflict_request_ids ?? []);
+                $merged = array_values(array_unique(array_merge($existing, [(int) $request->id])));
+
+                if ($merged !== $existing) {
+                    $conflictingRequest->update([
+                        'pending_equipment_conflict_request_ids' => $merged,
+                    ]);
+                }
+            });
+
+        $this->removeStalePendingConflictRefs($request, $pendingConflictRfIds, $pendingEquipmentRequestIds);
     }
 
-    private function removeStalePendingConflictRefs(FacilityRequest $saved_request, array $currentPendingRfIds): void
+    private function removeStalePendingConflictRefs(FacilityRequest $saved_request, array $currentPendingRfIds, array $currentPendingEquipmentRequestIds = []): void
     {
-        $savedRfIds = $saved_request->requestFacilities()->pluck('id')->toArray();
+        $savedRfIds = $saved_request->requestFacilities()->pluck('id')->map(fn ($id) => (int) $id)->all();
 
         if (empty($savedRfIds)) {
             return;
@@ -692,20 +752,41 @@ class RequestService
         // request ids in one query instead of an EXISTS query per candidate.
         $stillConflictingRequestIds = RequestFacility::whereIn('id', $currentPendingRfIds)
             ->pluck('request_id')
+            ->map(fn ($id) => (int) $id)
             ->all();
 
         $candidateRequests = FacilityRequest::where('id', '!=', $saved_request->id)
             ->whereNotNull('pending_conflict_rf_ids')
             ->get()
-            ->filter(fn ($r) => ! empty(array_intersect($r->pending_conflict_rf_ids ?? [], $savedRfIds)));
+            ->filter(fn ($r) => ! empty(array_intersect(self::normalizeConflictIds($r->pending_conflict_rf_ids ?? []), $savedRfIds)));
 
         foreach ($candidateRequests as $candidate) {
-            if (in_array($candidate->id, $stillConflictingRequestIds, true)) {
+            if (in_array((int) $candidate->id, $stillConflictingRequestIds, true)) {
                 continue;
             }
 
             $candidate->update([
-                'pending_conflict_rf_ids' => array_values(array_diff($candidate->pending_conflict_rf_ids ?? [], $savedRfIds)),
+                'pending_conflict_rf_ids' => array_values(array_diff(self::normalizeConflictIds($candidate->pending_conflict_rf_ids ?? []), $savedRfIds)),
+            ]);
+        }
+
+        // Prune this request's id from other requests' pending equipment
+        // conflict lists when it is no longer an equipment conflict for them.
+        $equipmentCandidates = FacilityRequest::where('id', '!=', $saved_request->id)
+            ->whereNotNull('pending_equipment_conflict_request_ids')
+            ->get()
+            ->filter(fn ($r) => in_array((int) $saved_request->id, self::normalizeConflictIds($r->pending_equipment_conflict_request_ids ?? []), true));
+
+        foreach ($equipmentCandidates as $candidate) {
+            if (in_array((int) $candidate->id, array_map('intval', $currentPendingEquipmentRequestIds), true)) {
+                continue;
+            }
+
+            $candidate->update([
+                'pending_equipment_conflict_request_ids' => array_values(array_diff(
+                    self::normalizeConflictIds($candidate->pending_equipment_conflict_request_ids ?? []),
+                    [(int) $saved_request->id]
+                )),
             ]);
         }
     }
@@ -733,6 +814,128 @@ class RequestService
                     ]);
                 }
             });
+    }
+
+    /**
+     * Strip a request's references out of every other request's stored
+     * conflict arrays. Called when the request leaves the blocking pool
+     * (denied, marked for reschedule) so ghosts don't linger.
+     */
+    public function clearConflictRefsForRequest(FacilityRequest $request): void
+    {
+        $rfIds = $request->requestFacilities()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $requestId = (int) $request->id;
+
+        $candidates = FacilityRequest::where('id', '!=', $request->id)
+            ->where(function ($query) {
+                $query->whereNotNull('pending_conflict_rf_ids')
+                    ->orWhereNotNull('approved_conflict_rf_ids')
+                    ->orWhereNotNull('pending_equipment_conflict_request_ids')
+                    ->orWhereNotNull('approved_equipment_conflict_request_ids');
+            })
+            ->get(['id', 'pending_conflict_rf_ids', 'approved_conflict_rf_ids', 'pending_equipment_conflict_request_ids', 'approved_equipment_conflict_request_ids', 'recommended_action', 'recommended_action_reason']);
+
+        foreach ($candidates as $candidate) {
+            $pending = array_values(array_diff(self::normalizeConflictIds($candidate->pending_conflict_rf_ids ?? []), $rfIds));
+            $approved = array_values(array_diff(self::normalizeConflictIds($candidate->approved_conflict_rf_ids ?? []), $rfIds));
+            $pendingEquipment = array_values(array_diff(self::normalizeConflictIds($candidate->pending_equipment_conflict_request_ids ?? []), [$requestId]));
+            $approvedEquipment = array_values(array_diff(self::normalizeConflictIds($candidate->approved_equipment_conflict_request_ids ?? []), [$requestId]));
+
+            $payload = [
+                'pending_conflict_rf_ids' => $pending,
+                'approved_conflict_rf_ids' => $approved,
+                'pending_equipment_conflict_request_ids' => $pendingEquipment,
+                'approved_equipment_conflict_request_ids' => $approvedEquipment,
+            ];
+
+            if (empty($pending) && empty($approved) && empty($pendingEquipment) && empty($approvedEquipment)) {
+                $payload['recommended_action'] = null;
+                $payload['recommended_action_reason'] = null;
+            }
+
+            $candidate->update($payload);
+        }
+    }
+
+    /**
+     * Release requests held by the given holder (approved request denied or
+     * sent back for reschedule): clear the hold flags so they re-enter
+     * conflict scans. Status and history are left for admin review.
+     *
+     * @return Collection<int, FacilityRequest> the requests that were released.
+     */
+    public function releaseHeldRequests(int $holderId): Collection
+    {
+        $released = FacilityRequest::where('held_by_request_id', $holderId)
+            ->where('on_hold', true)
+            ->get();
+
+        if ($released->isEmpty()) {
+            return collect();
+        }
+
+        FacilityRequest::where('held_by_request_id', $holderId)
+            ->where('on_hold', true)
+            ->update([
+                'on_hold' => false,
+                'held_by_request_id' => null,
+            ]);
+
+        return $released;
+    }
+
+    /**
+     * Move a newly approved request's slot ids from every other request's
+     * pending buckets to its approved buckets (time + equipment). Approval
+     * does not hold pending time-overlaps, so without this sweep their
+     * stored buckets would describe an approved request as pending forever.
+     */
+    private function migrateConflictBucketsForApproval(FacilityRequest $approvedRequest): void
+    {
+        $winnerRfIds = $approvedRequest->requestFacilities()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $winnerId = (int) $approvedRequest->id;
+
+        if (empty($winnerRfIds)) {
+            return;
+        }
+
+        $candidates = FacilityRequest::where('id', '!=', $approvedRequest->id)
+            ->where(function ($query) {
+                $query->whereNotNull('pending_conflict_rf_ids')
+                    ->orWhereNotNull('pending_equipment_conflict_request_ids');
+            })
+            ->get(['id', 'pending_conflict_rf_ids', 'approved_conflict_rf_ids', 'pending_equipment_conflict_request_ids', 'approved_equipment_conflict_request_ids']);
+
+        foreach ($candidates as $candidate) {
+            $pending = self::normalizeConflictIds($candidate->pending_conflict_rf_ids ?? []);
+            $move = array_values(array_intersect($pending, $winnerRfIds));
+
+            $pendingEquipment = self::normalizeConflictIds($candidate->pending_equipment_conflict_request_ids ?? []);
+            $moveEquipment = in_array($winnerId, $pendingEquipment, true);
+
+            if (empty($move) && ! $moveEquipment) {
+                continue;
+            }
+
+            $payload = [];
+            if (! empty($move)) {
+                $payload['pending_conflict_rf_ids'] = array_values(array_diff($pending, $winnerRfIds));
+                $payload['approved_conflict_rf_ids'] = array_values(array_unique(array_merge(
+                    self::normalizeConflictIds($candidate->approved_conflict_rf_ids ?? []),
+                    $move
+                )));
+            }
+            if ($moveEquipment) {
+                $payload['pending_equipment_conflict_request_ids'] = array_values(array_diff($pendingEquipment, [$winnerId]));
+                $approvedEquipment = self::normalizeConflictIds($candidate->approved_equipment_conflict_request_ids ?? []);
+                if (! in_array($winnerId, $approvedEquipment, true)) {
+                    $approvedEquipment[] = $winnerId;
+                }
+                $payload['approved_equipment_conflict_request_ids'] = array_values($approvedEquipment);
+            }
+
+            $candidate->update($payload);
+        }
     }
 
     public function approve(int $request_id): FacilityRequest
@@ -768,6 +971,10 @@ class RequestService
 
             $this->auditLogger::requestApproved($request);
 
+            // Collect every request displaced by this approval so callers can
+            // notify each affected owner (winner + losers + equipment losers).
+            $affectedRequestIds = collect();
+
             foreach ($conflictingRequests as $conflicting) {
                 $conflicting->update([
                     'status' => RequestStatus::FOR_RESCHEDULE,
@@ -785,6 +992,7 @@ class RequestService
                 ]);
 
                 $this->auditLogger::requestHeld($conflicting, $request);
+                $affectedRequestIds->push($conflicting->id);
             }
 
             $equipmentDisplaced = $this->getEquipmentDisplacedRequests($request);
@@ -810,9 +1018,17 @@ class RequestService
                 ]);
 
                 $this->auditLogger::requestHeld($conflicting, $request);
+                $affectedRequestIds->push($conflicting->id);
             }
 
-            return $request->fresh();
+            // The winner is now Approved: relabel its slot ids in every other
+            // request's pending buckets as approved buckets (Option 1: migrate).
+            $this->migrateConflictBucketsForApproval($request);
+
+            $fresh = $request->fresh();
+            $fresh->setAttribute('held_request_ids', $affectedRequestIds->unique()->values()->all());
+
+            return $fresh;
         });
     }
 
@@ -979,6 +1195,63 @@ class RequestService
         return Carbon::parse("{$dateOnly} {$timeOnly}");
     }
 
+    /**
+     * Admin status transition for non-approve decisions (deny, conditional
+     * approval, reschedule). Flips parent + facility rows together and, when
+     * the request leaves the blocking pool, strips its references out of
+     * other requests' conflict arrays and releases requests it was holding.
+     */
+    public function applyStatusTransition(int $id, RequestStatus $status): FacilityRequest
+    {
+        return DB::transaction(function () use ($id, $status) {
+            $request = FacilityRequest::lockForUpdate()->findOrFail($id);
+            $request->update([
+                'status' => $status,
+                'processed_by' => Auth::id(),
+                'processed_at' => now(),
+            ]);
+            $request->requestFacilities()->update(['status' => $status]);
+
+            if (in_array($status, [RequestStatus::DENIED, RequestStatus::FOR_RESCHEDULE], true)) {
+                $this->clearConflictRefsForRequest($request->fresh());
+                $releasedIds = $this->releaseHeldRequests($request->id)->pluck('id')->all();
+            }
+
+            match ($status) {
+                RequestStatus::DENIED => $this->auditLogger::requestDenied($request),
+                RequestStatus::CONDITIONALLY_APPROVED => $this->auditLogger::requestConditionallyApproved($request),
+                RequestStatus::FOR_RESCHEDULE => $this->auditLogger::requestMarkedForReschedule($request),
+                default => null,
+            };
+
+            $fresh = $request->fresh();
+            // Requests un-held by this transition so callers can notify
+            // owners whose hold was lifted.
+            $fresh->setAttribute('released_request_ids', $releasedIds ?? []);
+
+            return $fresh;
+        });
+    }
+
+    /**
+     * Manual hold toggle. Releasing a conflict hold also drops the holder
+     * link so the request doesn't linger as a phantom blocker.
+     */
+    public function toggleHold(int $id): FacilityRequest
+    {
+        return DB::transaction(function () use ($id) {
+            $request = FacilityRequest::lockForUpdate()->findOrFail($id);
+            $onHold = ! $request->on_hold;
+            $request->update([
+                'on_hold' => $onHold,
+                'held_by_request_id' => $onHold ? $request->held_by_request_id : null,
+            ]);
+            $this->auditLogger::requestHoldToggled($request, $onHold);
+
+            return $request->fresh();
+        });
+    }
+
     public function putOnHold(FacilityRequest $target, FacilityRequest $heldBy, string $reason): void
     {
         $target->update([
@@ -989,6 +1262,13 @@ class RequestService
             'processed_by' => null,
             'processed_at' => null,
         ]);
+
+        $target->comments()->create([
+            'user_id' => Auth::id(),
+            'body' => 'Marked for reschedule — '.$reason,
+        ]);
+
+        $this->auditLogger::requestHeld($target, $heldBy);
     }
 
     public function getEditData(int $requestId): array
@@ -1141,7 +1421,9 @@ class RequestService
                         'requester' => $conflicting->user->name,
                         'equipment_id' => $eqId,
                         'equipment_name' => $conflicting->equipment->firstWhere('id', $eqId)?->name,
-                        'status' => $conflicting->status,
+                        // Normalize: status is enum-cast on the model, but
+                        // consumers partition on plain string values.
+                        'status' => $conflicting->status instanceof RequestStatus ? $conflicting->status->value : $conflicting->status,
                         'date' => $date,
                         'time_start' => $timeStart,
                         'time_end' => $timeEnd,
@@ -1223,11 +1505,32 @@ class RequestService
     {
         return DB::transaction(function () use ($requestFacilityId) {
             $rf = RequestFacility::with('request')->lockForUpdate()->findOrFail($requestFacilityId);
+            // Lock the parent so concurrent facility decisions can't interleave.
+            $rf->request()->lockForUpdate()->firstOrFail();
             $rf->update(['status' => RequestStatus::APPROVED]);
-            $this->handleFacilityLevelConflicts($rf);
-            $this->syncParentRequestStatus($rf->request);
+            $affected = $this->handleFacilityLevelConflicts($rf->fresh());
+            $affected = $affected->merge($this->displaceEquipmentForFacility($rf->fresh()))->unique()->values();
+            $this->syncParentRequestStatus($rf->request()->firstOrFail());
+            $this->migrateConflictBucketsForFacilityApproval($rf->fresh());
+            // Loser parent ids displaced by this single-facility approval so
+            // callers can notify each affected owner.
+            $rf->setAttribute('held_request_ids', $affected->all());
 
             return $rf;
+        });
+    }
+
+    /**
+     * Recompute a parent request's aggregate status from its facility rows
+     * (for per-facility decisions made outside approveFacility).
+     */
+    public function refreshParentStatus(int $requestId): FacilityRequest
+    {
+        return DB::transaction(function () use ($requestId) {
+            $request = FacilityRequest::lockForUpdate()->findOrFail($requestId);
+            $this->syncParentRequestStatus($request->fresh());
+
+            return $request->fresh();
         });
     }
 
@@ -1237,6 +1540,8 @@ class RequestService
         $total = $facilities->count();
         $approved = $facilities->where('status', RequestStatus::APPROVED)->count();
         $denied = $facilities->where('status', RequestStatus::DENIED)->count();
+        $conditionallyApproved = $facilities->where('status', RequestStatus::CONDITIONALLY_APPROVED)->count();
+        $forReschedule = $facilities->where('status', RequestStatus::FOR_RESCHEDULE)->count();
 
         if ($approved === $total) {
             $newStatus = RequestStatus::APPROVED;
@@ -1244,6 +1549,10 @@ class RequestService
             $newStatus = RequestStatus::DENIED;
         } elseif ($approved > 0) {
             $newStatus = RequestStatus::PARTIALLY_APPROVED;
+        } elseif ($conditionallyApproved === $total && $total > 0) {
+            $newStatus = RequestStatus::CONDITIONALLY_APPROVED;
+        } elseif ($forReschedule > 0) {
+            $newStatus = RequestStatus::FOR_RESCHEDULE;
         } else {
             $newStatus = RequestStatus::PENDING;
         }
@@ -1251,8 +1560,18 @@ class RequestService
         $request->update(['status' => $newStatus]);
     }
 
-    private function handleFacilityLevelConflicts(RequestFacility $approvedRf): void
+    /**
+     * Time-conflict overwrite scoped to a single approved facility row: flip
+     * only the overlapping loser rows to For Reschedule and hold their
+     * parents (which resync to Partially Approved when sibling rows are
+     * unaffected) instead of holding whole requests.
+     *
+     * @return Collection<int, int> affected loser parent request ids.
+     */
+    private function handleFacilityLevelConflicts(RequestFacility $approvedRf): Collection
     {
+        $approvedRf->loadMissing('facility', 'request');
+
         $booking = [
             [
                 'facility_id' => $approvedRf->facility_id,
@@ -1262,14 +1581,194 @@ class RequestService
             ],
         ];
 
-        $conflicts = $this->getConflictingApprovedRequests($booking, $approvedRf->request_id);
+        $conflictingRfs = $this->getConflictingApprovedFacilities($booking, $approvedRf->request_id);
 
-        foreach ($conflicts as $conflictingRequest) {
-            $this->putOnHold(
-                $conflictingRequest,
-                $approvedRf->request,
-                'Conflict with approved facility: '.$approvedRf->facility->name
-            );
+        $affectedIds = collect();
+
+        if ($conflictingRfs->isEmpty()) {
+            return $affectedIds;
+        }
+
+        $winner = $approvedRf->request;
+        $reason = 'Conflict with approved facility: '.$approvedRf->facility->name
+            .' on '.Carbon::parse($approvedRf->date_requested)->format('F j, Y');
+
+        foreach ($conflictingRfs->groupBy('request_id')->sortKeys() as $loserRequestId => $rfs) {
+            if ((int) $loserRequestId === (int) $approvedRf->request_id) {
+                continue;
+            }
+
+            $loser = FacilityRequest::lockForUpdate()->find($loserRequestId);
+
+            if (! $loser || $loser->on_hold) {
+                continue;
+            }
+
+            foreach ($rfs as $loserRf) {
+                if (! in_array($loserRf->status, [RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED], true)) {
+                    continue;
+                }
+
+                $loserRf->update(['status' => RequestStatus::FOR_RESCHEDULE]);
+            }
+
+            $this->putOnHold($loser, $winner, $reason);
+            $this->syncParentRequestStatus($loser->fresh());
+            $affectedIds->push($loser->id);
+        }
+
+        return $affectedIds;
+    }
+
+    /**
+     * Row-level counterpart of getConflictingApprovedRequests: returns the
+     * overlapping approved/conditionally-approved facility rows (with parents)
+     * instead of just the parent requests, so single-facility approvals can
+     * overwrite only the conflicting rows.
+     */
+    private function getConflictingApprovedFacilities(array $bookings, int $excludeRequestId): Collection
+    {
+        $conflictingRfIds = collect();
+
+        foreach ($bookings as $booking) {
+            $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
+            $requestedStart = $this->parseBookingDateTime($dateOnly, $booking['time_start']);
+            $requestedEnd = $this->parseBookingDateTime($dateOnly, $booking['time_end']);
+
+            $existingBookings = RequestFacility::where('facility_id', $booking['facility_id'])
+                ->where('date_requested', $dateOnly)
+                ->whereIn('status', [RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED])
+                ->whereHas('request', function ($query) use ($excludeRequestId) {
+                    $query->where('on_hold', false)
+                        ->when($excludeRequestId, fn ($q) => $q->where('id', '!=', $excludeRequestId));
+                })
+                ->with('request')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($existingBookings as $existing) {
+                $existingStart = $this->parseBookingDateTime($dateOnly, $existing->time_start);
+                $existingEnd = $this->parseBookingDateTime($dateOnly, $existing->time_end);
+
+                if ($requestedStart->lt($existingEnd) && $requestedEnd->gt($existingStart)) {
+                    $conflictingRfIds->push($existing->id);
+                }
+            }
+        }
+
+        if ($conflictingRfIds->isEmpty()) {
+            return collect();
+        }
+
+        return RequestFacility::whereIn('id', $conflictingRfIds->unique())->with('request')->get();
+    }
+
+    /**
+     * Equipment counterpart of handleFacilityLevelConflicts, scoped to a
+     * single approved facility row: hold overlapping pending requests whose
+     * equipment is no longer available, with comment + audit like approve().
+     *
+     * @return Collection<int, int> affected loser parent request ids.
+     */
+    private function displaceEquipmentForFacility(RequestFacility $approvedRf): Collection
+    {
+        $request = $approvedRf->request;
+        $request->loadMissing('equipment');
+        $date = Carbon::parse($approvedRf->date_requested)->format('Y-m-d');
+        $timeStart = substr($approvedRf->time_start, 0, 5);
+        $timeEnd = substr($approvedRf->time_end, 0, 5);
+
+        $affectedIds = collect();
+
+        foreach ($request->equipment as $equipment) {
+            if ($equipment->quantityAvailable($date, $timeStart, $timeEnd, null) >= 0) {
+                continue;
+            }
+
+            $displaced = FacilityRequest::whereIn('status', [RequestStatus::PENDING, RequestStatus::CONDITIONALLY_APPROVED])
+                ->where('on_hold', false)
+                ->where('id', '!=', $request->id)
+                ->whereHas('equipment', fn ($q) => $q->where('equipments.id', $equipment->id))
+                ->whereHas('requestFacilities', fn ($q) => $q
+                    ->where('date_requested', $date)
+                    ->where('time_start', '<', $timeEnd)
+                    ->where('time_end', '>', $timeStart))
+                ->get();
+
+            foreach ($displaced as $conflicting) {
+                if ($conflicting->on_hold) {
+                    continue;
+                }
+
+                $conflicting->update([
+                    'status' => RequestStatus::FOR_RESCHEDULE,
+                    'on_hold' => true,
+                    'held_by_request_id' => $request->id,
+                    'recommended_action' => RequestStatus::DENIED,
+                    'recommended_action_reason' => 'Equipment no longer available — superseded by approved facility: "'.$request->title.'"',
+                    'processed_by' => null,
+                    'processed_at' => null,
+                ]);
+
+                $conflicting->comments()->create([
+                    'user_id' => Auth::id(),
+                    'body' => 'Marked for reschedule — equipment taken by approved facility: "'.$request->title.'"',
+                ]);
+
+                $this->auditLogger::requestHeld($conflicting, $request);
+                $affectedIds->push($conflicting->id);
+            }
+        }
+
+        return $affectedIds;
+    }
+
+    /**
+     * Scoped counterpart of migrateConflictBucketsForApproval for a single
+     * approved facility row: only the approved row id (not every sibling row
+     * of the winner) moves from pending buckets to approved buckets.
+     */
+    private function migrateConflictBucketsForFacilityApproval(RequestFacility $approvedRf): void
+    {
+        $winnerId = (int) $approvedRf->request_id;
+        $winnerRfId = (int) $approvedRf->id;
+
+        $candidates = FacilityRequest::where('id', '!=', $winnerId)
+            ->where(function ($query) {
+                $query->whereNotNull('pending_conflict_rf_ids')
+                    ->orWhereNotNull('pending_equipment_conflict_request_ids');
+            })
+            ->get(['id', 'pending_conflict_rf_ids', 'approved_conflict_rf_ids', 'pending_equipment_conflict_request_ids', 'approved_equipment_conflict_request_ids']);
+
+        foreach ($candidates as $candidate) {
+            $pending = self::normalizeConflictIds($candidate->pending_conflict_rf_ids ?? []);
+            $move = in_array($winnerRfId, $pending, true);
+
+            $pendingEquipment = self::normalizeConflictIds($candidate->pending_equipment_conflict_request_ids ?? []);
+            $moveEquipment = in_array($winnerId, $pendingEquipment, true);
+
+            if (! $move && ! $moveEquipment) {
+                continue;
+            }
+
+            $payload = [];
+            if ($move) {
+                $payload['pending_conflict_rf_ids'] = array_values(array_diff($pending, [$winnerRfId]));
+                $payload['approved_conflict_rf_ids'] = array_values(array_unique(array_merge(
+                    self::normalizeConflictIds($candidate->approved_conflict_rf_ids ?? []),
+                    [$winnerRfId]
+                )));
+            }
+            if ($moveEquipment) {
+                $payload['pending_equipment_conflict_request_ids'] = array_values(array_diff($pendingEquipment, [$winnerId]));
+                $approvedEquipment = self::normalizeConflictIds($candidate->approved_equipment_conflict_request_ids ?? []);
+                if (! in_array($winnerId, $approvedEquipment, true)) {
+                    $approvedEquipment[] = $winnerId;
+                }
+                $payload['approved_equipment_conflict_request_ids'] = array_values($approvedEquipment);
+            }
+
+            $candidate->update($payload);
         }
     }
 

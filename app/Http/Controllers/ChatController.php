@@ -714,13 +714,13 @@ SYMTPROMPT;
                 ->with(['facility', 'request'])
                 ->get()
                 ->map(fn ($rf) => [
-                            'title' => $rf->request?->title,
-                            'facility_name' => $rf->facility?->name ?? 'unknown',
-                            'date_requested' => $rf->date_requested,
-                            'time_start' => $rf->time_start,
-                            'time_end' => $rf->time_end,
-                            'status' => $rf->status ?? 'unknown',
-                        ])
+                    'title' => $rf->request?->title,
+                    'facility_name' => $rf->facility?->name ?? 'unknown',
+                    'date_requested' => $rf->date_requested,
+                    'time_start' => $rf->time_start,
+                    'time_end' => $rf->time_end,
+                    'status' => $rf->status ?? 'unknown',
+                ])
                 ->values(),
         ];
     }
@@ -3158,7 +3158,7 @@ SYMTPROMPT;
 
                 foreach ($bookingsForValidation as $booking) {
                     $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
-                    $facilityRequest->requestFacilities()->create([
+                    $requestFacility = $facilityRequest->requestFacilities()->create([
                         'facility_id' => $booking['facility_id'],
                         'date_requested' => $dateOnly,
                         'time_start' => $booking['time_start'],
@@ -3188,6 +3188,7 @@ SYMTPROMPT;
                             $isBorrowed = $sourceFacilityId !== null && $sourceFacilityId !== (int) $booking['facility_id'];
 
                             $facilityRequest->equipment()->attach($equipment['equipment_id'], [
+                                'request_facility_id' => $requestFacility->id,
                                 'quantity_needed' => $equipment['quantity_needed'],
                                 'is_borrowed' => $isBorrowed,
                                 'source_facility_id' => $isBorrowed ? $sourceFacilityId : null,
@@ -3239,6 +3240,12 @@ SYMTPROMPT;
                         \Log::warning('Failed to clean temp directory: '.$e->getMessage());
                     }
                 }
+
+                // Store conflict arrays + backfill the pending side, exactly
+                // like web submissions do. Runs before priority holds below:
+                // holds exclude rows from scans, so detecting after would
+                // come back empty.
+                app(\App\Services\RequestService::class)->detectAndStoreConflicts($facilityRequest->fresh());
 
                 if ($priorityLevel > 0) {
                     try {

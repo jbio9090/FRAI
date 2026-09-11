@@ -3,12 +3,18 @@
 namespace Tests\Feature;
 
 use App\Enums\RequestStatus;
+use App\Models\Equipment;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\User;
+use App\Notifications\RequestFacilityDecision;
+use App\Notifications\RequestResult;
 use App\Services\RequestService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class RequestTest extends TestCase
@@ -350,5 +356,395 @@ class RequestTest extends TestCase
         $this->assertEquals([], $untouched->pending_conflict_rf_ids ?? []);
         $this->assertEquals([], $untouched->approved_conflict_rf_ids ?? []);
         $this->assertEquals($originalRecommendation, $untouched->recommended_action);
+    }
+
+    public function test_deny_clears_conflict_refs_on_other_requests(): void
+    {
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+
+        $first = $this->createBooking($ownerA, $facility, '2026-11-01', '10:00', '12:00');
+        $second = $this->createBooking($ownerB, $facility, '2026-11-01', '11:00', '13:00');
+
+        $firstRfId = $first->requestFacilities()->first()->id;
+
+        $this->assertContains($firstRfId, $second->fresh()->pending_conflict_rf_ids ?? []);
+
+        app(RequestService::class)->applyStatusTransition($first->id, RequestStatus::DENIED);
+
+        $denied = $first->fresh();
+
+        $this->assertEquals(RequestStatus::DENIED, $denied->status);
+        $this->assertEquals(RequestStatus::DENIED, $denied->requestFacilities()->first()->status);
+
+        $cleared = $second->fresh();
+
+        $this->assertNotContains($firstRfId, $cleared->pending_conflict_rf_ids ?? []);
+        $this->assertEquals([], $cleared->pending_conflict_rf_ids ?? []);
+        $this->assertNull($cleared->recommended_action);
+    }
+
+    public function test_approve_migrates_pending_bucket_to_approved(): void
+    {
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+        $admin = User::factory()->create();
+
+        $first = $this->createBooking($ownerA, $facility, '2026-11-02', '10:00', '12:00');
+        $second = $this->createBooking($ownerB, $facility, '2026-11-02', '11:00', '13:00');
+
+        $firstRfId = $first->requestFacilities()->first()->id;
+
+        $this->assertContains($firstRfId, $second->fresh()->pending_conflict_rf_ids ?? []);
+
+        $this->actingAs($admin);
+        app(RequestService::class)->approve($first->id);
+
+        $migrated = $second->fresh();
+
+        // Pending time-overlaps are not held on approve, but their buckets
+        // must stop describing the winner as pending.
+        $this->assertFalse($migrated->on_hold);
+        $this->assertEquals(RequestStatus::PENDING, $migrated->status);
+        $this->assertNotContains($firstRfId, $migrated->pending_conflict_rf_ids ?? []);
+        $this->assertContains($firstRfId, $migrated->approved_conflict_rf_ids ?? []);
+    }
+
+    public function test_bulk_for_reschedule_applies_without_crash(): void
+    {
+        Permission::findOrCreate('approve requests');
+        Role::findOrCreate('admin')->givePermissionTo('approve requests');
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+
+        $first = $this->createBooking($ownerA, $facility, '2026-11-03', '10:00', '12:00');
+        $second = $this->createBooking($ownerB, $facility, '2026-11-03', '11:00', '13:00');
+
+        $response = $this->actingAs($admin)->post(route('bulk.action'), [
+            'ids' => [$first->id, $second->id],
+            'action' => 'for_reschedule',
+        ]);
+
+        $response->assertRedirect();
+
+        $this->assertEquals(RequestStatus::FOR_RESCHEDULE, $first->fresh()->status);
+        $this->assertEquals(RequestStatus::FOR_RESCHEDULE, $second->fresh()->status);
+        $this->assertEquals([], $first->fresh()->pending_conflict_rf_ids ?? []);
+        $this->assertEquals([], $second->fresh()->pending_conflict_rf_ids ?? []);
+    }
+
+    public function test_conditionally_approved_blocker_is_detected(): void
+    {
+        $facility = Facility::factory()->create();
+        $owner = User::factory()->create();
+
+        $this->actingAs($owner);
+
+        $blocker = FacilityRequest::factory()->conditionallyApproved()->create(['user_id' => $owner->id]);
+
+        $blockerRf = RequestFacility::create([
+            'request_id' => $blocker->id,
+            'facility_id' => $facility->id,
+            'date_requested' => '2026-11-04',
+            'time_start' => '07:00:00',
+            'time_end' => '12:00:00',
+            'status' => RequestStatus::CONDITIONALLY_APPROVED,
+        ]);
+
+        $pending = $this->createBooking($owner, $facility, '2026-11-04', '08:00', '12:00');
+
+        $this->assertContains($blockerRf->id, $pending->fresh()->approved_conflict_rf_ids ?? []);
+    }
+
+    public function test_held_request_can_resubmit_after_release(): void
+    {
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+        $admin = User::factory()->create();
+
+        $first = $this->createBooking($ownerA, $facility, '2026-11-05', '10:00', '12:00');
+        $second = $this->createBooking($ownerB, $facility, '2026-11-05', '11:00', '13:00');
+
+        $this->actingAs($admin);
+        app(RequestService::class)->putOnHold($second->fresh(), $first->fresh(), 'Superseded by approved request');
+
+        $this->assertTrue($second->fresh()->on_hold);
+
+        $this->actingAs($ownerB);
+        app(RequestService::class)->update([
+            'title' => 'Second booking',
+            'description' => 'Second booking description',
+            'facility_bookings' => [
+                [
+                    'facility_id' => $facility->id,
+                    'date' => '2026-11-05',
+                    'time_start' => '14:00',
+                    'time_end' => '15:00',
+                ],
+            ],
+        ], $second->id);
+
+        $resubmitted = $second->fresh();
+
+        $this->assertFalse($resubmitted->on_hold);
+        $this->assertNull($resubmitted->held_by_request_id);
+        $this->assertEquals([], $resubmitted->pending_conflict_rf_ids ?? []);
+    }
+
+    public function test_deny_releases_held_requests(): void
+    {
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+        $admin = User::factory()->create();
+
+        $first = $this->createBooking($ownerA, $facility, '2026-11-06', '10:00', '12:00');
+        $second = $this->createBooking($ownerB, $facility, '2026-11-06', '11:00', '13:00');
+
+        $this->actingAs($admin);
+        app(RequestService::class)->putOnHold($second->fresh(), $first->fresh(), 'Superseded by approved request');
+
+        $this->assertEquals($first->id, $second->fresh()->held_by_request_id);
+
+        app(RequestService::class)->applyStatusTransition($first->id, RequestStatus::DENIED);
+
+        $released = $second->fresh();
+
+        $this->assertFalse($released->on_hold);
+        $this->assertNull($released->held_by_request_id);
+    }
+
+    public function test_equipment_conflicts_are_stored_and_backfilled(): void
+    {
+        $facility = Facility::factory()->create();
+        $equipment = Equipment::factory()->create();
+        $equipment->facilities()->attach($facility->id, ['quantity' => 5]);
+
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+
+        $bookingsFor = fn () => [
+            [
+                'facility_id' => $facility->id,
+                'date' => '2026-11-07',
+                'time_start' => '10:00',
+                'time_end' => '12:00',
+                'equipment' => [
+                    ['equipment_id' => $equipment->id, 'quantity_needed' => 1],
+                ],
+            ],
+        ];
+
+        $this->actingAs($ownerA);
+        $first = app(RequestService::class)->create([
+            'title' => 'First equipment booking',
+            'description' => 'First equipment booking description',
+            'facility_bookings' => $bookingsFor(),
+        ]);
+
+        $this->actingAs($ownerB);
+        $second = app(RequestService::class)->create([
+            'title' => 'Second equipment booking',
+            'description' => 'Second equipment booking description',
+            'facility_bookings' => $bookingsFor(),
+        ]);
+
+        $this->assertEquals([$first->id], $second->fresh()->pending_equipment_conflict_request_ids ?? []);
+        $this->assertContains($second->id, $first->fresh()->pending_equipment_conflict_request_ids ?? []);
+
+        app(RequestService::class)->applyStatusTransition($first->id, RequestStatus::DENIED);
+
+        $this->assertEquals([], $second->fresh()->pending_equipment_conflict_request_ids ?? []);
+    }
+
+    private function actingAsAdmin(): User
+    {
+        Permission::findOrCreate('approve requests');
+        Role::findOrCreate('admin')->givePermissionTo('approve requests');
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+
+        return $admin;
+    }
+
+    private function createApprovedRequestWithBookings(User $owner, Facility $facility, array $bookings): FacilityRequest
+    {
+        $request = FacilityRequest::factory()->approved()->create(['user_id' => $owner->id]);
+
+        foreach ($bookings as $booking) {
+            RequestFacility::create([
+                'request_id' => $request->id,
+                'facility_id' => $facility->id,
+                'date_requested' => $booking['date'],
+                'time_start' => $booking['time_start'],
+                'time_end' => $booking['time_end'],
+                'status' => RequestStatus::APPROVED,
+            ]);
+        }
+
+        return $request;
+    }
+
+    public function test_approve_facility_flips_only_overlapping_loser_row(): void
+    {
+        $facility = Facility::factory()->create();
+        $loserOwner = User::factory()->create();
+        $winnerOwner = User::factory()->create();
+        $admin = User::factory()->create();
+
+        $loser = $this->createApprovedRequestWithBookings($loserOwner, $facility, [
+            ['date' => '2026-12-01', 'time_start' => '07:00:00', 'time_end' => '12:00:00'],
+            ['date' => '2026-12-02', 'time_start' => '07:00:00', 'time_end' => '12:00:00'],
+        ]);
+
+        $overlapRf = $loser->requestFacilities()->where('date_requested', '2026-12-01')->firstOrFail();
+        $otherRf = $loser->requestFacilities()->where('date_requested', '2026-12-02')->firstOrFail();
+
+        $winner = $this->createBooking($winnerOwner, $facility, '2026-12-01', '11:30', '16:00');
+        $winnerRf = $winner->requestFacilities()->firstOrFail();
+
+        $this->actingAs($admin);
+        $approvedRf = app(RequestService::class)->approveFacility($winnerRf->id);
+
+        $this->assertEquals(RequestStatus::APPROVED, $approvedRf->fresh()->status);
+        $this->assertEquals(RequestStatus::APPROVED, $winner->fresh()->status);
+        $this->assertEquals(RequestStatus::FOR_RESCHEDULE, $overlapRf->fresh()->status);
+        $this->assertEquals(RequestStatus::APPROVED, $otherRf->fresh()->status);
+
+        $loserFresh = $loser->fresh();
+
+        $this->assertEquals(RequestStatus::PARTIALLY_APPROVED, $loserFresh->status);
+        $this->assertTrue($loserFresh->on_hold);
+        $this->assertEquals($winner->id, $loserFresh->held_by_request_id);
+        $this->assertEquals([$loser->id], $approvedRf->getAttribute('held_request_ids'));
+    }
+
+    public function test_approve_facility_without_overlap_holds_nothing(): void
+    {
+        $facility = Facility::factory()->create();
+        $loserOwner = User::factory()->create();
+        $winnerOwner = User::factory()->create();
+        $admin = User::factory()->create();
+
+        $loser = $this->createApprovedRequestWithBookings($loserOwner, $facility, [
+            ['date' => '2026-12-05', 'time_start' => '07:00:00', 'time_end' => '12:00:00'],
+        ]);
+
+        $loserRf = $loser->requestFacilities()->firstOrFail();
+
+        $winner = $this->createBooking($winnerOwner, $facility, '2026-12-06', '10:00', '16:00');
+        $winnerRf = $winner->requestFacilities()->firstOrFail();
+
+        $this->actingAs($admin);
+        $approvedRf = app(RequestService::class)->approveFacility($winnerRf->id);
+
+        $this->assertEquals(RequestStatus::APPROVED, $approvedRf->fresh()->status);
+        $this->assertEquals(RequestStatus::APPROVED, $loserRf->fresh()->status);
+        $this->assertEquals(RequestStatus::APPROVED, $loser->fresh()->status);
+        $this->assertFalse($loser->fresh()->on_hold);
+        $this->assertEquals([], $approvedRf->getAttribute('held_request_ids'));
+    }
+
+    public function test_full_approve_exposes_held_request_ids_and_notifies_loser(): void
+    {
+        $facility = Facility::factory()->create();
+        $loserOwner = User::factory()->create();
+        $winnerOwner = User::factory()->create();
+
+        $loser = $this->createApprovedRequestWithBookings($loserOwner, $facility, [
+            ['date' => '2026-12-10', 'time_start' => '07:00:00', 'time_end' => '12:00:00'],
+        ]);
+
+        $winner = $this->createBooking($winnerOwner, $facility, '2026-12-10', '11:00', '13:00');
+
+        Notification::fake();
+
+        $admin = $this->actingAsAdmin();
+        $response = $this->actingAs($admin)->post(route('requests.updateStatus', $winner->id), [
+            'action' => 'approve',
+        ]);
+
+        $response->assertRedirect();
+
+        $loserFresh = $loser->fresh();
+
+        $this->assertEquals(RequestStatus::APPROVED, $winner->fresh()->status);
+        $this->assertEquals(RequestStatus::FOR_RESCHEDULE, $loserFresh->status);
+        $this->assertTrue($loserFresh->on_hold);
+        $this->assertEquals($winner->id, $loserFresh->held_by_request_id);
+
+        Notification::assertSentTo($winnerOwner, RequestResult::class, fn ($notification, $channels, $notifiable) => $notification->toArray($notifiable)['status'] === RequestStatus::APPROVED->value);
+        Notification::assertSentTo($loserOwner, RequestResult::class, fn ($notification, $channels, $notifiable) => $notification->toArray($notifiable)['status'] === RequestStatus::ON_HOLD->value);
+    }
+
+    public function test_approve_facility_notifies_winner_and_loser(): void
+    {
+        $facility = Facility::factory()->create();
+        $loserOwner = User::factory()->create();
+        $winnerOwner = User::factory()->create();
+
+        $loser = $this->createApprovedRequestWithBookings($loserOwner, $facility, [
+            ['date' => '2026-12-11', 'time_start' => '07:00:00', 'time_end' => '12:00:00'],
+            ['date' => '2026-12-12', 'time_start' => '07:00:00', 'time_end' => '12:00:00'],
+        ]);
+
+        $winner = $this->createBooking($winnerOwner, $facility, '2026-12-11', '11:30', '16:00');
+        $winnerRf = $winner->requestFacilities()->firstOrFail();
+
+        Notification::fake();
+
+        $admin = $this->actingAsAdmin();
+        $response = $this->actingAs($admin)->post(route('requests.facilities.updateStatus', [
+            'request' => $winner->id,
+            'facility' => $winnerRf->id,
+        ]), [
+            'action' => 'approve',
+        ]);
+
+        $response->assertRedirect();
+
+        $loserFresh = $loser->fresh();
+
+        $this->assertEquals(RequestStatus::FOR_RESCHEDULE, $loser->requestFacilities()->where('date_requested', '2026-12-11')->firstOrFail()->fresh()->status);
+        $this->assertEquals(RequestStatus::APPROVED, $loser->requestFacilities()->where('date_requested', '2026-12-12')->firstOrFail()->fresh()->status);
+        $this->assertEquals(RequestStatus::PARTIALLY_APPROVED, $loserFresh->status);
+        $this->assertTrue($loserFresh->on_hold);
+
+        Notification::assertSentTo($winnerOwner, RequestFacilityDecision::class);
+        Notification::assertSentTo($loserOwner, RequestResult::class, fn ($notification, $channels, $notifiable) => $notification->toArray($notifiable)['status'] === RequestStatus::ON_HOLD->value);
+    }
+
+    public function test_deny_releases_hold_and_exposes_released_ids(): void
+    {
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+        $admin = User::factory()->create();
+
+        $first = $this->createBooking($ownerA, $facility, '2026-12-13', '10:00', '12:00');
+        $second = $this->createBooking($ownerB, $facility, '2026-12-13', '11:00', '13:00');
+
+        $this->actingAs($admin);
+        app(RequestService::class)->putOnHold($second->fresh(), $first->fresh(), 'Superseded by approved request');
+
+        $this->assertTrue($second->fresh()->on_hold);
+
+        $denied = app(RequestService::class)->applyStatusTransition($first->id, RequestStatus::DENIED);
+
+        $this->assertEquals([$second->id], $denied->getAttribute('released_request_ids'));
+
+        $released = $second->fresh();
+
+        $this->assertFalse($released->on_hold);
+        $this->assertNull($released->held_by_request_id);
     }
 }

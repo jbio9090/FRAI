@@ -109,7 +109,9 @@ export function BookingCard({
 }: BookingCardProps) {
     const { hasPermission } = usePermission();
     const detailsId = useId();
+    const conflictsId = useId();
     const [isEquipmentOpen, setIsEquipmentOpen] = useState(false);
+    const [isConflictsOpen, setIsConflictsOpen] = useState(false);
 
     const hasOwnEquipment = booking.equipment.length > 0;
     const hasBorrowedEquipment = (booking.borrowed_equipment ?? []).length > 0;
@@ -257,10 +259,56 @@ export function BookingCard({
             {/* Content Body */}
             <div className="flex-1 px-4 py-2">
                 {hasConflicts && (
-                    <div className="mb-2 flex items-center gap-1.5 rounded-md border border-[var(--ads-danger)]/40 bg-[var(--ads-danger-bg)]/50 px-2 py-1.5 text-xs font-medium text-[var(--ads-danger)]">
-                        <AlertCircleIcon size={12} className="shrink-0" />
-                        {conflictCount} schedule conflict{conflictCount === 1 ? '' : 's'}
-                    </div>
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setIsConflictsOpen((v) => !v)}
+                            aria-expanded={isConflictsOpen}
+                            aria-controls={conflictsId}
+                            className="mb-2 flex w-full items-center gap-1.5 rounded-md border border-[var(--ads-danger)]/40 bg-[var(--ads-danger-bg)]/50 px-2 py-1.5 text-left text-xs font-medium text-[var(--ads-danger)] transition-colors hover:bg-[var(--ads-danger-bg)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        >
+                            <AlertCircleIcon size={12} className="shrink-0" />
+                            <span className="flex-1">
+                                {conflictCount} schedule conflict{conflictCount === 1 ? '' : 's'}
+                            </span>
+                            <ChevronDown size={12} className={`shrink-0 transition-transform ${isConflictsOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isConflictsOpen && (
+                            <div id={conflictsId} className="mb-2 space-y-1.5 rounded-md border border-border/60 px-2 py-2">
+                                {draftConflicts.map((conflict) => (
+                                    <p key={`draft-${conflict.index}`} className="text-sm text-destructive">
+                                        Duplicate facility booking with card #{conflict.index + 1}: <strong>{conflict.facility_name}</strong> on{' '}
+                                        {format(conflict.date, 'PPP')} ({formatTime(conflict.time_start)}-{formatTime(conflict.time_end)})
+                                    </p>
+                                ))}
+                                {booking.conflicts.map((conflict, i) => (
+                                    <p key={i} className="text-sm text-destructive">
+                                        Schedule conflict with{' '}
+                                        {conflict.request_id ? (
+                                            <Link className="font-bold hover:underline" href={route('requests.detail', [conflict.request_id])}>
+                                                <span>"{conflict.request_title}"</span>
+                                            </Link>
+                                        ) : (
+                                            <span className="font-bold">"{conflict.request_title}"</span>
+                                        )}{' '}
+                                        ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
+                                    </p>
+                                ))}
+                                {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
+                                    conflicts.map((c, i) => {
+                                        const eqName =
+                                            booking.equipment.find((e) => e.equipment_id === Number(eqId))?.equipment_name ?? `Equipment #${eqId}`;
+                                        return (
+                                            <p key={`eq-${eqId}-${i}`} className="text-xs text-[var(--ads-amber)]">
+                                                Equipment conflict ({eqName}) — also requested by "{c.request_title}" ({c.status})
+                                            </p>
+                                        );
+                                    }),
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
                 {isCapacityExceeded && (
                     <div className="mb-2 flex items-center gap-1.5 rounded-md border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/50 px-2 py-1.5 text-xs font-medium text-[var(--ads-amber)]">
@@ -289,42 +337,6 @@ export function BookingCard({
 
                         {isEquipmentOpen && (
                             <div id={detailsId} className="mt-1">
-                                {hasConflicts && (
-                                    <div className="space-y-1.5 border-t border-border/60 py-2">
-                                        {draftConflicts.map((conflict) => (
-                                            <p key={`draft-${conflict.index}`} className="text-sm text-destructive">
-                                                Duplicate facility booking with card #{conflict.index + 1}: <strong>{conflict.facility_name}</strong> on{' '}
-                                                {format(conflict.date, 'PPP')} ({formatTime(conflict.time_start)}-{formatTime(conflict.time_end)})
-                                            </p>
-                                        ))}
-                                        {booking.conflicts.map((conflict, i) => (
-                                            <p key={i} className="text-sm text-destructive">
-                                                Schedule conflict with{' '}
-                                                {conflict.request_id ? (
-                                                    <Link className="font-bold hover:underline" href={route('requests.detail', [conflict.request_id])}>
-                                                        <span>"{conflict.request_title}"</span>
-                                                    </Link>
-                                                ) : (
-                                                    <span className="font-bold">"{conflict.request_title}"</span>
-                                                )}{' '}
-                                                ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
-                                            </p>
-                                        ))}
-                                        {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>
-                                            conflicts.map((c, i) => {
-                                                const eqName =
-                                                    booking.equipment.find((e) => e.equipment_id === Number(eqId))?.equipment_name ??
-                                                    `Equipment #${eqId}`;
-                                                return (
-                                                    <p key={`eq-${eqId}-${i}`} className="text-xs text-[var(--ads-amber)]">
-                                                        Equipment conflict ({eqName}) — also requested by "{c.request_title}" ({c.status})
-                                                    </p>
-                                                );
-                                            }),
-                                        )}
-                                    </div>
-                                )}
-
                                 {isCapacityExceeded && (
                                     <p className="flex items-center gap-1.5 border-t border-border/60 py-2 text-xs font-medium text-[var(--ads-amber)]">
                                         <Users size={12} className="shrink-0" />
@@ -347,9 +359,7 @@ export function BookingCard({
                                             <div key={name} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-1.5 text-sm">
                                                 <CategoryTag>Borrowed</CategoryTag>
                                                 <span className="font-medium text-foreground/90">{name}</span>
-                                                <span className="text-muted-foreground">
-                                                    ×{items.reduce((s, e) => s + e.quantity_needed, 0)}
-                                                </span>
+                                                <span className="text-muted-foreground">×{items.reduce((s, e) => s + e.quantity_needed, 0)}</span>
                                                 <span className="flex flex-wrap items-center gap-1">
                                                     {items.map((e, i) => (
                                                         <span

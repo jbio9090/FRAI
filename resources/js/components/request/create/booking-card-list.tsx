@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectTrigger, SelectItem, SelectValue } from '@/components/ui/select';
 import type { FacilityBooking } from '@/pages/requests/create';
+import { countBookingConflicts } from '@/pages/requests/create/utils';
 
 /* ─────────────────────────────────────────────────────────────────────────
  | BookingCardList — sortable, filterable, collapsible list of booked slots
@@ -81,7 +82,7 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove }: Bo
         .map((b, originalIndex) => ({ b, originalIndex }))
         .filter(({ b, originalIndex }) => {
             if (filterFacility !== 'all' && b.facility_id !== Number(filterFacility)) return false;
-            if (filterConflicts && b.conflicts.length === 0 && !draftConflictsByIndex.has(originalIndex)) return false;
+            if (filterConflicts && countBookingConflicts(b) === 0 && !draftConflictsByIndex.has(originalIndex)) return false;
             return true;
         })
         .sort((x, y) => {
@@ -105,7 +106,7 @@ export function BookingCardList({ bookings, editingIndex, onEdit, onRemove }: Bo
             }
         });
 
-    const hasConflicts = bookings.some((b) => b.conflicts.length > 0) || draftConflictsByIndex.size > 0;
+    const hasConflicts = bookings.some((b) => countBookingConflicts(b) > 0) || draftConflictsByIndex.size > 0;
     const draftConflictFacilities = Array.from(
         new Set(
             Array.from(draftConflictsByIndex.values())
