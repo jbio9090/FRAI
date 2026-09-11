@@ -10,6 +10,7 @@ use App\Models\RequestFacility;
 use App\Models\User;
 use App\Notifications\RequestFacilityDecision;
 use App\Notifications\RequestResult;
+use App\Services\FacilityService;
 use App\Services\RequestService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -746,5 +747,73 @@ class RequestTest extends TestCase
 
         $this->assertFalse($released->on_hold);
         $this->assertNull($released->held_by_request_id);
+    }
+
+    public function test_day_schedule_shows_approved_rows_regardless_of_parent_status(): void
+    {
+        $facility = Facility::factory()->create();
+        $owner = User::factory()->create();
+
+        $this->actingAs($owner);
+
+        $parent = FacilityRequest::factory()->create([
+            'user_id' => $owner->id,
+            'status' => RequestStatus::PARTIALLY_APPROVED,
+        ]);
+
+        RequestFacility::create([
+            'request_id' => $parent->id,
+            'facility_id' => $facility->id,
+            'date_requested' => '2026-12-20',
+            'time_start' => '10:00:00',
+            'time_end' => '12:00:00',
+            'status' => RequestStatus::APPROVED,
+        ]);
+
+        RequestFacility::create([
+            'request_id' => $parent->id,
+            'facility_id' => $facility->id,
+            'date_requested' => '2026-12-21',
+            'time_start' => '10:00:00',
+            'time_end' => '12:00:00',
+            'status' => RequestStatus::DENIED,
+        ]);
+
+        $events = app(FacilityService::class)->getDaySchedule($facility->id, '2026-12-20');
+
+        $this->assertCount(1, $events);
+        $this->assertSame(RequestStatus::APPROVED, $events->first()['status']);
+        $this->assertSame($parent->title, $events->first()['request_title']);
+
+        $this->assertSame([], app(FacilityService::class)->getDaySchedule($facility->id, '2026-12-21')->all());
+    }
+
+    public function test_day_schedule_includes_rows_of_held_requests(): void
+    {
+        $facility = Facility::factory()->create();
+        $owner = User::factory()->create();
+
+        $this->actingAs($owner);
+
+        $parent = FacilityRequest::factory()->approved()->create([
+            'user_id' => $owner->id,
+            'on_hold' => true,
+        ]);
+
+        RequestFacility::create([
+            'request_id' => $parent->id,
+            'facility_id' => $facility->id,
+            'date_requested' => '2026-12-22',
+            'time_start' => '10:00:00',
+            'time_end' => '12:00:00',
+            'status' => RequestStatus::APPROVED,
+        ]);
+
+        // Display-only schedules include held parents' approved rows; only
+        // approve-time conflict scans exclude on-hold requests.
+        $events = app(FacilityService::class)->getDaySchedule($facility->id, '2026-12-22');
+
+        $this->assertCount(1, $events);
+        $this->assertSame($parent->id, $events->first()['request_id']);
     }
 }
