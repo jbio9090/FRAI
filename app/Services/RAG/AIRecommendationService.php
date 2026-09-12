@@ -187,20 +187,6 @@ PROMPT;
     {
         $lines = [];
 
-        // --- Temporal verdict ---
-        $daysUntil = now()->startOfDay()->diffInDays(
-            \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
-            false
-        );
-
-        if ($daysUntil < 0) {
-            $lines[] = '- TEMPORAL: This facility date is in the PAST. This booking cannot be approved.';
-        } elseif ($daysUntil < 3) {
-            $lines[] = "- TEMPORAL: This facility date is only {$daysUntil} day(s) from today. The 3-day advance rule is VIOLATED. This booking must be DENIED.";
-        } else {
-            $lines[] = "- TEMPORAL: This facility date is {$daysUntil} days from today. The 3-day advance rule is NOT violated.";
-        }
-
         // --- Conflict signals scoped to this RequestFacility ---
         $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
         $pendingConflictRfIds = $request->pending_conflict_rf_ids ?? [];
@@ -245,16 +231,7 @@ PROMPT;
      */
     private function buildRequestContext(FacilityRequest $request, RequestFacility $rf): string
     {
-        $daysUntil = now()->startOfDay()->diffInDays(
-            \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
-            false
-        );
-
-        $urgency = $daysUntil < 0
-            ? 'PAST DATE'
-            : "({$daysUntil} days from today)";
-
-        $facilityLine = "{$rf->facility->name} on {$rf->date_requested} {$urgency} from {$rf->time_start} to {$rf->time_end}";
+        $facilityLine = "{$rf->facility->name} on {$rf->date_requested} from {$rf->time_start} to {$rf->time_end}";
 
         // Parent-level equipment applies to all bookings in the request.
         $equipment = $request->equipment->map(

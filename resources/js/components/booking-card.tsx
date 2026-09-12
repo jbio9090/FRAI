@@ -329,12 +329,6 @@ export function BookingCard({
                         )}
                     </>
                 )}
-                {isCapacityExceeded && (
-                    <div className="mb-2 flex items-center gap-1.5 rounded-md border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/50 px-2 py-1.5 text-xs font-medium text-[var(--ads-amber)]">
-                        <Users size={12} className="shrink-0" />
-                        Capacity exceeded
-                    </div>
-                )}
 
                 {/* Equipment summary + expandable details */}
                 {hasAnyEquipment && (
