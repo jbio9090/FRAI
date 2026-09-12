@@ -96,6 +96,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
         { label: 'Approved', value: 'approved' },
         { label: 'Denied', value: 'denied' },
         { label: 'Conditionally Approved', value: 'conditionally_approved' },
+        { label: 'Partially Approved', value: 'partially_approved' },
         { label: 'For Reschedule', value: 'for_reschedule' },
     ];
 

@@ -99,8 +99,7 @@ class AccountController extends Controller
 
         $statusValues = $requestStatus
             ? collect(explode(',', $requestStatus))
-                ->map(fn ($s) => collect(RequestStatus::cases())
-                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s))))
+                ->map(fn ($s) => RequestStatus::tryFromFilter($s))
                 ->filter()
                 ->values()
                 ->all()
@@ -122,7 +121,7 @@ class AccountController extends Controller
             ->values();
 
         $requestStatuses = collect(RequestStatus::cases())
-            ->map(fn ($c) => ['value' => $c->value, 'label' => $c->value])
+            ->map(fn ($c) => ['value' => strtolower($c->name), 'label' => $c->value])
             ->values();
 
         return Inertia::render('accounts/detail', [

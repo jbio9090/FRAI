@@ -754,7 +754,10 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                 time_end: currentTimeEnd,
                 equipment: selectedEquipment,
                 borrowed_equipment: selectedBorrowedEquipment,
-                conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd),
+                conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd).map((conflict) => ({
+                    ...conflict,
+                    date: conflict.date ?? formattedDate,
+                })),
                 external_equipment: externalEquipment,
                 expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
                 facility_capacity: facility.capacity,
@@ -786,7 +789,10 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                     time_end: currentTimeEnd,
                     equipment: selectedEquipment,
                     borrowed_equipment: selectedBorrowedEquipment,
-                    conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd),
+                    conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd).map((conflict) => ({
+                        ...conflict,
+                        date: conflict.date ?? formattedDate,
+                    })),
                     external_equipment: externalEquipment,
                     expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
                     facility_capacity: facility.capacity,

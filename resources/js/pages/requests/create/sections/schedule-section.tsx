@@ -16,6 +16,20 @@ import type { Facility } from '../types';
 import type { AlternativeSlot } from '../use-create-request';
 import { addCalendarDays, formatTime } from '../utils';
 
+function formatConflictDate(date?: string): string | null {
+    if (!date) {
+        return null;
+    }
+
+    const parsed = new Date(`${date}T00:00:00`);
+
+    if (isNaN(parsed.getTime())) {
+        return date;
+    }
+
+    return format(parsed, 'MMM d, yyyy');
+}
+
 interface ScheduleSectionProps {
     selectedDates: Date[];
     handleDateChange: (dates: Date[] | undefined) => void;
@@ -103,8 +117,8 @@ export function ScheduleSection({
                                     {selectedDates.length === 0
                                         ? 'Pick a date'
                                         : selectedDates.length === 1
-                                            ? format(selectedDates[0], 'PPP')
-                                            : `${selectedDates.length} dates selected`}
+                                          ? format(selectedDates[0], 'PPP')
+                                          : `${selectedDates.length} dates selected`}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0">
@@ -205,24 +219,37 @@ export function ScheduleSection({
                         <AlertDescription className="text-[var(--ads-amber)]">
                             <p className="mb-2">Your selected time overlaps with existing facility bookings:</p>
                             <div className="space-y-1.5">
-                                {scheduleConflicts.map((c, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex items-start gap-1.5 rounded border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/40 px-2 py-1.5 text-xs text-[var(--ads-amber)]"
-                                    >
-                                        <span>
-                                            <strong>{c.request_title}</strong> <br />
-                                            <span className="flex gap-1 items-center">
-                                                <Clock size={10} className='font-semibold'/>
-                                                {formatTime(c.time_start)} - {formatTime(c.time_end)} —{' '}
-                                                <span className={c.status === 'Approved' ? 'font-semibold text-[var(--ads-danger)]' : 'font-semibold'}>
-                                                    {c.status}
+                                {scheduleConflicts.map((c, i) => {
+                                    const conflictDate = formatConflictDate(c.date);
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="flex items-start gap-1.5 rounded border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/40 px-2 py-1.5 text-xs text-[var(--ads-amber)]"
+                                        >
+                                            <span>
+                                                <strong>{c.request_title}</strong> <br />
+                                                {conflictDate && (
+                                                    <span className="flex items-center gap-1">
+                                                        <CalendarIcon size={10} className="font-semibold" />
+                                                        {conflictDate}
+                                                    </span>
+                                                )}
+                                                <span className="flex items-center gap-1">
+                                                    <Clock size={10} className="font-semibold" />
+                                                    {formatTime(c.time_start)} - {formatTime(c.time_end)} —{' '}
+                                                    <span
+                                                        className={
+                                                            c.status === 'Approved' ? 'font-semibold text-[var(--ads-danger)]' : 'font-semibold'
+                                                        }
+                                                    >
+                                                        {c.status}
+                                                    </span>
                                                 </span>
                                             </span>
-
-                                        </span>
-                                    </div>
-                                ))}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </AlertDescription>
                     </Alert>
@@ -235,8 +262,8 @@ export function ScheduleSection({
                         alternativesLoading={alternativesLoading ?? false}
                         alternativesError={alternativesError ?? null}
                         includeEquipmentFilter={includeEquipmentFilter ?? false}
-                        setIncludeEquipmentFilter={setIncludeEquipmentFilter ?? (() => { })}
-                        applyAlternative={applyAlternative ?? (() => { })}
+                        setIncludeEquipmentFilter={setIncludeEquipmentFilter ?? (() => {})}
+                        applyAlternative={applyAlternative ?? (() => {})}
                         facilities={facilities ?? []}
                         isEditing={isEditing ?? false}
                         existingRequest={existingRequest ?? null}

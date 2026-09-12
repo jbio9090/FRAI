@@ -86,6 +86,20 @@ function formatTime(time: string): string {
     });
 }
 
+function formatShortDate(date?: string): string {
+    if (!date) {
+        return '---';
+    }
+
+    const parsed = new Date(`${date}T00:00:00`);
+
+    if (isNaN(parsed.getTime())) {
+        return date;
+    }
+
+    return format(parsed, 'MMM d, yyyy');
+}
+
 function groupBorrowed(borrowed: BorrowedEquipmentRequest[]): Record<string, BorrowedEquipmentRequest[]> {
     return borrowed.reduce(
         (groups, eq) => ({
@@ -292,7 +306,12 @@ export function BookingCard({
                                         ) : (
                                             <span className="font-bold">"{conflict.request_title}"</span>
                                         )}{' '}
-                                        ({formatTime(conflict.time_start)}–{formatTime(conflict.time_end)})
+                                        (
+                                        <span className="inline-flex items-center gap-1 align-middle">
+                                            <CalendarIcon size={11} className="shrink-0" />
+                                            {formatShortDate(conflict.date ?? booking.date)}
+                                        </span>
+                                        {` · ${formatTime(conflict.time_start)}–${formatTime(conflict.time_end)}`})
                                     </p>
                                 ))}
                                 {Object.entries(booking.equipment_conflicts ?? {}).flatMap(([eqId, conflicts]) =>

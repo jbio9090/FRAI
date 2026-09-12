@@ -71,8 +71,7 @@ class RequestController extends Controller
 
         $statusValues = $statusParam
             ? collect(explode(',', $statusParam))
-                ->map(fn ($s) => collect(RequestStatus::cases())
-                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s))))
+                ->map(fn ($s) => RequestStatus::tryFromFilter($s))
                 ->filter()
                 ->values()
             : collect();
