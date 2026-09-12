@@ -619,6 +619,7 @@ class RequestService
                     $conflicts[] = [
                         'request_id' => $existing->request_id,
                         'request_facility_id' => $existing->id,
+                        'facility_id' => $existing->facility_id,
                         'request_title' => $existing->request?->title ?? $existing->title,
                         'date' => $existing->date_requested,
                         'time_start' => $existing->time_start,
@@ -653,25 +654,69 @@ class RequestService
 
         $this->attachPerFacilityEquipment($request);
 
-        $bookings = $request->requestFacilities->map(fn ($rf) => [
-            'facility_id' => $rf->facility_id,
-            'date' => $rf->date_requested,
-            'time_start' => $rf->time_start,
-            'time_end' => $rf->time_end,
-            'equipment' => $rf->equipment?->toArray() ?? [],
-            'borrowed_equipment' => $rf->borrowed_equipment?->toArray() ?? [],
-            'external_equipment' => $rf->externalEquipments?->toArray() ?? [],
-        ])->toArray();
+        $bookingsByRfId = [];
+        foreach ($request->requestFacilities as $rf) {
+            $bookingsByRfId[(int) $rf->id] = [
+                'facility_id' => $rf->facility_id,
+                'date' => $rf->date_requested,
+                'time_start' => $rf->time_start,
+                'time_end' => $rf->time_end,
+                'equipment' => $rf->equipment?->toArray() ?? [],
+                'borrowed_equipment' => $rf->borrowed_equipment?->toArray() ?? [],
+                'external_equipment' => $rf->externalEquipments?->toArray() ?? [],
+            ];
+        }
 
-        $conflicts = $this->checkForConflicts(
-            $bookings,
-            self::BLOCKING_STATUSES,
-            $request->id
-        );
+        $bookings = array_values($bookingsByRfId);
+
+        // Per-own-RF mapping: which of this request's RF ids overlap each
+        // conflicting request. checkForConflicts() only returns the other
+        // side's RF, so attribute each conflict back to the own bookings
+        // with matching facility + date + overlapping time. This keeps
+        // multi-date requests from polluting every card with every RF id
+        // (e.g. 09-22/09-23 ids showing on a 09-21 booking).
+        $conflicts = $this->checkForConflicts($bookings, self::BLOCKING_STATUSES, $request->id);
 
         $pendingConflicts = collect($conflicts)->filter(fn ($c) => $c['status'] === RequestStatus::PENDING->value)->values();
         // Approved and Conditionally Approved both occupy the slot.
         $approvedConflicts = collect($conflicts)->filter(fn ($c) => in_array($c['status'], [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value], true))->values();
+
+        // Per-own-RF mapping for the pending backfill below: which of this
+        // request's RF ids overlap each conflicting *pending* request.
+        // checkForConflicts() only returns the other side's RF, so attribute
+        // each pending conflict back to the own bookings with matching
+        // facility + date + overlapping time. This keeps multi-date requests
+        // from polluting every card with every RF id (e.g. 09-22/09-23 ids
+        // showing on a 09-21 booking). Approved conflicts are recorded only
+        // on the new request's side; the approved side stays untouched.
+        $ownRfIdsByConflictingRequestId = [];
+        foreach ($pendingConflicts as $conflict) {
+            foreach ($bookingsByRfId as $ownRfId => $booking) {
+                if ((int) $booking['facility_id'] !== (int) ($conflict['facility_id'] ?? 0)) {
+                    continue;
+                }
+                $bookingDate = Carbon::parse($booking['date'])->format('Y-m-d');
+                $conflictDate = Carbon::parse($conflict['date'])->format('Y-m-d');
+                if ($bookingDate !== $conflictDate) {
+                    continue;
+                }
+                $bookingStart = $this->parseBookingDateTime($bookingDate, $booking['time_start']);
+                $bookingEnd = $this->parseBookingDateTime($bookingDate, $booking['time_end']);
+                $conflictStart = $this->parseBookingDateTime($conflictDate, $conflict['time_start']);
+                $conflictEnd = $this->parseBookingDateTime($conflictDate, $conflict['time_end']);
+                if ($bookingStart->lt($conflictEnd) && $bookingEnd->gt($conflictStart)) {
+                    $ownRfIdsByConflictingRequestId[(int) $conflict['request_id']][] = $ownRfId;
+                }
+            }
+        }
+        foreach ($ownRfIdsByConflictingRequestId as $conflictingRequestId => $ownRfIds) {
+            $ownRfIds = array_values(array_unique(array_map('intval', $ownRfIds)));
+            if (empty($ownRfIds)) {
+                unset($ownRfIdsByConflictingRequestId[$conflictingRequestId]);
+            } else {
+                $ownRfIdsByConflictingRequestId[$conflictingRequestId] = $ownRfIds;
+            }
+        }
 
         $pendingConflictRfIds = self::normalizeConflictIds($pendingConflicts->pluck('request_facility_id')->all());
         $approvedConflictRfIds = self::normalizeConflictIds($approvedConflicts->pluck('request_facility_id')->all());
@@ -695,19 +740,19 @@ class RequestService
             'approved_equipment_conflict_request_ids' => $approvedEquipmentRequestIds,
         ]);
 
-        $savedRequestRfIds = $request->requestFacilities()->pluck('id')->map(fn ($id) => (int) $id)->all();
-
-        $pendingConflicts
-            ->pluck('request_id')
-            ->unique()
-            ->each(function ($conflictingRequestId) use ($savedRequestRfIds) {
+        collect($ownRfIdsByConflictingRequestId)
+            ->each(function ($overlappingOwnRfIds, $conflictingRequestId) {
                 $conflictingRequest = FacilityRequest::find($conflictingRequestId);
                 if (! $conflictingRequest) {
                     return;
                 }
 
+                // Only merge the own RF ids that actually overlap this
+                // conflicting request, not every RF of this request. Merging
+                // all ids is what leaked other-date/other-facility ids (e.g.
+                // 09-22/09-23 rows) into a 09-21 request's conflict list.
                 $existing = self::normalizeConflictIds($conflictingRequest->pending_conflict_rf_ids ?? []);
-                $merged = array_values(array_unique(array_merge($existing, $savedRequestRfIds)));
+                $merged = array_values(array_unique(array_merge($existing, $overlappingOwnRfIds)));
 
                 $conflictingRequest->update([
                     'pending_conflict_rf_ids' => $merged,

@@ -816,4 +816,83 @@ class RequestTest extends TestCase
         $this->assertCount(1, $events);
         $this->assertSame($parent->id, $events->first()['request_id']);
     }
+
+    public function test_backfill_only_merges_overlapping_rf_ids(): void
+    {
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+
+        $this->actingAs($ownerA);
+        $multi = app(RequestService::class)->create([
+            'title' => 'Multi date booking',
+            'description' => 'Multi date booking description',
+            'facility_bookings' => [
+                [
+                    'facility_id' => $facility->id,
+                    'date' => '2026-09-21',
+                    'time_start' => '07:00',
+                    'time_end' => '19:30',
+                ],
+                [
+                    'facility_id' => $facility->id,
+                    'date' => '2026-09-22',
+                    'time_start' => '07:00',
+                    'time_end' => '20:00',
+                ],
+                [
+                    'facility_id' => $facility->id,
+                    'date' => '2026-09-23',
+                    'time_start' => '07:00',
+                    'time_end' => '20:00',
+                ],
+            ],
+        ]);
+
+        $this->actingAs($ownerB);
+        $single = app(RequestService::class)->create([
+            'title' => 'Single date booking',
+            'description' => 'Single date booking description',
+            'facility_bookings' => [
+                [
+                    'facility_id' => $facility->id,
+                    'date' => '2026-09-21',
+                    'time_start' => '09:00',
+                    'time_end' => '14:00',
+                ],
+            ],
+        ]);
+
+        $multiRfByDate = $multi->requestFacilities()->get()->keyBy(fn ($rf) => $rf->date_requested);
+        $overlappingRfId = (int) $multiRfByDate['2026-09-21']->id;
+
+        $singleFresh = $single->fresh();
+
+        // Only the 09-21 RF overlaps; 09-22/09-23 ids must not leak in.
+        $this->assertEquals([$overlappingRfId], $singleFresh->pending_conflict_rf_ids);
+
+        $multiFresh = $multi->fresh();
+        $singleRfId = (int) $single->requestFacilities()->first()->id;
+
+        // Backfill side also records only the overlapping own RF, not all
+        // three RF ids of the multi-date request.
+        $this->assertEquals([$singleRfId], $multiFresh->pending_conflict_rf_ids);
+    }
+
+    public function test_conflict_id_lists_stay_unique(): void
+    {
+        $facility = Facility::factory()->create();
+        $ownerA = User::factory()->create();
+        $ownerB = User::factory()->create();
+
+        $first = $this->createBooking($ownerA, $facility, '2026-11-01', '10:00', '12:00');
+        $second = $this->createBooking($ownerB, $facility, '2026-11-01', '11:00', '13:00');
+
+        foreach ([$first->fresh(), $second->fresh()] as $request) {
+            foreach (['pending_conflict_rf_ids', 'approved_conflict_rf_ids'] as $key) {
+                $ids = $request->getAttribute($key) ?? [];
+                $this->assertEquals(array_values(array_unique(array_map('intval', $ids))), array_map('intval', $ids));
+            }
+        }
+    }
 }

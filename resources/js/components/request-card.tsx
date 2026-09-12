@@ -25,7 +25,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGro
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem } from '@/components/ui/select';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import { cn, recommendedActionToPresentTense } from '@/lib/utils';
+import { cn, recommendedActionToPresentTense, conflictsForBooking } from '@/lib/utils';
 import { PRIORITY_LABELS, PRIORITY_ACCENT } from '@/types/request';
 import type { Request } from '@/types/request';
 import AnimatedText from './animated-text';
@@ -384,25 +384,23 @@ function RequestDetails({
                         {request.request_facilities.map((rf) => {
                             const facility = request.facilities.find((f) => f.id === rf.facility_id);
 
-                            const pendingConflicts = (request.pending_conflicts ?? [])
-                                .filter((c) => c.facility_id === rf.facility_id)
-                                .map((c) => ({
-                                    request_id: c.request_id,
-                                    request_title: c.request?.title ?? 'Unknown',
-                                    status: c.request?.status ?? 'Pending',
-                                    time_start: c.time_start,
-                                    time_end: c.time_end,
-                                }));
+                            const pendingConflicts = conflictsForBooking(rf, request.pending_conflicts).map((c) => ({
+                                request_id: c.request_id,
+                                request_title: c.request?.title ?? 'Unknown',
+                                status: c.request?.status ?? 'Pending',
+                                date: c.date_requested,
+                                time_start: c.time_start,
+                                time_end: c.time_end,
+                            }));
 
-                            const approvedConflicts = (request.approved_conflicts ?? [])
-                                .filter((c) => c.facility_id === rf.facility_id)
-                                .map((c) => ({
-                                    request_id: c.request_id,
-                                    request_title: c.request?.title ?? 'Unknown',
-                                    status: c.request?.status ?? 'Approved',
-                                    time_start: c.time_start,
-                                    time_end: c.time_end,
-                                }));
+                            const approvedConflicts = conflictsForBooking(rf, request.approved_conflicts).map((c) => ({
+                                request_id: c.request_id,
+                                request_title: c.request?.title ?? 'Unknown',
+                                status: c.request?.status ?? 'Approved',
+                                date: c.date_requested,
+                                time_start: c.time_start,
+                                time_end: c.time_end,
+                            }));
 
                             const booking = {
                                 request_id: rf.request_id,
