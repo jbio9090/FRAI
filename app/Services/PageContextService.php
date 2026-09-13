@@ -42,6 +42,7 @@ class PageContextService
             'current_facility' => $this->getCurrentFacility(),
             'current_equipment' => $this->getCurrentEquipment(),
             'current_request' => $this->getCurrentRequest(),
+            'page_capability' => PageCapabilityMap::forRoute($routeName),
         ];
 
         $pageSpecificContext = $this->getPageSpecificContext($routeName, $page);
@@ -256,7 +257,7 @@ class PageContextService
             'recent_activity' => $recentActivity,
             'facilities' => [],
             'equipment' => [],
-            'requests' => [],
+            'requests' => $this->getRequestsForContext(),
         ];
     }
 
@@ -426,20 +427,20 @@ class PageContextService
             'has_pending_conflicts' => ! empty($request->pending_conflict_rf_ids),
             'has_approved_conflicts' => ! empty($request->approved_conflict_rf_ids),
             'conflicting_requests' => \App\Models\RequestFacility::whereIn('id', array_merge(
-        $request->pending_conflict_rf_ids ?? [],
-        $request->approved_conflict_rf_ids ?? []
-    ))
-    ->with(['facility', 'request'])
-    ->get()
-    ->map(fn ($rf) => [
-        'title' => $rf->request?->title,
-        'facility_name' => $rf->facility?->name ?? 'unknown',
-        'date_requested' => $rf->date_requested,
-        'time_start' => $rf->time_start,
-        'time_end' => $rf->time_end,
-        'status' => $rf->status ?? 'unknown',
-    ])
-    ->values(),
+                $request->pending_conflict_rf_ids ?? [],
+                $request->approved_conflict_rf_ids ?? []
+            ))
+                ->with(['facility', 'request'])
+                ->get()
+                ->map(fn ($rf) => [
+                    'title' => $rf->request?->title,
+                    'facility_name' => $rf->facility?->name ?? 'unknown',
+                    'date_requested' => $rf->date_requested,
+                    'time_start' => $rf->time_start,
+                    'time_end' => $rf->time_end,
+                    'status' => $rf->status ?? 'unknown',
+                ])
+                ->values(),
             'processed_by' => $request->processedBy?->name,
             'processed_at' => $request->processed_at?->toDateTimeString(),
             'created_at' => $request->created_at?->toDateTimeString(),
@@ -477,10 +478,13 @@ class PageContextService
         $statusValues = $statusParam
             ? collect(explode(',', $statusParam))
                 ->map(fn ($s) => collect(\App\Enums\RequestStatus::cases()))
-                    ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s)))
+                ->firstWhere(fn ($case) => strtolower($case->name) === strtolower(trim($s)))
                 ->filter()
                 ->values()
             : collect();
+
+        $user = Auth::user();
+        $isAdmin = $user?->hasRole(['admin', 'Super Admin']) ?? false;
 
         $results = $this->requestService->get(
             $statusValues->isNotEmpty() ? $statusValues->all() : null,
@@ -488,7 +492,8 @@ class PageContextService
             $request->input('search'),
             $request->input('sort'),
             $request->input('order', 'asc'),
-            $request->input('requester'),
+            // Explicitly scope to current user for non-admin users, matching dashboard behavior
+            $isAdmin ? null : $user->id,
             $request->input('facility'),
         );
 
@@ -662,6 +667,29 @@ class PageContextService
                 'status' => $rf->status ?? 'unknown',
             ])->toArray(),
         ])->toArray();
+    }
+
+    /**
+     * Get recent requests with status info, scoped to the current user
+     * unless the user is admin.
+     */
+    private function getRequestsForContext(): array
+    {
+        $user = auth()->user();
+        $query = RequestModel::with(['requestFacilities.facility', 'user'])
+            ->latest();
+
+        if (! $user->hasRole(['admin', 'Super Admin'])) {
+            $query->where('user_id', $user->id);
+        }
+
+        return $query->take(20)->get()->map(fn ($request) => [
+            'id' => $request->id,
+            'title' => $request->title,
+            'status' => $request->status?->value ?? 'unknown',
+            'requester' => $request->user?->name ?? 'unknown',
+            'facilities' => $request->requestFacilities->map(fn ($facility) => $facility->name)->filter()->values(),
+        ])->values()->all();
     }
 
     /**

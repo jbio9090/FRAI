@@ -6,6 +6,8 @@ import MessageList from './components/MessageList';
 import { useChatAPI } from './hooks/useChatAPI';
 import { useMessages } from './hooks/useMessages';
 import { getCsrfToken } from './utils/csrfToken';
+import { Link } from '@/inertia';
+import { route } from '@/routes';
 
 export default function Chatbot() {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -19,6 +21,7 @@ export default function Chatbot() {
     const [isContextLoading, setIsContextLoading] = useState(false);
     const [debugRawResponse, setDebugRawResponse] = useState<string>('');
     const [debugToolCalls, setDebugToolCalls] = useState<unknown[]>([]);
+    const [navigationSuggestion, setNavigationSuggestion] = useState<{ route: string; reason: string } | null>(null);
     const { messages, addMessage, setMessages, clearMessages } = useMessages();
     const { isLoading, sendMessage } = useChatAPI();
     const pageContext = useCurrentPageContext();
@@ -155,6 +158,19 @@ export default function Chatbot() {
                 false,
                 pageContext,
                 (token) => {
+                    // Handle navigation suggestion token
+                    if (token.startsWith('NAVIGATE_SUGGESTION:')) {
+                        const rest = token.substring('NAVIGATE_SUGGESTION:'.length);
+                        const parts = rest.split(':');
+                        if (parts.length >= 2) {
+                            const route = parts[0];
+                            const reason = parts.slice(1).join(':');
+                            setNavigationSuggestion({ route, reason });
+                            // Don't add this token to streaming content - render as Link instead
+                            return;
+                        }
+                    }
+
                     streamingContent += token;
                     if (devMode) {
                         setDebugRawResponse((previous) => previous + token);
@@ -313,6 +329,25 @@ export default function Chatbot() {
                             </div>
                         ) : (
                             <MessageList messages={messages} messagesEndRef={messagesEndRef} />
+                        )}
+                        {navigationSuggestion && (
+                            <div className="mt-3 p-3 rounded-bg border border-primary/20 bg-primary/5 text-sm">
+                                <p className="font-medium text-primary">{navigationSuggestion.reason}</p>
+                                <Link
+                                    href={route(navigationSuggestion.route)}
+                                    className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 transition"
+                                >
+                                    Go to {navigationSuggestion.route}
+                                    <svg
+                                        className="h-3.5 w-3.5"
+                                        viewBox="0 0 24 24"
+                                        fill="currentColor"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M9.59 5.59L2.56 12.08l5.75 5.75L11 19.06l7.91-7.91L9.59 5.59z" />
+                                    </svg>
+                                </Link>
+                            </div>
                         )}
                         {isLoading ? (
                             <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">

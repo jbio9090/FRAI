@@ -293,6 +293,25 @@ class OpenRouterClient
         return [];
     }
 
+    private function getSuggestedNavigationToolDefinition(): array
+    {
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => 'suggest_navigation',
+                'description' => 'Suggest navigation to a different page when the AI determines the user needs data not available on the current page. The frontend will render this as a clickable link.',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'route' => ['type' => 'string', 'description' => 'The route name to navigate to.'],
+                        'reason' => ['type' => 'string', 'description' => 'Brief reason for the suggestion.'],
+                    ],
+                    'required' => ['route', 'reason'],
+                ],
+            ],
+        ];
+    }
+
     private function providerConfig(): array
     {
         $provider = $this->providerName();

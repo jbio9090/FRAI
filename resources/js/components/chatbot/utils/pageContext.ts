@@ -13,6 +13,7 @@ export interface ClientPageContext {
     visible_content: string;
     forms: Array<{ label: string; value: string }>;
     rich: Record<string, unknown> | null;
+    requestsScope?: 'partial' | 'full' | 'none';
 }
 
 const visibleText = (element: Element): string => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -30,6 +31,17 @@ export function collectPageContext(inertiaComponent?: string): ClientPageContext
         const normalizedRoute = currentRoute.replace(/\./g, '/');
         if (normalizedRoute !== inertiaComponent) {
             console.warn('[pageContext] route/component mismatch', { route: currentRoute, component: inertiaComponent });
+        }
+    }
+
+    // Determine requests scope based on route
+    let requestsScope: 'partial' | 'full' | 'none' = 'none';
+    if (currentRoute) {
+        const routeLower = currentRoute.toLowerCase();
+        if (routeLower === 'dashboard') {
+            requestsScope = 'partial';
+        } else if (routeLower === 'requests.index' || routeLower === 'requests.detail') {
+            requestsScope = 'full';
         }
     }
 
@@ -60,5 +72,6 @@ export function collectPageContext(inertiaComponent?: string): ClientPageContext
             }))
             .slice(0, 20),
         rich: rich ?? null,
+        requestsScope,
     };
 }
