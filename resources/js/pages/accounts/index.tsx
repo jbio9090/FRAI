@@ -40,6 +40,7 @@ import type { User } from "@/types";
 
 interface RowUser extends User {
     is_active: boolean;
+    position?: string;
 }
 
 interface PaginatedUsers {
@@ -60,6 +61,7 @@ interface UserForm {
     username: string;
     email: string;
     role: string;
+    position: string;
     profile: File | null;
     preview?: string;
 }
@@ -68,6 +70,7 @@ interface AccountForm {
     username: string;
     email: string;
     password: string;
+    position?: string;
 }
 
 interface PageProps {
@@ -93,14 +96,16 @@ interface CsvRow {
     name: string;
     email: string;
     role: string;
+    position: string;
     status: 'pending' | 'valid' | 'warning' | 'error';
     error?: string;
 }
 
-const emptyForm: UserForm = { username: "", email: "", role: "", profile: null };
+const emptyForm: UserForm = { username: "", email: "", role: "", position: "", profile: null };
 
 const CSV_HEADERS = ['name', 'email', 'role'];
-const CSV_TEMPLATE = `name,email,role\nJohn Doe,johndoe@example.com,admin\nJane Smith,janesmith@example.com,staff`;
+const CSV_OPTIONAL_HEADERS = ['position'];
+const CSV_TEMPLATE = `name,email,role,position\nJohn Doe,johndoe@example.com,administrative staff,Registrar Clerk\nJane Smith,janesmith@example.com,administrative staff,`;
 
 export default function AccountsPage({ users = [], roles = [] }: { users?: RowUser[] | { data: RowUser[] }; roles?: string[] }) {
     const reduceMotion = useReducedMotion();
@@ -319,6 +324,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             username: user.name,
             email: user.email,
             role: (user.role ?? '').toString().toLowerCase(),
+            position: user.position ?? '',
             profile: null,
             preview: undefined
         });
@@ -332,6 +338,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             name: editForm.username,
             email: editForm.email,
             role: editForm.role,
+            position: editForm.position,
             profile: editForm.profile,
         }, {
             onSuccess: () => setEditingUser(null),
@@ -356,28 +363,31 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
         const name = row['name']?.trim() ?? '';
         const email = row['email']?.trim() ?? '';
         const role = row['role']?.trim() ?? '';
+        const position = row['position']?.trim() ?? '';
         const roleFromCsv = row['role']?.trim().toLowerCase() ?? '';
         const isValidRole = addRoleOptions.includes(roleFromCsv);
 
         if (!roleFromCsv || !isValidRole)
             return {
-                name, email, role,
+                name, email, role, position,
                 status: 'error',
                 error: `Invalid role. Valid options: ${addRoleOptions.join(', ')}`
             };
-        if (!name) return { name, email, role, status: 'error', error: `Row ${index + 1}: Name is required` };
+        if (!name) return { name, email, role, position, status: 'error', error: `Row ${index + 1}: Name is required` };
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-            return { name, email, role, status: 'error', error: `Row ${index + 1}: Invalid email address` };
+            return { name, email, role, position, status: 'error', error: `Row ${index + 1}: Invalid email address` };
         if (!role || !addRoleOptions.map(r => r.toLowerCase()).includes(role.toLowerCase()))
-            return { name, email, role, status: 'error', error: `Row ${index + 1}: Role "${role}" is not valid` };
+            return { name, email, role, position, status: 'error', error: `Row ${index + 1}: Role "${role}" is not valid` };
+        if (position.length > 100)
+            return { name, email, role, position, status: 'error', error: `Row ${index + 1}: Position must not exceed 100 characters` };
 
         const emailLower = email.toLowerCase();
         const existsInSystem = userList.some(u => (u.email ?? '').toLowerCase() === emailLower);
         if (existsInSystem) {
-            return { name, email, role, status: 'warning', error: `Email already exists in system: ${email}` };
+            return { name, email, role, position, status: 'warning', error: `Email already exists in system: ${email}` };
         }
 
-        return { name, email, role, status: 'valid' };
+        return { name, email, role, position, status: 'valid' };
     };
 
     const parseCsv = (text: string): CsvRow[] => {
@@ -438,7 +448,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
 
         setIsBatchSubmitting(true);
         router.post(route("accounts.batch-store"), {
-            accounts: validRows.map(r => ({ name: r.name, email: r.email, role: r.role })),
+            accounts: validRows.map(r => ({ name: r.name, email: r.email, role: r.role, position: r.position })),
         }, {
             onFinish: () => setIsBatchSubmitting(false),
         });
@@ -528,6 +538,18 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                         onChange={(e) => onChange({ ...form, email: e.target.value })}
                     />
                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                    <Label>Position</Label>
+                    <Input
+                        type="text"
+                        placeholder="Enter position"
+                        value={form.position}
+                        className={errors.position ? "border-destructive" : ""}
+                        onChange={(e) => onChange({ ...form, position: e.target.value })}
+                    />
+                    {errors.position && <p className="text-sm text-destructive">{errors.position}</p>}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -860,7 +882,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                             <div className="flex items-start gap-3">
                                 <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                                 <p className="text-sm text-muted-foreground leading-relaxed">
-                                    Upload a <strong className="text-foreground">.csv</strong> file with columns: <code className="bg-muted px-1 rounded text-xs">name</code>, <code className="bg-muted px-1 rounded text-xs">email</code>, <code className="bg-muted px-1 rounded text-xs">role</code>. Each account will receive a random temporary password that must be changed on first login.
+                                    Upload a <strong className="text-foreground">.csv</strong> file with columns: <code className="bg-muted px-1 rounded text-xs">name</code>, <code className="bg-muted px-1 rounded text-xs">email</code>, <code className="bg-muted px-1 rounded text-xs">role</code> and optional <code className="bg-muted px-1 rounded text-xs">position</code>. Each account will receive a random temporary password that must be changed on first login.
                                 </p>
                             </div>
 
@@ -948,6 +970,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                                 <TableHead>Name</TableHead>
                                                 <TableHead className="hidden sm:table-cell">Email</TableHead>
                                                 <TableHead>Role</TableHead>
+                                                <TableHead className="hidden md:table-cell">Position</TableHead>
                                                 <TableHead className="w-6"></TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -958,6 +981,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                                     <TableCell className="font-medium">{row.name || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell className="hidden sm:table-cell">{row.email || <span className="text-muted-foreground italic">empty</span>}</TableCell>
                                                     <TableCell className="capitalize">{row.role || <span className="text-muted-foreground italic">empty</span>}</TableCell>
+                                                    <TableCell className="hidden md:table-cell">{row.position || <span className="text-muted-foreground italic">—</span>}</TableCell>
                                                     <TableCell>
                                                         {row.status === 'valid' ? (
                                                             <CircleCheck className="h-4 w-4 text-[var(--ads-ok)]" />
@@ -1075,6 +1099,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                             <TableHead className="w-[50px]"></TableHead>
                             <TableHead>Name</TableHead>
                             <TableHead>Email</TableHead>
+                            <TableHead>Position</TableHead>
                             <TableHead>Created At</TableHead>
                             {activeTab === 'archived' && (<TableHead>Deleted At</TableHead>)}
                             <TableHead>Role</TableHead>
@@ -1113,9 +1138,10 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                                         )}
                                     </TableCell>
                                     <TableCell>{rowUser.email}</TableCell>
+                                    <TableCell>{rowUser.position ?? '—'}</TableCell>
                                     <TableCell>{moment(rowUser.created_at).format("MMMM D, YYYY h:mm A")}</TableCell>
                                     {activeTab === 'archived' && (<TableCell>{moment(rowUser.deleted_at).format("MMMM D, YYYY h:mm A")}</TableCell>)}
-                                    <TableCell><RoleBadge roles={[rowUser.role]} variant="sm" /></TableCell>
+                                    <TableCell><RoleBadge roles={[rowUser.role]} position={rowUser.position} variant="sm" /></TableCell>
 
                                     {/* Status toggle cell */}
                                     {(isAdmin || isSuperAdmin) && activeTab !== 'archived' && (

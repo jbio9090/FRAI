@@ -3,6 +3,7 @@ export type User = {
     name: string;
     email: string;
     profile?: string;
+    position?: string;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;

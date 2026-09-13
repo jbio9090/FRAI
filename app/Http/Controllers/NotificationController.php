@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Notifications\TestPushNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
@@ -19,6 +20,10 @@ class NotificationController extends Controller
             $validated['platform'] ?? 'web'
         );
 
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json(['message' => 'Device registered for push notifications', 'active' => true]);
+        }
+
         return redirect()->back()->with(['message' => 'Device registered for push notifications']);
     }
 
@@ -30,7 +35,25 @@ class NotificationController extends Controller
 
         $request->user()->removeFcmToken($validated['token']);
 
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json(['message' => 'Device unregistered from push notifications', 'active' => false]);
+        }
+
         return redirect()->back()->with(['message' => 'Device unregistered from push notifications']);
+    }
+
+    public function status(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'token' => 'required|string|max:500',
+        ]);
+
+        $active = $request->user()->fcmTokens()
+            ->where('token', $validated['token'])
+            ->where('is_active', true)
+            ->exists();
+
+        return response()->json(['active' => $active]);
     }
 
     public function send(Request $request)

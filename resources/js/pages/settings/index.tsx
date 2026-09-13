@@ -40,6 +40,7 @@ interface PageProps extends Record<string, unknown> {
             profile: string;
             roles: string[];
             email: string;
+            position?: string;
             admin_email_notifications_enabled: boolean;
         };
     };
@@ -64,6 +65,7 @@ export default function Settings() {
     } = useForm({
         name: auth.user.name,
         email: auth.user.email,
+        position: auth.user.position ?? '',
     });
 
     const handleUpdateDetails = () => {
@@ -183,7 +185,7 @@ export default function Settings() {
                     <div className="flex flex-col gap-1 min-w-0">
                         <span className="text-md font-semibold leading-none truncate text-wrap">{auth.user.name}</span>
                         <span className="text-sm text-muted-foreground leading-none text-wrap flex gap-1 items-center"><Mail size={12} />{auth.user.email}</span>
-                        <RoleBadge roles={auth.user.roles} variant="sm" />
+                        <RoleBadge roles={auth.user.roles} position={auth.user.position} variant="sm" />
                     </div>
 
                     <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -340,6 +342,19 @@ export default function Settings() {
                                 />
                                 {detailsErrors.email && (
                                     <span className="text-xs text-destructive">{detailsErrors.email}</span>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                                <Label className="text-sm">Position</Label>
+                                <Input
+                                    value={detailsData.position}
+                                    onChange={e => setDetailsData('position', e.target.value)}
+                                    placeholder="Your position"
+                                    disabled={detailsProcessing}
+                                />
+                                {detailsErrors.position && (
+                                    <span className="text-xs text-destructive">{detailsErrors.position}</span>
                                 )}
                             </div>
                         </div>

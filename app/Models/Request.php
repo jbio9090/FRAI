@@ -38,6 +38,11 @@ class Request extends Model
         'approved_equipment_conflict_request_ids',
     ];
 
+    protected $appends = [
+        'pending_conflicts',
+        'approved_conflicts',
+    ];
+
     protected $casts = [
         'status' => RequestStatus::class,
         'on_hold' => 'boolean',
@@ -124,18 +129,29 @@ class Request extends Model
 
     /* SCOPES */
 
-    public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end)
+    public function scopeConflicting(Builder $query, $facilityId, $date, $start, $end, $crossFacility = false)
     {
-        return $query->where('facility_id', $facilityId)
-            ->where('date', $date)
-            ->where(function ($q) use ($start, $end) {
-                $q->whereBetween('start_time', [$start, $end])
-                    ->orWhereBetween('end_time', [$start, $end])
-                    ->orWhere(function ($inner) use ($start, $end) {
-                        $inner->where('start_time', '<=', $start)
-                            ->where('end_time', '>=', $end);
-                    });
-            })
+        $query->whereExists(function ($exists) use ($facilityId, $date, $start, $end, $crossFacility) {
+            $exists->from('request_facilities');
+
+            // Always reference request_facilities.request_id to requests.id
+            $exists->whereColumn('request_facilities.request_id', 'requests.id');
+
+            // Only filter by facility_id when not doing cross-facility check
+            if (! $crossFacility) {
+                $exists->where('request_facilities.facility_id', $facilityId);
+            }
+
+            $exists->where('request_facilities.date_requested', $date)
+                ->where(function ($q) use ($start, $end) {
+                    $q->whereBetween('time_start', [$start, $end])
+                        ->orWhereBetween('time_end', [$start, $end])
+                        ->orWhere(function ($inner) use ($start, $end) {
+                            $inner->where('time_start', '<=', $start)
+                                ->where('time_end', '>=', $end);
+                        });
+                });
+        })
             ->whereIn('status', ['Pending', 'Approved']);
     }
 
@@ -188,5 +204,69 @@ class Request extends Model
         }
 
         return true;
+    }
+
+    public function getPendingConflictsAttribute(): array
+    {
+        $conflicts = $this->getRelationValue('pending_conflicts');
+        if (! $conflicts) {
+            return [];
+        }
+
+        return $conflicts->map(function ($rf) {
+            return [
+                'id' => $rf->id,
+                'facility_id' => $rf->facility_id,
+                'request_id' => $rf->request_id,
+                'date_requested' => $rf->date_requested,
+                'time_start' => $rf->time_start,
+                'time_end' => $rf->time_end,
+                'request' => $rf->request ? [
+                    'id' => $rf->request->id,
+                    'title' => $rf->request->title,
+                    'status' => $rf->request->status?->value ?? (string) $rf->request->status,
+                    'user' => $rf->request->user ? [
+                        'id' => $rf->request->user->id,
+                        'name' => $rf->request->user->name,
+                    ] : null,
+                ] : null,
+                'facility' => $rf->facility ? [
+                    'id' => $rf->facility->id,
+                    'name' => $rf->facility->name,
+                ] : null,
+            ];
+        })->toArray();
+    }
+
+    public function getApprovedConflictsAttribute(): array
+    {
+        $conflicts = $this->getRelationValue('approved_conflicts');
+        if (! $conflicts) {
+            return [];
+        }
+
+        return $conflicts->map(function ($rf) {
+            return [
+                'id' => $rf->id,
+                'facility_id' => $rf->facility_id,
+                'request_id' => $rf->request_id,
+                'date_requested' => $rf->date_requested,
+                'time_start' => $rf->time_start,
+                'time_end' => $rf->time_end,
+                'request' => $rf->request ? [
+                    'id' => $rf->request->id,
+                    'title' => $rf->request->title,
+                    'status' => $rf->request->status?->value ?? (string) $rf->request->status,
+                    'user' => $rf->request->user ? [
+                        'id' => $rf->request->user->id,
+                        'name' => $rf->request->user->name,
+                    ] : null,
+                ] : null,
+                'facility' => $rf->facility ? [
+                    'id' => $rf->facility->id,
+                    'name' => $rf->facility->name,
+                ] : null,
+            ];
+        })->toArray();
     }
 }

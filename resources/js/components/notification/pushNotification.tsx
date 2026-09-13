@@ -1,6 +1,55 @@
-import { router, usePage } from '@inertiajs/react';
-import React, { useState, useEffect, useCallback } from 'react';
+import { usePage } from '@inertiajs/react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { status, subscribe, unsubscribe as unsubscribeAction } from '@/actions/App/Http/Controllers/NotificationController';
+import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
 import { Button } from '@/components/ui/button';
+import { isPushOptedOut, setPushOptedOut } from '@/lib/pushPreferences';
+
+async function postPushJson(url: string, body: Record<string, unknown>): Promise<void> {
+    const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': getCsrfToken(),
+        },
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Push request failed with status ${response.status}`);
+    }
+}
+
+async function fetchPushStatus(token: string): Promise<boolean | null> {
+    try {
+        const response = await fetch(status.url(), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': getCsrfToken(),
+            },
+            body: JSON.stringify({ token }),
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        const data = (await response.json()) as { active?: boolean };
+
+        return typeof data.active === 'boolean' ? data.active : null;
+    } catch (err) {
+        console.error('Error fetching push status:', err);
+
+        return null;
+    }
+}
 
 export default function PushNotifications() {
     const { firebaseConfig } = usePage().props as unknown as { firebaseConfig?: Record<string, unknown> };
@@ -9,6 +58,7 @@ export default function PushNotifications() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSupported, setIsSupported] = useState(false);
+    const checkGeneration = useRef(0);
 
     const isNativePlatform = useCallback((): boolean => {
         return typeof (window as Window & { Capacitor?: unknown }).Capacitor !== 'undefined';
@@ -19,46 +69,87 @@ export default function PushNotifications() {
         return getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
     }, [firebaseConfig]);
 
-    const checkNativeRegistration = useCallback(async () => {
+    const checkNativeRegistration = useCallback(async (generation: number) => {
         try {
+            if (isPushOptedOut()) {
+                if (checkGeneration.current === generation) {
+                    setIsRegistered(false);
+                }
+                return;
+            }
+
             const { PushNotifications: CapPush } = await import('@capacitor/push-notifications');
             const perm = await CapPush.checkPermissions();
             setPermission(perm.receive as NotificationPermission);
 
             if (perm.receive === 'granted') {
-                const token = await CapPush.getRegistration();
-                setIsRegistered(!!token?.token);
+                const reg = await CapPush.getRegistration();
+                const token = reg?.token;
+                if (!token) {
+                    if (checkGeneration.current === generation) {
+                        setIsRegistered(false);
+                    }
+                    return;
+                }
+
+                const active = await fetchPushStatus(token);
+                if (checkGeneration.current === generation) {
+                    // Fall back to token existence when the status lookup fails,
+                    // so a transient backend error never hides the Disable button.
+                    setIsRegistered(active ?? true);
+                }
+            } else if (checkGeneration.current === generation) {
+                setIsRegistered(false);
             }
         } catch (err) {
             console.error('Error checking native registration:', err);
         }
     }, []);
 
-    const checkWebRegistration = useCallback(async () => {
-        try {
-            const { getMessaging, getToken } = await import('firebase/messaging');
+    const checkWebRegistration = useCallback(
+        async (generation: number) => {
+            try {
+                if (isPushOptedOut()) {
+                    if (checkGeneration.current === generation) {
+                        setIsRegistered(false);
+                    }
+                    return;
+                }
 
-            const app = await getFirebaseApp();
-            const messaging = getMessaging(app);
-            const token = await getToken(messaging, {
-                vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-            });
+                const { getMessaging, getToken } = await import('firebase/messaging');
 
-            if (token) {
-                setIsRegistered(true);
+                const app = await getFirebaseApp();
+                const messaging = getMessaging(app);
+                const token = await getToken(messaging, {
+                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                });
+
+                if (!token) {
+                    if (checkGeneration.current === generation) {
+                        setIsRegistered(false);
+                    }
+                    return;
+                }
+
+                const active = await fetchPushStatus(token);
+                if (checkGeneration.current === generation) {
+                    setIsRegistered(active ?? true);
+                }
+            } catch (err) {
+                console.error('Error checking web registration:', err);
             }
-        } catch (err) {
-            console.error('Error checking web registration:', err);
-        }
-    }, [getFirebaseApp]);
+        },
+        [getFirebaseApp],
+    );
 
     const checkSupport = useCallback(async () => {
+        const generation = ++checkGeneration.current;
         if (isNativePlatform()) {
             setIsSupported(true);
-            await checkNativeRegistration();
+            await checkNativeRegistration(generation);
         } else if ('serviceWorker' in navigator && 'PushManager' in window) {
             setIsSupported(true);
-            await checkWebRegistration();
+            await checkWebRegistration(generation);
         }
     }, [isNativePlatform, checkNativeRegistration, checkWebRegistration]);
 
@@ -67,17 +158,17 @@ export default function PushNotifications() {
     }, [checkSupport]);
 
     const sendTokenToServer = async (token: string, platform: string) => {
-        await router.post('/push/subscribe', {
-            token,
-            platform,
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-            onError: (errors) => {
-                setError('Failed to save device token');
-                console.error(errors);
-            },
-        });
+        try {
+            await postPushJson(subscribe['/push/subscribe'].url(), {
+                token,
+                platform,
+            });
+            setPushOptedOut(false);
+        } catch (err) {
+            setError('Failed to save device token');
+            console.error(err);
+            throw err;
+        }
     };
 
     const getPlatform = async (): Promise<string> => {
@@ -99,20 +190,26 @@ export default function PushNotifications() {
 
         await CapPush.register();
 
-        CapPush.addListener('registration', async () => {
-            try {
-                const fcmToken = await FCM.getToken();
-                await sendTokenToServer(fcmToken.token, await getPlatform());
-                setIsRegistered(true);
-            } catch (err) {
-                console.error('Error getting FCM token:', err);
-                setError('Failed to register device');
-            }
-        });
+        await new Promise<void>((resolve, reject) => {
+            void CapPush.addListener('registration', async () => {
+                try {
+                    const fcmToken = await FCM.getToken();
+                    await sendTokenToServer(fcmToken.token, await getPlatform());
+                    checkGeneration.current += 1;
+                    setIsRegistered(true);
+                    resolve();
+                } catch (err) {
+                    console.error('Error getting FCM token:', err);
+                    setError('Failed to register device');
+                    reject(err instanceof Error ? err : new Error('Failed to register device'));
+                }
+            });
 
-        CapPush.addListener('registrationError', (err) => {
-            console.error('Registration error:', err);
-            setError('Failed to register for push notifications');
+            void CapPush.addListener('registrationError', (err) => {
+                console.error('Registration error:', err);
+                setError('Failed to register for push notifications');
+                reject(new Error('Failed to register for push notifications'));
+            });
         });
     };
 
@@ -135,6 +232,7 @@ export default function PushNotifications() {
 
         if (token) {
             await sendTokenToServer(token, 'web');
+            checkGeneration.current += 1;
             setIsRegistered(true);
         }
     };
@@ -166,8 +264,9 @@ export default function PushNotifications() {
     };
 
     const isStandalone = (): boolean => {
-        return window.matchMedia('(display-mode: standalone)').matches || 
-               (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+        return (
+            window.matchMedia('(display-mode: standalone)').matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+        );
     };
 
     const showIOSInstallPrompt = (): boolean => {
@@ -177,6 +276,9 @@ export default function PushNotifications() {
     const unsubscribe = async () => {
         setLoading(true);
         setError(null);
+        // Invalidate any in-flight mount-time check so it cannot flip us back on.
+        checkGeneration.current += 1;
+        const generation = checkGeneration.current;
 
         try {
             if (isNativePlatform()) {
@@ -184,11 +286,8 @@ export default function PushNotifications() {
                 const { FCM } = await import('@capacitor-community/fcm');
 
                 const fcmToken = await FCM.getToken();
-                await router.post('/push/unsubscribe', {
+                await postPushJson(unsubscribeAction.url(), {
                     token: fcmToken.token,
-                }, {
-                    preserveState: true,
-                    preserveScroll: true,
                 });
 
                 await CapPush.unregister();
@@ -202,18 +301,19 @@ export default function PushNotifications() {
                 });
 
                 if (token) {
-                    await router.post('/push/unsubscribe', {
+                    await postPushJson(unsubscribeAction.url(), {
                         token,
-                    }, {
-                        preserveState: true,
-                        preserveScroll: true,
                     });
                 }
 
                 await deleteToken(messaging);
             }
 
-            setIsRegistered(false);
+            // Persist the opt-out before flipping UI, and only after the server acked.
+            setPushOptedOut(true);
+            if (checkGeneration.current === generation) {
+                setIsRegistered(false);
+            }
         } catch (err) {
             setError('Failed to unsubscribe');
             console.error(err);
@@ -224,59 +324,40 @@ export default function PushNotifications() {
 
     if (!isSupported) {
         return (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-yellow-800">
-                    Push notifications are not supported on this device/browser.
-                </p>
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                <p className="text-yellow-800">Push notifications are not supported on this device/browser.</p>
             </div>
         );
     }
 
     return (
-        <div className="flex gap-12 justify-between items-center text-sm">
-            <span className='text-sm font-semibold'>Notifications</span>
+        <div className="flex items-center justify-between gap-12 text-sm">
+            <span className="text-sm font-semibold">Notifications</span>
 
             {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                    <p className="text-red-800 text-sm">{error}</p>
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
+                    <p className="text-sm text-red-800">{error}</p>
                 </div>
             )}
 
             {isSupported && !isIOS() && isRegistered && (
-                <p className="text-sm text-green-600 text-center">
-                    Push notifications are active on this device.
-                </p>
+                <p className="text-center text-sm text-green-600">Push notifications are active on this device.</p>
             )}
 
             {!isRegistered && !showIOSInstallPrompt() && (
-                <Button
-                    onClick={requestPermissionAndRegister}
-                    disabled={loading}
-                    size={"sm"}
-                    variant={"outline"}
-                >
-                    <span className='text-sm'>
-                        {loading ? 'Enabling...' : 'Enable Push Notifications'}
-                    </span>
+                <Button onClick={requestPermissionAndRegister} disabled={loading} size={'sm'} variant={'outline'}>
+                    <span className="text-sm">{loading ? 'Enabling...' : 'Enable Push Notifications'}</span>
                 </Button>
             )}
 
             {isRegistered && (
-                <Button
-                    onClick={unsubscribe}
-                    disabled={loading}
-                    size={"sm"}
-                >
-                    <span className='text-sm'>
-                        {loading ? 'Disabling...' : 'Disable Push Notifications'}
-                    </span>
+                <Button onClick={unsubscribe} disabled={loading} size={'sm'}>
+                    <span className="text-sm">{loading ? 'Disabling...' : 'Disable Push Notifications'}</span>
                 </Button>
             )}
 
             {permission === 'denied' && (
-                <p className="text-sm text-gray-600 text-center">
-                    Notifications are blocked. Please enable them in your device/browser settings.
-                </p>
+                <p className="text-center text-sm text-gray-600">Notifications are blocked. Please enable them in your device/browser settings.</p>
             )}
         </div>
     );

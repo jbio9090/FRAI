@@ -21,6 +21,7 @@ import moment from 'moment';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { downloadBulkFacilitiesPDF, type BulkFacilityBookingEntry } from '@/components/pdf/FacilitiesPDF';
 import RequestCard from '@/components/request-card';
 import RequestsSkeleton from '@/components/skeleton/RequestIndexSkeleton';
 import SmartPagination from '@/components/SmartPagination';
@@ -74,8 +75,8 @@ export default function RequestsPage({ requests, page_title, facilities, request
     const [requesterFilter, setRequesterFilter] = useState<string[]>([]);
     const [externalEquipmentFilter, setExternalEquipmentFilter] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string[]>([]);
-    const [pendingConflictFilter, setPendingConflictFilter] = useState(false);
-    const [approvedConflictFilter, setApprovedConflictFilter] = useState(false);
+    const [pendingConflictFilter, setPendingConflictFilter] = useState(route().params.has_pending_conflicts === '1');
+    const [approvedConflictFilter, setApprovedConflictFilter] = useState(route().params.has_approved_conflicts === '1');
     const hasLoadedOnce = useRef(false);
     const staleRequests = useRef<PaginatedRequests | null>(null);
 
@@ -95,6 +96,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
         { label: 'Approved', value: 'approved' },
         { label: 'Denied', value: 'denied' },
         { label: 'Conditionally Approved', value: 'conditionally_approved' },
+        { label: 'Partially Approved', value: 'partially_approved' },
         { label: 'For Reschedule', value: 'for_reschedule' },
     ];
 
@@ -311,7 +313,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                         )}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-72 p-0" align="start">
+                                <PopoverContent className="w-80 p-0" align="start">
                                     <div className="flex max-h-96 flex-col gap-4 overflow-y-auto p-3">
                                         <div className="flex flex-col gap-2">
                                             <div className="flex items-center justify-between">
@@ -937,6 +939,38 @@ export default function RequestsPage({ requests, page_title, facilities, request
                         >
                             <Download size={14} />
                             <span>CSV</span>
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                                const selectedRequests = (requests?.data ?? []).filter((r) => selected.includes(r.id));
+                                const bookings: BulkFacilityBookingEntry[] = selectedRequests.flatMap((req) =>
+                                    req.request_facilities.map((rf) => ({
+                                        requestTitle: req.title,
+                                        facility_name: req.facilities.find((f) => f.id === rf.facility_id)?.name ?? 'Unknown Facility',
+                                        date: rf.date_requested,
+                                        time_start: rf.time_start,
+                                        time_end: rf.time_end,
+                                        has_outsiders: rf.has_outsiders ?? false,
+                                        expected_capacity: rf.expected_capacity ?? null,
+                                    })),
+                                );
+
+                                try {
+                                    const stickerCount = await downloadBulkFacilitiesPDF(
+                                        bookings,
+                                        `Requests Facilities-${moment().format('YYYY-MM-DD')}.pdf`,
+                                    );
+                                    toast.success(`Exported ${stickerCount} booking(s) from ${selectedRequests.length} request(s) to PDF`);
+                                } catch {
+                                    toast.error('No facility bookings to export.');
+                                }
+                            }}
+                        >
+                            <Download size={14} />
+                            <span>PDF</span>
                         </Button>
 
                         <Button size="sm" variant="outline" onClick={() => setIsBulkCommentOpen((p) => !p)}>

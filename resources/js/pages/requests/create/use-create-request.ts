@@ -22,7 +22,25 @@ import type {
     FacilityBooking,
     FacilityScheduleData,
 } from './types';
-import { addCalendarDays, clearDraft, draftDiffersFromExisting, formatMaxFileSize, getTodayStart, loadDraft, maxFileSizeBytes, minutesToTime, saveDraft, timeToMinutes } from './utils';
+import {
+    addCalendarDays,
+    clearDraft,
+    draftDiffersFromExisting,
+    filterOverlappingSchedules,
+    formatMaxFileSize,
+    getTodayStart,
+    isSameBookingForm,
+    loadDraft,
+    maxFileSizeBytes,
+    mergeEquipmentConflicts,
+    mergeScheduleConflicts,
+    minutesToTime,
+    sameTimeWindow,
+    saveDraft,
+    scheduleCacheKey,
+    stripBookingConflicts,
+    timeToMinutes,
+} from './utils';
 import { ALLOWED_TYPES } from './utils';
 
 export function useCreateRequest({ facilities, existingRequest }: Pick<CreateRequestProps, 'facilities' | 'existingRequest'>) {
@@ -68,10 +86,22 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
     const [selectedBorrowedEquipment, setSelectedBorrowedEquipment] = useState<BorrowedEquipmentRequest[]>([]);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
     const [facilitySchedule, setFacilitySchedule] = useState<FacilityScheduleData | null>(null);
+    // Per-date schedule cache keyed by `${facilityId}|${yyyy-MM-dd}` so
+    // multi-facility selections and late responses can backfill conflicts
+    // onto bookings that were already added.
+    const [scheduleCache, setScheduleCache] = useState<Record<string, BookingSchedule[]>>({});
+    const scheduleRequestId = useRef(0);
     const [expectedCapacity, setExpectedCapacity] = useState<number | ''>('');
     const [hasOutsiders, setHasOutsiders] = useState<boolean>(false);
     const [existingFiles, setExistingFiles] = useState<ExistingFile[]>(existingRequest?.existing_files ?? []);
     const [equipmentConflicts, setEquipmentConflicts] = useState<Record<number, EquipmentConflict[]>>({});
+    // Per-date equipment conflict cache with the time window it was checked for,
+    // so fast-clicked or non-primary dates can be backfilled after fetch resolves.
+    const [equipmentConflictCache, setEquipmentConflictCache] = useState<
+        Record<string, { facilityId: number; timeStart: string; timeEnd: string; conflicts: Record<number, EquipmentConflict[]> }>
+    >({});
+    const equipmentRequestId = useRef(0);
+    const availabilityRequestId = useRef(0);
     const [equipmentAvailability, setEquipmentAvailability] = useState<EquipmentAvailabilityMap>({});
     const [borrowableAvailability, setBorrowableAvailability] = useState<BorrowableAvailabilityMap>({});
     const [isExternalOpen, setIsExternalOpen] = useState(false);
@@ -93,7 +123,16 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         return () => {
             clearRichPageContext();
         };
-    }, [existingRequest?.id, isEditing, selectedDates, selectedEquipment.length, selectedFacility, scheduleConflicts.length, currentTimeEnd, currentTimeStart]);
+    }, [
+        existingRequest?.id,
+        isEditing,
+        selectedDates,
+        selectedEquipment.length,
+        selectedFacility,
+        scheduleConflicts.length,
+        currentTimeEnd,
+        currentTimeStart,
+    ]);
 
     // Consolidated conflict-check loading state (counter prevents premature clearing)
     const [checkingConflicts, setCheckingConflicts] = useState(false);
@@ -195,7 +234,9 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                 {
                     title: data.title,
                     description: data.description,
-                    facility_bookings: data.facility_bookings,
+                    // Conflict badges are re-derived from fresh scans on load;
+                    // never persist them or they haunt restored drafts.
+                    facility_bookings: stripBookingConflicts(data.facility_bookings),
                     priority_level: data.priority_level as 0 | 1 | 2,
                     priority_reason: data.priority_reason,
                     approved_by: data.approved_by,
@@ -213,36 +254,70 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         return () => clearTimeout(timeout);
     }, [data.title, data.description, data.priority_level, data.priority_reason, data.facility_bookings, data.approved_by, showDraftBanner]);
 
+    function fetchEquipmentConflictsFor(dates: Date[], timeStart: string, timeEnd: string, ids: number[]) {
+        if (dates.length === 0 || !timeStart || !timeEnd || ids.length === 0) return;
+
+        const requestId = ++equipmentRequestId.current;
+        const snapshot = [...dates];
+        const facilityId = selectedFacility;
+        const excludeRequestId = existingRequest?.id ?? null;
+        beginConflictCheck();
+        Promise.all(
+            snapshot.map(async (date) => {
+                const dateKey = format(date, 'yyyy-MM-dd');
+                const conflicts = await fetchEquipmentConflicts({
+                    equipmentIds: ids,
+                    currentDate: dateKey,
+                    timeStart,
+                    timeEnd,
+                    excludeRequestId,
+                });
+
+                return { dateKey, conflicts };
+            }),
+        )
+            .then((results) => {
+                if (equipmentRequestId.current !== requestId) return;
+                setEquipmentConflictCache((prev) => {
+                    const next = { ...prev };
+                    for (const { dateKey, conflicts } of results) {
+                        if (conflicts) {
+                            next[scheduleCacheKey(facilityId ?? -1, dateKey)] = { facilityId: facilityId ?? -1, timeStart, timeEnd, conflicts };
+                        }
+                    }
+
+                    return next;
+                });
+                setEquipmentConflicts(results[0]?.conflicts ?? {});
+            })
+            .finally(endConflictCheck);
+    }
+
     useEffect(() => {
         const ids = selectedEquipment.map((e) => e.equipment_id);
         if (ids.length > 0) {
             if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
-                beginConflictCheck();
-                fetchEquipmentConflicts({
-                    equipmentIds: ids,
-                    currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
-                    timeStart: currentTimeStart,
-                    timeEnd: currentTimeEnd,
-                    excludeRequestId: existingRequest?.id ?? null,
-                })
-                    .then((conflicts) => {
-                        if (conflicts) setEquipmentConflicts(conflicts);
-                    })
-                    .finally(endConflictCheck);
+                fetchEquipmentConflictsFor(selectedDates, currentTimeStart, currentTimeEnd, ids);
             }
         } else {
             setEquipmentConflicts({});
         }
 
         if (selectedFacility && selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+            const requestId = ++availabilityRequestId.current;
+            const facilityId = selectedFacility;
+            const currentDate = format(selectedDates[0], 'yyyy-MM-dd');
+            const timeStart = currentTimeStart;
+            const timeEnd = currentTimeEnd;
             beginConflictCheck();
             fetchEquipmentAvailability({
-                facilityId: selectedFacility,
-                currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
-                timeStart: currentTimeStart,
-                timeEnd: currentTimeEnd,
+                facilityId,
+                currentDate,
+                timeStart,
+                timeEnd,
             })
                 .then((availability) => {
+                    if (availabilityRequestId.current !== requestId) return;
                     if (availability) setEquipmentAvailability(availability);
                 })
                 .finally(endConflictCheck);
@@ -253,15 +328,20 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
 
     useEffect(() => {
         if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+            const requestId = ++availabilityRequestId.current;
+            const currentDate = format(selectedDates[0], 'yyyy-MM-dd');
+            const timeStart = currentTimeStart;
+            const timeEnd = currentTimeEnd;
             beginConflictCheck();
             fetchBorrowableAvailability({
                 facilities,
                 selectedFacility,
-                currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
-                timeStart: currentTimeStart,
-                timeEnd: currentTimeEnd,
+                currentDate,
+                timeStart,
+                timeEnd,
             })
                 .then((map) => {
+                    if (availabilityRequestId.current !== requestId) return;
                     if (map) setBorrowableAvailability(map);
                 })
                 .finally(endConflictCheck);
@@ -293,11 +373,94 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         });
 
         setScheduleConflicts(allConflicts);
-    }, [selectedFacility, selectedDates, currentTimeStart, currentTimeEnd, facilitySchedule]);
+    }, [selectedFacility, selectedDates, currentTimeStart, currentTimeEnd, facilitySchedule, scheduleCache]);
 
-    const loadSchedule = async (facilityId: number, date: Date) => {
+    // Backfill conflicts onto bookings that were added before their schedule or
+    // equipment checks resolved (fast click) or were never checked (non-primary
+    // dates). Only merges missing entries so user edits are never overwritten.
+    useEffect(() => {
+        if (data.facility_bookings.length === 0) return;
+        if (Object.keys(scheduleCache).length === 0 && Object.keys(equipmentConflictCache).length === 0) return;
+
+        let changed = false;
+        const patched = data.facility_bookings.map((booking) => {
+            let nextConflicts = booking.conflicts ?? [];
+            let nextEquipmentConflicts = booking.equipment_conflicts ?? {};
+            let bookingChanged = false;
+
+            const dayBookings = scheduleCache[scheduleCacheKey(booking.facility_id, booking.date)];
+            if (dayBookings) {
+                const incoming = filterOverlappingSchedules(dayBookings, booking.time_start, booking.time_end).map((conflict) => ({
+                    ...conflict,
+                    date: booking.date,
+                }));
+                const merged = mergeScheduleConflicts(nextConflicts, incoming);
+                if (merged !== nextConflicts) {
+                    nextConflicts = merged;
+                    bookingChanged = true;
+                }
+            }
+
+            const equipmentEntry = equipmentConflictCache[scheduleCacheKey(booking.facility_id, booking.date)];
+            if (
+                equipmentEntry &&
+                equipmentEntry.facilityId === booking.facility_id &&
+                sameTimeWindow(equipmentEntry.timeStart, equipmentEntry.timeEnd, booking.time_start, booking.time_end)
+            ) {
+                const bookingEquipmentIds = new Set(booking.equipment.map((e) => e.equipment_id));
+                const relevant: Record<number, EquipmentConflict[]> = {};
+                for (const [equipmentIdKey, conflicts] of Object.entries(equipmentEntry.conflicts)) {
+                    const equipmentId = Number(equipmentIdKey);
+                    if (bookingEquipmentIds.has(equipmentId)) {
+                        relevant[equipmentId] = conflicts;
+                    }
+                }
+                const mergedEquipment = mergeEquipmentConflicts(nextEquipmentConflicts, relevant);
+                if (mergedEquipment !== nextEquipmentConflicts) {
+                    nextEquipmentConflicts = mergedEquipment;
+                    bookingChanged = true;
+                }
+            }
+
+            if (bookingChanged) {
+                changed = true;
+
+                return { ...booking, conflicts: nextConflicts, equipment_conflicts: nextEquipmentConflicts };
+            }
+
+            return booking;
+        });
+
+        if (changed) {
+            setData('facility_bookings', patched);
+        }
+    }, [scheduleCache, equipmentConflictCache, data.facility_bookings]);
+
+    const loadSchedule = async (facilityId: number, date: Date | Date[]) => {
+        const dates = (Array.isArray(date) ? date : [date]).filter(Boolean);
+        if (dates.length === 0) return;
+
+        const requestId = ++scheduleRequestId.current;
         beginConflictCheck();
-        setFacilitySchedule(await loadFacilitySchedule(facilityId, date).finally(endConflictCheck));
+        try {
+            const results = await Promise.all(dates.map((d) => loadFacilitySchedule(facilityId, d)));
+            if (scheduleRequestId.current !== requestId) return;
+            setScheduleCache((prev) => {
+                const next = { ...prev };
+                results.forEach((result, index) => {
+                    if (result) {
+                        next[scheduleCacheKey(facilityId, format(dates[index], 'yyyy-MM-dd'))] = result.bookings;
+                    }
+                });
+
+                return next;
+            });
+            if (results[0]) {
+                setFacilitySchedule(results[0]);
+            }
+        } finally {
+            endConflictCheck();
+        }
     };
 
     // Fetch alternatives for FOR_RESCHEDULE requests
@@ -364,6 +527,23 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         setHasOutsiders(booking.has_outsiders ?? false);
         setEquipmentConflicts(booking.equipment_conflicts ?? {});
 
+        // Seed the caches from the card so an immediate re-save keeps its
+        // conflicts instead of rebuilding them from empty caches.
+        const cacheKey = scheduleCacheKey(booking.facility_id, booking.date);
+        if (booking.conflicts && booking.conflicts.length > 0) {
+            const seeded = booking.conflicts.map((conflict) => ({ ...conflict, date: booking.date }));
+            setScheduleCache((prev) => (prev[cacheKey] ? prev : { ...prev, [cacheKey]: seeded }));
+        }
+        if (booking.equipment_conflicts && Object.keys(booking.equipment_conflicts).length > 0) {
+            const entry = {
+                facilityId: booking.facility_id,
+                timeStart: booking.time_start.slice(0, 5),
+                timeEnd: booking.time_end.slice(0, 5),
+                conflicts: booking.equipment_conflicts,
+            };
+            setEquipmentConflictCache((prev) => (prev[cacheKey] ? prev : { ...prev, [cacheKey]: entry }));
+        }
+
         // Store which card is being edited and a snapshot for change-detection
         setEditingIndex(index);
         setOriginalBookingData({ ...booking });
@@ -414,8 +594,10 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         setSelectedFacility(facilityId);
         setSelectedEquipment([]);
         setScheduleConflicts([]);
-        // Load schedule for the first selected date (for conflict preview)
-        if (selectedDates.length > 0) loadSchedule(facilityId, selectedDates[0]);
+        // Caches are keyed by facility+date, so previous facilities' entries
+        // stay valid for backfilling already-added bookings.
+        // Load schedules for all selected dates (for conflict preview)
+        if (selectedDates.length > 0) loadSchedule(facilityId, selectedDates);
     }
 
     const handleDateChange = (dates: Date[] | undefined) => {
@@ -426,25 +608,34 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         } else {
             setSelectedDates(next);
         }
-        const primary = (dates ?? [])[0];
-        if (selectedFacility && primary) loadSchedule(selectedFacility, primary);
+        const targets = editingIndex !== null ? [next[next.length - 1]].filter(Boolean) : next;
+        if (selectedFacility && targets.length > 0) loadSchedule(selectedFacility, targets);
     };
 
     function clearEquipmentSelection(e: React.MouseEvent<HTMLButtonElement>) {
         e.preventDefault();
         setSelectedEquipment([]);
+        setEquipmentConflicts({});
     }
 
     function selectAllEquipment(e: React.MouseEvent<HTMLButtonElement>) {
         e.preventDefault();
-        setSelectedEquipment(
-            availableEquipment.map((equipment) => ({
-                equipment_id: equipment.id,
-                equipment_name: equipment.name,
-                quantity_needed: equipment.pivot.quantity,
-                max_quantity: equipment.pivot.quantity,
-            })),
-        );
+        const updated = availableEquipment.map((equipment) => ({
+            equipment_id: equipment.id,
+            equipment_name: equipment.name,
+            quantity_needed: equipment.pivot.quantity,
+            max_quantity: equipment.pivot.quantity,
+        }));
+        setSelectedEquipment(updated);
+
+        if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+            fetchEquipmentConflictsFor(
+                selectedDates,
+                currentTimeStart,
+                currentTimeEnd,
+                updated.map((e) => e.equipment_id),
+            );
+        }
     }
 
     function handleEquipmentToggle(equipment: FacilityEquipment) {
@@ -471,23 +662,27 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         setSelectedEquipment(updated);
 
         if (updated.length > 0 && selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
-            beginConflictCheck();
-            fetchEquipmentConflicts({
-                equipmentIds: updated.map((e) => e.equipment_id),
-                currentDate: format(selectedDates[0], 'yyyy-MM-dd'),
-                timeStart: currentTimeStart,
-                timeEnd: currentTimeEnd,
-                excludeRequestId: existingRequest?.id ?? null,
-            })
-                .then((conflicts) => {
-                    if (conflicts) setEquipmentConflicts(conflicts);
-                })
-                .finally(endConflictCheck);
+            fetchEquipmentConflictsFor(
+                selectedDates,
+                currentTimeStart,
+                currentTimeEnd,
+                updated.map((e) => e.equipment_id),
+            );
         }
     }
 
     function updateEquipmentQuantity(equipmentId: number, quantity: number) {
-        setSelectedEquipment(selectedEquipment.map((e) => (e.equipment_id === equipmentId ? { ...e, quantity_needed: quantity } : e)));
+        const updated = selectedEquipment.map((e) => (e.equipment_id === equipmentId ? { ...e, quantity_needed: quantity } : e));
+        setSelectedEquipment(updated);
+
+        if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
+            fetchEquipmentConflictsFor(
+                selectedDates,
+                currentTimeStart,
+                currentTimeEnd,
+                updated.map((e) => e.equipment_id),
+            );
+        }
     }
 
     function handleTimeStartChange(newStartTime: string) {
@@ -503,27 +698,43 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         if (currentTimeStart && timeToMinutes(newEndTime) <= timeToMinutes(currentTimeStart)) return;
         setCurrentTimeEnd(newEndTime);
     }
-
     function checkLocalConflicts(facilityId: number, date: string, startTime: string, endTime: string): BookingSchedule[] {
-        if (!facilitySchedule) return [];
+        const cachedBookings = scheduleCache[scheduleCacheKey(facilityId, date)];
+        const dayBookings = cachedBookings ?? (facilitySchedule && facilitySchedule.date === date ? facilitySchedule.bookings : undefined);
 
-        if (facilityId !== selectedFacility) return [];
+        if (!dayBookings) return [];
 
-        if (facilitySchedule.date !== date) return [];
+        if (!cachedBookings && facilityId !== selectedFacility) {
+            return [];
+        }
 
-        const start = new Date(`2000-01-01T${startTime}`);
-        const end = new Date(`2000-01-01T${endTime}`);
+        return filterOverlappingSchedules(dayBookings, startTime, endTime);
+    }
 
-        return facilitySchedule.bookings.filter((booking) => {
-            if (booking.status !== 'Approved' && booking.status !== 'Conditionally Approved') {
-                return false;
+    function equipmentConflictsForDate(dateKey: string, timeStart: string, timeEnd: string): Record<number, EquipmentConflict[]> {
+        if (selectedFacility === null) return {};
+        const entry = equipmentConflictCache[scheduleCacheKey(selectedFacility, dateKey)];
+        if (entry && entry.facilityId === selectedFacility && sameTimeWindow(entry.timeStart, entry.timeEnd, timeStart, timeEnd)) {
+            const selectedIds = new Set(selectedEquipment.map((e) => e.equipment_id));
+            const filtered: Record<number, EquipmentConflict[]> = {};
+            for (const [equipmentIdKey, conflicts] of Object.entries(entry.conflicts)) {
+                const equipmentId = Number(equipmentIdKey);
+                if (selectedIds.has(equipmentId)) {
+                    filtered[equipmentId] = conflicts;
+                }
             }
 
-            const bookingStart = new Date(`2000-01-01T${booking.time_start}`);
-            const bookingEnd = new Date(`2000-01-01T${booking.time_end}`);
+            return filtered;
+        }
 
-            return start < bookingEnd && end > bookingStart;
-        });
+        // No cache for this date yet: only the primary date may reuse the live
+        // preview state. Other dates must start empty — the backfill effect adds
+        // their real conflicts when their fetch resolves. Returning the preview
+        // here would attach another date's conflicts permanently (backfill only
+        // merges, never removes).
+        const primaryKey = selectedDates.length > 0 ? format(selectedDates[0], 'yyyy-MM-dd') : null;
+
+        return dateKey === primaryKey ? equipmentConflicts : {};
     }
 
     function addFacilityBooking() {
@@ -534,24 +745,30 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         if (editingIndex !== null) {
             // ── EDIT MODE ──────────────────────────────────────────────────────────
             const date = selectedDates[0];
+            const formattedDate = format(date, 'yyyy-MM-dd');
             const newBooking: FacilityBooking = {
                 facility_id: selectedFacility,
                 facility_name: facility.name,
-                date: format(date, 'yyyy-MM-dd'),
+                date: formattedDate,
                 time_start: currentTimeStart,
                 time_end: currentTimeEnd,
                 equipment: selectedEquipment,
                 borrowed_equipment: selectedBorrowedEquipment,
-                conflicts: scheduleConflicts.filter((c) => c.date === format(date, 'yyyy-MM-dd')),
+                conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd).map((conflict) => ({
+                    ...conflict,
+                    date: conflict.date ?? formattedDate,
+                })),
                 external_equipment: externalEquipment,
                 expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
                 facility_capacity: facility.capacity,
                 has_outsiders: hasOutsiders,
-                equipment_conflicts: equipmentConflicts,
+                equipment_conflicts: equipmentConflictsForDate(formattedDate, currentTimeStart, currentTimeEnd),
             };
 
             // If nothing changed, just exit edit mode without touching the array.
-            if (originalBookingData && JSON.stringify(newBooking) === JSON.stringify(originalBookingData)) {
+            // Conflict badges are excluded: they're re-derived server data,
+            // not user input.
+            if (originalBookingData && isSameBookingForm(newBooking, originalBookingData)) {
                 cancelEditBooking();
                 return;
             }
@@ -572,12 +789,15 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                     time_end: currentTimeEnd,
                     equipment: selectedEquipment,
                     borrowed_equipment: selectedBorrowedEquipment,
-                    conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd),
+                    conflicts: checkLocalConflicts(selectedFacility, formattedDate, currentTimeStart, currentTimeEnd).map((conflict) => ({
+                        ...conflict,
+                        date: conflict.date ?? formattedDate,
+                    })),
                     external_equipment: externalEquipment,
                     expected_capacity: expectedCapacity === '' ? null : expectedCapacity,
                     facility_capacity: facility.capacity,
                     has_outsiders: hasOutsiders,
-                    equipment_conflicts: equipmentConflicts,
+                    equipment_conflicts: equipmentConflictsForDate(formattedDate, currentTimeStart, currentTimeEnd),
                 };
             });
 
@@ -667,8 +887,22 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
 
         const options = {
             forceFormData: true,
+            // Success toast is handled globally via flash.success in DefaultLayout.
             onSuccess: () => clearDraft(existingRequest?.id),
-            onError: (errs) => console.log('validation errors:', errs),
+            onError: (errs: Record<string, string>) => {
+                const messages = Object.values(errs ?? {});
+                toast.error(isEditing ? 'Failed to save changes' : 'Failed to submit request', {
+                    description:
+                        messages.length > 0
+                            ? `${messages.length} field${messages.length === 1 ? '' : 's'} need${messages.length === 1 ? 's' : ''} attention. ${messages.slice(0, 2).join(' ')}`
+                            : 'Please check the form and try again.',
+                    duration: 5000,
+                    position: 'top-right',
+                });
+                requestAnimationFrame(() => {
+                    document.getElementById('form-errors')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            },
         };
 
         if (isEditing) {

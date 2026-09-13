@@ -14,11 +14,12 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { flushSync } from "react-dom";
-import { PieChart, Pie, Cell } from "recharts";
-import { LineChart } from "@/components/charts/line";
+import { PieChart, Pie, Cell, Legend } from "recharts";
+import { DiscreteBarChart } from "@/components/charts/discrete-bar";
 import { StackedBarChart } from "@/components/charts/stacked-bar";
 import { downloadReportsPdf } from "@/components/pdf/reports-pdf";
 import { FilterPanel } from "@/components/reports/filter-panel";
+import StatTile from "@/components/stat-tile";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,6 +32,13 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DefaultLayout from "@/layout.tsx/default.";
 import { formatRequestStatus } from "@/lib/formatters";
+import {
+  PROCESSING_BAR_COLOR,
+  SLA_LINE_COLOR,
+  VOLUME_BAR_COLOR,
+  categoryColor,
+  sortedCategoryNames,
+} from "@/lib/report-palette";
 import type { ReportFilters, ReportMeta, ReportKpis, ReportType, ChartDataPoint, Granularity, KpiComparison } from "@/types/reports";
 
 const REPORT_TABS: { id: ReportType; label: string; description: string }[] = [
@@ -64,44 +72,12 @@ function formatDisplayDate(dateStr: string, granularity: Granularity): string {
   }
 }
 
-function KpiTile({
-  label,
-  value,
-  icon: Icon,
-  iconBg,
-  iconColor,
-  delta,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
-  iconBg: string;
-  iconColor: string;
-  delta?: { value: number; label: string; positive: boolean } | null;
-}) {
-  return (
-    <Card className="border-border">
-      <CardContent className="p-5 md:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="ads-eyebrow mb-1">{label}</p>
-            <p className="text-2xl md:text-3xl font-bold tabular-nums text-foreground">
-              {value}
-            </p>
-            {delta && (
-              <p className="mt-1 text-xs flex items-center gap-1" style={{ color: delta.positive ? "var(--ads-ok)" : "var(--ads-danger)" }}>
-                <span className="font-medium">{delta.value > 0 ? "+" : ""}{delta.value.toFixed(1)}%</span>
-                <span className="text-muted-foreground">vs. previous period</span>
-              </p>
-            )}
-          </div>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: iconBg }}>
-            <Icon className="h-5 w-5" style={{ color: iconColor }} strokeWidth={2} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function formatDeltaSub(pct: number | null | undefined): string | undefined {
+  if (pct === null || pct === undefined) {
+    return undefined;
+  }
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct.toFixed(1)}% vs prev period`;
 }
 
 export default function ReportsPage({
@@ -304,6 +280,7 @@ export default function ReportsPage({
     );
 
     // Also fetch facility usage pie data
+    let pieData: ChartDataPoint[] = [];
     try {
       const pieParams = new URLSearchParams({
         type: "facility-usage-pie",
@@ -319,18 +296,64 @@ export default function ReportsPage({
       });
       const pieRes = await fetch(`/reports/data?${pieParams.toString()}`);
       const pieJson = await pieRes.json();
-      setAllFacilityPieData(pieJson.data || []);
+      pieData = pieJson.data || [];
+      setAllFacilityPieData(pieData);
     } catch (error) {
       console.error("Failed to fetch facility-usage-pie data:", error);
+      pieData = [];
       setAllFacilityPieData([]);
     }
 
     flushSync(() => {
       setAllChartData(results);
     });
+
+    // Return fresh data so callers don't read stale React state
+    // (the closure's `allChartData` is still empty on first export).
+    return { results, pieData };
   }, []);
 
-  const captureChartImages = async () => {
+  const waitForOffscreenCharts = async (
+    freshData: Record<ReportType, ChartDataPoint[]>,
+    freshPieData: ChartDataPoint[],
+    timeoutMs = 8000
+  ) => {
+    const start = Date.now();
+    const refsByType: Partial<Record<ReportType, React.RefObject<HTMLDivElement | null>>> = {
+      volume: volumeRef,
+      "approval-rate": approvalRateRef,
+      "facility-utilization": facilityUtilizationRef,
+      "priority-distribution": priorityDistributionRef,
+      "processing-time": processingTimeRef,
+    };
+    const hasData = (type: ReportType) =>
+      (type === "facility-utilization" ? freshPieData : freshData[type] ?? []).length > 0;
+
+    // Poll until every chart with data has rendered an <svg>, so html-to-image
+    // captures real content instead of an empty container on first export.
+    for (;;) {
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      );
+      const pending = (Object.keys(refsByType) as ReportType[]).filter((type) => {
+        if (!hasData(type)) return false;
+        const el = refsByType[type]?.current;
+        if (!el) return true;
+        return !el.querySelector("svg");
+      });
+      if (pending.length === 0) return;
+      if (Date.now() - start > timeoutMs) {
+        console.warn(`Timed out waiting for off-screen charts: ${pending.join(", ")}`);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  };
+
+  const captureChartImages = async (
+    freshData?: Record<ReportType, ChartDataPoint[]>,
+    freshPieData?: ChartDataPoint[]
+  ) => {
     const images: Record<ReportType, string> = {
       volume: "",
       "approval-rate": "",
@@ -341,12 +364,18 @@ export default function ReportsPage({
       "processing-time": "",
     };
 
+    // Prefer explicitly passed fresh data; fall back to state for other callers.
+    // Reading `allChartData` directly here would use a stale closure on the
+    // first export (state hasn't re-rendered yet when this runs).
+    const source = freshData ?? allChartData;
+    const pieSource = freshPieData ?? allFacilityPieData;
+
     const chartConfigs: { type: ReportType; ref: React.RefObject<HTMLDivElement | null>; data: ChartDataPoint[] }[] = [
-      { type: "volume", ref: volumeRef, data: allChartData.volume },
-      { type: "approval-rate", ref: approvalRateRef, data: allChartData["approval-rate"] },
-      { type: "facility-utilization", ref: facilityUtilizationRef, data: allFacilityPieData },
-      { type: "priority-distribution", ref: priorityDistributionRef, data: allChartData["priority-distribution"] },
-      { type: "processing-time", ref: processingTimeRef, data: allChartData["processing-time"] },
+      { type: "volume", ref: volumeRef, data: source.volume },
+      { type: "approval-rate", ref: approvalRateRef, data: source["approval-rate"] },
+      { type: "facility-utilization", ref: facilityUtilizationRef, data: pieSource },
+      { type: "priority-distribution", ref: priorityDistributionRef, data: source["priority-distribution"] },
+      { type: "processing-time", ref: processingTimeRef, data: source["processing-time"] },
     ];
 
     for (const { type, ref, data } of chartConfigs) {
@@ -364,9 +393,7 @@ export default function ReportsPage({
           const pngDataUrl = await toPng(ref.current!, {
             backgroundColor: "#ffffff",
             pixelRatio: 2,
-            quality: 0.95,
             skipFonts: true,
-            skipAutoDetect: true,
           });
           images[type] = pngDataUrl;
         } catch (error) {
@@ -414,17 +441,16 @@ export default function ReportsPage({
     switch (activeTab) {
       case "volume": {
         const config: ChartConfig = {
-          value: { label: "Requests", color: "var(--chart-1)" },
+          value: { label: "Requests", color: VOLUME_BAR_COLOR },
         };
         return (
-          <LineChart
+          <DiscreteBarChart
             data={chartData as ChartDataPoint[]}
             config={config}
-            title="Request Volume"
-            description="Total requests created over time"
             yAxisLabel="Requests"
             height={350}
             granularity={filters.granularity}
+            barColor={VOLUME_BAR_COLOR}
           />
         );
       }
@@ -455,29 +481,30 @@ export default function ReportsPage({
         );
       }
       case "facility-utilization": {
-        const categories = [...new Set((facilityPieData as ChartDataPoint[]).map((d) => d.category).filter(Boolean))];
+        const categories = sortedCategoryNames(facilityPieData as ChartDataPoint[]);
         const config: ChartConfig = {};
-        categories.forEach((cat, i) => {
-          config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+        categories.forEach((cat) => {
+          config[cat] = { label: cat, color: categoryColor(cat, categories) };
         });
         return (
           <div className="space-y-4">
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={facilityPieData as ChartDataPoint[]}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {facilityPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -494,29 +521,30 @@ export default function ReportsPage({
           return acc;
         }, {} as Record<string, number>);
         const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
-        const categories = [...new Set(pieData.map((d) => d.category).filter(Boolean))];
+        const categories = sortedCategoryNames(pieData);
         const config: ChartConfig = {};
-        categories.forEach((cat, i) => {
-          config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+        categories.forEach((cat) => {
+          config[cat] = { label: cat, color: categoryColor(cat, categories) };
         });
         return (
           <div className="space-y-4">
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={pieData}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -526,19 +554,17 @@ export default function ReportsPage({
       }
       case "processing-time": {
         const config: ChartConfig = {
-          value: { label: "Avg Days", color: "var(--chart-1)" },
+          value: { label: "Avg Days", color: PROCESSING_BAR_COLOR },
         };
         return (
-          <LineChart
+          <DiscreteBarChart
             data={chartData as ChartDataPoint[]}
             config={config}
-            title="Processing Time"
-            description="Average days from creation to final decision"
             yAxisLabel="Days"
-            showArea={false}
             height={350}
             granularity={filters.granularity}
-            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: "var(--ads-danger)", strokeDasharray: "5 5" }}
+            barColor={PROCESSING_BAR_COLOR}
+            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: SLA_LINE_COLOR, strokeDasharray: "5 5" }}
           />
         );
       }
@@ -550,21 +576,21 @@ export default function ReportsPage({
   const handleExportPdf = async () => {
     setPdfGenerating(true);
     try {
-      // Fetch all chart data first
-      await fetchAllChartData(filters);
+      // Fetch all chart data first. Use the RETURNED data directly instead of
+      // `allChartData` state, which is still stale (empty) on first export.
+      const { results: freshCharts, pieData: freshPie } = await fetchAllChartData(filters);
       // Fetch methodology
       const methodologyData = await fetchMethodology(filters);
       setMethodology(methodologyData);
 
-      // Wait for state to update and component to re-render with charts
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      // Force multiple frames for refs to attach and Recharts to render
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      // Wait for off-screen charts to re-render with the fresh data, then
+      // capture images. Polls for <svg> so first export isn't blank.
+      await waitForOffscreenCharts(freshCharts, freshPie);
       // Extra delay for Recharts internal rendering
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Capture chart images from off-screen render
-      const images = await captureChartImages();
+      const images = await captureChartImages(freshCharts, freshPie);
 
       await downloadReportsPdf(
         {
@@ -575,11 +601,17 @@ export default function ReportsPage({
             avg_processing_days: 0,
             active_conflicts: 0,
           },
+          kpiDeltas: kpiComparison?.deltas ?? {
+            total_requests_pct: null,
+            approval_rate_pct: null,
+            avg_processing_days_pct: null,
+            active_conflicts_pct: null,
+          },
           chartsData: REPORT_TABS.map((tab) => ({
             type: tab.id,
             title: tab.label,
             description: tab.description,
-            data: allChartData[tab.id] || [],
+            data: tab.id === "facility-utilization" ? freshPie : freshCharts[tab.id] || [],
             imageUrl: images[tab.id],
           })),
           methodology: methodologyData,
@@ -613,14 +645,13 @@ export default function ReportsPage({
     >
       <div ref={volumeRef} style={{ width: 800, height: 400 }}>
         {allChartData.volume.length > 0 && (
-          <LineChart
+          <DiscreteBarChart
             data={allChartData.volume as ChartDataPoint[]}
-            config={{ value: { label: "Requests", color: "var(--chart-1)" } }}
-            title="Request Volume"
-            description="Total requests created over time"
+            config={{ value: { label: "Requests", color: VOLUME_BAR_COLOR } }}
             yAxisLabel="Requests"
             height={350}
             granularity={filters.granularity}
+            barColor={VOLUME_BAR_COLOR}
           />
         )}
       </div>
@@ -649,28 +680,29 @@ export default function ReportsPage({
       </div>
       <div ref={facilityUtilizationRef} style={{ width: 400, height: 350 }}>
         {allFacilityPieData.length > 0 && (() => {
-          const categories = [...new Set(allFacilityPieData.map((d) => d.category).filter(Boolean))];
+          const categories = sortedCategoryNames(allFacilityPieData);
           const config: ChartConfig = {};
-          categories.forEach((cat, i) => {
-            config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+          categories.forEach((cat) => {
+            config[cat] = { label: cat, color: categoryColor(cat, categories) };
           });
           return (
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={allFacilityPieData as ChartDataPoint[]}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {allFacilityPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -687,28 +719,29 @@ export default function ReportsPage({
             return acc;
           }, {} as Record<string, number>);
           const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
-          const categories = [...new Set(pieData.map((d) => d.category).filter(Boolean))];
+          const categories = sortedCategoryNames(pieData);
           const config: ChartConfig = {};
-          categories.forEach((cat, i) => {
-            config[cat] = { label: cat, color: CHART_COLORS[i % CHART_COLORS.length] };
+          categories.forEach((cat) => {
+            config[cat] = { label: cat, color: categoryColor(cat, categories) };
           });
           return (
             <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
               <PieChart>
                 <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
+                <Legend verticalAlign="bottom" height={36} />
                 <Pie
                   data={pieData}
                   dataKey="value"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
+                  cy="42%"
                   innerRadius={60}
                   outerRadius={100}
                   label={({ category, value }) => `${category}: ${value}`}
                   labelLine={false}
                 >
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={`var(--chart-${(index % 5) + 1})`} />
+                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
                   ))}
                 </Pie>
               </PieChart>
@@ -718,16 +751,14 @@ export default function ReportsPage({
       </div>
       <div ref={processingTimeRef} style={{ width: 800, height: 400 }}>
         {allChartData["processing-time"].length > 0 && (
-          <LineChart
+          <DiscreteBarChart
             data={allChartData["processing-time"] as ChartDataPoint[]}
-            config={{ value: { label: "Avg Days", color: "var(--chart-1)" } }}
-            title="Processing Time"
-            description="Average days from creation to final decision"
+            config={{ value: { label: "Avg Days", color: PROCESSING_BAR_COLOR } }}
             yAxisLabel="Days"
-            showArea={false}
             height={350}
             granularity={filters.granularity}
-            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: "var(--ads-danger)", strokeDasharray: "5 5" }}
+            barColor={PROCESSING_BAR_COLOR}
+            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: SLA_LINE_COLOR, strokeDasharray: "5 5" }}
           />
         )}
       </div>
@@ -783,7 +814,7 @@ export default function ReportsPage({
         )}
 
 {kpis && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {(() => {
                 const deltas = kpiComparison?.deltas ?? {
                   total_requests_pct: null,
@@ -793,53 +824,30 @@ export default function ReportsPage({
                 };
                 return (
                   <>
-                    <KpiTile
+                    <StatTile
+                      icon={ClipboardList}
                       label="Total Requests"
                       value={kpis.total_requests.toLocaleString()}
-                      icon={ClipboardList}
-                      iconBg="var(--primary)"
-                      iconColor="hsl(var(--primary-foreground))"
-                      delta={deltas.total_requests_pct !== null ? {
-                        value: deltas.total_requests_pct,
-                        label: "vs. previous period",
-                        positive: deltas.total_requests_pct >= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.total_requests_pct)}
                     />
-                    <KpiTile
+                    <StatTile
+                      icon={CheckCircle2}
                       label="Approval Rate"
                       value={`${kpis.approval_rate}%`}
-                      icon={CheckCircle2}
-                      iconBg="var(--ads-ok-bg)"
-                      iconColor="var(--ads-ok)"
-                      delta={deltas.approval_rate_pct !== null ? {
-                        value: deltas.approval_rate_pct,
-                        label: "vs. previous period",
-                        positive: deltas.approval_rate_pct >= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.approval_rate_pct)}
                     />
-                    <KpiTile
+                    <StatTile
+                      icon={Calendar}
                       label="Avg Processing Time"
                       value={`${kpis.avg_processing_days} days`}
-                      icon={Calendar}
-                      iconBg="var(--ads-amber-bg)"
-                      iconColor="var(--ads-amber)"
-                      delta={deltas.avg_processing_days_pct !== null ? {
-                        value: deltas.avg_processing_days_pct,
-                        label: "vs. previous period",
-                        positive: deltas.avg_processing_days_pct <= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.avg_processing_days_pct)}
                     />
-                    <KpiTile
+                    <StatTile
+                      icon={AlertTriangle}
                       label="Active Conflicts"
                       value={kpis.active_conflicts}
-                      icon={AlertTriangle}
-                      iconBg="var(--ads-danger-bg)"
-                      iconColor="var(--ads-danger)"
-                      delta={deltas.active_conflicts_pct !== null ? {
-                        value: deltas.active_conflicts_pct,
-                        label: "vs. previous period",
-                        positive: deltas.active_conflicts_pct <= 0
-                      } : null}
+                      sub={formatDeltaSub(deltas.active_conflicts_pct)}
+                      variant={kpis.active_conflicts > 0 ? "warning" : "default"}
                     />
                   </>
                 );
@@ -848,7 +856,7 @@ export default function ReportsPage({
           )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList variant="line" className="flex gap-1">
+          <TabsList variant="line" scrollable className="flex gap-1">
             {REPORT_TABS.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id} className="px-3 py-1.5 text-sm font-medium">
                 {tab.label}

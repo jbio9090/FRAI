@@ -57,7 +57,9 @@ export function DetailsTab({
                             value={data.title}
                             onChange={(e) => setData('title', e.target.value)}
                             placeholder="e.g., Gamecon"
+                            className={errors.title ? 'border-destructive focus-visible:ring-destructive' : ''}
                         />
+                        {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
                     </div>
 
                     <div className="space-y-2">
@@ -68,7 +70,9 @@ export function DetailsTab({
                             onChange={(e) => setData('description', e.target.value)}
                             placeholder="Provide details about your request"
                             rows={4}
+                            className={errors.description ? 'border-destructive focus-visible:ring-destructive' : ''}
                         />
+                        {errors.description && <p className="text-sm text-destructive">{errors.description}</p>}
                     </div>
                 </div>
             </section>
@@ -85,7 +89,7 @@ export function DetailsTab({
                             value={data.priority_level.toString()}
                             onValueChange={(value) => setData('priority_level', parseInt(value) as 0 | 1 | 2)}
                         >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger className={errors.priority_level ? 'w-full border-destructive focus-visible:ring-destructive' : 'w-full'}>
                                 <SelectValue placeholder="Select priority" />
                             </SelectTrigger>
                             <SelectContent>
@@ -99,10 +103,13 @@ export function DetailsTab({
                                 ))}
                             </SelectContent>
                         </Select>
+                        {errors.priority_level && <p className="text-sm text-destructive">{errors.priority_level}</p>}
+                        {errors.priority_reason && <p className="text-sm text-destructive">{errors.priority_reason}</p>}
                     </div>
 
                     <div className="space-y-2">
                         <Label>Approved By</Label>
+                        {errors.approved_by && <p className="text-sm text-destructive">{errors.approved_by}</p>}
                         <div className="flex flex-wrap gap-2">
                             {requestOptions.approvers.map((approver, index) => {
                                 const isChecked = data.approved_by.includes(approver);
@@ -137,7 +144,13 @@ export function DetailsTab({
                     <span className="ads-eyebrow">Attachments</span>
                 </div>
                 <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">Attach supporting documents, images, or files ({requestOptions.max_file_size_mb !== null ? `max ${formatMaxFileSize(requestOptions.max_file_size_mb)} each` : 'no strict limit'}).</p>
+                    <p className="text-xs text-muted-foreground">
+                        Attach supporting documents, images, or files (
+                        {requestOptions.max_file_size_mb !== null
+                            ? `max ${formatMaxFileSize(requestOptions.max_file_size_mb)} each`
+                            : 'no strict limit'}
+                        ).
+                    </p>
 
                     <label
                         htmlFor="file-upload"
@@ -145,7 +158,10 @@ export function DetailsTab({
                     >
                         <Paperclip size={20} className="mb-2 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Click to attach files</span>
-                        <span className="mt-1 text-xs text-muted-foreground">JPG, PNG, PDF, DOC, XLSX, PPTX {requestOptions.max_file_size_mb !== null ? `up to ${formatMaxFileSize(requestOptions.max_file_size_mb)}` : ''}</span>
+                        <span className="mt-1 text-xs text-muted-foreground">
+                            JPG, PNG, PDF, DOC, XLSX, PPTX{' '}
+                            {requestOptions.max_file_size_mb !== null ? `up to ${formatMaxFileSize(requestOptions.max_file_size_mb)}` : ''}
+                        </span>
                         <input
                             id="file-upload"
                             type="file"

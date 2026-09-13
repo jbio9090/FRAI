@@ -444,11 +444,14 @@ SYMTPROMPT;
             case 'check_facility_availability': {
                 $args = $parsedArguments;
 
+                // Enable cross-facility conflict detection to catch bookings
+                // in other facilities (e.g., MPH 6C vs MPHC 6C)
                 $conflicts = RequestModel::conflicting(
                     (int) ($args['facility_id'] ?? 0),
                     $args['date'] ?? null,
                     $args['start_time'] ?? null,
                     $args['end_time'] ?? null,
+                    true,  // crossFacility: detect conflicts even with different facility_id
                 )->with('user')->get();
 
                 $toolResult = [
@@ -706,20 +709,20 @@ SYMTPROMPT;
             'has_pending_conflicts' => ! empty($request->pending_conflict_rf_ids),
             'has_approved_conflicts' => ! empty($request->approved_conflict_rf_ids),
             'conflicting_requests' => \App\Models\RequestFacility::whereIn('id', array_merge(
-        $request->pending_conflict_rf_ids ?? [],
-        $request->approved_conflict_rf_ids ?? []
-    ))
-    ->with(['facility', 'request'])
-    ->get()
-    ->map(fn ($rf) => [
-        'title' => $rf->request?->title,
-        'facility_name' => $rf->facility?->name ?? 'unknown',
-        'date_requested' => $rf->date_requested,
-        'time_start' => $rf->time_start,
-        'time_end' => $rf->time_end,
-        'status' => $rf->status ?? 'unknown',
-    ])
-    ->values(),
+                $request->pending_conflict_rf_ids ?? [],
+                $request->approved_conflict_rf_ids ?? []
+            ))
+                ->with(['facility', 'request'])
+                ->get()
+                ->map(fn ($rf) => [
+                    'title' => $rf->request?->title,
+                    'facility_name' => $rf->facility?->name ?? 'unknown',
+                    'date_requested' => $rf->date_requested,
+                    'time_start' => $rf->time_start,
+                    'time_end' => $rf->time_end,
+                    'status' => $rf->status ?? 'unknown',
+                ])
+                ->values(),
         ];
     }
 
@@ -3156,7 +3159,7 @@ SYMTPROMPT;
 
                 foreach ($bookingsForValidation as $booking) {
                     $dateOnly = Carbon::parse($booking['date'])->format('Y-m-d');
-                    $facilityRequest->requestFacilities()->create([
+                    $requestFacility = $facilityRequest->requestFacilities()->create([
                         'facility_id' => $booking['facility_id'],
                         'date_requested' => $dateOnly,
                         'time_start' => $booking['time_start'],
@@ -3186,6 +3189,7 @@ SYMTPROMPT;
                             $isBorrowed = $sourceFacilityId !== null && $sourceFacilityId !== (int) $booking['facility_id'];
 
                             $facilityRequest->equipment()->attach($equipment['equipment_id'], [
+                                'request_facility_id' => $requestFacility->id,
                                 'quantity_needed' => $equipment['quantity_needed'],
                                 'is_borrowed' => $isBorrowed,
                                 'source_facility_id' => $isBorrowed ? $sourceFacilityId : null,
@@ -3237,6 +3241,12 @@ SYMTPROMPT;
                         \Log::warning('Failed to clean temp directory: '.$e->getMessage());
                     }
                 }
+
+                // Store conflict arrays + backfill the pending side, exactly
+                // like web submissions do. Runs before priority holds below:
+                // holds exclude rows from scans, so detecting after would
+                // come back empty.
+                app(\App\Services\RequestService::class)->detectAndStoreConflicts($facilityRequest->fresh());
 
                 if ($priorityLevel > 0) {
                     try {

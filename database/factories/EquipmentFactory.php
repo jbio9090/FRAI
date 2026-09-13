@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\Facility;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -17,10 +16,11 @@ class EquipmentFactory extends Factory
      */
     public function definition(): array
     {
+        // NOTE: equipments has no facility_id column; facility linkage lives
+        // in the facility_equipment pivot — attach explicitly in tests.
         return [
             'name' => fake()->name(),
             'quantity' => fake()->randomDigit(),
-            'facility_id' => Facility::factory(),
         ];
     }
 }

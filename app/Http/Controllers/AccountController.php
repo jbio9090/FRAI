@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\AuditEvent;
 use App\Enums\RequestStatus;
 use App\Models\AuditLog;
-use App\Models\Request as FacilityRequest;
 use App\Models\User;
+use App\Services\RequestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +18,10 @@ use Spatie\Permission\Models\Role;
 
 class AccountController extends Controller
 {
+    public function __construct(
+        protected RequestService $requestService,
+    ) {}
+
     public function index(Request $request)
     {
         $perPage = (int) $request->input('per_page', 10);
@@ -53,6 +57,7 @@ class AccountController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->roles->first()?->name,
+            'position' => $user->position,
             'profile' => $user->profile,
             'is_active' => $user->is_active,
             'created_at' => $user->created_at,
@@ -92,24 +97,23 @@ class AccountController extends Controller
         $requestSort = $request->input('request_sort', 'created_at');
         $requestOrder = $request->input('request_order', 'desc');
 
-        $requests = FacilityRequest::with([
-            'user',
-            'facilities',
-            'facility',
-            'requestFacilities.facility',
-            'requestFacilities.equipment',
-            'equipment',
-            'comments.user',
-            'files',
-        ])
-            ->where('user_id', $user->id)
-            ->when($requestStatus, fn ($q) => $q->where('status', $requestStatus))
-            ->when($requestSearch, fn ($q) => $q->where(function ($sq) use ($requestSearch) {
-                $sq->where('title', 'ILIKE', "%{$requestSearch}%")
-                    ->orWhere('description', 'ILIKE', "%{$requestSearch}%");
-            }))
-            ->orderBy($requestSort, $requestOrder)
-            ->paginate(15)->appends($request->query());
+        $statusValues = $requestStatus
+            ? collect(explode(',', $requestStatus))
+                ->map(fn ($s) => RequestStatus::tryFromFilter($s))
+                ->filter()
+                ->values()
+                ->all()
+            : null;
+
+        $requests = $this->requestService->getForUser(
+            $user->id,
+            $statusValues,
+            $request->input('filter', 'this_week'),
+            $requestSearch,
+            $requestSort,
+            $requestOrder,
+            15
+        );
 
         $auditEvents = collect(AuditEvent::cases())
             ->filter(fn ($c) => $c !== AuditEvent::Unknown)
@@ -117,7 +121,7 @@ class AccountController extends Controller
             ->values();
 
         $requestStatuses = collect(RequestStatus::cases())
-            ->map(fn ($c) => ['value' => $c->value, 'label' => $c->value])
+            ->map(fn ($c) => ['value' => strtolower($c->name), 'label' => $c->value])
             ->values();
 
         return Inertia::render('accounts/detail', [
@@ -127,6 +131,7 @@ class AccountController extends Controller
                 'email' => $user->email,
                 'role' => $user->roles->first()?->name,
                 'roles' => $user->roles->pluck('name')->toArray(),
+                'position' => $user->position,
                 'profile' => $user->profile,
                 'is_active' => $user->is_active,
                 'created_at' => $user->created_at?->toISOString(),
@@ -165,6 +170,7 @@ class AccountController extends Controller
                 },
             ],
             'profile' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'position' => 'nullable|string|max:100',
         ]);
 
         $actor = $request->user();
@@ -187,6 +193,7 @@ class AccountController extends Controller
         $tempPassword = Str::random(10);
         $validated['password'] = Hash::make($tempPassword);
         $validated['force_password_change'] = true;
+        $validated['position'] = trim((string) ($validated['position'] ?? '')) ?: null;
 
         $user = User::create($validated);
         $user->assignRole($role->name);
@@ -203,7 +210,7 @@ class AccountController extends Controller
      * Create multiple accounts from a CSV-parsed payload.
      *
      * Expected request body:
-     *   accounts: [{ name, email, role }, ...]
+     *   accounts: [{ name, email, role, position? }, ...]
      *
      * Returns flash data with:
      *   batch_results.created  – successfully created accounts + temp passwords
@@ -224,6 +231,7 @@ class AccountController extends Controller
                     }
                 },
             ],
+            'accounts.*.position' => 'nullable|string|max:100',
         ]);
 
         $created = [];
@@ -283,6 +291,7 @@ class AccountController extends Controller
                         'email' => $account['email'],
                         'password' => Hash::make($tempPassword),
                         'force_password_change' => true,
+                        'position' => trim((string) ($account['position'] ?? '')) ?: null,
                     ]);
 
                     if ($role) {
@@ -328,6 +337,7 @@ class AccountController extends Controller
                 },
             ],
             'profile' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'position' => 'nullable|string|max:100',
         ]);
 
         $actor = $request->user();
@@ -361,6 +371,7 @@ class AccountController extends Controller
         $updateData = [
             'name' => $validated['name'],
             'email' => $validated['email'],
+            'position' => trim((string) ($validated['position'] ?? '')) ?: null,
         ];
 
         if (! empty($validated['password'])) {

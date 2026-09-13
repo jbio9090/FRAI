@@ -28,6 +28,7 @@ class User extends Authenticatable
         'email',
         'password',
         'profile',
+        'position',
         'is_active',
         'force_password_change',
     ];

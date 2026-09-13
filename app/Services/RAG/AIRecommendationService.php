@@ -106,19 +106,19 @@ If ALL rules are satisfied, default to Approved.
 VALID STATUSES (choose exactly one): {$validStatuses}
 
 Respond using ONLY this JSON structure — no other text:
-{"status": "<valid status>", "reason": "<one sentence summarising the decisive rule or overall result>"}
+{"status": "<valid status>", "reason": "<single plain paragraph, max 3 short sentences and about 60 words, stating only the decisive outcome in plain language. No bullets, numbering, markdown, line breaks, rule quotes, or extra detail>"}
 PROMPT;
 
         $raw = $this->ai->chat([
             [
                 'role' => 'system',
-                'content' => 'You are a JSON-only response bot. You must output a single valid JSON object and absolutely nothing else. No explanation, no markdown, no preamble.',
+                'content' => 'You are a JSON-only response bot. You must output a single valid JSON object and absolutely nothing else. No explanation, no markdown, no preamble. Keep the reason value concise: one plain paragraph, max 3 short sentences.',
             ],
             [
                 'role' => 'user',
                 'content' => $prompt,
             ],
-        ], ['timeout' => config('ai.recommendation.timeout', 120)]);
+        ], ['timeout' => config('ai.recommendation.timeout', 120), 'max_tokens' => 250]);
 
         return $this->parseResponse($raw);
     }
@@ -187,20 +187,6 @@ PROMPT;
     {
         $lines = [];
 
-        // --- Temporal verdict ---
-        $daysUntil = now()->startOfDay()->diffInDays(
-            \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
-            false
-        );
-
-        if ($daysUntil < 0) {
-            $lines[] = '- TEMPORAL: This facility date is in the PAST. This booking cannot be approved.';
-        } elseif ($daysUntil < 3) {
-            $lines[] = "- TEMPORAL: This facility date is only {$daysUntil} day(s) from today. The 3-day advance rule is VIOLATED. This booking must be DENIED.";
-        } else {
-            $lines[] = "- TEMPORAL: This facility date is {$daysUntil} days from today. The 3-day advance rule is NOT violated.";
-        }
-
         // --- Conflict signals scoped to this RequestFacility ---
         $approvedConflictRfIds = $request->approved_conflict_rf_ids ?? [];
         $pendingConflictRfIds = $request->pending_conflict_rf_ids ?? [];
@@ -245,16 +231,7 @@ PROMPT;
      */
     private function buildRequestContext(FacilityRequest $request, RequestFacility $rf): string
     {
-        $daysUntil = now()->startOfDay()->diffInDays(
-            \Carbon\Carbon::parse($rf->date_requested)->startOfDay(),
-            false
-        );
-
-        $urgency = $daysUntil < 0
-            ? 'PAST DATE'
-            : "({$daysUntil} days from today)";
-
-        $facilityLine = "{$rf->facility->name} on {$rf->date_requested} {$urgency} from {$rf->time_start} to {$rf->time_end}";
+        $facilityLine = "{$rf->facility->name} on {$rf->date_requested} from {$rf->time_start} to {$rf->time_end}";
 
         // Parent-level equipment applies to all bookings in the request.
         $equipment = $request->equipment->map(
@@ -364,7 +341,7 @@ PROMPT;
                 if (stripos($raw, $case->value) !== false) {
                     return [
                         'status' => $case,
-                        'reason' => trim($raw),
+                        'reason' => self::toConciseParagraph($raw),
                     ];
                 }
             }
@@ -379,7 +356,42 @@ PROMPT;
 
         return [
             'status' => $status,
-            'reason' => $decoded['reason'] ?? '',
+            'reason' => self::toConciseParagraph((string) ($decoded['reason'] ?? '')),
         ];
+    }
+
+    /**
+     * Normalize any AI-provided reason into a single plain paragraph:
+     * no markdown, bullets, numbering, or line breaks, capped at
+     * 3 sentences / ~70 words so cards, rollups, and emails stay scannable.
+     */
+    public static function toConciseParagraph(string $text, int $maxSentences = 3, int $maxWords = 70): string
+    {
+        $text = preg_replace('/```.*?```/s', ' ', $text) ?? $text;
+        $text = str_replace(['`', '**', '__', '##', '#'], ' ', $text);
+        $text = preg_replace('/^\s*(?:[-*•\d]+[.)\]:-]?\s+)+/m', ' ', $text) ?? $text;
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+        $text = trim($text, " \t\n\r\0\x0B-\"'");
+
+        if ($text === '') {
+            return '';
+        }
+
+        $sentences = preg_split('/(?<=[.!?])\s+/', $text) ?: [$text];
+        $sentences = array_values(array_filter(array_map('trim', $sentences)));
+
+        if (count($sentences) > $maxSentences) {
+            $sentences = array_slice($sentences, 0, $maxSentences);
+        }
+
+        $paragraph = implode(' ', $sentences);
+        $words = preg_split('/\s+/', $paragraph) ?: [];
+
+        if (count($words) > $maxWords) {
+            $paragraph = implode(' ', array_slice($words, 0, $maxWords));
+            $paragraph = rtrim($paragraph, " \t-–—:;,").'.';
+        }
+
+        return $paragraph;
     }
 }

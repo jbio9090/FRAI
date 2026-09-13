@@ -176,7 +176,7 @@ function CommentEntry({ log }: { log: AuditLog }) {
                     </span>
                 </div>
                 {body && (
-                    <p className="text-sm text-foreground/80 leading-relaxed mt-0.5">{body}</p>
+                    <p className="text-sm text-foreground/80 leading-relaxed mt-0.5 break-words">{body}</p>
                 )}
             </div>
         </div>
@@ -202,7 +202,7 @@ function TagEntry({ log }: { log: AuditLog }) {
                 {tags.length > 0
                     ? tags.map((tag, i) => <TagPill key={tag} label={tag} index={i} />)
                     : log.description && (
-                        <span className="text-sm text-muted-foreground">{log.description}</span>
+                        <span className="text-sm text-muted-foreground break-words">{log.description}</span>
                     )}
                 <span className="text-xs text-muted-foreground ml-auto shrink-0">
                     {moment(log.created_at).fromNow()}
@@ -366,7 +366,7 @@ function SystemEntry({ log }: { log: AuditLog }) {
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-semibold text-sm text-foreground">{name}</span>
                     {log.description ? (
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground break-words">
                             {name ? log.description.replace(name, "").trim() : log.description.trim()}
                         </span>
                     ) : (

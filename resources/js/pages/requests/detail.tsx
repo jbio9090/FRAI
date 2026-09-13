@@ -24,7 +24,7 @@ import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default.';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
-import { cn } from '@/lib/utils';
+import { cn, conflictsForBooking } from '@/lib/utils';
 import { PRIORITY_ACCENT, PRIORITY_LABELS } from '@/types/request';
 import type { Request, ChosenAlternative } from '@/types/request';
 
@@ -542,27 +542,23 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                             max_quantity: eq.pivot.quantity_needed,
                                         })) ?? [];
 
-                                const approvedConflicts =
-                                    request.approved_conflicts
-                                        ?.filter((c) => c.facility_id === rf.facility_id)
-                                        ?.map((c) => ({
-                                            request_id: c.request_id,
-                                            request_title: c.request?.title ?? 'Unknown',
-                                            status: c.request?.status ?? 'Approved',
-                                            time_start: c.time_start,
-                                            time_end: c.time_end,
-                                        })) ?? [];
+                                const approvedConflicts = conflictsForBooking(rf, request.approved_conflicts).map((c) => ({
+                                    request_id: c.request_id,
+                                    request_title: c.request?.title ?? 'Unknown',
+                                    status: c.request?.status ?? 'Approved',
+                                    date: c.date_requested,
+                                    time_start: c.time_start,
+                                    time_end: c.time_end,
+                                }));
 
-                                const pendingConflicts =
-                                    request.pending_conflicts
-                                        ?.filter((c) => c.facility_id === rf.facility_id)
-                                        ?.map((c) => ({
-                                            request_id: c.request_id,
-                                            request_title: c.request?.title ?? 'Unknown',
-                                            status: c.request?.status ?? 'Pending',
-                                            time_start: c.time_start,
-                                            time_end: c.time_end,
-                                        })) ?? [];
+                                const pendingConflicts = conflictsForBooking(rf, request.pending_conflicts).map((c) => ({
+                                    request_id: c.request_id,
+                                    request_title: c.request?.title ?? 'Unknown',
+                                    status: c.request?.status ?? 'Pending',
+                                    date: c.date_requested,
+                                    time_start: c.time_start,
+                                    time_end: c.time_end,
+                                }));
 
                                 const booking = {
                                     facility_id: rf.facility_id,
