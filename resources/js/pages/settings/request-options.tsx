@@ -13,7 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import DefaultLayout from '@/layout.tsx/default.';
+import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 import type { RequestOptions } from '@/types/request';
 

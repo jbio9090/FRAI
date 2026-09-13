@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import DefaultLayout from "@/layout.tsx/default.";
+import DefaultLayout from "@/layout.tsx/default";
 import { formatRequestStatus } from "@/lib/formatters";
 import {
   PROCESSING_BAR_COLOR,

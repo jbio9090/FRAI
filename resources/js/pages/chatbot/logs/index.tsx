@@ -17,7 +17,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import DefaultLayout from '@/layout.tsx/default.';
+import DefaultLayout from '@/layout.tsx/default';
 
 type LogUser = {
     id: number;

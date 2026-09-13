@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default.';
+import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 import type { AccountsDetailProps } from '@/types/auth';
 import type { Request } from '@/types/request';

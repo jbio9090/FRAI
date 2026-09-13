@@ -1,6 +1,5 @@
 import { usePage } from '@inertiajs/react';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { status, subscribe, unsubscribe as unsubscribeAction } from '@/actions/App/Http/Controllers/NotificationController';
 import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
 import { Button } from '@/components/ui/button';
 import { isPushOptedOut, setPushOptedOut } from '@/lib/pushPreferences';
@@ -25,7 +24,7 @@ async function postPushJson(url: string, body: Record<string, unknown>): Promise
 
 async function fetchPushStatus(token: string): Promise<boolean | null> {
     try {
-        const response = await fetch(status.url(), {
+        const response = await fetch(route('notification.status'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -159,7 +158,7 @@ export default function PushNotifications() {
 
     const sendTokenToServer = async (token: string, platform: string) => {
         try {
-            await postPushJson(subscribe['/push/subscribe'].url(), {
+            await postPushJson(route('notification.subscribe'), {
                 token,
                 platform,
             });
@@ -286,7 +285,7 @@ export default function PushNotifications() {
                 const { FCM } = await import('@capacitor-community/fcm');
 
                 const fcmToken = await FCM.getToken();
-                await postPushJson(unsubscribeAction.url(), {
+                await postPushJson(route('notification.unsubscribe'), {
                     token: fcmToken.token,
                 });
 
@@ -301,7 +300,7 @@ export default function PushNotifications() {
                 });
 
                 if (token) {
-                    await postPushJson(unsubscribeAction.url(), {
+                    await postPushJson(route('notification.unsubscribe'), {
                         token,
                     });
                 }

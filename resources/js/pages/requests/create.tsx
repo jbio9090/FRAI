@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import DefaultLayout from '@/layout.tsx/default.';
+import DefaultLayout from '@/layout.tsx/default';
 import { ChosenAlternativesPanel } from './create/components/ChosenAlternativesPanel';
 import { BookingActions } from './create/sections/booking-actions';
 import { DetailsTab } from './create/sections/details-tab';

@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default.';
+import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 
 type RuleEntry = {

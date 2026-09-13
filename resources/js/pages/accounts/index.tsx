@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from "@/layout.tsx/default.";
+import DefaultLayout from "@/layout.tsx/default";
 import type { User } from "@/types";
 
 interface RowUser extends User {

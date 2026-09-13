@@ -1,3 +1,4 @@
+import { Link } from '@inertiajs/react';
 import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCurrentPageContext } from '@/lib/useCurrentPageContext';
@@ -6,8 +7,6 @@ import MessageList from './components/MessageList';
 import { useChatAPI } from './hooks/useChatAPI';
 import { useMessages } from './hooks/useMessages';
 import { getCsrfToken } from './utils/csrfToken';
-import { Link } from '@/inertia';
-import { route } from '@/routes';
 
 export default function Chatbot() {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);

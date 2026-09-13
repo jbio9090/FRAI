@@ -65,7 +65,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { usePermission } from "@/hooks/use-permission";
-import DefaultLayout from "@/layout.tsx/default.";
+import DefaultLayout from "@/layout.tsx/default";
 import { cn } from "@/lib/utils";
 import wordToColor from "@/lib/wordToColor";
 
