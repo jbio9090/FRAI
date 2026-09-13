@@ -1,5 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
+import { isPushOptedOut } from '@/lib/pushPreferences';
 import '../css/app.css';
 
 const appName = import.meta.env.VITE_APP_NAME || 'FRAI';
@@ -12,8 +13,16 @@ function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | u
         return;
     }
 
+    // Per-device opt-out: never mint a fresh FCM token after the user disabled
+    // push on this browser. Otherwise getToken() would recreate one and the
+    // settings toggle would snap back to enabled.
+    if (isPushOptedOut()) {
+        return;
+    }
+
     // Register Service Worker for PWA web push notifications
-    void navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
+    void navigator.serviceWorker
+        .register('/firebase-messaging-sw.js', { scope: '/' })
         .then((reg) => {
             console.log('FCM Service Worker registered:', reg.scope);
         })

@@ -170,6 +170,7 @@ class AccountController extends Controller
                 },
             ],
             'profile' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'position' => 'nullable|string|max:100',
         ]);
 
         $actor = $request->user();
@@ -192,6 +193,7 @@ class AccountController extends Controller
         $tempPassword = Str::random(10);
         $validated['password'] = Hash::make($tempPassword);
         $validated['force_password_change'] = true;
+        $validated['position'] = trim((string) ($validated['position'] ?? '')) ?: null;
 
         $user = User::create($validated);
         $user->assignRole($role->name);
@@ -208,7 +210,7 @@ class AccountController extends Controller
      * Create multiple accounts from a CSV-parsed payload.
      *
      * Expected request body:
-     *   accounts: [{ name, email, role }, ...]
+     *   accounts: [{ name, email, role, position? }, ...]
      *
      * Returns flash data with:
      *   batch_results.created  – successfully created accounts + temp passwords
@@ -229,6 +231,7 @@ class AccountController extends Controller
                     }
                 },
             ],
+            'accounts.*.position' => 'nullable|string|max:100',
         ]);
 
         $created = [];
@@ -288,6 +291,7 @@ class AccountController extends Controller
                         'email' => $account['email'],
                         'password' => Hash::make($tempPassword),
                         'force_password_change' => true,
+                        'position' => trim((string) ($account['position'] ?? '')) ?: null,
                     ]);
 
                     if ($role) {
@@ -333,6 +337,7 @@ class AccountController extends Controller
                 },
             ],
             'profile' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'position' => 'nullable|string|max:100',
         ]);
 
         $actor = $request->user();
@@ -366,6 +371,7 @@ class AccountController extends Controller
         $updateData = [
             'name' => $validated['name'],
             'email' => $validated['email'],
+            'position' => trim((string) ($validated['position'] ?? '')) ?: null,
         ];
 
         if (! empty($validated['password'])) {

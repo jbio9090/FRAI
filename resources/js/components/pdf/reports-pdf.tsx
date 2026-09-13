@@ -50,6 +50,16 @@ const styles = StyleSheet.create({
     fontFamily: "Manrope",
   },
   // Cover
+  coverBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+    marginRight: 8,
+  },
   eyebrow: {
     fontSize: 10,
     fontWeight: 700,
@@ -787,6 +797,10 @@ export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta:
     <Document>
       {/* Cover: summary + KPIs + filters */}
       <Page size="A4" style={styles.page}>
+        <View style={styles.coverBrandRow}>
+          <Image src="/FRAI.png" style={styles.brandLogo} />
+          <Text style={styles.eyebrow}>FRAI · GSO Reports</Text>
+        </View>
         <Text style={styles.title}>
           {format(new Date(filters.start), "MMMM d, yyyy")} – {format(new Date(filters.end), "MMMM d, yyyy")}
         </Text>
