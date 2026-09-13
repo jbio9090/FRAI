@@ -1,4 +1,4 @@
-import DefaultLayout from '@/layout.tsx/default';
+import DefaultLayout from '@/layout.tsx/default.tsx';
 
 export default function ChatbotPage() {
     return (
