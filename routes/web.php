@@ -206,3 +206,13 @@ Route::prefix('/login')->group(function () {
     Route::get('/', [LoginController::class, 'show'])->name('login.show');
     Route::post('/', [LoginController::class, 'authenticate'])->name('login');
 })->middleware(['throttle:10,1', 'guest']);
+
+if (! app()->isProduction()) {
+    Route::get('/dev/error/{code}', function (int $code) {
+        abort_unless(in_array($code, [403, 404], true), 404);
+
+        return Inertia::render('Errors/Error', ['status' => $code])
+            ->toResponse(request())
+            ->setStatusCode($code);
+    })->whereIn('code', ['403', '404'])->name('dev.error');
+}
