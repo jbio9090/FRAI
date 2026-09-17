@@ -1,7 +1,8 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { FileSearch, ShieldAlert } from 'lucide-react';
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import type { SharedData } from '@/types';
 
 interface ErrorPageProps {
     status: number;
@@ -53,6 +54,12 @@ export default function Error({ status }: ErrorPageProps) {
     const copy = ERROR_COPY[status as keyof typeof ERROR_COPY] ?? { ...FALLBACK_COPY, heading: String(status) };
     const { Icon } = copy;
 
+    // Note: `auth` is only present when the `web` middleware ran before the
+    // error (e.g. a 403 inside the app). Genuine 404s match no route, so the
+    // page renders with just `status` — fall back to the login link there.
+    const { auth } = usePage<SharedData>().props;
+    const isAuthenticated = auth?.user != null;
+
     const handleGoBack = () => {
         window.history.back();
     };
@@ -75,7 +82,11 @@ export default function Error({ status }: ErrorPageProps) {
                         </div>
                         <div className="flex flex-col items-center gap-2 sm:flex-row">
                             <Button asChild>
-                                <Link href={route('dashboard')}>Back to dashboard</Link>
+                                {isAuthenticated ? (
+                                    <Link href={route('dashboard')}>Back to dashboard</Link>
+                                ) : (
+                                    <Link href={route('login.show')}>Back to login</Link>
+                                )}
                             </Button>
                             <Button variant="ghost" type="button" onClick={handleGoBack}>
                                 Go back
