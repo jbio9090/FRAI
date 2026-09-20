@@ -35,3 +35,4 @@ vite-dev.log
 /CLAUDE.md
 /AGENTS.md
 /junie/
+.claude/worktrees/analysis-worktree/

@@ -1,0 +1,260 @@
+## Frontend chatbot UI
+
+resources/js/components/ChatbotSessionModal.tsx — Modal for viewing/managing chat session messages
+  — props: none listed; hooks: useMessages; exports: renders Inertia page component for session modal
+
+resources/js/components/chatbot/chatbot.tsx — Main chatbot component
+  — props/page_context: receives pageContext from useCurrentPageContext hook; hooks: useChatAPI, useMessages, useEffect (load session, scroll); exports: chat UI with message list, input, context viewer in dev mode
+
+resources/js/components/chatbot/components/ChatInput.tsx — Chat input component
+  — props: value (input state), onChange, onKeyPress, onSend; hooks: none; exports: text input with send on Enter, disabled state, placeholder
+
+resources/js/components/chatbot/components/MessageList.tsx — Message display list
+  — props: messages, messagesEndRef; hooks: none; exports: renders message bubbles with role-based styling
+
+resources/js/components/chatbot/components/LoadingIndicator.tsx — Loading spinner
+  — props: none; hooks: none; exports: simple spinner while AI is thinking
+
+resources/js/components/chatbot/components/TypingMessage.tsx — Typing indicator
+  — props: none; hooks: none; exports: shows "assistant is typing..." UI
+
+resources/js/components/chatbot/components/TypingText.tsx — Typing text animation
+  — props: none; hooks: none; exports: streams text tokens as they arrive
+
+resources/js/components/chatbot/utils/csrfToken.ts — CSRF token utility
+  — props: none; hooks: none; exports: getCsrfToken function for API requests
+
+resources/js/components/chatbot/services/chatService.ts — Chat messaging service
+  — props: ChatRequest payload (messages, participant_count, booking_context, faq_mode, page_context); hooks: sendChatMessage, sendChatMessageStream; exports: sendChatMessage (POST /api.chat), sendChatMessageStream (POST /chat/stream), extractBookingPayloadFromText, extractNavigationSuggestion
+
+resources/js/components/chatbot/services/requestService.ts — Request creation from chat
+  — props: CreateRequestPayload; hooks: none; exports: createRequest function for submitting requests from chat
+
+resources/js/components/chatbot/types.ts — TypeScript types for chatbot
+  — props: Message, ChatRequest, CreateRequestPayload types; hooks: none; exports: typed interfaces for chat messages and payloads
+
+resources/js/components/chatbot/hooks/useChatAPI.ts — Main chat API hook
+  — props: none (React hook); hooks: useState, useCallback; exports: isLoading, error, sendMessage, submitRequest, detectAndSubmitRequest, clearError
+
+resources/js/components/chatbot/hooks/useMessages.ts — Message state hook
+  — props: none; hooks: useState; exports: messages, addMessage, setMessages, clearMessages
+
+## Frontend state / hooks
+
+resources/js/hooks/use-darkMode.ts — Dark mode toggle
+  — props: none; hooks: useState, useEffect; exports: isDarkMode, toggleDarkMode
+
+resources/js/hooks/use-mobile.ts — Mobile detection
+  — props: none; hooks: useState, useEffect; exports: isMobile, setIsMobile
+
+resources/js/hooks/use-permission.ts — Permission check
+  — props: none; hooks: useEffect; exports: user permissions, role checks
+
+resources/js/hooks/use-alternatives.ts — Alternatives management
+  — props: none; hooks: useState, useEffect; exports: alternatives state, refetch
+
+resources/js/hooks/use-chosen-alternatives.ts — Chosen alternatives for rescheduled requests
+  — props: requestId, enabled; hooks: useState, useEffect, useCallback; exports: chosenAlternatives, loading, error, refetch
+
+resources/js/lib/utils.ts — General utility functions
+  — props: none; hooks: none; exports: formatters, date helpers, string utilities
+
+resources/js/lib/formatters.ts — Value formatting utilities
+  — props: none; hooks: none; exports: formatCurrency, formatDate, etc.
+
+resources/js/lib/downloadCSV.ts — CSV download utility
+  — props: none; hooks: none; exports: downloadCSV function
+
+resources/js/lib/getInitials.ts — Initials extraction
+  — props: none; hooks: none; exports: getInitials function
+
+resources/js/lib/wordToColor.ts — Color assignment from words
+  — props: none; hooks: none; exports: wordToColor function
+
+resources/js/lib/report-palette.ts — Color palette for dataviz
+  — props: none; hooks: none; exports: palette configuration
+
+resources/js/lib/pushPreferences.ts — Push notification preferences
+  — props: none; hooks: none; exports: preference settings
+
+## Routing & page structure
+
+resources/js/pages/chatbot/chatbot.tsx — Chatbot page
+  — props: none directly; uses useCurrentPageContext, route() from Ziggy; hooks: useEffect (load session, load context); exports: renders chatbot UI at /chatbot
+
+resources/js/pages/dashboard.tsx — Dashboard page
+  — props: breadcrumbs, auth, labeledBreadcrumb, flash; hooks: useEffect (apply theme, show flash); exports: dashboard layout with sidebar, breadcrumbs, toaster
+
+resources/js/pages/requests/create.tsx — Request creation page
+  — props: requestOptions from page props; hooks: usePage, useChosenAlternatives; exports: multi-step form for creating facility requests
+
+resources/js/pages/requests/create/sections/schedule-section.tsx — Schedule section of create form
+  — props: requestOptions (booking window, days, step); hooks: none; exports: date/time picker UI
+
+resources/js/pages/requests/create/sections/booking-actions.tsx — Booking actions
+  — props: requestOptions; hooks: none; exports: approve, reject, reschedule actions
+
+resources/js/pages/requests/create/sections/details-tab.tsx — Details tab
+  — props: none; hooks: none; exports: request details form
+
+resources/js/pages/requests/create/sections/equipment-section.tsx — Equipment selection
+  — props: requestOptions; hooks: none; exports: equipment picker with facility assignments
+
+resources/js/pages/requests/create/sections/external-equipment.tsx — External equipment
+  — props: none; hooks: none; exports: external equipment handling
+
+resources/js/pages/requests/create/sections/borrow-panel.tsx — Borrow equipment panel
+  — props: none; hooks: none; exports: borrow equipment from other facilities
+
+resources/js/pages/accounts/index.tsx — Accounts management page
+  — props: none; hooks: useEffect; exports: list of accounts
+
+resources/js/pages/accounts/detail.tsx — Account detail page
+  — props: user/id; hooks: useEffect; exports: account details
+
+resources/js/pages/facilities/index.tsx — Facilities list page
+  — props: none; hooks: useEffect; exports: facilities listing
+
+resources/js/pages/facilities/detail.tsx — Facility detail page
+  — props: facility/id; hooks: useEffect; exports: facility details
+
+resources/js/pages/equipments/index.tsx — Equipment list page
+  — props: none; hooks: useEffect; exports: equipment listing
+
+resources/js/pages/rules/index.tsx — Rules/FAQ management page
+  — props: policies, faqs from page props; hooks: useEffect; exports: rules management UI
+
+resources/js/pages/settings/index.tsx — Settings page
+  — props: none; hooks: useEffect; exports: system settings
+
+resources/js/pages/settings/request-options.tsx — Request options settings
+  — props: requestOptions; hooks: useEffect; exports: admin settings for booking window, approvers, etc.
+
+resources/js/pages/welcome.tsx — Welcome page
+  — props: none; hooks: useEffect; exports: welcome landing page
+
+resources/js/pages/errors/Error.tsx — Error page
+  — props: status; hooks: useEffect; exports: error page rendering
+
+resources/js/routes/chat/index.ts — Chat route definitions (Ziggy)
+  — props/params: route definitions for chat.facilities, chat.equipment, chat.session; exports: Ziggy route object with facilities, equipment, session
+
+resources/js/routes/chat/session/index.ts — Chat session route definitions
+  — props/params: get, clear; exports: session route definitions (chat.session.get, chat.session.clear)
+
+resources/js/routes/api/index.ts — API route definitions
+  — props/params: page, chat, db; exports: API routes (api.chat, api.db.create.request)
+
+resources/js/routes/api/page/index.ts — API page context route
+  — props/params: page context; exports: route('api.page.context')
+
+resources/js/ziggy.js — Ziggy JS route definitions (Laravel → JS)
+  — props: all Laravel route names converted to JS; hooks: none; exports: route() function for all web routes
+
+## Backend chat pipeline
+
+app/Http/Controllers/ChatController.php — Main chat controller
+  — props/params: receives messages, page_context from Inertia request; hooks: sessionCacheKey, pageContextCacheKey, faqStateCacheKey, loadSession, saveSession, clearSession, getServerPageContext, getFaqState, saveFaqState, clearFaqState; exports: chat() (POST /chat), stream() (POST /chat/stream), getSession(), newSession(), testCsrf(), models(), latestRequests(), rulesList(), facilitiesList(), equipmentList(), uploadFile(), createRequestApi()
+
+  — Session cache keys (TTL: 15 min = SESSION_TTL_MINUTES):
+    - chat_session_v2_{user_id} — stores last 10 messages per session
+    - chat_page_context_{user_id} — cached page context with fingerprint
+    - chat_faq_state_v2_{user_id} — FAQ state during clarification flow
+
+  — Cache TTL: 15 minutes (SESSION_TTL_MINUTES private constant)
+
+  — AI provider: OpenRouterClient (class name) but configured provider is NVIDIA (config/ai.php: provider => 'nvidia', model => 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b')
+
+  — Tools available to AI: get_page_context, get_request_details, check_facility_availability, get_suggested_alternatives, get_my_permissions, suggest_navigation
+
+  — Cache keys referenced in frontend:
+    - chat_session_{user_id}
+    - chat_faq_state_{user_id}
+    - 15-minute TTL
+
+app/Services/AI/OpenRouterClient.php — AI client class
+  — props/params: config from config/ai.php (provider, model, api_key, base_url); hooks: chat(), chatWithTools(), chatResponse(), streamChat(), providerName(), model(), baseUrl(), apiKey(), isConfigured(), buildChatPayload(), doChatRequest(), extractToolCalls(); exports: configured model nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b, provider NVIDIA, endpoint https://integrate.api.nvidia.com/v1, chat template kwargs for thinking enabled
+
+app/Services/RAG/FaqMatchingService.php — FAQ matching service
+  — props/params: config from ai.faq.*; hooks: match(), retrieveCandidates(), suggestNearMatch(), findByQuestion(); exports: lexical/semantic FAQ matching, rule-based answers
+
+app/Services/RequestService.php — Request business logic
+  — props/params: request operations; hooks: detectAndStoreConflicts(), findConflictingLowerPriorityRequests(), putOnHold(), notifyOnHold(); exports: request creation, conflict detection, priority-based hold/reschedule
+
+app/Services/AlternativeRecommendationService.php — Alternative recommendations
+  — props/params: alternative facility/time suggestions; hooks: findAlternatives(); exports: suggested alternatives for rescheduled requests
+
+app/Services/PageContextService.php — Page context service
+  — props/params: current page context; hooks: getCurrentPageContext(), getFacilities(), getEquipment(); exports: page capability map, facility/equipment lists
+
+## Logging / context infrastructure
+
+app/Http/Middleware/HandleInertiaRequests.php — Inertia request middleware
+  — props/params: shares requestOptions, response metadata; hooks: handleInertiaRequest(); exports: Inertia response enhancement, requestOptions shared to all pages
+
+resources/js/lib/richPageContext.ts — Rich page context collection
+  — props: ClientPageContext interface (url, path, route, component, title, headings, active_tabs, visible_buttons, visible_tables, visible_content, forms, rich, requestsScope); hooks: none; exports: collectPageContext() function for gathering page data
+
+resources/js/lib/useCurrentPageContext.ts — React hook for page context
+  — props: none; hooks: usePage, collectPageContext; exports: page context data via usePage() + collectPageContext()
+
+resources/js/components/chatbot/utils/pageContext.ts — Client page context
+  — props: ClientPageContext interface; hooks: none; exports: collectPageContext() for browser-side page data
+
+resources/js/components/chatbot/hooks/useChatAPI.ts — Uses collectPageContext (line 5): imports and calls collectPageContext() to gather current page data for AI chat requests
+
+## Shared props / middleware
+
+resources/js/pages/app.tsx — Inertia app bootstrap
+  — props: shared props across all pages; hooks: useEffect; exports: Inertia app configuration with Ziggy routes
+
+routes/web.php — Laravel web routes
+  — props/params: all route definitions with names (dashboard, requests.index, requests.detail, chatbot, api.chat, chat.stream, chat.session.get, chat.session.clear, etc.); hooks: Route::get(), Route::post(), middleware(); exports: named routes for all public endpoints
+
+config/ai.php — AI configuration
+  — props/params: provider (nvidia), nvidia.api_key, nvidia.model (nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b), generate.timeout, generate.temperature, generate.max_tokens, faq.top_k, faq.lexical_threshold, faq.near_match_ratio_min, recommendation.rule_limit, recommendation.timeout, embedding.model, embedding.dimensions; hooks: none; exports: AI provider and model configuration
+
+database/migrations/2026_08_01_000001_create_settings_table.php — Settings storage
+  — props/params: settings table with key/value JSON; hooks: none; exports: stores request options (approvers, booking window, days, step, min_advance_days)
+
+App\Models\Setting — Settings model
+  — props/params: key (PK), value (array cast); hooks: none; exports: single accessor for request options
+
+App\Services\RequestSettingsService.php — Request settings service
+  — props/params: all(), approvers(), bookingWindow(), minAdvanceDays(), update(); hooks: none; exports: single source of truth for request options, cached via request_options.settings key
+
+resources/js/types/request.ts — Request types
+  — props/params: BookingWindow, RequestOptions types; hooks: none; exports: typed interfaces used by create page and chatbot
+
+resources/js/components/app-sidebar.tsx — Sidebar component
+  — props: none listed; hooks: useEffect; exports: navigation sidebar with collapsible state
+
+resources/js/components/theme-toggle.tsx — Theme toggle
+  — props: none; hooks: useEffect; exports: light/dark theme switching
+
+resources/js/components/ui/* — shadcn/ui component library
+  — props: varies by component; hooks: varies; exports: reusable UI primitives (button, input, dialog, etc.)
+
+## Gaps
+
+- useBookingFlow: index previously noted it doesn't exist. Confirmed: the multi-step booking flow logic lives in ChatController.php (session management with PROMPT_VERSION, cache keys with 15-min TTL) and RequestSettingsService (shared to frontend via HandleInertiaRequests). No dedicated `use-booking-flow.ts` hook exists; the chatbot derives booking window options and minAdvanceDays from RequestSettingsService::all() shared as `requestOptions` page prop.
+
+- route('chat.stream') now registered: confirmed registered in routes/web.php line 190-196 under Route::prefix('/chat')->group. The frontend in chatService.ts line 121 calls route('chat.stream') for streaming connections.
+
+- OpenRouterClient naming vs NVIDIA provider: class name is OpenRouterClient but configured provider is NVIDIA (config/ai.php: provider => 'nvidia'). The model defaults to nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b. The testCsrf endpoint reports 'provider' => 'nvidia' and 'configured_model' => 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b'. Naming mismatch remains: class says "OpenRouter" but actual provider is NVIDIA.
+
+- RuleIndexingService: NOT a stub. Functional service at app/Services/RAG/RuleIndexingService.php that indexes rule embeddings into pgvector when both embedding model is configured AND database driver is pgsql. Checks useVectorSearch() which requires embedder->isConfigured() && config('database.default') === 'pgsql'. Dispatches via IndexRuleEmbedding job from RulesController. Falls back to priority-ordered rule selection when vector search is not available.
+
+- resources/js/layout.tsx/default..tsx: typo in task description. Real path is resources/js/layout.tsx/default.tsx. Contains DefaultLayout component with sidebar, breadcrumbs, theme toggle, and Chatbot inclusion.
+
+- page_context / get_page_context usage: used in ChatController.php getContextAwareSystemPrompt() method (line 242) as a tool available to the AI. Frontend calls route('api.page.context') to fetch page context from PageContextController at /api/page-context. The tool is injected into the AI's system prompt and available via get_page_context function call. Also used in resources/js/components/chatbot/utils/pageContext.ts (client-side collection) and resources/js/lib/useCurrentPageContext.ts (React hook).
+
+- Chat session cache keys: chat_session_{user_id}, chat_faq_state_{user_id} with 15-minute TTL, plus PROMPT_VERSION prefix (v2) for automatic invalidation on deploy.
+
+- No dedicated booking flow hook: the chatbot guided flow uses RequestSettingsService data (booking window, min advance days) shared as `requestOptions` page prop, not a separate useBookingFlow hook.
+
+ADDED: All entries verified and created in index
+REMOVED: N/A (index was empty, now populated)
+CHANGED: N/A
+UNVERIFIED: N/A (all entries verified from code)
+NEW GAPS: useBookingFlow logic lives in ChatController.php + RequestSettingsService (no separate hook); OpenRouterClient vs NVIDIA provider naming mismatch; route('chat.stream') now registered; RuleIndexingService is functional not stub; layout.tsx path typo; page_context/tool availability confirmed; cache keys and TTL confirmed
