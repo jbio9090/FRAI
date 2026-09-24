@@ -1,5 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
+import { getPushServiceWorkerRegistration, resolveVapidKey } from '@/lib/firebasePush';
 import { isPushOptedOut } from '@/lib/pushPreferences';
 import '../css/app.css';
 
@@ -30,8 +31,7 @@ function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | u
     // Register Service Worker for PWA web push notifications, then mint the
     // token against that exact registration so foreground and background push
     // share it.
-    void navigator.serviceWorker
-        .register('/firebase-messaging-sw.js', { scope: '/' })
+    void getPushServiceWorkerRegistration()
         .then((registration) => {
             console.log('FCM Service Worker registered:', registration.scope);
             initForegroundPush(firebaseConfig, registration);
@@ -48,14 +48,19 @@ function initForegroundPush(firebaseConfig: Record<string, unknown>, serviceWork
 
             const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
             const messaging = getMessaging(app);
+            const vapidKey = resolveVapidKey(firebaseConfig);
 
-            try {
-                await getToken(messaging, {
-                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-                    serviceWorkerRegistration,
-                });
-            } catch (err) {
-                console.warn('FCM getToken init failed — foreground push may not fire:', err);
+            if (!vapidKey) {
+                console.warn('FCM getToken init skipped — no VAPID key in server config or build env.');
+            } else {
+                try {
+                    await getToken(messaging, {
+                        vapidKey,
+                        serviceWorkerRegistration,
+                    });
+                } catch (err) {
+                    console.warn('FCM getToken init failed — foreground push may not fire:', err);
+                }
             }
 
             onMessage(messaging, (payload) => {

@@ -196,7 +196,9 @@ const messaging = firebase.messaging();
 
 | Variable | Where Used | Description |
 |---|---|---|
-| `FIREBASE_CREDENTIALS` | Laravel backend | Path to Firebase service account JSON (e.g. `storage/app/firebase-auth.json`) — resolved relative to project root by `kreait/laravel-firebase`. On Render Docker use the absolute `/etc/secrets/firebase-auth.json` (see [Render secret files](#secret-files-on-render-docker)) |
+| `FIREBASE_CREDENTIALS` | Laravel backend | Path to Firebase service account JSON (e.g. `storage/app/firebase-auth.json`) — resolved relative to project root. Backslashes are normalized to `/` by `config/firebase.php`. On Render Docker use the Secret File path `/etc/secrets/firebase-auth.json` — `entrypoint.sh` copies it into `storage/app/` before `config:cache` (see [Secret files on Render](#secret-files-on-render-docker)) |
+| `FIREBASE_CREDENTIALS_JSON` | Laravel backend (alternative) | Raw service-account JSON — no file needed. Takes precedence over the path |
+| `FIREBASE_CREDENTIALS_BASE64` | Laravel backend (alternative) | Base64-encoded service-account JSON — avoids newline issues in env vars |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Laravel backend (fallback) | Same file, fallback path |
 | `VITE_FIREBASE_API_KEY` | Frontend + Inertia | Firebase project API key |
 | `VITE_FIREBASE_AUTH_DOMAIN` | Frontend + Inertia | Firebase auth domain |
@@ -291,8 +293,9 @@ Queue worker `FAIL` lines don't print the exception. To see it:
 ### Secret Files on Render (Docker)
 1. Render Dashboard → service → **Environment** → **Secret Files** → add file `firebase-auth.json` (service account JSON contents).
 2. It is mounted at `/etc/secrets/firebase-auth.json`.
-3. Set `FIREBASE_CREDENTIALS=/etc/secrets/firebase-auth.json` (and optionally `GOOGLE_APPLICATION_CREDENTIALS` to the same value). Because the deploy runs `config:cache`, redeploy after changing these.
-4. Ensure `www-data` can read it (group `1000`, see above).
+3. Set `FIREBASE_CREDENTIALS=/etc/secrets/firebase-auth.json` (and optionally `GOOGLE_APPLICATION_CREDENTIALS` to the same value). `entrypoint.sh` copies it to `storage/app/firebase-auth.json` (owned by `www-data`) before `config:cache`, and warns (without aborting) if the key is missing or unreadable. Because the deploy runs `config:cache`, redeploy after changing these. Alternative: skip the file entirely and set `FIREBASE_CREDENTIALS_JSON` (raw JSON) or `FIREBASE_CREDENTIALS_BASE64`.
+4. Env-var checklist for push on Render: all `VITE_FIREBASE_*` (runtime config for Inertia props + `/push/sw-config.js`), `FIREBASE_CREDENTIALS*`, `APP_URL` (must be the public prod URL — it is baked into notification payloads and signed URLs at dispatch time).
+5. Never run a local `queue:work` against the production database — payloads dispatched locally bake the local `APP_URL` into push links.
 
 ---
 

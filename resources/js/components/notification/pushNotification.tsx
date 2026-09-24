@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
 import { Button } from '@/components/ui/button';
+import { getPushServiceWorkerRegistration, isFirebaseConfigValid, resolveVapidKey } from '@/lib/firebasePush';
 import { isPushOptedOut, setPushOptedOut } from '@/lib/pushPreferences';
 
 async function postPushJson(url: string, body: Record<string, unknown>): Promise<void> {
@@ -18,7 +19,8 @@ async function postPushJson(url: string, body: Record<string, unknown>): Promise
     });
 
     if (!response.ok) {
-        throw new Error(`Push request failed with status ${response.status}`);
+        const detail = await response.text().catch(() => '');
+        throw new Error(`Push request failed with status ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
     }
 }
 
@@ -115,15 +117,35 @@ export default function PushNotifications() {
                     return;
                 }
 
+                // getToken() throws when permission is not granted. Without a
+                // token there is nothing to look up, and this device simply
+                // has not enabled push — skip quietly instead of erroring.
+                if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+                    if (checkGeneration.current === generation) {
+                        setIsRegistered(false);
+                    }
+                    return;
+                }
+
+                if (!isFirebaseConfigValid(firebaseConfig)) {
+                    console.error('Push config missing from server (firebaseConfig has no projectId).');
+                    return;
+                }
+
+                const vapidKey = resolveVapidKey(firebaseConfig);
+
+                if (!vapidKey) {
+                    console.error('VAPID key missing (neither server config nor build env provides one).');
+                    return;
+                }
+
                 const { getMessaging, getToken } = await import('firebase/messaging');
 
                 const app = await getFirebaseApp();
                 const messaging = getMessaging(app);
-                const registration =
-                    (await navigator.serviceWorker.getRegistration()) ??
-                    (await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }));
+                const registration = await getPushServiceWorkerRegistration();
                 const token = await getToken(messaging, {
-                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                    vapidKey,
                     serviceWorkerRegistration: registration,
                 });
 
@@ -142,7 +164,7 @@ export default function PushNotifications() {
                 console.error('Error checking web registration:', err);
             }
         },
-        [getFirebaseApp],
+        [firebaseConfig, getFirebaseApp],
     );
 
     const checkSupport = useCallback(async () => {
@@ -222,6 +244,18 @@ export default function PushNotifications() {
             return;
         }
 
+        if (!isFirebaseConfigValid(firebaseConfig)) {
+            setError('Push is not configured on the server. Please try again after the next deployment.');
+            return;
+        }
+
+        const vapidKey = resolveVapidKey(firebaseConfig);
+
+        if (!vapidKey) {
+            setError('Push is misconfigured (missing VAPID key). Please contact support.');
+            return;
+        }
+
         const result = await Notification.requestPermission();
         setPermission(result);
 
@@ -234,9 +268,9 @@ export default function PushNotifications() {
 
         const app = await getFirebaseApp();
         const messaging = getMessaging(app);
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+        const registration = await getPushServiceWorkerRegistration();
         const token = await getToken(messaging, {
-            vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+            vapidKey,
             serviceWorkerRegistration: registration,
         });
 
@@ -310,8 +344,14 @@ export default function PushNotifications() {
 
                 const app = await getFirebaseApp();
                 const messaging = getMessaging(app);
+                // Resolve the token against the same worker registration used
+                // at subscribe time, otherwise FCM may mint a different token
+                // and the server row for this device is never unsubscribed.
+                const registration = await getPushServiceWorkerRegistration();
+                const vapidKey = resolveVapidKey(firebaseConfig);
                 const token = await getToken(messaging, {
-                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                    vapidKey,
+                    serviceWorkerRegistration: registration,
                 });
 
                 if (token) {
