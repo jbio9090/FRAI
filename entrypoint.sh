@@ -27,6 +27,46 @@ chown -R www-data:www-data /var/www/html/storage
 chown -R www-data:www-data /var/www/html/bootstrap/cache
 
 # ------------------------------------------------------------------
+# 1b. Stage the Firebase service-account key (FCM server sends)
+# ------------------------------------------------------------------
+# Render mounts Secret Files at /etc/secrets (group-readable by gid 1000,
+# and www-data is in group `runner` (gid 1000) per Dockerfile.render).
+# Copy it into storage/app (gitignored, www-data-owned) BEFORE config:cache
+# so FIREBASE_CREDENTIALS=storage/app/firebase-auth.json resolves. Warns but
+# never aborts: web routes work without FCM, only pushes fail.
+if [ -f /etc/secrets/firebase-auth.json ]; then
+    echo "📦 Staging Firebase service-account key..."
+    cp /etc/secrets/firebase-auth.json /var/www/html/storage/app/firebase-auth.json
+    chown www-data:www-data /var/www/html/storage/app/firebase-auth.json
+    chmod 600 /var/www/html/storage/app/firebase-auth.json
+fi
+
+if [ -n "$FIREBASE_CREDENTIALS_JSON" ] || [ -n "$FIREBASE_CREDENTIALS_BASE64" ]; then
+    echo "✅ Firebase credentials supplied via env (JSON)."
+elif [ -n "$FIREBASE_CREDENTIALS" ]; then
+    case "$FIREBASE_CREDENTIALS" in
+        '{'*)
+            echo "✅ Firebase credentials supplied via env (JSON)."
+            ;;
+        /*)
+            CRED_PATH="$FIREBASE_CREDENTIALS"
+            ;;
+        *)
+            CRED_PATH="/var/www/html/$FIREBASE_CREDENTIALS"
+            ;;
+    esac
+    if [ -n "$CRED_PATH" ]; then
+        if su -s /bin/sh www-data -c "test -r \"$CRED_PATH\""; then
+            echo "✅ Firebase credentials file is readable."
+        else
+            echo "⚠️  FIREBASE_CREDENTIALS=$FIREBASE_CREDENTIALS is not readable by www-data — web push sends will fail."
+        fi
+    fi
+else
+    echo "⚠️  FIREBASE_CREDENTIALS is not set — web push sends will fail."
+fi
+
+# ------------------------------------------------------------------
 # 2. Wait for the database to be reachable (Max 5 retries)
 # ------------------------------------------------------------------
 echo "⏳ Testing database connection..."

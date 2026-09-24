@@ -1,7 +1,5 @@
 <x-mail::message>
-    <x-mail::heading>
-        Reschedule Options for: {{ $requestTitle }}
-    </x-mail::heading>
+# Reschedule Options for: {{ $requestTitle }}
 
     <x-mail::panel>
         An admin has selected reschedule options for your request. Please review the suggested alternatives below and choose one when you edit your request.

@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
 import { Button } from '@/components/ui/button';
+import { getPushServiceWorkerRegistration, isFirebaseConfigValid, resolveVapidKey } from '@/lib/firebasePush';
 import { isPushOptedOut, setPushOptedOut } from '@/lib/pushPreferences';
 
 async function postPushJson(url: string, body: Record<string, unknown>): Promise<void> {
@@ -18,7 +19,8 @@ async function postPushJson(url: string, body: Record<string, unknown>): Promise
     });
 
     if (!response.ok) {
-        throw new Error(`Push request failed with status ${response.status}`);
+        const detail = await response.text().catch(() => '');
+        throw new Error(`Push request failed with status ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
     }
 }
 
@@ -115,12 +117,36 @@ export default function PushNotifications() {
                     return;
                 }
 
+                // getToken() throws when permission is not granted. Without a
+                // token there is nothing to look up, and this device simply
+                // has not enabled push — skip quietly instead of erroring.
+                if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+                    if (checkGeneration.current === generation) {
+                        setIsRegistered(false);
+                    }
+                    return;
+                }
+
+                if (!isFirebaseConfigValid(firebaseConfig)) {
+                    console.error('Push config missing from server (firebaseConfig has no projectId).');
+                    return;
+                }
+
+                const vapidKey = resolveVapidKey(firebaseConfig);
+
+                if (!vapidKey) {
+                    console.error('VAPID key missing (neither server config nor build env provides one).');
+                    return;
+                }
+
                 const { getMessaging, getToken } = await import('firebase/messaging');
 
                 const app = await getFirebaseApp();
                 const messaging = getMessaging(app);
+                const registration = await getPushServiceWorkerRegistration();
                 const token = await getToken(messaging, {
-                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                    vapidKey,
+                    serviceWorkerRegistration: registration,
                 });
 
                 if (!token) {
@@ -138,7 +164,7 @@ export default function PushNotifications() {
                 console.error('Error checking web registration:', err);
             }
         },
-        [getFirebaseApp],
+        [firebaseConfig, getFirebaseApp],
     );
 
     const checkSupport = useCallback(async () => {
@@ -213,6 +239,23 @@ export default function PushNotifications() {
     };
 
     const registerWeb = async () => {
+        if (!('serviceWorker' in navigator)) {
+            setError('Push notifications are not supported in this browser.');
+            return;
+        }
+
+        if (!isFirebaseConfigValid(firebaseConfig)) {
+            setError('Push is not configured on the server. Please try again after the next deployment.');
+            return;
+        }
+
+        const vapidKey = resolveVapidKey(firebaseConfig);
+
+        if (!vapidKey) {
+            setError('Push is misconfigured (missing VAPID key). Please contact support.');
+            return;
+        }
+
         const result = await Notification.requestPermission();
         setPermission(result);
 
@@ -225,8 +268,10 @@ export default function PushNotifications() {
 
         const app = await getFirebaseApp();
         const messaging = getMessaging(app);
+        const registration = await getPushServiceWorkerRegistration();
         const token = await getToken(messaging, {
-            vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+            vapidKey,
+            serviceWorkerRegistration: registration,
         });
 
         if (token) {
@@ -255,7 +300,11 @@ export default function PushNotifications() {
     };
 
     const isIOS = (): boolean => {
-        return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
+        // iPads in desktop mode report as "Macintosh", so also match touch-capable Macs.
+        return (
+            (/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as Window & { MSStream?: unknown }).MSStream) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+        );
     };
 
     const isSafari = (): boolean => {
@@ -295,8 +344,14 @@ export default function PushNotifications() {
 
                 const app = await getFirebaseApp();
                 const messaging = getMessaging(app);
+                // Resolve the token against the same worker registration used
+                // at subscribe time, otherwise FCM may mint a different token
+                // and the server row for this device is never unsubscribed.
+                const registration = await getPushServiceWorkerRegistration();
+                const vapidKey = resolveVapidKey(firebaseConfig);
                 const token = await getToken(messaging, {
-                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                    vapidKey,
+                    serviceWorkerRegistration: registration,
                 });
 
                 if (token) {
@@ -330,34 +385,54 @@ export default function PushNotifications() {
     }
 
     return (
-        <div className="flex items-center justify-between gap-12 text-sm">
-            <span className="text-sm font-semibold">Notifications</span>
+        <>
+            <div className="flex items-center justify-between gap-12 text-sm">
+                <span className="text-sm font-semibold">Notifications</span>
 
-            {error && (
-                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
-                    <p className="text-sm text-red-800">{error}</p>
+                {error && (
+                    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
+                        <p className="text-sm text-red-800">{error}</p>
+                    </div>
+                )}
+
+                {isSupported && !isIOS() && isRegistered && (
+                    <p className="text-center text-sm text-green-600">Push notifications are active on this device.</p>
+                )}
+
+                {!isRegistered && !showIOSInstallPrompt() && (
+                    <Button onClick={requestPermissionAndRegister} disabled={loading} size={'sm'} variant={'outline'}>
+                        <span className="text-sm">{loading ? 'Enabling...' : 'Enable Push Notifications'}</span>
+                    </Button>
+                )}
+
+                {isRegistered && (
+                    <Button onClick={unsubscribe} disabled={loading} size={'sm'}>
+                        <span className="text-sm">{loading ? 'Disabling...' : 'Disable Push Notifications'}</span>
+                    </Button>
+                )}
+
+                {permission === 'denied' && (
+                    <p className="text-center text-sm text-gray-600">
+                        Notifications are blocked. Please enable them in your device/browser settings.
+                    </p>
+                )}
+            </div>
+
+            {showIOSInstallPrompt() && !isRegistered && (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                    <p className="text-sm font-semibold text-blue-900">Enable push on your iPhone</p>
+                    <p className="mt-1 text-sm text-blue-800">
+                        Apple only allows web push for apps added to the Home Screen (iOS 16.4 or later). Safari tabs can&apos;t receive
+                        notifications.
+                    </p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-blue-800">
+                        <li>Tap the Share button in Safari&apos;s toolbar.</li>
+                        <li>Choose &quot;Add to Home Screen&quot;, then tap Add.</li>
+                        <li>Open the app from the new Home Screen icon.</li>
+                        <li>Come back here and tap Enable Push Notifications.</li>
+                    </ol>
                 </div>
             )}
-
-            {isSupported && !isIOS() && isRegistered && (
-                <p className="text-center text-sm text-green-600">Push notifications are active on this device.</p>
-            )}
-
-            {!isRegistered && !showIOSInstallPrompt() && (
-                <Button onClick={requestPermissionAndRegister} disabled={loading} size={'sm'} variant={'outline'}>
-                    <span className="text-sm">{loading ? 'Enabling...' : 'Enable Push Notifications'}</span>
-                </Button>
-            )}
-
-            {isRegistered && (
-                <Button onClick={unsubscribe} disabled={loading} size={'sm'}>
-                    <span className="text-sm">{loading ? 'Disabling...' : 'Disable Push Notifications'}</span>
-                </Button>
-            )}
-
-            {permission === 'denied' && (
-                <p className="text-center text-sm text-gray-600">Notifications are blocked. Please enable them in your device/browser settings.</p>
-            )}
-        </div>
+        </>
     );
 }

@@ -1,5 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
+import { getPushServiceWorkerRegistration, resolveVapidKey } from '@/lib/firebasePush';
 import { isPushOptedOut } from '@/lib/pushPreferences';
 import '../css/app.css';
 
@@ -20,29 +21,46 @@ function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | u
         return;
     }
 
-    // Register Service Worker for PWA web push notifications
-    void navigator.serviceWorker
-        .register('/firebase-messaging-sw.js', { scope: '/' })
-        .then((reg) => {
-            console.log('FCM Service Worker registered:', reg.scope);
+    // Push permission (notably iOS Safari) is only granted from a user gesture
+    // in settings. Skip token minting until then — getToken() would throw and
+    // the settings toggle owns the permission-request flow.
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+        return;
+    }
+
+    // Register Service Worker for PWA web push notifications, then mint the
+    // token against that exact registration so foreground and background push
+    // share it.
+    void getPushServiceWorkerRegistration()
+        .then((registration) => {
+            console.log('FCM Service Worker registered:', registration.scope);
+            initForegroundPush(firebaseConfig, registration);
         })
         .catch((err) => {
             console.error('FCM Service Worker registration failed:', err);
         });
+}
 
+function initForegroundPush(firebaseConfig: Record<string, unknown>, serviceWorkerRegistration: ServiceWorkerRegistration): void {
     void import('firebase/app')
         .then(async ({ getApps, initializeApp }) => {
             const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
 
             const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
             const messaging = getMessaging(app);
+            const vapidKey = resolveVapidKey(firebaseConfig);
 
-            try {
-                await getToken(messaging, {
-                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-                });
-            } catch (err) {
-                console.warn('FCM getToken init failed — foreground push may not fire:', err);
+            if (!vapidKey) {
+                console.warn('FCM getToken init skipped — no VAPID key in server config or build env.');
+            } else {
+                try {
+                    await getToken(messaging, {
+                        vapidKey,
+                        serviceWorkerRegistration,
+                    });
+                } catch (err) {
+                    console.warn('FCM getToken init failed — foreground push may not fire:', err);
+                }
             }
 
             onMessage(messaging, (payload) => {

@@ -5,9 +5,38 @@ namespace App\Http\Controllers;
 use App\Notifications\TestPushNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class NotificationController extends Controller
 {
+    /**
+     * Serve the Firebase web config as JavaScript for the push service worker.
+     *
+     * The service worker runs outside the app bundle and cannot read Inertia
+     * props, so it imports this endpoint via importScripts(). These keys are
+     * public by design (they ship to every browser). No auth: the worker
+     * installs on first visit, including logged-out pages.
+     */
+    public function swConfig(): Response
+    {
+        $config = [
+            'apiKey' => config('services.firebase.api_key'),
+            'authDomain' => config('services.firebase.auth_domain'),
+            'projectId' => config('services.firebase.project_id'),
+            'storageBucket' => config('services.firebase.storage_bucket'),
+            'messagingSenderId' => config('services.firebase.messaging_sender_id'),
+            'appId' => config('services.firebase.app_id'),
+            'measurementId' => config('services.firebase.measurement_id'),
+        ];
+
+        $js = 'self.__FIREBASE_CONFIG = '.json_encode($config, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES).';';
+
+        return response($js, 200, [
+            'Content-Type' => 'application/javascript; charset=UTF-8',
+            'Cache-Control' => 'public, max-age=3600',
+        ]);
+    }
+
     public function subscribe(Request $request)
     {
         $validated = $request->validate([

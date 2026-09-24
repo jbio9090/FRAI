@@ -71,6 +71,9 @@ class HandleInertiaRequests extends Middleware
                 'messagingSenderId' => config('services.firebase.messaging_sender_id'),
                 'appId' => config('services.firebase.app_id'),
                 'measurementId' => config('services.firebase.measurement_id'),
+                // Runtime VAPID key: import.meta.env is baked at Vite build time and
+                // is empty in the Docker image, so the frontend prefers this value.
+                'vapidKey' => config('services.firebase.vapid_key'),
             ],
         ]);
     }

@@ -28,8 +28,11 @@ class RescheduleAlternativesChosen extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
+        // Markdown (not plain view): the template uses <x-mail::> components
+        // whose `mail` view namespace is only registered during Markdown
+        // rendering. A plain view fails with "No hint path defined for [mail]".
         return new Content(
-            view: 'emails.reschedule-alternatives-chosen',
+            markdown: 'emails.reschedule-alternatives-chosen',
             with: [
                 'requestTitle' => $this->requestTitle,
                 'url' => $this->url,
