@@ -1,5 +1,5 @@
 import { router, useForm, usePage } from '@inertiajs/react';
-import { UserRoundPen, Mail } from 'lucide-react';
+import { UserRoundPen, Mail, Info } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import PushNotifications from '@/components/notification/pushNotification';
@@ -29,6 +29,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    Tooltip,
+    TooltipTrigger,
+    TooltipContent,
+} from "@/components/ui/tooltip";
 import { usePermission } from '@/hooks/use-permission';
 import DefaultLayout from '@/layout.tsx/default';
 
@@ -42,6 +47,7 @@ interface PageProps extends Record<string, unknown> {
             email: string;
             position?: string;
             admin_email_notifications_enabled: boolean;
+            email_notifications_enabled: boolean;
         };
     };
 }
@@ -52,6 +58,7 @@ export default function Settings() {
     const [preview, setPreview] = useState<string | null>(null);
     const [pwDialogOpen, setPwDialogOpen] = useState(false);
     const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
+    const [userEmailNotificationProcessing, setUserEmailNotificationProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { hasRole } = usePermission();
     const [editDetailsDialogOpen, setEditDetailsDialogOpen] = useState(false);
@@ -157,6 +164,22 @@ export default function Settings() {
                 preserveScroll: true,
                 onStart: () => setEmailNotificationProcessing(true),
                 onFinish: () => setEmailNotificationProcessing(false),
+                onSuccess: () => router.reload({ only: ['auth'] }),
+            },
+        );
+    };
+
+    const handleUserEmailNotificationToggle = () => {
+        router.post(
+            route('settings.email-notifications'),
+            {
+                subscribed: !auth.user.email_notifications_enabled,
+            },
+            {
+                preserveScroll: true,
+                onStart: () => setUserEmailNotificationProcessing(true),
+                onFinish: () => setUserEmailNotificationProcessing(false),
+                onSuccess: () => router.reload({ only: ['auth'] }),
             },
         );
     };
@@ -379,24 +402,69 @@ export default function Settings() {
 
                 <PushNotifications />
 
-                {isAdmin && (
+                <div className="flex flex-col gap-4">
+                    {/* User Email Notifications - for all users */}
                     <div className="flex justify-between items-center gap-4">
-                        <span className="text-sm font-semibold">Email Notifications</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold">My Email Notifications</span>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button type="button" className="text-muted-foreground hover:text-foreground transition-colors p-1" aria-label="Email notifications help">
+                                        <Info size={14} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" align="center" className="max-w-xs">
+                                    Receive emails for updates on your own requests: status changes, facility decisions, and reschedule notices.
+                                </TooltipContent>
+                            </Tooltip>
+                        </div>
                         <Button
-                            variant={auth.user.admin_email_notifications_enabled ? "default" : "outline"}
+                            variant={auth.user.email_notifications_enabled ? "default" : "outline"}
                             size="sm"
                             type="button"
-                            onClick={handleAdminEmailNotificationToggle}
-                            disabled={emailNotificationProcessing}
+                            onClick={handleUserEmailNotificationToggle}
+                            disabled={userEmailNotificationProcessing}
                         >
-                            {emailNotificationProcessing
+                            {userEmailNotificationProcessing
                                 ? 'Saving...'
-                                : auth.user.admin_email_notifications_enabled
+                                : auth.user.email_notifications_enabled
                                     ? 'Unsubscribe'
                                     : 'Subscribe'}
                         </Button>
                     </div>
-                )}
+
+                    {/* Admin Email Notifications - only for admins */}
+                    {isAdmin && (
+                        <div className="flex justify-between items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold">Admin Email Notifications</span>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button type="button" className="text-muted-foreground hover:text-foreground transition-colors p-1" aria-label="Admin email notifications help">
+                                            <Info size={14} />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" align="center" className="max-w-xs">
+                                        Receive emails when AI recommendations are ready for your review. Only available to admins.
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
+                            <Button
+                                variant={auth.user.admin_email_notifications_enabled ? "default" : "outline"}
+                                size="sm"
+                                type="button"
+                                onClick={handleAdminEmailNotificationToggle}
+                                disabled={emailNotificationProcessing}
+                            >
+                                {emailNotificationProcessing
+                                    ? 'Saving...'
+                                    : auth.user.admin_email_notifications_enabled
+                                        ? 'Unsubscribe'
+                                        : 'Subscribe'}
+                            </Button>
+                        </div>
+                    )}
+                </div>
 
                 <div className="flex justify-between items-center">
                     <span className="text-sm font-semibold">Theme</span>

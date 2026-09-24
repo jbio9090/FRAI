@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\NotificationService;
 use App\Services\RequestSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -51,6 +52,7 @@ class HandleInertiaRequests extends Middleware
                     'roles' => $request->user()->getRoleNames(),
                     'permissions' => $request->user()->getAllPermissions()->pluck('name'),
                     'admin_email_notifications_enabled' => $request->user()->admin_email_notifications_enabled,
+                    'email_notifications_enabled' => NotificationService::getUserEmailEnabled($request->user()),
                     'notification_unread_count' => $request->user()->unreadNotifications()->count(),
                 ] : null,
             ],

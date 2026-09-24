@@ -4,8 +4,10 @@ namespace App\Notifications;
 
 use App\Enums\RequestStatus;
 use App\Notifications\Channels\LoggableFcmChannel;
+use App\Services\NotificationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\URL;
@@ -28,7 +30,24 @@ class RequestFacilityDecision extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return ['database', LoggableFcmChannel::class];
+        $channels = ['database', LoggableFcmChannel::class];
+        if (NotificationService::getUserEmailEnabled($notifiable)) {
+            $channels[] = 'mail';
+        }
+        return $channels;
+    }
+
+    public function toMail($notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject('Facility Decision: '.$this->requestTitle)
+            ->markdown('emails.request-facility-decision', [
+                'requestTitle' => $this->requestTitle,
+                'facilityName' => $this->facilityName,
+                'status' => $this->status->value,
+                'body' => $this->makeBody(),
+                'url' => $this->url,
+            ]);
     }
 
     private function makeBody(): string

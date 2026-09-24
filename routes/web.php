@@ -110,6 +110,9 @@ Route::middleware('auth')->group(function () {
         ->middleware(['role:admin|Super Admin', 'permission:approve requests'])
         ->name('settings.admin-email-notifications');
 
+    Route::post('/settings/email-notifications', [SettingsController::class, 'updateEmailNotifications'])
+        ->name('settings.email-notifications');
+
     // Admin-only request options (approvers, booking window, min advance days)
     Route::middleware('permission:manage request options')->group(function () {
         Route::get('/request-options', [RequestSettingsController::class, 'index'])->name('request-options');

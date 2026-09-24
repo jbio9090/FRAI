@@ -4,8 +4,10 @@ namespace App\Notifications;
 
 use App\Enums\RequestStatus;
 use App\Notifications\Channels\LoggableFcmChannel;
+use App\Services\NotificationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\URL;
@@ -27,7 +29,25 @@ class Reschedule extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        return ['database', LoggableFcmChannel::class];
+        $channels = ['database', LoggableFcmChannel::class];
+        if (NotificationService::getUserEmailEnabled($notifiable)) {
+            $channels[] = 'mail';
+        }
+        return $channels;
+    }
+
+    public function toMail($notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject('Reschedule Required: '.$this->request_title)
+            ->markdown('emails.request-reschedule', [
+                'requestTitle' => $this->request_title,
+                'status' => $this->status->value,
+                'facility' => $this->facility,
+                'date' => $this->date,
+                'time' => $this->time,
+                'url' => $this->url,
+            ]);
     }
 
     public function toFcm($notifiable): FcmMessage

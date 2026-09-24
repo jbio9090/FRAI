@@ -14,6 +14,7 @@ use App\Notifications\RequestResult;
 use App\Notifications\Reschedule;
 use App\Notifications\RescheduleAlternativesChosen;
 use Illuminate\Support\Carbon;
+use App\Models\Setting;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -234,5 +235,20 @@ class NotificationService
             Log::error('Request edited admin notification failed: '.$e->getMessage());
             Log::error('Stack trace: '.$e->getTraceAsString());
         }
+    }
+
+    public static function getUserEmailEnabled(User $user): bool
+    {
+        // Always use settings table for user email notifications (even for admins)
+        $setting = Setting::find("user_email_notifications_{$user->id}");
+        return $setting?->value['email_notifications_enabled'] ?? false;
+    }
+
+    public static function setUserEmailEnabled(User $user, bool $enabled): void
+    {
+        Setting::updateOrCreate(
+            ['key' => "user_email_notifications_{$user->id}"],
+            ['value' => ['email_notifications_enabled' => $enabled]]
+        );
     }
 }

@@ -12,6 +12,7 @@ use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\RequestRescheduleSuggestion;
 use App\Models\User;
+use App\Notifications\RequestSubmitted;
 use App\Services\AlternativeRecommendationService;
 use App\Services\AuditLogger;
 use App\Services\NotificationService;
@@ -363,6 +364,10 @@ class RequestController extends Controller
 
         ProcessRequestRecommendation::dispatch($saved_request);
         ProcessRequestConflicts::dispatch($saved_request);
+
+        if (env('SEND_REQUEST_CONFIRMATION_EMAIL')) {
+            $saved_request->user->notify(new RequestSubmitted($saved_request));
+        }
 
         return redirect()->route('requests.index', ['status' => strtolower(RequestStatus::PENDING->name)])
             ->with('success', 'Request created successfully');
