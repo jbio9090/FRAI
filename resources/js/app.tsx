@@ -20,16 +20,28 @@ function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | u
         return;
     }
 
-    // Register Service Worker for PWA web push notifications
+    // Push permission (notably iOS Safari) is only granted from a user gesture
+    // in settings. Skip token minting until then — getToken() would throw and
+    // the settings toggle owns the permission-request flow.
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+        return;
+    }
+
+    // Register Service Worker for PWA web push notifications, then mint the
+    // token against that exact registration so foreground and background push
+    // share it.
     void navigator.serviceWorker
         .register('/firebase-messaging-sw.js', { scope: '/' })
-        .then((reg) => {
-            console.log('FCM Service Worker registered:', reg.scope);
+        .then((registration) => {
+            console.log('FCM Service Worker registered:', registration.scope);
+            initForegroundPush(firebaseConfig, registration);
         })
         .catch((err) => {
             console.error('FCM Service Worker registration failed:', err);
         });
+}
 
+function initForegroundPush(firebaseConfig: Record<string, unknown>, serviceWorkerRegistration: ServiceWorkerRegistration): void {
     void import('firebase/app')
         .then(async ({ getApps, initializeApp }) => {
             const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
@@ -40,6 +52,7 @@ function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | u
             try {
                 await getToken(messaging, {
                     vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+                    serviceWorkerRegistration,
                 });
             } catch (err) {
                 console.warn('FCM getToken init failed — foreground push may not fire:', err);

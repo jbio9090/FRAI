@@ -25,6 +25,10 @@ Route::get('/requests/{id}/push-action/{action}', [RequestController::class, 'ha
     ->name('requests.push_action')
     ->middleware('signed');
 
+// Public Firebase config for the push service worker (imported via importScripts).
+// Must stay outside auth: the worker installs on first visit, even logged out.
+Route::get('/push/sw-config.js', [NotificationController::class, 'swConfig'])->name('notification.sw-config');
+
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
 

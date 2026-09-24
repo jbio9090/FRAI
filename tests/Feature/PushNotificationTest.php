@@ -105,4 +105,16 @@ class PushNotificationTest extends TestCase
         $this->postJson(route('notification.unsubscribe'), ['token' => 'x'])->assertUnauthorized();
         $this->postJson(route('notification.status'), ['token' => 'x'])->assertUnauthorized();
     }
+
+    public function test_sw_config_is_public_javascript_mirroring_firebase_config(): void
+    {
+        config()->set('services.firebase.project_id', 'test-project-123');
+
+        $response = $this->get(route('notification.sw-config'));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/javascript', $response->headers->get('Content-Type'));
+        $response->assertSee('self.__FIREBASE_CONFIG', false);
+        $response->assertSee('test-project-123', false);
+    }
 }
