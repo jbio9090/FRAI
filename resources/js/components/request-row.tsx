@@ -17,7 +17,7 @@ export default function RequestRow({ request, className }: { request: Request; c
         <Link
             href={route('requests.detail', request.id)}
             className={cn(
-                'flex min-w-0 items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50',
+                'flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/50',
                 className,
             )}
         >
@@ -50,7 +50,7 @@ export default function RequestRow({ request, className }: { request: Request; c
                 )}
             </div>
 
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex max-w-full min-w-0 shrink-0 items-center gap-2 sm:gap-3">
                 <span className="hidden items-center gap-1 text-xs text-muted-foreground xl:inline-flex">
                     <Calendar className="h-3.5 w-3.5" />
                     {moment(request.created_at).fromNow()}

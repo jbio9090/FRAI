@@ -28,13 +28,9 @@ export default function StatusTag({ requestStatus, variant = 'default' }: Status
     return (
         <span
             className={cn(
-                'inline-flex w-fit items-center gap-1.5 rounded-[4px] font-semibold whitespace-nowrap',
+                'inline-flex w-fit max-w-full min-w-0 shrink items-center gap-1.5 overflow-hidden rounded-[4px] font-semibold text-ellipsis whitespace-nowrap',
                 toneStyles[tone],
-                variant === 'small'
-                    ? 'px-1.5 py-0.5 text-[11px]'
-                    : variant === 'large'
-                      ? 'px-3 py-1 text-sm'
-                      : 'px-2 py-0.5 text-xs',
+                variant === 'small' ? 'px-1.5 py-0.5 text-[11px]' : variant === 'large' ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-xs',
             )}
         >
             <span className="size-1.5 shrink-0 rounded-full bg-current" />

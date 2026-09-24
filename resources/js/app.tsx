@@ -1,95 +1,9 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
-import { getPushServiceWorkerRegistration, resolveVapidKey } from '@/lib/firebasePush';
-import { isPushOptedOut } from '@/lib/pushPreferences';
+import { ensureForegroundPushListener } from '@/lib/firebasePush';
 import '../css/app.css';
 
 const appName = import.meta.env.VITE_APP_NAME || 'FRAI';
-
-function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | undefined): void {
-    const isNative = typeof (window as Window & { Capacitor?: unknown }).Capacitor !== 'undefined';
-    const supportsWebPush = 'serviceWorker' in navigator && 'PushManager' in window;
-
-    if (isNative || !supportsWebPush || !firebaseConfig) {
-        return;
-    }
-
-    // Per-device opt-out: never mint a fresh FCM token after the user disabled
-    // push on this browser. Otherwise getToken() would recreate one and the
-    // settings toggle would snap back to enabled.
-    if (isPushOptedOut()) {
-        return;
-    }
-
-    // Push permission (notably iOS Safari) is only granted from a user gesture
-    // in settings. Skip token minting until then — getToken() would throw and
-    // the settings toggle owns the permission-request flow.
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
-        return;
-    }
-
-    // Register Service Worker for PWA web push notifications, then mint the
-    // token against that exact registration so foreground and background push
-    // share it.
-    void getPushServiceWorkerRegistration()
-        .then((registration) => {
-            console.log('FCM Service Worker registered:', registration.scope);
-            initForegroundPush(firebaseConfig, registration);
-        })
-        .catch((err) => {
-            console.error('FCM Service Worker registration failed:', err);
-        });
-}
-
-function initForegroundPush(firebaseConfig: Record<string, unknown>, serviceWorkerRegistration: ServiceWorkerRegistration): void {
-    void import('firebase/app')
-        .then(async ({ getApps, initializeApp }) => {
-            const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
-
-            const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-            const messaging = getMessaging(app);
-            const vapidKey = resolveVapidKey(firebaseConfig);
-
-            if (!vapidKey) {
-                console.warn('FCM getToken init skipped — no VAPID key in server config or build env.');
-            } else {
-                try {
-                    await getToken(messaging, {
-                        vapidKey,
-                        serviceWorkerRegistration,
-                    });
-                } catch (err) {
-                    console.warn('FCM getToken init failed — foreground push may not fire:', err);
-                }
-            }
-
-            onMessage(messaging, (payload) => {
-                console.log('Foreground push received:', payload);
-
-                const title = payload.notification?.title || 'Notification';
-                const body = payload.notification?.body || '';
-                const options = {
-                    body,
-                    icon: '/FRAI.png',
-                    data: payload.data || {},
-                };
-
-                void navigator.serviceWorker.getRegistration().then((registration) => {
-                    if (registration) {
-                        void registration.showNotification(title, options);
-                        return;
-                    }
-
-                    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-                        new Notification(title, options);
-                    }
-                });
-            });
-        })
-        .catch((err) => {
-            console.error('Failed to initialize foreground push listener:', err);
-        });
-}
 
 const pages = import.meta.glob('./pages/**/*.tsx', { eager: true });
 
@@ -103,7 +17,16 @@ createInertiaApp({
         return page;
     },
     setup({ el, App, props }) {
-        setupForegroundPushListener((props as unknown as { firebaseConfig?: Record<string, unknown> }).firebaseConfig);
+        // Best-effort: attaches onMessage when permission was already granted.
+        // When permission is granted later via Settings → Enable, registerWeb
+        // calls ensureForegroundPushListener again (skips are not cached).
+        void ensureForegroundPushListener(
+            (props as unknown as { firebaseConfig?: Record<string, unknown> }).firebaseConfig,
+        ).then((result) => {
+            if (result !== 'attached') {
+                console.debug(`FCM foreground listener not attached at boot: ${result}`);
+            }
+        });
 
         const root = createRoot(el);
         root.render(<App {...props} />);

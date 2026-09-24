@@ -14,7 +14,7 @@ function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
       role="navigation"
       aria-label="pagination"
       data-slot="pagination"
-      className={cn("mx-auto flex w-full justify-center", className)}
+      className={cn("mx-auto flex w-full min-w-0 max-w-full justify-center overflow-x-clip", className)}
       {...props}
     />
   )
@@ -27,7 +27,7 @@ function PaginationContent({
   return (
     <ul
       data-slot="pagination-content"
-      className={cn("flex flex-row items-center gap-1", className)}
+      className={cn("flex min-w-0 max-w-full flex-row flex-wrap items-center justify-center gap-1", className)}
       {...props}
     />
   )

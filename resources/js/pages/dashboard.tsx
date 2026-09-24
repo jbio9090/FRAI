@@ -79,10 +79,7 @@ const chartConfig = {
     },
 } satisfies ChartConfig;
 
-const CHART_COLORS = [
-    'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
-    'var(--chart-4)', 'var(--chart-5)',
-];
+const CHART_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
 
 function greetingFor(name: string): string {
     const hour = new Date().getHours();
@@ -148,7 +145,7 @@ export default function Dashboard({
             label: row.label,
             count: row.count,
             fill: CHART_COLORS[i % CHART_COLORS.length],
-        }))
+        })),
     );
     const [activeTab, setActiveTab] = useState<Tab>(getInitialTab);
     const [notifications, setNotifications] = useState<InboxNotification[]>(notificationsProp ?? []);
@@ -171,7 +168,7 @@ export default function Dashboard({
                 label: row.label,
                 count: row.count,
                 fill: CHART_COLORS[i % CHART_COLORS.length],
-            }))
+            })),
         );
         setLogsLoading(false);
     };
@@ -183,10 +180,12 @@ export default function Dashboard({
         try {
             await axios.post('/dashboard/notifications/mark-read');
             const readAt = new Date().toISOString();
-            setNotifications((prev) => prev.map((notification) => ({
-                ...notification,
-                read_at: notification.read_at ?? readAt,
-            })));
+            setNotifications((prev) =>
+                prev.map((notification) => ({
+                    ...notification,
+                    read_at: notification.read_at ?? readAt,
+                })),
+            );
             setUnreadCount(0);
             router.reload({ only: ['auth'] });
         } finally {
@@ -228,19 +227,11 @@ export default function Dashboard({
     const rangeLabel = rangeOptions[range];
 
     const toggleBuilding = (building: string) => {
-        setSelectedBuildings((prev) =>
-            prev.includes(building)
-                ? prev.filter((b) => b !== building)
-                : [...prev, building]
-        );
+        setSelectedBuildings((prev) => (prev.includes(building) ? prev.filter((b) => b !== building) : [...prev, building]));
     };
 
-    const pendingConflictRequests = (pending?.data ?? []).filter(
-        (r) => r.pending_conflicts && r.pending_conflicts.length > 0
-    );
-    const approvedConflictRequests = (pending?.data ?? []).filter(
-        (r) => r.approved_conflicts && r.approved_conflicts.length > 0
-    );
+    const pendingConflictRequests = (pending?.data ?? []).filter((r) => r.pending_conflicts && r.pending_conflicts.length > 0);
+    const approvedConflictRequests = (pending?.data ?? []).filter((r) => r.approved_conflicts && r.approved_conflicts.length > 0);
 
     const pieChartConfig = useMemo(() => {
         const config: ChartConfig = { count: { label: 'Events' } };
@@ -273,40 +264,34 @@ export default function Dashboard({
     }
 
     const roles = auth.user.roles?.length ? auth.user.roles : ['Member'];
-    const cardClass = 'min-w-0 overflow-hidden rounded-lg border-border shadow-none';
+    const cardClass = 'w-full min-w-0 max-w-full overflow-hidden rounded-lg border-border shadow-none';
 
     return (
         <DefaultLayout hasPadding={false}>
-            <div className="flex flex-col p-6 md:p-8">
-                <Tabs value={activeTab} onValueChange={handleTabChange}>
-                    <TabsList variant="line">
+            <div className="flex w-full max-w-full min-w-0 flex-col overflow-x-clip p-6 md:p-8">
+                <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full max-w-full min-w-0 overflow-x-clip">
+                    <TabsList variant="line" className="h-auto min-h-9 w-full max-w-full min-w-0 flex-wrap">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Schedule</TabsTrigger>
                         <TabsTrigger value="activity">Activity</TabsTrigger>
                         <TabsTrigger value="inbox">
                             <span className="relative">
                                 Inbox
-                                {unreadCount > 0 && (
-                                    <span className="absolute -right-2 -top-1 size-2 rounded-full bg-[var(--primary)]" />
-                                )}
+                                {unreadCount > 0 && <span className="absolute -top-1 -right-2 size-2 rounded-full bg-[var(--primary)]" />}
                             </span>
                         </TabsTrigger>
                     </TabsList>
 
                     {/* ── Overview ─────────────────────────────────────────── */}
-                    <TabsContent value="overview" className="mt-6 flex flex-col gap-6">
-                        <div className="flex flex-wrap items-end justify-between gap-4">
-                            <div className="flex flex-col gap-1">
-                                <p className="ads-eyebrow">
-                                    {moment().format('dddd, MMMM D')}
-                                </p>
-                                <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
-                                    {greetingFor(auth.user.name)}
-                                </h1>
+                    <TabsContent value="overview" className="mt-6 flex w-full max-w-full min-w-0 flex-col gap-6 overflow-x-clip">
+                        <div className="flex w-full max-w-full min-w-0 flex-wrap items-end justify-between gap-4">
+                            <div className="flex max-w-full min-w-0 flex-col gap-1">
+                                <p className="ads-eyebrow">{moment().format('dddd, MMMM D')}</p>
+                                <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{greetingFor(auth.user.name)}</h1>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">
                                 <RoleBadge roles={roles} position={auth.user.position} />
-                                <Button size="sm" asChild>
+                                <Button size="sm" className="shrink-0" asChild>
                                     <Link href={route('request.create')}>
                                         <CirclePlus className="h-4 w-4" />
                                         New request
@@ -316,7 +301,7 @@ export default function Dashboard({
                         </div>
 
                         {/* KPI strip */}
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             {isAdmin ? (
                                 <>
                                     <StatTile
@@ -333,46 +318,20 @@ export default function Dashboard({
                                         value={kpis.needsAction}
                                         sub="conflicts to review"
                                     />
-                                    <StatTile
-                                        icon={CheckCircle2}
-                                        label="Approved this week"
-                                        value={kpis.approvedThisWeek}
-                                        sub="last 7 days"
-                                    />
-                                    <StatTile
-                                        icon={Calendar}
-                                        label="Events today"
-                                        value={kpis.eventsToday}
-                                        sub={`${buildings.length} buildings`}
-                                    />
+                                    <StatTile icon={CheckCircle2} label="Approved this week" value={kpis.approvedThisWeek} sub="last 7 days" />
+                                    <StatTile icon={Calendar} label="Events today" value={kpis.eventsToday} sub={`${buildings.length} buildings`} />
                                 </>
                             ) : (
                                 <>
-                                    <StatTile
-                                        variant="accent"
-                                        icon={ClipboardList}
-                                        label="My pending"
-                                        value={kpis.awaitingDecision}
-                                        sub="requests"
-                                    />
-                                    <StatTile
-                                        icon={CheckCircle2}
-                                        label="My approved this week"
-                                        value={kpis.approvedThisWeek}
-                                        sub="last 7 days"
-                                    />
-                                    <StatTile
-                                        icon={Calendar}
-                                        label="My events today"
-                                        value={kpis.eventsToday}
-                                        sub="bookings"
-                                    />
+                                    <StatTile variant="accent" icon={ClipboardList} label="My pending" value={kpis.awaitingDecision} sub="requests" />
+                                    <StatTile icon={CheckCircle2} label="My approved this week" value={kpis.approvedThisWeek} sub="last 7 days" />
+                                    <StatTile icon={Calendar} label="My events today" value={kpis.eventsToday} sub="bookings" />
                                 </>
                             )}
                         </div>
 
                         {/* Conflict banners */}
-                        {(isAdmin && (pendingConflictRequests.length > 0 || approvedConflictRequests.length > 0)) && (
+                        {isAdmin && (pendingConflictRequests.length > 0 || approvedConflictRequests.length > 0) && (
                             <div className="flex flex-col gap-2">
                                 {pendingConflictRequests.length > 0 && (
                                     <Link
@@ -380,9 +339,7 @@ export default function Dashboard({
                                         className="flex items-center gap-3 rounded-lg border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/20 px-4 py-3 transition-colors hover:bg-[var(--ads-amber-bg)]/70"
                                     >
                                         <span className="size-2 shrink-0 rounded-full bg-[var(--ads-amber)]" />
-                                        <span className="text-sm font-semibold text-[var(--ads-amber)]">
-                                            Pending conflicts
-                                        </span>
+                                        <span className="text-sm font-semibold text-[var(--ads-amber)]">Pending conflicts</span>
                                         <span className="text-xs text-[var(--ads-amber)]/80">
                                             {pendingConflictRequests.length} request{pendingConflictRequests.length !== 1 ? 's' : ''} need review
                                         </span>
@@ -395,9 +352,7 @@ export default function Dashboard({
                                         className="flex items-center gap-3 rounded-lg border border-[var(--ads-danger)]/40 bg-[var(--ads-danger-bg)] px-4 py-3 transition-colors hover:bg-[var(--ads-danger-bg)]/70"
                                     >
                                         <span className="size-2 shrink-0 rounded-full bg-[var(--ads-danger)]" />
-                                        <span className="text-sm font-semibold text-[var(--ads-danger)]">
-                                            Approved conflicts
-                                        </span>
+                                        <span className="text-sm font-semibold text-[var(--ads-danger)]">Approved conflicts</span>
                                         <span className="text-xs text-[var(--ads-danger)]/80">
                                             {approvedConflictRequests.length} request{approvedConflictRequests.length !== 1 ? 's' : ''} need review
                                         </span>
@@ -408,16 +363,14 @@ export default function Dashboard({
                         )}
 
                         {/* Queue + live activity */}
-                        <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[5fr_3fr]">
+                        <div className="grid w-full max-w-full min-w-0 grid-cols-1 items-start gap-4 overflow-x-clip lg:grid-cols-[5fr_3fr]">
                             <Card className={cardClass}>
-                                <CardHeader className="flex w-full items-start justify-between gap-3 space-y-0 border-b border-border min-h-18">
-                                    <div className="min-w-0">
+                                <CardHeader className="flex min-h-18 w-full max-w-full min-w-0 items-start justify-between gap-3 space-y-0 border-b border-border">
+                                    <div className="min-w-0 flex-1">
                                         <CardTitle className="text-sm font-semibold">
                                             {isAdmin ? 'Pending requests' : 'Your pending requests'}
                                         </CardTitle>
-                                        <CardDescription>
-                                            {isAdmin ? 'Awaiting a decision' : 'Requests still being processed'}
-                                        </CardDescription>
+                                        <CardDescription>{isAdmin ? 'Awaiting a decision' : 'Requests still being processed'}</CardDescription>
                                     </div>
                                     <div className="flex shrink-0 flex-col items-center gap-2">
                                         <Button variant="outline" size="xs" className="w-[5.5rem] justify-center" asChild>
@@ -426,15 +379,17 @@ export default function Dashboard({
                                                 <ArrowUpRight className="h-4 w-4" />
                                             </Link>
                                         </Button>
-                                        <span className="text-xs text-muted-foreground">
-                                            {pendingRequests.data.length} shown
-                                        </span>
+                                        <span className="text-xs text-muted-foreground">{pendingRequests.data.length} shown</span>
                                     </div>
                                 </CardHeader>
-                                <CardContent className="p-0">
-                                    <div className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-6 pb-6">
+                                <CardContent className="max-w-full min-w-0 overflow-hidden p-0">
+                                    <div className="flex flex-wrap gap-1 px-6 pb-6">
                                         {(['All', 'Week', 'Month'] as const).map((label) => {
-                                            const filterMap: Record<string, 'all' | 'this_week' | 'this_month'> = { All: 'all', Week: 'this_week', Month: 'this_month' };
+                                            const filterMap: Record<string, 'all' | 'this_week' | 'this_month'> = {
+                                                All: 'all',
+                                                Week: 'this_week',
+                                                Month: 'this_month',
+                                            };
                                             const value = filterMap[label];
                                             return (
                                                 <Button
@@ -471,15 +426,13 @@ export default function Dashboard({
                                             </Link>
                                         </div>
                                     ) : (
-                                        <div className="flex flex-col">
+                                        <div className="flex max-w-full min-w-0 flex-col overflow-hidden">
                                             {pendingLoading ? (
                                                 <div className="flex h-[200px] items-center justify-center">
                                                     <Spinner size="sm" className="size-5" />
                                                 </div>
                                             ) : (
-                                                pendingRequests.data.slice(0, 6).map((request) => (
-                                                    <RequestRow key={request.id} request={request} />
-                                                ))
+                                                pendingRequests.data.slice(0, 6).map((request) => <RequestRow key={request.id} request={request} />)
                                             )}
                                         </div>
                                     )}
@@ -487,8 +440,8 @@ export default function Dashboard({
                             </Card>
 
                             <Card className={cardClass}>
-                                <CardHeader className="flex items-start justify-between gap-3 space-y-0 border-b border-border min-h-18">
-                                    <div className="min-w-0">
+                                <CardHeader className="flex min-h-18 w-full max-w-full min-w-0 items-start justify-between gap-3 space-y-0 border-b border-border">
+                                    <div className="min-w-0 flex-1">
                                         <CardTitle className="flex items-center gap-1.5 text-sm font-semibold">
                                             <Activity className="h-4 w-4 text-[var(--ads-ok)]" />
                                             Live activity
@@ -505,7 +458,7 @@ export default function Dashboard({
                                         <ArrowUpRight className="h-4 w-4" />
                                     </Button>
                                 </CardHeader>
-                                <CardContent className="p-4">
+                                <CardContent className="max-w-full min-w-0 overflow-hidden p-4">
                                     <ActivityFeed auditLogs={auditLogs.slice(0, 6)} />
                                 </CardContent>
                             </Card>
@@ -513,8 +466,8 @@ export default function Dashboard({
                     </TabsContent>
 
                     {/* ── Schedule ─────────────────────────────────────────── */}
-                    <TabsContent value="calendar">
-                        <div className="mt-4">
+                    <TabsContent value="calendar" className="w-full max-w-full min-w-0 overflow-x-clip">
+                        <div className="mt-4 w-full max-w-full min-w-0">
                             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                 <h2 className="text-sm font-semibold text-foreground">Facility Calendar Schedule</h2>
                                 <Popover>
@@ -570,9 +523,9 @@ export default function Dashboard({
                     </TabsContent>
 
                     {/* ── Activity ─────────────────────────────────────────── */}
-                    <TabsContent value="activity">
-                        <div className="mt-6 flex flex-col gap-8">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
+                    <TabsContent value="activity" className="w-full max-w-full min-w-0 overflow-x-clip">
+                        <div className="mt-6 flex w-full max-w-full min-w-0 flex-col gap-8 overflow-x-clip">
+                            <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-between gap-3">
                                 <div className="flex flex-col gap-0.5">
                                     <h2 className="text-xl font-bold tracking-tight">Activity Report</h2>
                                     <p className="text-sm text-muted-foreground">{rangeLabel} — system events over time</p>
@@ -584,24 +537,26 @@ export default function Dashboard({
                                     </SelectTrigger>
                                     <SelectContent>
                                         {(Object.entries(rangeOptions) as [typeof range, string][]).map(([value, label]) => (
-                                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                                            <SelectItem key={value} value={value}>
+                                                {label}
+                                            </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
-                            <div className="flex flex-col gap-2 xl:grid xl:grid-cols-[5fr_3fr]">
+                            <div className="flex w-full max-w-full min-w-0 flex-col gap-2 overflow-x-clip xl:grid xl:grid-cols-[5fr_3fr]">
                                 <Card className={cn(cardClass, 'overflow-hidden')}>
-                                    <CardHeader className="pb-2">
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle className="text-sm font-semibold">Events per day</CardTitle>
-                                            <div className="flex items-center gap-1.5">
+                                    <CardHeader className="max-w-full min-w-0 pb-2">
+                                        <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-between gap-2">
+                                            <CardTitle className="min-w-0 text-sm font-semibold">Events per day</CardTitle>
+                                            <div className="flex shrink-0 items-center gap-1.5">
                                                 <span className="inline-block h-2 w-2 rounded-full bg-primary" />
                                                 <span className="text-sm text-muted-foreground">Total events</span>
                                             </div>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="px-2 pb-4">
+                                    <CardContent className="max-w-full min-w-0 overflow-hidden px-2 pb-4">
                                         {loading ? (
                                             <div className="flex h-[300px] items-center justify-center">
                                                 <div className="flex flex-col items-center gap-3">
@@ -614,11 +569,11 @@ export default function Dashboard({
                                                 <p className="text-sm text-muted-foreground">No activity in this period.</p>
                                             </div>
                                         ) : (
-                                            <ChartContainer config={chartConfig} className="h-[300px] w-full px-2 pb-4">
-                                                <AreaChart
-                                                    data={data}
-                                                    margin={{ top: 10, right: 16, left: -10, bottom: 0 }}
-                                                >
+                                            <ChartContainer
+                                                config={chartConfig}
+                                                className="aspect-auto h-[300px] w-full max-w-full min-w-0 overflow-hidden px-2 pb-4"
+                                            >
+                                                <AreaChart data={data} margin={{ top: 10, right: 16, left: -10, bottom: 0 }}>
                                                     <defs>
                                                         <linearGradient id="fill-total" x1="0" y1="0" x2="0" y2="1">
                                                             <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.25} />
@@ -648,12 +603,18 @@ export default function Dashboard({
                                                         tickMargin={10}
                                                     />
                                                     <ChartTooltip
-                                                        cursor={{ stroke: 'var(--primary)', strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
+                                                        cursor={{
+                                                            stroke: 'var(--primary)',
+                                                            strokeWidth: 1,
+                                                            strokeDasharray: '4 4',
+                                                            strokeOpacity: 0.5,
+                                                        }}
                                                         content={
                                                             <ChartTooltipContent
-                                                                labelFormatter={(val) => range === 'day'
-                                                                    ? `Today at ${moment(val, 'HH:mm').format('h:mm A')}`
-                                                                    : moment(val).format('dddd, MMM D YYYY')
+                                                                labelFormatter={(val) =>
+                                                                    range === 'day'
+                                                                        ? `Today at ${moment(val, 'HH:mm').format('h:mm A')}`
+                                                                        : moment(val).format('dddd, MMM D YYYY')
                                                                 }
                                                             />
                                                         }
@@ -674,33 +635,30 @@ export default function Dashboard({
                                 </Card>
 
                                 <Card className={cn(cardClass, 'overflow-hidden')}>
-                                    <CardHeader className="pb-2">
+                                    <CardHeader className="max-w-full min-w-0 pb-2">
                                         <CardTitle className="text-sm font-semibold">Activity Breakdown</CardTitle>
                                         <CardDescription>Distribution of activity types in this period</CardDescription>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="flex flex-col items-center gap-4 md:flex-row">
+                                    <CardContent className="max-w-full min-w-0 overflow-hidden">
+                                        <div className="flex w-full max-w-full min-w-0 flex-col items-center gap-4 overflow-hidden md:flex-row">
                                             {!logsLoading && pieData.length > 0 && (
-                                                <div className="flex flex-col items-center gap-4 px-4 pb-5 md:flex-row">
+                                                <div className="flex w-full max-w-full min-w-0 flex-col items-center gap-4 overflow-hidden px-4 pb-5 md:flex-row">
                                                     <ChartContainer
                                                         config={pieChartConfig}
-                                                        className="mx-auto aspect-square max-h-[260px] min-w-[220px] [&_.recharts-pie-label-text]:fill-foreground"
+                                                        className="mx-auto aspect-square max-h-[260px] w-full max-w-[260px] min-w-0 overflow-hidden [&_.recharts-pie-label-text]:fill-foreground"
                                                     >
                                                         <PieChart>
-                                                            <ChartTooltip
-                                                                content={<ChartTooltipContent nameKey="event" hideLabel />}
-                                                            />
-                                                            <Pie
-                                                                data={pieData}
-                                                                dataKey="count"
-                                                                nameKey="event"
-                                                            />
+                                                            <ChartTooltip content={<ChartTooltipContent nameKey="event" hideLabel />} />
+                                                            <Pie data={pieData} dataKey="count" nameKey="event" />
                                                         </PieChart>
                                                     </ChartContainer>
 
-                                                    <div className="flex w-full flex-col gap-2">
+                                                    <div className="flex w-full max-w-full min-w-0 flex-col gap-2 overflow-hidden">
                                                         {pieData.map((row, i) => (
-                                                            <div key={row.event} className="flex items-center justify-between gap-2 text-xs">
+                                                            <div
+                                                                key={row.event}
+                                                                className="flex w-full max-w-full min-w-0 items-center justify-between gap-2 text-xs"
+                                                            >
                                                                 <div className="flex min-w-0 items-center gap-2">
                                                                     <span
                                                                         className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
@@ -725,8 +683,8 @@ export default function Dashboard({
                                     Loading activity...
                                 </div>
                             ) : (
-                                <div className="flex flex-col gap-3">
-                                    <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-x-clip">
+                                    <div className="flex w-full max-w-full min-w-0 flex-wrap items-center gap-2">
                                         <Popover>
                                             <PopoverTrigger asChild>
                                                 <Button
@@ -734,7 +692,7 @@ export default function Dashboard({
                                                     size="sm"
                                                     className={cn(
                                                         'flex items-center gap-2',
-                                                        logSort !== 'newest' && 'border-primary bg-primary/5 text-primary'
+                                                        logSort !== 'newest' && 'border-primary bg-primary/5 text-primary',
                                                     )}
                                                 >
                                                     <ArrowDownUp size={14} />
@@ -742,12 +700,14 @@ export default function Dashboard({
                                                 </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-44 p-0" align="start">
-                                                <p className="px-3 pb-1 pt-3 text-xs font-semibold text-muted-foreground">Sort By</p>
+                                                <p className="px-3 pt-3 pb-1 text-xs font-semibold text-muted-foreground">Sort By</p>
                                                 <div className="flex flex-col p-1">
-                                                    {([
-                                                        { label: 'Newest first', value: 'newest' },
-                                                        { label: 'Oldest first', value: 'oldest' },
-                                                    ] as const).map((opt) => (
+                                                    {(
+                                                        [
+                                                            { label: 'Newest first', value: 'newest' },
+                                                            { label: 'Oldest first', value: 'oldest' },
+                                                        ] as const
+                                                    ).map((opt) => (
                                                         <Button
                                                             key={opt.value}
                                                             variant={logSort === opt.value ? 'secondary' : 'ghost'}
@@ -769,7 +729,7 @@ export default function Dashboard({
                                                     size="sm"
                                                     className={cn(
                                                         'flex items-center gap-2',
-                                                        logFilter !== 'all' && 'border-primary bg-primary/5 text-primary'
+                                                        logFilter !== 'all' && 'border-primary bg-primary/5 text-primary',
                                                     )}
                                                 >
                                                     <ListFilter size={14} />
@@ -794,7 +754,10 @@ export default function Dashboard({
                                                             </button>
                                                         )}
                                                     </div>
-                                                    {[{ label: 'All event types', value: 'all' }, ...auditEvents.map((ev) => ({ value: ev.value, label: ev.label }))].map((opt) => (
+                                                    {[
+                                                        { label: 'All event types', value: 'all' },
+                                                        ...auditEvents.map((ev) => ({ value: ev.value, label: ev.label })),
+                                                    ].map((opt) => (
                                                         <label
                                                             key={opt.value}
                                                             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
@@ -836,18 +799,14 @@ export default function Dashboard({
                     </TabsContent>
 
                     {/* ── Inbox ────────────────────────────────────────────── */}
-                    <TabsContent value="inbox">
-                        <div className="mt-6 flex flex-col gap-4">
-                            <div className="flex items-center justify-between gap-3">
+                    <TabsContent value="inbox" className="w-full max-w-full min-w-0 overflow-x-clip">
+                        <div className="mt-6 flex w-full max-w-full min-w-0 flex-col gap-4 overflow-x-clip">
+                            <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-between gap-3">
                                 <div className="flex flex-col gap-0.5">
                                     <h2 className="text-xl font-bold tracking-tight">Notification Inbox</h2>
-                                    <p className="text-sm text-muted-foreground">
-                                        Recent request notifications sent to your account.
-                                    </p>
+                                    <p className="text-sm text-muted-foreground">Recent request notifications sent to your account.</p>
                                 </div>
-                                {markingNotificationsRead && (
-                                    <span className="text-xs text-muted-foreground">Marking as seen...</span>
-                                )}
+                                {markingNotificationsRead && <span className="text-xs text-muted-foreground">Marking as seen...</span>}
                             </div>
 
                             {notifications.length === 0 ? (
@@ -861,7 +820,7 @@ export default function Dashboard({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex flex-col gap-2">
+                                <div className="flex w-full max-w-full min-w-0 flex-col gap-2 overflow-hidden">
                                     {notifications.map((notification) => {
                                         const isUnread = !notification.read_at;
 
@@ -870,30 +829,32 @@ export default function Dashboard({
                                                 key={notification.id}
                                                 href={notification.url}
                                                 className={cn(
-                                                    'group flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/60',
-                                                    isUnread && 'border-[var(--ads-ok-bg)] bg-[var(--ads-ok-bg)]/40'
+                                                    'group flex w-full max-w-full min-w-0 items-start gap-3 overflow-hidden rounded-lg border p-4 transition-colors hover:bg-muted/60',
+                                                    isUnread && 'border-[var(--ads-ok-bg)] bg-[var(--ads-ok-bg)]/40',
                                                 )}
                                             >
-                                                <div className={cn(
-                                                    'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
-                                                    isUnread ? 'bg-[var(--ads-ok)] text-primary-foreground' : 'bg-muted text-muted-foreground'
-                                                )}>
+                                                <div
+                                                    className={cn(
+                                                        'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full',
+                                                        isUnread ? 'bg-[var(--ads-ok)] text-primary-foreground' : 'bg-muted text-muted-foreground',
+                                                    )}
+                                                >
                                                     <Bell className="h-4 w-4" />
                                                 </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <div className="min-w-0">
+                                                <div className="max-w-full min-w-0 flex-1 overflow-hidden">
+                                                    <div className="flex w-full max-w-full min-w-0 items-start justify-between gap-3 overflow-hidden">
+                                                        <div className="max-w-full min-w-0 flex-1 overflow-hidden">
                                                             <p className="truncate text-sm font-semibold">{notification.title}</p>
-                                                            <p className="mt-1 text-sm text-muted-foreground">{notification.body}</p>
+                                                            <p className="mt-1 max-w-full text-sm [overflow-wrap:anywhere] break-words text-muted-foreground">
+                                                                {notification.body}
+                                                            </p>
                                                         </div>
                                                         <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
                                                     </div>
                                                     <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                                                         {isUnread && <span className="size-2 rounded-full bg-[var(--primary)]" />}
                                                         <span>
-                                                            {notification.created_at
-                                                                ? moment(notification.created_at).fromNow()
-                                                                : 'Recently'}
+                                                            {notification.created_at ? moment(notification.created_at).fromNow() : 'Recently'}
                                                         </span>
                                                         {notification.status && <span>- {notification.status}</span>}
                                                     </div>

@@ -87,9 +87,9 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
          * On mobile the Sidebar component renders a Sheet overlay regardless of
          * this value — the icon-rail collapse only applies at ≥ md breakpoint.
          */
-        <SidebarProvider defaultOpen={getSidebarDefaultOpen()} className="bg-background">
+        <SidebarProvider defaultOpen={getSidebarDefaultOpen()} className="max-w-full min-w-0 overflow-x-clip bg-background">
             <AppSidebar />
-            <SidebarInset className="relative min-h-svh">
+            <SidebarInset className="relative min-h-svh max-w-full min-w-0 overflow-x-clip">
                 <header className="sticky top-0 z-8 flex h-16 shrink-0 items-center gap-2 border-b border-border bg-card px-4">
                     <SidebarTrigger className="-ml-1" />
                     <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
@@ -118,9 +118,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
                                                 {isLast && labeledBreadcrumb == null ? (
                                                     <BreadcrumbPage>{label}</BreadcrumbPage>
                                                 ) : (
-                                                    <BreadcrumbLink href={path}>
-                                                        {label}
-                                                    </BreadcrumbLink>
+                                                    <BreadcrumbLink href={path}>{label}</BreadcrumbLink>
                                                 )}
                                             </BreadcrumbItem>
                                             {index < breadcrumbs.length - 1 && <BreadcrumbSeparator />}
@@ -160,7 +158,8 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
 
                 <div
                     className={
-                        'mx-auto flex w-full max-w-10xl flex-1 flex-col justify-start gap-4 overflow-visible' + (hasPadding ? ' p-6 md:p-8' : '')
+                        'mx-auto flex w-full max-w-full min-w-0 flex-1 flex-col justify-start gap-4 overflow-x-clip xl:max-w-7xl' +
+                        (hasPadding ? ' p-6 md:p-8' : '')
                     }
                 >
                     {children}

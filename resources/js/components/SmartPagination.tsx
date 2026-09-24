@@ -1,8 +1,20 @@
-import { useState } from "react";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationEllipsis, PaginationPrevious } from "./ui/pagination";
+import { useState } from 'react';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationEllipsis,
+    PaginationPrevious,
+} from './ui/pagination';
 
-
-export default function SmartPagination({ currentPage, lastPage, onPageChange, className }: {
+export default function SmartPagination({
+    currentPage,
+    lastPage,
+    onPageChange,
+    className,
+}: {
     currentPage: number;
     lastPage: number;
     onPageChange: (page: number) => void;
@@ -10,7 +22,7 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
 }) {
     const [editingLeft, setEditingLeft] = useState(false);
     const [editingRight, setEditingRight] = useState(false);
-    const [inputVal, setInputVal] = useState("");
+    const [inputVal, setInputVal] = useState('');
 
     const handleJump = (side: 'left' | 'right') => {
         const page = parseInt(inputVal);
@@ -22,8 +34,8 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
         } else {
             setEditingRight(false);
         }
-        setInputVal("");
-    }
+        setInputVal('');
+    };
 
     const getPageWindow = () => {
         const delta = 2; // pages on each side of current
@@ -32,7 +44,7 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
             range.push(i);
         }
         return range;
-    }
+    };
 
     const pageWindow = getPageWindow();
     const showLeftEllipsis = pageWindow[0] > 2;
@@ -40,19 +52,29 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
 
     return (
         <Pagination>
-            <PaginationContent className={"w-full mx-auto justify-center" + (className ? " " + className : "")}>
+            <PaginationContent className={'mx-auto w-full max-w-full min-w-0 flex-wrap justify-center' + (className ? ' ' + className : '')}>
                 {/* Prev */}
                 <PaginationItem>
                     <PaginationPrevious
                         href="#"
-                        onClick={(e) => { e.preventDefault(); if (currentPage > 1) onPageChange(currentPage - 1); }}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            if (currentPage > 1) onPageChange(currentPage - 1);
+                        }}
                         className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
                     />
                 </PaginationItem>
 
                 {/* First page */}
                 <PaginationItem>
-                    <PaginationLink href="#" onClick={(e) => { e.preventDefault(); onPageChange(1); }} isActive={currentPage === 1}>
+                    <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            onPageChange(1);
+                        }}
+                        isActive={currentPage === 1}
+                    >
                         1
                     </PaginationLink>
                 </PaginationItem>
@@ -64,14 +86,25 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
                             <input
                                 autoFocus
                                 type="number"
-                                className="w-12 h-9 text-center border rounded-md text-sm"
+                                className="h-9 w-12 rounded-md border text-center text-sm"
                                 value={inputVal}
                                 onChange={(e) => setInputVal(e.target.value)}
-                                onBlur={() => { handleJump('left'); }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleJump('left'); if (e.key === 'Escape') setEditingLeft(false); }}
+                                onBlur={() => {
+                                    handleJump('left');
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleJump('left');
+                                    if (e.key === 'Escape') setEditingLeft(false);
+                                }}
                             />
                         ) : (
-                            <PaginationEllipsis className="cursor-pointer" onClick={() => { setEditingLeft(true); setEditingRight(false); }} />
+                            <PaginationEllipsis
+                                className="cursor-pointer"
+                                onClick={() => {
+                                    setEditingLeft(true);
+                                    setEditingRight(false);
+                                }}
+                            />
                         )}
                     </PaginationItem>
                 )}
@@ -79,7 +112,14 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
                 {/* Page window */}
                 {pageWindow.map((page) => (
                     <PaginationItem key={page}>
-                        <PaginationLink href="#" onClick={(e) => { e.preventDefault(); onPageChange(page); }} isActive={currentPage === page}>
+                        <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                onPageChange(page);
+                            }}
+                            isActive={currentPage === page}
+                        >
                             {page}
                         </PaginationLink>
                     </PaginationItem>
@@ -92,14 +132,23 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
                             <input
                                 autoFocus
                                 type="number"
-                                className="w-12 h-9 text-center border rounded-md text-sm"
+                                className="h-9 w-12 rounded-md border text-center text-sm"
                                 value={inputVal}
                                 onChange={(e) => setInputVal(e.target.value)}
                                 onBlur={() => handleJump('right')}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleJump('right'); if (e.key === 'Escape') setEditingRight(false); }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleJump('right');
+                                    if (e.key === 'Escape') setEditingRight(false);
+                                }}
                             />
                         ) : (
-                            <PaginationEllipsis className="cursor-pointer" onClick={() => { setEditingRight(true); setEditingLeft(false); }} />
+                            <PaginationEllipsis
+                                className="cursor-pointer"
+                                onClick={() => {
+                                    setEditingRight(true);
+                                    setEditingLeft(false);
+                                }}
+                            />
                         )}
                     </PaginationItem>
                 )}
@@ -107,7 +156,14 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
                 {/* Last page */}
                 {lastPage > 1 && (
                     <PaginationItem>
-                        <PaginationLink href="#" onClick={(e) => { e.preventDefault(); onPageChange(lastPage); }} isActive={currentPage === lastPage}>
+                        <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                onPageChange(lastPage);
+                            }}
+                            isActive={currentPage === lastPage}
+                        >
                             {lastPage}
                         </PaginationLink>
                     </PaginationItem>
@@ -117,7 +173,10 @@ export default function SmartPagination({ currentPage, lastPage, onPageChange, c
                 <PaginationItem>
                     <PaginationNext
                         href="#"
-                        onClick={(e) => { e.preventDefault(); if (currentPage < lastPage) onPageChange(currentPage + 1); }}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            if (currentPage < lastPage) onPageChange(currentPage + 1);
+                        }}
                         className={currentPage === lastPage ? 'pointer-events-none opacity-50' : ''}
                     />
                 </PaginationItem>

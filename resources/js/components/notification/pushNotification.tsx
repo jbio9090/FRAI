@@ -2,7 +2,7 @@ import { usePage } from '@inertiajs/react';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
 import { Button } from '@/components/ui/button';
-import { getPushServiceWorkerRegistration, isFirebaseConfigValid, resolveVapidKey } from '@/lib/firebasePush';
+import { getPushServiceWorkerRegistration, isFirebaseConfigValid, resolveVapidKey, ensureForegroundPushListener } from '@/lib/firebasePush';
 import { isPushOptedOut, setPushOptedOut } from '@/lib/pushPreferences';
 
 async function postPushJson(url: string, body: Record<string, unknown>): Promise<void> {
@@ -278,6 +278,15 @@ export default function PushNotifications() {
             await sendTokenToServer(token, 'web');
             checkGeneration.current += 1;
             setIsRegistered(true);
+
+            // Permission was just granted mid-session, so the boot-time
+            // listener never attached. Attach onMessage now — otherwise
+            // same-tab pushes stay silent until the next full page load.
+            const attachResult = await ensureForegroundPushListener(firebaseConfig);
+
+            if (attachResult !== 'attached') {
+                console.warn(`Foreground push listener not attached after enable: ${attachResult}`);
+            }
         }
     };
 
