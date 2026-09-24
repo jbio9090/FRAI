@@ -36,3 +36,5 @@ vite-dev.log
 /AGENTS.md
 /junie/
 .claude/worktrees/analysis-worktree/
+/.opencode/index
+.opencode/codebase-index.json
