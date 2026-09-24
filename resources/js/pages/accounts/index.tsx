@@ -101,7 +101,8 @@ interface CsvRow {
     error?: string;
 }
 
-const emptyForm: UserForm = { username: "", email: "", role: "", position: "", profile: null };
+const emptyUsername = "";
+const emptyEmail = "";
 
 const CSV_HEADERS = ['name', 'email', 'role'];
 const CSV_OPTIONAL_HEADERS = ['position'];
@@ -119,8 +120,9 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isBatchOpen, setIsBatchOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<RowUser | null>(null);
-    const [addForm, setAddForm] = useState<UserForm>(emptyForm);
-    const [editForm, setEditForm] = useState<UserForm>(emptyForm);
+    const [addUsername, setAddUsername] = useState(emptyUsername);
+    const [addEmail, setAddEmail] = useState(emptyEmail);
+    const [editForm, setEditForm] = useState<UserForm>({ username: "", email: "", role: "", position: "", profile: null });
     const fileInputRef = useRef<HTMLInputElement>(null);
     const csvInputRef = useRef<HTMLInputElement>(null);
     const { errors } = usePage<PageProps>().props;
@@ -308,12 +310,14 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
         router.post(route("accounts.store"), {
-            ...addForm,
-            name: addForm.username,
+            username: addUsername,
+            email: addEmail,
+            name: addUsername,
         }, {
             onSuccess: () => {
                 setIsAddOpen(false);
-                setAddForm(emptyForm);
+                setAddUsername(emptyUsername);
+                setAddEmail(emptyEmail);
             },
         });
     };
@@ -476,10 +480,19 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
         form,
         onChange,
         isEdit = false,
+        // Individual state variables for Add form (to avoid object spread on each keystroke)
+        username,
+        email,
+        setUsername,
+        setEmail,
     }: {
         form: UserForm;
         onChange: (f: UserForm) => void;
         isEdit?: boolean;
+        username?: string;
+        email?: string;
+        setUsername?: (v: string) => void;
+        setEmail?: (v: string) => void;
     }) => (
         <>
             <div className="flex flex-col items-center gap-4 mb-4">
@@ -521,9 +534,9 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                     <Input
                         type="text"
                         placeholder="Enter username"
-                        value={form.username}
+                        value={username ?? form.username}
                         className={errors.username ? "border-destructive" : ""}
-                        onChange={(e) => onChange({ ...form, username: e.target.value })}
+                        onChange={setUsername ? (e) => setUsername(e.target.value) : (e) => onChange({ ...form, username: e.target.value })}
                     />
                     {errors.username && <p className="text-sm text-destructive">{errors.username}</p>}
                 </div>
@@ -533,9 +546,9 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                     <Input
                         type="email"
                         placeholder="Enter email"
-                        value={form.email}
+                        value={email ?? form.email}
                         className={errors.email ? "border-destructive" : ""}
-                        onChange={(e) => onChange({ ...form, email: e.target.value })}
+                        onChange={setEmail ? (e) => setEmail(e.target.value) : (e) => onChange({ ...form, email: e.target.value })}
                     />
                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                 </div>
@@ -791,7 +804,10 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             {/* ── Add Dialog ───────────────────────────────────────────────── */}
             <Dialog open={isAddOpen} onOpenChange={(open) => {
                 setIsAddOpen(open);
-                if (!open) setAddForm(emptyForm);
+                if (!open) {
+                    setAddUsername(emptyUsername);
+                    setAddEmail(emptyEmail);
+                }
             }}>
                 <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85dvh] overflow-y-auto">
                     <DialogHeader>
@@ -803,7 +819,14 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                         </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAdd} className="flex flex-col gap-4 mb-8">
-                        <FormFields form={addForm} onChange={setAddForm} />
+                        <FormFields
+                            form={{ username: addUsername, email: addEmail, role: "", position: "", profile: null, preview: undefined }}
+                            onChange={() => {}}
+                            username={addUsername}
+                            email={addEmail}
+                            setUsername={setAddUsername}
+                            setEmail={setAddEmail}
+                        />
                         <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
                             <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setIsAddOpen(false)}>
                                 Cancel
