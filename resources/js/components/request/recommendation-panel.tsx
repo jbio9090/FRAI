@@ -1,6 +1,6 @@
-import { router, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { format } from 'date-fns';
 import { Calendar, Clock, Sparkles, LayoutGrid, Filter, CheckSquare, Send, Loader2 } from 'lucide-react';
-import moment from 'moment';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -16,12 +16,30 @@ interface RecommendationPanelProps {
     variant?: 'card' | 'page';
 }
 
-function formatDate(date: string) {
-    return moment(date, ['YYYY-MM-DD', moment.ISO_8601]).format('MMM D, YYYY');
+function formatDate(date?: string) {
+    if (!date) {
+        return '---';
+    }
+
+    const parsed = new Date(`${date}T00:00:00`);
+
+    if (isNaN(parsed.getTime())) {
+        return date;
+    }
+
+    return format(parsed, 'PPP');
 }
 
-function formatTime(time: string) {
-    return moment(time, 'HH:mm:ss').format('h:mm A');
+function formatTime(time: string): string {
+    if (!time) return '---';
+    const normalized = time === '24:00' || time === '24:00:00' ? '23:59:00' : time;
+    const parsed = new Date(`2000-01-01T${normalized}`);
+    if (isNaN(parsed.getTime())) return '---';
+    return parsed.toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+    });
 }
 
 function getTypeLabel(type: AlternativeSlot['type']): string {
@@ -43,7 +61,7 @@ function getCapacityBadge(fit: AlternativeSlot['capacity_fit']) {
         larger: 'bg-[var(--ads-info-bg)] text-[var(--ads-info)]',
         smaller: 'bg-[var(--ads-warning-bg)] text-[var(--ads-warning)]',
     };
-    return <span className={cn('px-1.5 py-0.5 text-[10px] font-semibold rounded-[4px]', styles[fit])}>{fit}</span>;
+    return <span className={cn('rounded-[4px] px-1.5 py-0.5 text-[10px] font-semibold', styles[fit])}>{fit}</span>;
 }
 
 function getSlotKey(slot: AlternativeSlot): string {
@@ -55,7 +73,14 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
     const { hasRole } = usePermission();
     const isAdmin = hasRole('admin') || hasRole('Super Admin');
 
-    const { alternatives, loading: altLoading, error: altError, refetch, includeEquipment, setIncludeEquipment } = useAlternatives({
+    const {
+        alternatives,
+        loading: altLoading,
+        error: altError,
+        refetch,
+        includeEquipment,
+        setIncludeEquipment,
+    } = useAlternatives({
         requestId: request.id,
         includeEquipment: false,
         enabled: request.status === 'For Reschedule',
@@ -66,7 +91,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
 
     const handleSlotToggle = (slot: AlternativeSlot) => {
         const key = getSlotKey(slot);
-        setSelectedSlots(prev => {
+        setSelectedSlots((prev) => {
             const next = new Set(prev);
             if (next.has(key)) {
                 next.delete(key);
@@ -88,18 +113,20 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
         setIsSubmitting(true);
 
         const chosenAlternatives: AlternativeSlot[] = [];
-        Object.values(alternatives.alternatives).flat().forEach(slot => {
-            if (selectedSlots.has(getSlotKey(slot))) {
-                chosenAlternatives.push(slot);
-            }
-        });
+        Object.values(alternatives.alternatives)
+            .flat()
+            .forEach((slot) => {
+                if (selectedSlots.has(getSlotKey(slot))) {
+                    chosenAlternatives.push(slot);
+                }
+            });
 
         try {
             const response = await fetch(route('requests.reschedule-alternatives.store', [request.id]), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
+                    Accept: 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
                 },
                 body: JSON.stringify({ alternatives: chosenAlternatives }),
@@ -144,9 +171,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                     >
                         <StatusTag requestStatus={request.recommended_action ?? 'Pending'} variant="large" />
                         {request.recommended_action_reason && (
-                            <p className="max-w-lg text-center text-sm leading-relaxed text-muted-foreground">
-                                {request.recommended_action_reason}
-                            </p>
+                            <p className="max-w-lg text-center text-sm leading-relaxed text-muted-foreground">{request.recommended_action_reason}</p>
                         )}
                     </motion.div>
                 )}
@@ -167,12 +192,23 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                 <div key={rf.id} className="ads-card flex flex-col gap-1.5 p-4">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex min-w-0 flex-col gap-0.5">
-                                            <span className="truncate text-sm font-semibold">{facilityName}</span>
-                                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                <Calendar size={11} />
-                                                {formatDate(rf.date_requested)}
-                                                <Clock size={11} className="ml-1" />
-                                                {formatTime(rf.time_start)} – {formatTime(rf.time_end)}
+                                            <Link
+                                                className="truncate text-lg font-semibold tracking-tight text-foreground hover:underline"
+                                                href={route('facility.detail', [rf.facility_id])}
+                                            >
+                                                {facilityName}
+                                            </Link>
+                                            <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                                                <span className="flex items-center gap-1">
+                                                    <Calendar size={11} className="shrink-0" />
+                                                    <span className="text-foreground">{formatDate(rf.date_requested)}</span>
+                                                </span>
+                                                <span className="flex items-center gap-1">
+                                                    <Clock size={11} className="shrink-0" />
+                                                    <span className="text-foreground">
+                                                        {formatTime(rf.time_start)} – {formatTime(rf.time_end)}
+                                                    </span>
+                                                </span>
                                             </span>
                                         </div>
                                         {isLoading || !rfStatus ? (
@@ -202,7 +238,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                             <span className="ads-eyebrow">Suggested Alternatives</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
                                 <Filter className="h-3.5 w-3.5" />
                                 <input
                                     type="checkbox"
@@ -216,14 +252,12 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                     </div>
 
                     {isAdmin && selectedSlots.size > 0 && (
-                        <div className="ads-card p-3 bg-primary/5 border-primary/20 flex items-center justify-between gap-3">
-                            <span className="text-sm font-medium text-primary">
-                                {selectedSlots.size} alternative(s) selected
-                            </span>
+                        <div className="ads-card flex items-center justify-between gap-3 border-primary/20 bg-primary/5 p-3">
+                            <span className="text-sm font-medium text-primary">{selectedSlots.size} alternative(s) selected</span>
                             <button
                                 onClick={handleSubmitChosen}
                                 disabled={isSubmitting}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-[4px] text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="flex items-center gap-2 rounded-[4px] bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {isSubmitting ? (
                                     <>
@@ -250,7 +284,9 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                     {altError && (
                         <div className="ads-card p-4 text-sm text-destructive">
                             Failed to load alternatives: {altError}
-                            <button onClick={refetch} className="ml-2 underline">Retry</button>
+                            <button onClick={refetch} className="ml-2 underline">
+                                Retry
+                            </button>
                         </div>
                     )}
 
@@ -263,11 +299,14 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                 const facilityName = facility?.name ?? `Facility #${facilityId}`;
 
                                 // Group slots by type
-                                const grouped = slots.reduce((acc, slot) => {
-                                    if (!acc[slot.type]) acc[slot.type] = [];
-                                    acc[slot.type].push(slot);
-                                    return acc;
-                                }, {} as Record<AlternativeSlot['type'], AlternativeSlot[]>);
+                                const grouped = slots.reduce(
+                                    (acc, slot) => {
+                                        if (!acc[slot.type]) acc[slot.type] = [];
+                                        acc[slot.type].push(slot);
+                                        return acc;
+                                    },
+                                    {} as Record<AlternativeSlot['type'], AlternativeSlot[]>,
+                                );
 
                                 const typeOrder: AlternativeSlot['type'][] = [
                                     'same_facility_time',
@@ -296,31 +335,38 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                                                         key={slotKey}
                                                                         type="button"
                                                                         onClick={() => handleSlotToggle(slot)}
-                                                                        className={`group relative flex flex-col p-3 text-left transition-all duration-150 text-xs cursor-pointer border-2 ${
+                                                                        className={`group relative flex cursor-pointer flex-col border-2 p-3 text-left text-xs transition-all duration-150 ${
                                                                             isSelected
                                                                                 ? 'border-primary bg-primary/10'
                                                                                 : 'border-border hover:border-primary/50'
                                                                         }`}
                                                                     >
-                                                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                                                        <div className="mb-2 flex items-center justify-between gap-2">
                                                                             <div className="flex items-center gap-1.5">
                                                                                 {isAdmin && (
                                                                                     <CheckSquare
-                                                                                        className={cn('h-4 w-4 flex-shrink-0 transition-colors', isSelected ? 'text-primary' : 'text-muted-foreground')}
+                                                                                        className={cn(
+                                                                                            'h-4 w-4 flex-shrink-0 transition-colors',
+                                                                                            isSelected ? 'text-primary' : 'text-muted-foreground',
+                                                                                        )}
                                                                                         strokeWidth={2.5}
                                                                                     />
                                                                                 )}
-                                                                                {slot.type === 'different_facility' || slot.type === 'different_facility_date' ? (
-                                                                                    <span className="flex items-center gap-1 text-sm font-medium truncate">
+                                                                                {slot.type === 'different_facility' ||
+                                                                                slot.type === 'different_facility_date' ? (
+                                                                                    <span className="flex items-center gap-1 truncate text-sm font-medium">
                                                                                         <LayoutGrid size={11} />
                                                                                         {slot.facility_name}
                                                                                     </span>
                                                                                 ) : (
                                                                                     <>
-                                                                                        <span className="text-sm font-medium">{formatDate(slot.date)}</span>
+                                                                                        <span className="text-sm font-medium">
+                                                                                            {formatDate(slot.date)}
+                                                                                        </span>
                                                                                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
                                                                                             <Clock size={11} />
-                                                                                            {formatTime(slot.time_start)} – {formatTime(slot.time_end)}
+                                                                                            {formatTime(slot.time_start)} –{' '}
+                                                                                            {formatTime(slot.time_end)}
                                                                                         </span>
                                                                                     </>
                                                                                 )}
@@ -328,7 +374,14 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                                                         </div>
                                                                         <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                                                                             {getCapacityBadge(slot.capacity_fit)}
-                                                                            <span className={cn('px-1.5 py-0.5 rounded-[4px]', slot.equipment_available ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]' : 'bg-[var(--ads-muted-bg)] text-[var(--ads-muted)]')}>
+                                                                            <span
+                                                                                className={cn(
+                                                                                    'rounded-[4px] px-1.5 py-0.5',
+                                                                                    slot.equipment_available
+                                                                                        ? 'bg-[var(--ads-ok-bg)] text-[var(--ads-ok)]'
+                                                                                        : 'bg-[var(--ads-muted-bg)] text-[var(--ads-muted)]',
+                                                                                )}
+                                                                            >
                                                                                 {slot.equipment_available ? 'Equipment ✓' : 'Equipment ✗'}
                                                                             </span>
                                                                         </div>
