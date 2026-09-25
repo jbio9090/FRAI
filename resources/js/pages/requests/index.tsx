@@ -234,7 +234,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
 
     return (
         <DefaultLayout hasPadding={false}>
-            <div className="mx-auto w-full max-w-7xl">
+            <div className="mx-auto w-full">
                 <div className="flex w-full flex-col flex-wrap gap-4 px-4 pt-4 md:px-8 md:pt-8">
                     <div className="flex flex-wrap items-center gap-2">
                         <InputGroup className="max-w-xs sm:max-w-sm md:max-w-md">

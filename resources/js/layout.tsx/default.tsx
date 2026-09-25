@@ -158,7 +158,7 @@ export default function DefaultLayout({ children, hasPadding = true }: Dashboard
 
                 <div
                     className={
-                        'mx-auto flex w-full max-w-full min-w-0 flex-1 flex-col justify-start gap-4 overflow-x-clip xl:max-w-7xl' +
+                        'mx-auto flex w-full max-w-full min-w-0 flex-1 flex-col justify-start gap-4 overflow-x-clip' +
                         (hasPadding ? ' p-6 md:p-8' : '')
                     }
                 >
