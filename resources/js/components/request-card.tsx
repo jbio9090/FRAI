@@ -186,7 +186,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection?.(request.id)}
             className={cn(
-                'ads-card mx-auto min-h-0 w-full p-8 transition-all duration-200',
+                'frai-card mx-auto min-h-0 w-full p-8 transition-all duration-200',
                 className,
                 isSelecting && 'cursor-pointer hover:border-primary/50',
                 isSelected && 'border-primary ring-1 ring-primary',

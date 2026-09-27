@@ -595,7 +595,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
-                        <p className="ads-eyebrow">User administration</p>
+                        <p className="frai-eyebrow">User administration</p>
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
                             Account Management
                         </h1>

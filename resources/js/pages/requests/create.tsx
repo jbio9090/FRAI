@@ -249,7 +249,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 </div>
 
                                 {/* ── Right: sticky sidebar (desktop only) ── */}
-                                <div className="ads-card sticky top-6 hidden p-5 lg:block">
+                                <div className="frai-card sticky top-6 hidden p-5 lg:block">
                                     {/* ── Desktop: FacilityInfo manages its own facility + date ── */}
                                     <FacilityInfo facilities={facilities} isForSidebar={true} />
 

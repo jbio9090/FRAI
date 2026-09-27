@@ -92,9 +92,9 @@ export function ScheduleSection({
     editingIndex,
 }: ScheduleSectionProps) {
     return (
-        <section className="ads-card p-5 md:p-6">
+        <section className="frai-card p-5 md:p-6">
             <div className="mb-5 border-b border-border pb-3">
-                <span className="ads-eyebrow">Schedule</span>
+                <span className="frai-eyebrow">Schedule</span>
             </div>
             <div className="space-y-5">
                 {/* Date + Time row */}

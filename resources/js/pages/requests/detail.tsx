@@ -282,10 +282,10 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     </div>
 
                     {isAdmin && (
-                        <div className="ads-card mt-1 flex w-full max-w-3xl flex-col gap-3 p-4">
+                        <div className="frai-card mt-1 flex w-full max-w-3xl flex-col gap-3 p-4">
                             <div className="flex flex-wrap items-start gap-3">
                                 <div className="flex min-w-0 flex-col">
-                                    <span className="ads-eyebrow">Recommendation</span>
+                                    <span className="frai-eyebrow">Recommendation</span>
                                     {request.recommended_action ? (
                                         <>
                                             <span
@@ -420,22 +420,22 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     <TabsContent value="overview" className="mt-6 px-6 md:px-8">
                         <div className="flex max-w-3xl flex-col gap-6">
                             {/* Description */}
-                            <section className="ads-card p-5 md:p-6">
+                            <section className="frai-card p-5 md:p-6">
                                 <div className="mb-4 border-b border-border pb-3">
-                                    <span className="ads-eyebrow">Description</span>
+                                    <span className="frai-eyebrow">Description</span>
                                 </div>
                                 <p className="leading-relaxed text-foreground">{request.description || 'No description provided.'}</p>
                             </section>
 
                             {/* Request details */}
-                            <section className="ads-card p-5 md:p-6">
+                            <section className="frai-card p-5 md:p-6">
                                 <div className="mb-5 border-b border-border pb-3">
-                                    <span className="ads-eyebrow">Request details</span>
+                                    <span className="frai-eyebrow">Request details</span>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
                                     <div>
-                                        <p className="ads-eyebrow mb-1.5">Requested by</p>
+                                        <p className="frai-eyebrow mb-1.5">Requested by</p>
                                         <div className="flex items-center gap-1.5">
                                             <AvatarWithInitials avatarSrc={request.user.profile} username={request.user.name} size="sm" />
                                             <span>{request.user.name}</span>
@@ -443,12 +443,12 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                     </div>
 
                                     <div>
-                                        <p className="ads-eyebrow mb-1.5">Date Submitted</p>
+                                        <p className="frai-eyebrow mb-1.5">Date Submitted</p>
                                         <p>{moment(request.created_at).format('MMM D, YYYY')}</p>
                                     </div>
 
                                     <div>
-                                        <p className="ads-eyebrow mb-1.5">Processed by</p>
+                                        <p className="frai-eyebrow mb-1.5">Processed by</p>
                                         {request.processed_by ? (
                                             <div className="flex items-center gap-1.5">
                                                 <AvatarWithInitials
@@ -464,7 +464,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                     </div>
 
                                     <div>
-                                        <p className="ads-eyebrow mb-1.5">Processed At</p>
+                                        <p className="frai-eyebrow mb-1.5">Processed At</p>
                                         {request.processed_at ? (
                                             <p>{moment(request.processed_at).format('MMM D, YYYY')}</p>
                                         ) : (
@@ -473,7 +473,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                     </div>
 
                                     <div className="col-span-2">
-                                        <p className="ads-eyebrow mb-1.5">Approved By</p>
+                                        <p className="frai-eyebrow mb-1.5">Approved By</p>
                                         {request.approved_by?.length ? (
                                             <p className="font-medium">{request.approved_by.join(', ')}</p>
                                         ) : (
@@ -598,7 +598,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                         className="relative mt-6 flex w-full flex-col items-start gap-4 px-6 md:grid md:grid-cols-[3fr_4fr] md:px-8"
                     >
                         <div className="order-1 h-full w-full max-w-2xl overflow-y-auto pr-2 pb-32 md:order-2 md:pb-0">
-                            <div className="ads-card flex flex-col gap-3 p-4">
+                            <div className="frai-card flex flex-col gap-3 p-4">
                                 {request.comments?.length > 0 ? (
                                     request.comments.map((comment) => <Comment key={comment.id} comment={comment} />)
                                 ) : (
@@ -623,7 +623,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                             </div>
                         ) : (
                             <div className="flex flex-col gap-4">
-                                <div className="ads-card p-5">
+                                <div className="frai-card p-5">
                                     <ActivityFeed auditLogs={auditLogs} />
                                 </div>
                                 <SmartPagination currentPage={currentPage} lastPage={lastPage} onPageChange={fetchAuditLogs} />
@@ -634,7 +634,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     {/* Files Tab */}
                     <TabsContent value="files" className="mt-6 px-6 md:px-8">
                         {request.files && request.files.length > 0 ? (
-                            <div className="ads-card max-w-2xl p-4">
+                            <div className="frai-card max-w-2xl p-4">
                                 <AttachedFileList
                                     serverFiles={request.files.map((f) => ({
                                         path: f.path,
@@ -726,7 +726,7 @@ function ChosenAlternativesTab({ request }: { request: Request }) {
         <div className="flex flex-col gap-4 max-w-3xl">
             <div className="flex items-center gap-2">
                 <LayoutGrid className="h-4 w-4 text-[var(--ads-ok)]" />
-                <span className="ads-eyebrow">Suggested Reschedule Options</span>
+                <span className="frai-eyebrow">Suggested Reschedule Options</span>
             </div>
 
             <p className="text-sm text-muted-foreground">
@@ -741,7 +741,7 @@ function ChosenAlternativesTab({ request }: { request: Request }) {
             )}
 
             {error && (
-                <div className="ads-card p-4 text-sm text-destructive flex items-center gap-2">
+                <div className="frai-card p-4 text-sm text-destructive flex items-center gap-2">
                     <AlertCircle className="h-4 w-4" />
                     Failed to load options: {error}
                     <button onClick={refetch} className="ml-2 underline">Retry</button>
@@ -754,11 +754,11 @@ function ChosenAlternativesTab({ request }: { request: Request }) {
                         if (!slots.length) return null;
 
                         return (
-                            <div key={facilityId} className="ads-card flex flex-col gap-3 p-4">
+                            <div key={facilityId} className="frai-card flex flex-col gap-3 p-4">
                                 <h4 className="text-sm font-semibold text-foreground">{slots[0].facility_name}</h4>
                                 <div className="flex flex-col gap-2">
                                     {slots.map((slot) => (
-                                        <div key={`${slot.facility_id}-${slot.date}-${slot.time_start}`} className="ads-card p-3 border-border hover:bg-muted/30 transition-colors">
+                                        <div key={`${slot.facility_id}-${slot.date}-${slot.time_start}`} className="frai-card p-3 border-border hover:bg-muted/30 transition-colors">
                                             <div className="flex items-center justify-between gap-2 mb-2">
                                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                                     <span className="font-medium truncate">{formatDate(slot.date)}</span>
@@ -788,7 +788,7 @@ function ChosenAlternativesTab({ request }: { request: Request }) {
             )}
 
             {chosenAlternatives && !loading && Object.keys(chosenAlternatives.alternatives).length === 0 && (
-                <div className="ads-card p-6 text-center text-sm text-muted-foreground">
+                <div className="frai-card p-6 text-center text-sm text-muted-foreground">
                     <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
                     <p>No reschedule options have been suggested by an admin yet.</p>
                     <p className="mt-1 text-xs">Please check back later or contact the admin.</p>
@@ -813,8 +813,8 @@ function CommentForm({ requestId }: { requestId: number }) {
     };
 
     return (
-        <div className="ads-card flex w-full max-w-2xl flex-col gap-3 p-4">
-            <span className="ads-eyebrow">Add a comment</span>
+        <div className="frai-card flex w-full max-w-2xl flex-col gap-3 p-4">
+            <span className="frai-eyebrow">Add a comment</span>
             <Textarea rows={3} className="w-full" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a comment..." />
             <Button size="sm" variant="secondary" className="self-start" disabled={body.trim().length === 0} onClick={submit}>
                 <SendHorizontal size={16} />

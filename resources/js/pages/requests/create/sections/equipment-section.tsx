@@ -48,9 +48,9 @@ export function EquipmentSection({
     borrowPanelProps,
 }: EquipmentSectionProps) {
     return (
-        <section className="ads-card p-5 md:p-6">
+        <section className="frai-card p-5 md:p-6">
             <div className="mb-5 border-b border-border pb-3">
-                <span className="ads-eyebrow">Facility & equipment</span>
+                <span className="frai-eyebrow">Facility & equipment</span>
             </div>
             <div className="space-y-5">
                 {/* Facility picker */}

@@ -286,7 +286,7 @@ export default function Dashboard({
                     <TabsContent value="overview" className="mt-6 flex w-full max-w-full min-w-0 flex-col gap-6 overflow-x-clip">
                         <div className="flex w-full max-w-full min-w-0 flex-wrap items-end justify-between gap-4">
                             <div className="flex max-w-full min-w-0 flex-col gap-1">
-                                <p className="ads-eyebrow">{moment().format('dddd, MMMM D')}</p>
+                                <p className="frai-eyebrow">{moment().format('dddd, MMMM D')}</p>
                                 <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{greetingFor(auth.user.name)}</h1>
                             </div>
                             <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">

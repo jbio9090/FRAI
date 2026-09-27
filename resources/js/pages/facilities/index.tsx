@@ -457,7 +457,7 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
-                        <p className="ads-eyebrow">Facility management</p>
+                        <p className="frai-eyebrow">Facility management</p>
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Facilities</h1>
                     </div>
                 </motion.div>
@@ -637,7 +637,7 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
 
                 <motion.div
                     {...motionProps}
-                    className="ads-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0"
+                    className="frai-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0"
                 >
                     <Table>
                         <TableHeader>
@@ -706,9 +706,9 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
                 </motion.div>
 
                 <motion.div {...motionProps} className="grid gap-6 lg:grid-cols-2">
-                    <section className="ads-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0">
+                    <section className="frai-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0">
                         <div className="border-b border-border px-5 py-4">
-                            <span className="ads-eyebrow">Buildings</span>
+                            <span className="frai-eyebrow">Buildings</span>
                         </div>
                         <Table>
                             <TableHeader>
@@ -764,9 +764,9 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
                         </Table>
                     </section>
 
-                    <section className="ads-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0">
+                    <section className="frai-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0">
                         <div className="border-b border-border px-5 py-4">
-                            <span className="ads-eyebrow">Campuses</span>
+                            <span className="frai-eyebrow">Campuses</span>
                         </div>
                         <Table>
                             <TableHeader>

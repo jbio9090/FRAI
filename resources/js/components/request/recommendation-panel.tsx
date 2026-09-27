@@ -150,10 +150,10 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
     return (
         <div className="flex flex-col gap-3">
             {/* Overall verdict card */}
-            <div className="ads-card flex flex-col gap-3 p-5">
+            <div className="frai-card flex flex-col gap-3 p-5">
                 <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-[var(--ads-ok)]" />
-                    <span className="ads-eyebrow">Overall recommendation</span>
+                    <span className="frai-eyebrow">Overall recommendation</span>
                 </div>
 
                 {isLoading ? (
@@ -180,7 +180,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
             {/* Per-facility breakdown */}
             {request.request_facilities?.length > 0 && (
                 <div className="flex flex-col gap-2">
-                    <span className="ads-eyebrow">Per-facility breakdown</span>
+                    <span className="frai-eyebrow">Per-facility breakdown</span>
                     <div className={cn('flex flex-col gap-2', variant === 'page' && 'md:grid md:grid-cols-2')}>
                         {request.request_facilities.map((rf) => {
                             const facility = request.facilities.find((f) => f.id === rf.facility_id);
@@ -189,7 +189,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                             const rfReason = rf.ai_recommendation_reason;
 
                             return (
-                                <div key={rf.id} className="ads-card flex flex-col gap-1.5 p-4">
+                                <div key={rf.id} className="frai-card flex flex-col gap-1.5 p-4">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex min-w-0 flex-col gap-0.5">
                                             <Link
@@ -235,7 +235,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <LayoutGrid className="h-4 w-4 text-[var(--ads-ok)]" />
-                            <span className="ads-eyebrow">Suggested Alternatives</span>
+                            <span className="frai-eyebrow">Suggested Alternatives</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
@@ -252,7 +252,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                     </div>
 
                     {isAdmin && selectedSlots.size > 0 && (
-                        <div className="ads-card flex items-center justify-between gap-3 border-primary/20 bg-primary/5 p-3">
+                        <div className="frai-card flex items-center justify-between gap-3 border-primary/20 bg-primary/5 p-3">
                             <span className="text-sm font-medium text-primary">{selectedSlots.size} alternative(s) selected</span>
                             <button
                                 onClick={handleSubmitChosen}
@@ -282,7 +282,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                     )}
 
                     {altError && (
-                        <div className="ads-card p-4 text-sm text-destructive">
+                        <div className="frai-card p-4 text-sm text-destructive">
                             Failed to load alternatives: {altError}
                             <button onClick={refetch} className="ml-2 underline">
                                 Retry
@@ -316,7 +316,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                                 ];
 
                                 return (
-                                    <div key={facilityId} className="ads-card flex flex-col gap-3 p-4">
+                                    <div key={facilityId} className="frai-card flex flex-col gap-3 p-4">
                                         <h4 className="text-sm font-semibold text-foreground">{facilityName}</h4>
                                         <div className="flex flex-col gap-2">
                                             {typeOrder.map((type) => {
@@ -325,7 +325,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
 
                                                 return (
                                                     <div key={type} className="flex flex-col gap-2">
-                                                        <span className="ads-eyebrow text-xs">{getTypeLabel(type)}</span>
+                                                        <span className="frai-eyebrow text-xs">{getTypeLabel(type)}</span>
                                                         <div className="flex flex-col gap-2">
                                                             {typeSlots.map((slot) => {
                                                                 const slotKey = getSlotKey(slot);
@@ -400,7 +400,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                     )}
 
                     {alternatives && !altLoading && Object.values(alternatives.alternatives).every((slots) => !slots.length) && (
-                        <div className="ads-card p-4 text-center text-sm text-muted-foreground">
+                        <div className="frai-card p-4 text-center text-sm text-muted-foreground">
                             No available alternatives found for the selected criteria.
                         </div>
                     )}

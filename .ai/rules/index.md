@@ -4,6 +4,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 
 | Applies to | Rule file |
 | --- | --- |
+| resources/{css,js}/** | .ai/rules/cssjs.md |
 | app/Mail/**, resources/views/emails/** | .ai/rules/emails.md |
 | ** | .ai/rules/general.md |
 | resources/js/** | .ai/rules/js.md |

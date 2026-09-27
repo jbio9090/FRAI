@@ -771,7 +771,7 @@ export default function ReportsPage({
       <div className="flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <p className="ads-eyebrow">GSO Reports · {dateRangeLabel}</p>
+            <p className="frai-eyebrow">GSO Reports · {dateRangeLabel}</p>
             <h1 className="font-display text-2xl font-semibold tracking-tight mt-1">Reports</h1>
           </div>
           <div className="flex items-center gap-2">

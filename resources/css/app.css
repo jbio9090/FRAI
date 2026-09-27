@@ -505,7 +505,7 @@
 }
 
 /* Flat card surface: hairline + white (no shadow by default) */
-.ads-card {
+.frai-card {
     border: 1px solid var(--border);
     background: var(--card);
     color: var(--card-foreground);
@@ -518,7 +518,7 @@
 }
 
 /* Section eyebrow: semibold, 11px, sentence case, muted */
-.ads-eyebrow {
+.frai-eyebrow {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.04em;

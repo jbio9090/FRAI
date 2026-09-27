@@ -81,7 +81,7 @@ export default function RulesPage({ policies, faqs }: RulesPageProps) {
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
-                        <p className="ads-eyebrow">Policy &amp; knowledge base</p>
+                        <p className="frai-eyebrow">Policy &amp; knowledge base</p>
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Rules</h1>
                         <p className="text-sm text-muted-foreground">
                             Rules the AI enforces on requests, plus FAQ answers the chatbot uses.
@@ -195,10 +195,10 @@ function RuleSection({
     const canManage = hasPermission('modify rules');
 
     return (
-        <section className="ads-card overflow-hidden">
+        <section className="frai-card overflow-hidden">
             <div className="flex items-center gap-2 border-b border-border px-5 py-4">
                 <div className="flex flex-col gap-0.5">
-                    <span className="ads-eyebrow">{eyebrow}</span>
+                    <span className="frai-eyebrow">{eyebrow}</span>
                     <h2 className="text-sm font-semibold text-foreground">{title}</h2>
                 </div>
                 <span className="ml-auto rounded-[4px] bg-[var(--ads-neutral-bg)] px-2 py-0.5 text-xs font-medium text-[var(--ads-neutral)]">

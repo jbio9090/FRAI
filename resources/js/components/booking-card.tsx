@@ -185,7 +185,7 @@ export function BookingCard({
     return (
         <div
             className={`group relative flex flex-col transition-shadow ${
-                isEditing ? 'rounded-lg border border-primary bg-primary/5 ring-2 ring-primary/20' : 'ads-card'
+                isEditing ? 'rounded-lg border border-primary bg-primary/5 ring-2 ring-primary/20' : 'frai-card'
             } ${className ?? ''}`}
         >
             {/* Header */}
@@ -344,7 +344,7 @@ export function BookingCard({
                                 size={12}
                                 className={`shrink-0 text-muted-foreground transition-transform ${isEquipmentOpen ? 'rotate-180' : ''}`}
                             />
-                            <span className="ads-eyebrow">Equipment</span>
+                            <span className="frai-eyebrow">Equipment</span>
                             <span className="text-xs text-muted-foreground">{equipmentSummaryParts.join(' · ')}</span>
                         </Button>
 

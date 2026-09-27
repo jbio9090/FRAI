@@ -511,7 +511,7 @@ export default function EquipmentsPage({
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
-                        <p className="ads-eyebrow">Equipment inventory</p>
+                        <p className="frai-eyebrow">Equipment inventory</p>
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
                             Equipments
                         </h1>
@@ -580,7 +580,7 @@ export default function EquipmentsPage({
 
                 <motion.div
                     {...motionProps}
-                    className="ads-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0"
+                    className="frai-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0"
                 >
                     <Table>
                         <TableHeader>

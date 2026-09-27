@@ -68,7 +68,7 @@ export function FacilityInfo({ facilities, isForSidebar }: FacilityInfoProps) {
 
     return (
         <div className={'space-y-4 ' + (isForSidebar ? 'hidden lg:block' : 'block lg:hidden')}>
-            {isForSidebar && <p className="ads-eyebrow">Facility info</p>}
+            {isForSidebar && <p className="frai-eyebrow">Facility info</p>}
 
             {/* Facility picker — owned by this component */}
             <Select value={internalFacilityId?.toString() ?? ''} onValueChange={(v) => setInternalFacilityId(Number(v))}>
