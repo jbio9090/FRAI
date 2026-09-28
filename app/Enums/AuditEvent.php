@@ -27,6 +27,7 @@ enum AuditEvent: string
 
     case AuthPasswordResetInitiated = 'auth.password_reset_initiated';
     case AuthPasswordSelfUpdated = 'auth.password_self_updated';
+    case AdminDemoted = 'admin.demoted';
 
     public function label(): string
     {
@@ -47,6 +48,7 @@ enum AuditEvent: string
             self::RequestFileRemoved => 'File Removed',
             self::AuthPasswordResetInitiated => 'Password Reset (Admin)',
             self::AuthPasswordSelfUpdated => 'Password Updated',
+            self::AdminDemoted => 'Admin Demoted',
             self::SettingsUpdated => 'Settings Updated',
             self::Unknown => 'Unknown',
         };
