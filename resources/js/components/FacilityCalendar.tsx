@@ -68,7 +68,7 @@ function CustomToolbar(toolbar: ToolbarProps) {
     };
 
     return (
-        <div className="sticky top-0 left-0 z-10 mb-4 flex w-full flex-wrap items-center justify-between gap-4 bg-background p-2">
+        <div className="sticky left-0 mb-4 flex w-full flex-wrap items-center justify-between gap-4 p-2">
             <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" onClick={goToBack}>
                     <ChevronLeft className="h-4 w-4" />
@@ -105,12 +105,17 @@ function CustomEvent({ event, isDashboard }: { event: Event; isDashboard: boolea
     const style = wordToColor(colorSeed);
 
     return (
-        <Link href={route('requests.detail', [event.request_id])}>
-            <div className="tag mx-2 flex h-full flex-row flex-wrap rounded-sm border-1 px-1 lg:flex-col" style={style}>
-                <span className="truncate text-xs font-bold">{requestTitle}</span>
-                <div className="flex items-center gap-1 text-left">
-                    <Clock size={12} />
-                    <span className="text-xs">
+        <Link href={route('requests.detail', [event.request_id])} className="block min-w-full">
+            <div
+                className="tag frai-cal-event min-w-0 border-1 mx-2 flex h-full flex-row rounded-sm px-1 lg:flex-col"
+                style={style}
+            >
+                <span className="min-w-0 truncate text-xs font-bold" title={requestTitle}>
+                    {requestTitle}
+                </span>
+                <div className="flex min-w-0 items-center gap-1 text-left">
+                    <Clock size={12} className="shrink-0" />
+                    <span className="min-w-0 truncate whitespace-nowrap text-xs">
                         {moment(event.start).format('h:mma')}-{moment(event.end).format('h:mma')}
                     </span>
                 </div>
@@ -189,7 +194,7 @@ export default function FacilityCalendar({
     };
 
     return (
-        <div className="frai-calendar relative">
+        <div className="relative h-[57rem]">
             <Calendar
                 views={['month', 'week', 'day']}
                 localizer={localizer}
@@ -206,6 +211,7 @@ export default function FacilityCalendar({
                     toolbar: CustomToolbar,
                     event: (props) => <CustomEvent {...props} isDashboard={isDashboard} />,
                 }}
+                popup
                 step={60}
                 timeslots={1}
             />

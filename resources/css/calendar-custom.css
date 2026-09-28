@@ -1,24 +1,5 @@
-/* ===== Calendar scroll container =====
- *
- * The calendar scrolls inside its own box instead of forcing the page taller
- * than the viewport. `.frai-calendar` (wrapper in FacilityCalendar) owns both
- * axes, so the month grid stays reachable on short screens: vertical swipe
- * reveals the bottom weeks, horizontal swipe walks across days, and the
- * toolbar stays pinned in both directions.
- */
-.frai-calendar {
-    height: calc(100dvh - 12rem);
-    min-height: 24rem;
-    overflow: auto;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-}
-
-/* Tall desktop keeps the historical 912px block, so nothing shifts there. */
-@media (width >= 48rem) and (height >= 71rem) {
-    .frai-calendar {
-        height: 57rem;
-    }
+.rbc-calendar {
+    overflow-x: scroll;
 }
 
 .rbc-month-view,
@@ -27,10 +8,11 @@
     min-width: 64rem;
 }
 
-/* Rows may not be squeezed below a usable height — when the six of them no
- * longer fit the box, the wrapper scrolls instead of clipping the month. */
-.frai-calendar .rbc-month-row {
-    min-height: 4.5rem;
+.rbc-sticky-toolbar {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    width: 100%;
 }
 
 .rbc-time-slot {
@@ -49,6 +31,12 @@
     background-color: var(--muted) !important;
 }
 
+@media (width >=48rem) {
+    .rbc-calendar {
+        overflow-x: visible;
+    }
+}
+
 .rbc-today {
     background-color: var(--muted) !important;
 }
@@ -60,6 +48,58 @@
     border: none !important;
     border-radius: 0.25rem !important;
     background-color: transparent !important;
+}
+
+/* ===== Event Overflow =====
+ *
+ * Each event sits in a `.rbc-row-segment`, a flex item of `.rbc-row`. Vendor
+ * gives it `flex-basis`/`max-width` percentages but no `min-width`, so the
+ * default `min-width: auto` resolves to min-content and a long title grows the
+ * segment past its share of the week, spilling into the next day cell.
+ */
+.rbc-row-segment {
+    min-width: 0;
+}
+
+/* Let the event box and its content wrapper shrink to the segment width.
+ * The `truncate` class on the title span then produces the actual ellipsis:
+ * `text-overflow` needs a block container, and the chip is a nested flex box. */
+.rbc-row-segment .rbc-event,
+.rbc-row-segment .rbc-event-content {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* ===== Event Hover =====
+ *
+ * Chip colour comes from `.tag` (which reads the --tag-* variables that
+ * wordToColor sets inline), so the hover strengthens the tint by overriding
+ * the alpha variable rather than the background itself. Gated behind
+ * `(hover: hover)` so the highlight does not stick after a tap on touch.
+ */
+.frai-cal-event {
+    transition:
+        background-color 150ms ease,
+        box-shadow 150ms ease,
+        transform 150ms ease;
+}
+
+@media (hover: hover) {
+    .frai-cal-event:hover {
+        --tag-bg-alpha: 0.6;
+        box-shadow: 0 1px 3px rgb(9 30 66 / 0.28);
+        transform: translateY(-1px);
+    }
+
+    .dark .frai-cal-event:hover {
+        --tag-bg-alpha: 0.75;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+    }
+}
+
+.frai-calendar .rbc-event a:focus-visible .frai-cal-event {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
 }
 
 
@@ -154,16 +194,17 @@
 } */
 
 .rbc-overlay {
-    background-color: hsl(var(--popover)) !important;
-    border: 1px solid hsl(var(--border)) !important;
+    background-color: var(--popover) !important;
+    border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important;
     padding: 0.5rem !important;
+    z-index: 30;
 }
 
 .rbc-overlay-header {
-    border-bottom: 1px solid hsl(var(--border)) !important;
-    color: hsl(var(--popover-foreground)) !important;
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--popover-foreground) !important;
     font-size: 0.75rem !important;
     font-weight: 600 !important;
     padding: 0.25rem 0.5rem 0.5rem !important;
@@ -171,7 +212,7 @@
 }
 
 .rbc-show-more {
-    color: hsl(var(--primary)) !important;
+    color: var(--primary) !important;
     font-size: 0.75rem !important;
     font-weight: 600 !important;
     background: transparent !important;
@@ -179,6 +220,6 @@
 }
 
 .rbc-show-more:hover {
-    color: hsl(var(--primary)) !important;
+    color: var(--primary) !important;
     text-decoration: underline !important;
 }
