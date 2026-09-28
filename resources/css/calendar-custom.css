@@ -1,5 +1,24 @@
-.rbc-calendar {
-    overflow-x: scroll;
+/* ===== Calendar scroll container =====
+ *
+ * The calendar scrolls inside its own box instead of forcing the page taller
+ * than the viewport. `.frai-calendar` (wrapper in FacilityCalendar) owns both
+ * axes, so the month grid stays reachable on short screens: vertical swipe
+ * reveals the bottom weeks, horizontal swipe walks across days, and the
+ * toolbar stays pinned in both directions.
+ */
+.frai-calendar {
+    height: calc(100dvh - 12rem);
+    min-height: 24rem;
+    overflow: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Tall desktop keeps the historical 912px block, so nothing shifts there. */
+@media (width >= 48rem) and (height >= 71rem) {
+    .frai-calendar {
+        height: 57rem;
+    }
 }
 
 .rbc-month-view,
@@ -8,11 +27,10 @@
     min-width: 64rem;
 }
 
-.rbc-sticky-toolbar {
-    position: sticky;
-    left: 0;
-    z-index: 10;
-    width: 100%;
+/* Rows may not be squeezed below a usable height — when the six of them no
+ * longer fit the box, the wrapper scrolls instead of clipping the month. */
+.frai-calendar .rbc-month-row {
+    min-height: 4.5rem;
 }
 
 .rbc-time-slot {
@@ -29,12 +47,6 @@
 
 .rbc-off-range-bg {
     background-color: var(--muted) !important;
-}
-
-@media (width >=48rem) {
-    .rbc-calendar {
-        overflow-x: visible;
-    }
 }
 
 .rbc-today {

@@ -393,7 +393,8 @@ export default function EquipmentsPage({
     const [assignTarget, setAssignTarget] = useState<Equipment | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Equipment | null>(null);
     const [deleting, setDeleting] = useState(false);
-    const { hasRole } = usePermission();
+    const { hasPermission } = usePermission();
+    const canManage = hasPermission("manage equipments");
     const reduceMotion = useReducedMotion();
 
     const motionProps = {
@@ -468,7 +469,7 @@ export default function EquipmentsPage({
 
     return (
         <DefaultLayout>
-            {(hasRole("admin") || hasRole("Super Admin")) && (
+            {canManage && (
                 <>
                     <EquipmentDialog open={addOpen} onClose={() => setAddOpen(false)} />
                     <EquipmentDialog
@@ -570,7 +571,7 @@ export default function EquipmentsPage({
                         </PopoverContent>
                     </Popover>
 
-                    {(hasRole("admin") || hasRole("Super Admin")) && (
+                    {canManage && (
                         <Button onClick={() => setAddOpen(true)} className="gap-2">
                             <Plus size={16} />
                             Add Equipment
@@ -589,13 +590,13 @@ export default function EquipmentsPage({
                                 <TableHead className="w-36">Total Qty</TableHead>
                                 <TableHead className="w-36">Assigned</TableHead>
                                 <TableHead>Assigned To Facility</TableHead>
-                                <TableHead className="w-28" />
+                                {canManage && <TableHead className="w-28" />}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {enrichedEquipments.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-32">
+                                    <TableCell colSpan={canManage ? 5 : 4} className="h-32">
                                         <div className="flex flex-col items-center justify-center gap-2">
                                             <div className="flex size-10 items-center justify-center rounded-full bg-muted">
                                                 <Package className="h-5 w-5 text-muted-foreground" />
@@ -657,65 +658,67 @@ export default function EquipmentsPage({
                                                     )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="whitespace-nowrap text-right">
-                                                <div className="hidden items-center justify-end gap-1 md:flex">
-                                                    <Button
-                                                        onClick={() => setAssignTarget(eq)}
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        aria-label={`Assign ${eq.name}`}
-                                                    >
-                                                        <ArrowLeftRight className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button
-                                                        onClick={() => setEditTarget(eq)}
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        aria-label={`Edit ${eq.name}`}
-                                                    >
-                                                        <Pencil className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button
-                                                        onClick={() => setDeleteTarget(eq)}
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="text-destructive focus:text-destructive"
-                                                        aria-label={`Delete ${eq.name}`}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
+                                            {canManage && (
+                                                <TableCell className="whitespace-nowrap text-right">
+                                                    <div className="hidden items-center justify-end gap-1 md:flex">
                                                         <Button
+                                                            onClick={() => setAssignTarget(eq)}
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-8 w-8 md:hidden"
-                                                            aria-label="Open menu"
+                                                            aria-label={`Assign ${eq.name}`}
                                                         >
-                                                            <MoreHorizontal className="w-4 h-4" />
+                                                            <ArrowLeftRight className="w-4 h-4" />
                                                         </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => setAssignTarget(eq)}>
-                                                            <ArrowLeftRight className="w-4 h-4 mr-2" />
-                                                            Assign Facilities
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => setEditTarget(eq)}>
-                                                            <Pencil className="w-4 h-4 mr-2" />
-                                                            Edit
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem
-                                                            onClick={() => setDeleteTarget(eq)}
-                                                            className="text-destructive focus:text-destructive"
+                                                        <Button
+                                                            onClick={() => setEditTarget(eq)}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            aria-label={`Edit ${eq.name}`}
                                                         >
-                                                            <Trash2 className="w-4 h-4 mr-2" />
-                                                            Delete
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
+                                                            <Pencil className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            onClick={() => setDeleteTarget(eq)}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="text-destructive focus:text-destructive"
+                                                            aria-label={`Delete ${eq.name}`}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 md:hidden"
+                                                                aria-label="Open menu"
+                                                            >
+                                                                <MoreHorizontal className="w-4 h-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => setAssignTarget(eq)}>
+                                                                <ArrowLeftRight className="w-4 h-4 mr-2" />
+                                                                Assign Facilities
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => setEditTarget(eq)}>
+                                                                <Pencil className="w-4 h-4 mr-2" />
+                                                                Edit
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem
+                                                                onClick={() => setDeleteTarget(eq)}
+                                                                className="text-destructive focus:text-destructive"
+                                                            >
+                                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                                Delete
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            )}
                                         </TableRow>
                                     );
                                 })

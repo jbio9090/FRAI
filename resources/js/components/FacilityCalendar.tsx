@@ -68,7 +68,7 @@ function CustomToolbar(toolbar: ToolbarProps) {
     };
 
     return (
-        <div className="sticky left-0 mb-4 flex w-full flex-wrap items-center justify-between gap-4 p-2">
+        <div className="sticky top-0 left-0 z-10 mb-4 flex w-full flex-wrap items-center justify-between gap-4 bg-background p-2">
             <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" onClick={goToBack}>
                     <ChevronLeft className="h-4 w-4" />
@@ -189,7 +189,7 @@ export default function FacilityCalendar({
     };
 
     return (
-        <div className="relative h-[57rem]">
+        <div className="frai-calendar relative">
             <Calendar
                 views={['month', 'week', 'day']}
                 localizer={localizer}

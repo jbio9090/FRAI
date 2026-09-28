@@ -128,7 +128,7 @@ Route::middleware('auth')->group(function () {
         ->name('equipment.check-conflicts');
     Route::post('/equipment/availability', [EquipmentController::class, 'getAvailability'])
         ->name('equipment.availability');
-    Route::middleware('permission:manage facilities')->group(function () {
+    Route::middleware('permission:manage equipments')->group(function () {
         Route::post('/equipments', [EquipmentController::class, 'store'])->name('equipments.store');
         Route::put('/equipments/{equipment}', [EquipmentController::class, 'update'])->name('equipments.update');
         Route::delete('/equipments/{equipment}', [EquipmentController::class, 'destroy'])->name('equipments.destroy');
