@@ -7,7 +7,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | resources/{css,js}/** | .ai/rules/cssjs.md |
 | app/Mail/**, resources/views/emails/** | .ai/rules/emails.md |
 | ** | .ai/rules/general.md |
-| resources/js/** | .ai/rules/js.md |
+| resources/js/**, resources/js/**/*.tsx | .ai/rules/js.md |
 | app/Notifications/** | .ai/rules/notifications.md |
 | resources/js/pages/dashboard.tsx | .ai/rules/pages.md |
 | app/Services/RequestService.php | .ai/rules/services.md |

@@ -213,6 +213,12 @@ class RequestController extends Controller
     {
         $requestModel = FacilityRequest::findOrFail($request_id);
 
+        abort_if(
+            $requestModel->user_id !== auth()->id()
+            && ! auth()->user()->hasRole(['admin', 'Super Admin']),
+            403
+        );
+
         return Inertia::render('requests/detail', [
             'labeledBreadcrumb' => $requestModel->title,
             'request' => $this->service->getDetail($request_id),
