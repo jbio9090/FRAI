@@ -1,3 +1,10 @@
+# OpenCode System Instructions
+
+- Prioritize the `open-codebase-index` plugin tool (e.g., codebase search/context) for all repo queries.
+- Do NOT use the `grep` tool for contextual, structural, architectural, or conceptual codebase questions.
+- Only fall back to the `grep` tool if looking for an exact literal string or an explicit variable definition.
+- If you are trying to understand how features map together, always hit the semantic codebase index vector database first.
+
 <laravel-boost-guidelines>
 === foundation rules ===
 
