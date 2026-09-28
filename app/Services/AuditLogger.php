@@ -226,4 +226,15 @@ class AuditLogger
             userId: $user->id,
         );
     }
+
+    public static function adminDemoted(User $targetUser, User $admin): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::AdminDemoted,
+            description: "Admin demoted to user: {$targetUser->email}",
+            subject: $targetUser,
+            userId: $admin->id,
+            properties: ['previous_roles' => $targetUser->roles->pluck('name')->toArray()],
+        );
+    }
 }

@@ -355,6 +355,9 @@ class AccountController extends Controller
             return back()->withErrors(['role' => $msg])->withInput();
         }
 
+        // Check if user was admin before role change
+        $wasAdmin = $user->hasAnyRole(['admin', 'Super Admin']);
+
         if ($request->hasFile('profile')) {
             if ($user->profile && $user->profile !== 'default.png') {
                 try {
@@ -380,6 +383,15 @@ class AccountController extends Controller
 
         $user->update($updateData);
         $user->syncRoles([$role->name]);
+
+        // Handle admin demotion: disable admin email notifications
+        $isNowAdmin = $user->hasAnyRole(['admin', 'Super Admin']);
+
+        if ($wasAdmin && !$isNowAdmin) {
+            $user->forceFill(['admin_email_notifications_enabled' => false])->save();
+
+            \App\Services\AuditLogger::adminDemoted($user, $actor);
+        }
 
         return redirect()->route('accounts.index');
     }
