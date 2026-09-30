@@ -76,7 +76,7 @@
 | Date Handling | date-fns, moment |
 | Charts | recharts |
 | Calendar | react-big-calendar |
-| PDF | @react-pdf/renderer |
+| PDF | @react-pdf/renderer (documents); html-to-image + `lib/pdf.ts` (DOM capture → A4 landscape JPEG) |
 | Animations | motion |
 | Theme | next-themes |
 

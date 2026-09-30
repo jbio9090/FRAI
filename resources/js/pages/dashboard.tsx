@@ -518,6 +518,7 @@ export default function Dashboard({
                                 initialEvents={initialEvents}
                                 calendarRoute="dashboard.calendar"
                                 filterBuildings={selectedBuildings}
+                                calendarTitle="Facility Schedule"
                             />
                         </div>
                     </TabsContent>

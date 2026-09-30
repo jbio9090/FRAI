@@ -287,6 +287,7 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
                     <FacilityCalendar
                         facilityId={facility.id}
                         initialEvents={initialEvents}
+                        calendarTitle={facility.name}
                     />
                 </TabsContent>
 
