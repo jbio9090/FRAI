@@ -831,6 +831,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                             isSelected={selected.includes(request.id)}
                                             handleSelection={handleSelection}
                                             className="w-full"
+                                            hideFacilityDecisionsWhenResolved
                                         />
                                     ))
                                 ) : (
