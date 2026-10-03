@@ -335,6 +335,7 @@ If get_request_details returns a "forbidden" error, tell the user the request ex
 SYMTPROMPT;
     }
 
+    
     private function getPageContextToolDefinition(): array
     {
         return [
