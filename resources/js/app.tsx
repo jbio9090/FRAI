@@ -1,5 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
+import { applyPageShell, type PageShell } from '@/layout.tsx/page-shell';
 import { ensureForegroundPushListener } from '@/lib/firebasePush';
 import '../css/app.css';
 
@@ -10,11 +11,12 @@ const pages = import.meta.glob('./pages/**/*.tsx', { eager: true });
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) => {
-        const page = (pages[`./pages/${name}.tsx`] || pages[`./pages/${name}/index.tsx`]) as { default: React.ComponentType };
+        const page = (pages[`./pages/${name}.tsx`] || pages[`./pages/${name}/index.tsx`]) as { default: React.ComponentType & { layout?: PageShell } } | undefined;
         if (!page) {
             throw new Error(`Page not found: ${name}`);
         }
-        return page;
+
+        return applyPageShell(page.default, name);
     },
     setup({ el, App, props }) {
         // Best-effort: attaches onMessage when permission was already granted.

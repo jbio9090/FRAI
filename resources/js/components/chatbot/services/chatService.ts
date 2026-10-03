@@ -66,6 +66,7 @@ export async function sendChatMessage(
     payload: ChatRequest,
     pageContextOverride?: ClientPageContext,
     devmode?: boolean,
+    signal?: AbortSignal,
 ): Promise<{
     content: string;
     bookingPayload: string | null;
@@ -84,6 +85,7 @@ export async function sendChatMessage(
         },
         credentials: 'same-origin',
         body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext), devmode: !!devmode }),
+        signal,
     });
 
     if (response.status === 419) {

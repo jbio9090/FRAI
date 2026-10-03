@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCurrentPageContext } from '@/lib/useCurrentPageContext';
@@ -22,9 +22,22 @@ export default function Chatbot() {
     const [debugToolCalls, setDebugToolCalls] = useState<unknown[]>([]);
     const [navigationSuggestion, setNavigationSuggestion] = useState<{ route: string; reason: string } | null>(null);
     const { messages, addMessage, setMessages, clearMessages } = useMessages();
-    const { isLoading, sendMessage } = useChatAPI();
+    const { isLoading, sendMessage, abortPendingTurn } = useChatAPI();
     const pageContext = useCurrentPageContext();
+    const { url } = usePage();
     const devMode = new URLSearchParams(window.location.search).has('devmode');
+
+    /*
+     * The app shell is a persistent Inertia layout, so this component no longer
+     * unmounts on navigation. Cancel an in-flight turn — in particular one parked
+     * on the 2-minute transient-failure retry — as soon as the URL changes, or it
+     * would answer a question from the page the user just left.
+     */
+    useEffect(() => {
+        abortPendingTurn();
+    }, [abortPendingTurn, url]);
+
+    useEffect(() => () => abortPendingTurn(), [abortPendingTurn]);
 
     useEffect(() => {
         const loadSession = async () => {
@@ -201,6 +214,12 @@ export default function Chatbot() {
                 },
             );
         } catch (err) {
+            // The turn was cancelled deliberately (navigation or a newer send).
+            // Surface nothing — a stale bubble or banner would be misleading.
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                return;
+            }
+
             const message = err instanceof Error ? err.message : 'Unable to send message.';
             setError(message);
             setMessages((previous) => {

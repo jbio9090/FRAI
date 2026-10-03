@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 
 interface Campus {
@@ -453,7 +452,7 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
     };
 
     return (
-        <DefaultLayout>
+        <>
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
@@ -819,6 +818,6 @@ export default function Facilities({ facilities, campuses, buildings, activeCamp
                     </section>
                 </motion.div>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

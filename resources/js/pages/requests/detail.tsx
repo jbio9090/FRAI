@@ -21,7 +21,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useChosenAlternatives } from '@/hooks/use-chosen-alternatives';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
 import { cn, conflictsForBooking } from '@/lib/utils';
@@ -163,12 +162,12 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
 
     if (!initialRequest || !auditLogsProp) {
         return (
-            <DefaultLayout>
+            <>
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     Loading request...
                 </div>
-            </DefaultLayout>
+            </>
         );
     }
 
@@ -239,7 +238,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
     });
 
     return (
-        <DefaultLayout hasPadding={false}>
+        <>
             <div className="flex w-full flex-col gap-4 *:text-sm">
                 <div className="flex flex-col gap-3 px-6 pt-6 md:px-8 md:pt-8">
                     <div className="flex flex-wrap items-center gap-2">
@@ -676,7 +675,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                     )}
                 </Tabs>
             </div>
-        </DefaultLayout>
+        </>
     );
 }
 

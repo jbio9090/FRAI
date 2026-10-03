@@ -35,7 +35,6 @@ import {
     TooltipContent,
 } from "@/components/ui/tooltip";
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 
 interface PageProps extends Record<string, unknown> {
     auth: {
@@ -185,7 +184,7 @@ export default function Settings() {
     };
 
     return (
-        <DefaultLayout>
+        <>
             <div className="flex flex-col mx-auto max-w-2xl gap-6 w-full">
                 <h1 className="text-lg font-semibold">Settings</h1>
 
@@ -482,6 +481,6 @@ export default function Settings() {
                     </Select>
                 </div>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

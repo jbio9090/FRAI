@@ -35,7 +35,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from "@/layout.tsx/default";
 import AccountFormFields from '@/pages/accounts/components/AccountFormFields';
 import type { AccountFormErrors, UserForm } from '@/pages/accounts/types';
 import type { User } from "@/types";
@@ -481,7 +480,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
     })();
 
     return (
-        <DefaultLayout>
+        <>
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
@@ -1178,6 +1177,6 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                 )}
                 </motion.div>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

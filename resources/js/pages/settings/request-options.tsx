@@ -13,7 +13,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 import type { RequestOptions } from '@/types/request';
 
@@ -86,7 +85,7 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
     };
 
     return (
-        <DefaultLayout>
+        <>
             <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
@@ -281,6 +280,6 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
                     </form>
                 </motion.div>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

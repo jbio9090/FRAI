@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { sendChatMessage } from '../services/chatService';
 import { createRequest } from '../services/requestService';
 import type { Message, ChatRequest, CreateRequestPayload } from '../types';
@@ -24,9 +24,42 @@ function isTransientAiFailure(error: unknown): boolean {
 		|| message.includes('temporarily unavailable');
 }
 
-function typeOutContent(content: string, onToken?: (token: string) => void): Promise<void> {
+function createAbortError(): DOMException {
+	return new DOMException('Chat turn aborted', 'AbortError');
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof DOMException && error.name === 'AbortError';
+}
+
+/**
+ * Sleep that ends early when the turn is aborted, so a pending transient-failure
+ * retry does not keep a stale turn alive after the user has navigated away.
+ */
+function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal.aborted) {
+			reject(createAbortError());
+			return;
+		}
+
+		const timer = window.setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, delayMs);
+
+		function onAbort() {
+			window.clearTimeout(timer);
+			reject(createAbortError());
+		}
+
+		signal.addEventListener('abort', onAbort, { once: true });
+	});
+}
+
+function typeOutContent(content: string, onToken?: (token: string) => void, signal?: AbortSignal): Promise<void> {
 	return new Promise((resolve) => {
-		if (!content) {
+		if (!content || signal?.aborted) {
 			resolve();
 			return;
 		}
@@ -44,6 +77,11 @@ function typeOutContent(content: string, onToken?: (token: string) => void): Pro
 				resolve();
 			}
 		}, 16);
+
+		signal?.addEventListener('abort', () => {
+			window.clearInterval(interval);
+			resolve();
+		}, { once: true });
 	});
 }
 
@@ -119,6 +157,21 @@ export function useChatAPI() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	/*
+	 * The app shell is a persistent Inertia layout, so this hook does not unmount
+	 * on navigation the way it used to. Every turn therefore owns an
+	 * AbortController: a new send supersedes the previous turn, and callers abort
+	 * on navigation/unmount (see chatbot.tsx) so a pending 2-minute transient
+	 * retry can never resolve into a stale answer on a page the user has left.
+	 */
+	const activeTurnRef = useRef<AbortController | null>(null);
+
+	const abortPendingTurn = useCallback(() => {
+		activeTurnRef.current?.abort();
+		activeTurnRef.current = null;
+		setIsLoading(false);
+	}, []);
+
 	const sendMessage = useCallback(async (
 		messages: Message[],
 		participantCount?: number,
@@ -131,6 +184,12 @@ export function useChatAPI() {
 		devmode?: boolean,
 		onDebugToolCalls?: (calls: unknown[]) => void,
 	) => {
+		// Supersede any turn still waiting to retry, then claim this turn's controller.
+		activeTurnRef.current?.abort();
+		const controller = new AbortController();
+		activeTurnRef.current = controller;
+		const { signal } = controller;
+
 		setIsLoading(true);
 		setError(null);
 
@@ -148,7 +207,7 @@ export function useChatAPI() {
 
 			while (true) {
 				try {
-					const response = await sendChatMessage(payload, pageContext, devmode);
+					const response = await sendChatMessage(payload, pageContext, devmode, signal);
 					fullContent = response.content;
 
 					if (response.deterministic) {
@@ -162,7 +221,7 @@ export function useChatAPI() {
 					if (response.bookingPayload) {
 						onBookingPayload?.(response.bookingPayload);
 					} else {
-						await typeOutContent(response.content, onToken);
+						await typeOutContent(response.content, onToken, signal);
 					}
 
 					// Check for navigation suggestion in the AI response
@@ -177,6 +236,11 @@ export function useChatAPI() {
 					setError(null);
 					return fullContent;
 				} catch (error) {
+					// An aborted turn was cancelled on purpose — no retry, no error banner.
+					if (signal.aborted || isAbortError(error)) {
+						throw isAbortError(error) ? error : createAbortError();
+					}
+
 					const message = error instanceof Error ? error.message : 'Unknown error occurred';
 					const retryable = isTransientAiFailure(error);
 
@@ -188,12 +252,19 @@ export function useChatAPI() {
 
 					attempt += 1;
 					setError('AI request failed. Retrying automatically in 2 minutes…');
-					await new Promise((waitResolve) => window.setTimeout(waitResolve, RETRY_DELAY_MS));
+					await waitForRetry(RETRY_DELAY_MS, signal);
 				}
 			}
 		};
 
-		return runRequest();
+		try {
+			return await runRequest();
+		} finally {
+			// Only release this turn's slot; a newer send may already own the ref.
+			if (activeTurnRef.current === controller) {
+				activeTurnRef.current = null;
+			}
+		}
 	}, []);
 
 	const submitRequest = useCallback(async (payload: CreateRequestPayload) => {
@@ -237,5 +308,6 @@ export function useChatAPI() {
 		submitRequest,
 		detectAndSubmitRequest,
 		clearError: () => setError(null),
+		abortPendingTurn,
 	};
 }

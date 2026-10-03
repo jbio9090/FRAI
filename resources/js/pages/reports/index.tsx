@@ -30,7 +30,6 @@ import {
 } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import DefaultLayout from "@/layout.tsx/default";
 import { formatRequestStatus } from "@/lib/formatters";
 import {
   PROCESSING_BAR_COLOR,
@@ -766,7 +765,7 @@ export default function ReportsPage({
   );
 
   return (
-    <DefaultLayout>
+    <>
       {offScreenCharts}
       <div className="flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -890,6 +889,6 @@ export default function ReportsPage({
           ))}
         </Tabs>
       </div>
-    </DefaultLayout>
+    </>
   );
 }

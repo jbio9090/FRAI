@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 
 type RuleEntry = {
@@ -77,7 +76,7 @@ export default function RulesPage({ policies, faqs }: RulesPageProps) {
     };
 
     return (
-        <DefaultLayout>
+        <>
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
@@ -176,7 +175,7 @@ export default function RulesPage({ policies, faqs }: RulesPageProps) {
                     </DialogContent>
                 </Dialog>
             )}
-        </DefaultLayout>
+        </>
     );
 }
 

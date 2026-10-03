@@ -33,7 +33,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 import type { Request as FacilityRequest } from '@/types/request';
 
@@ -267,7 +266,7 @@ export default function Dashboard({
     const cardClass = 'w-full min-w-0 max-w-full overflow-hidden rounded-lg border-border shadow-none';
 
     return (
-        <DefaultLayout hasPadding={false}>
+        <>
             <div className="flex w-full max-w-full min-w-0 flex-col overflow-x-clip p-6 md:p-8">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full max-w-full min-w-0 overflow-x-clip">
                     <TabsList variant="line" className="h-auto min-h-9 w-full max-w-full min-w-0 flex-wrap">
@@ -869,6 +868,6 @@ export default function Dashboard({
                     </TabsContent>
                 </Tabs>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

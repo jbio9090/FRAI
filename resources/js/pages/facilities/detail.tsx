@@ -31,7 +31,6 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 
 interface Equipment {
@@ -137,7 +136,7 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
     };
 
     return (
-        <DefaultLayout hasPadding={false}>
+        <>
             <motion.div {...motionProps} className="flex flex-col gap-6 px-4 py-4 md:px-8">
                 {/* Header */}
                 <div className="flex flex-col gap-1">
@@ -328,6 +327,6 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
                     )}
                 </TabsContent>
             </Tabs>
-        </DefaultLayout>
+        </>
     );
 }

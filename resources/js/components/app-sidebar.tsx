@@ -43,6 +43,7 @@ import { usePermission } from '@/hooks/use-permission';
 import logo from '@/svg/FRAI.svg';
 import type { SharedData } from '@/types';
 import { Button } from './ui/button';
+import { useSidebar } from './ui/sidebar';
 
 const iconRailItem = 'group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center';
 
@@ -52,8 +53,19 @@ function NavIcon({ icon: Icon, title }: { icon: React.ComponentType<{ label: str
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { hasPermission } = usePermission();
-    const { auth } = usePage<SharedData>().props;
+    const page = usePage<SharedData>();
+    const { auth } = page.props;
+    const { setOpenMobile } = useSidebar();
     const hasUnreadNotifications = Number(auth.user?.notification_unread_count ?? 0) > 0;
+
+    /*
+     * The app shell is a persistent layout, so the sidebar no longer unmounts
+     * between visits — on mobile the Sheet overlay would stay open on top of the
+     * page the user just navigated to. Close it whenever the URL changes.
+     */
+    React.useEffect(() => {
+        setOpenMobile(false);
+    }, [setOpenMobile, page.url]);
 
     const data = {
         topNav: [
