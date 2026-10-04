@@ -215,8 +215,24 @@ export default function Chatbot() {
             );
         } catch (err) {
             // The turn was cancelled deliberately (navigation or a newer send).
-            // Surface nothing — a stale bubble or banner would be misleading.
+            // Drop the empty assistant placeholder handleSend appended up-front,
+            // otherwise the user is left staring at a blank bubble that looks
+            // like the assistant never answered.
             if (err instanceof DOMException && err.name === 'AbortError') {
+                setMessages((previous) => {
+                    const trimmed = [...previous];
+
+                    while (
+                        trimmed.length > 0
+                        && trimmed[trimmed.length - 1].role === 'assistant'
+                        && (trimmed[trimmed.length - 1].content ?? '').trim() === ''
+                    ) {
+                        trimmed.pop();
+                    }
+
+                    return trimmed;
+                });
+
                 return;
             }
 

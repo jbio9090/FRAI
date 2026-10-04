@@ -38,6 +38,14 @@ class ChatController extends Controller
     // without needing to touch the cache manually or wait out the TTL.
     private const PROMPT_VERSION = 'v2';
 
+    /**
+     * Wall-clock deadline for the current chat turn, set by beginChatBudget().
+     * Every AI call in a turn is clamped to what is left of it so one slow
+     * provider call can never push the request past the 60s nginx
+     * fastcgi_read_timeout and surface as a 504. See config('ai.chat').
+     */
+    private ?float $chatDeadlineAt = null;
+
     protected PageContextService $pageContextService;
 
     public function __construct(
@@ -63,6 +71,73 @@ class ChatController extends Controller
     private function faqStateCacheKey(): string
     {
         return 'chat_faq_state_'.self::PROMPT_VERSION.'_'.Auth::id();
+    }
+
+    private function beginChatBudget(): void
+    {
+        $this->chatDeadlineAt = microtime(true) + max(0, (int) config('ai.chat.budget', 40));
+    }
+
+    private function remainingChatSeconds(): float
+    {
+        if ($this->chatDeadlineAt === null) {
+            return (float) config('ai.chat.budget', 40);
+        }
+
+        return max(0.0, $this->chatDeadlineAt - microtime(true));
+    }
+
+    /**
+     * True once the turn has too little budget left to be worth starting another
+     * AI call — the safety margin is reserved for session writes and nginx.
+     */
+    private function chatBudgetSpent(): bool
+    {
+        return $this->remainingChatSeconds() <= (float) config('ai.chat.safety_margin', 5);
+    }
+
+    /**
+     * Clamps a requested AI timeout to the per-call cap and to whatever is left
+     * of the turn budget, whichever is smaller.
+     */
+    private function chatCallTimeout(int $requested): int
+    {
+        $cap = max(1, (int) config('ai.chat.call_timeout', 25));
+        $remaining = (int) floor($this->remainingChatSeconds() - (int) config('ai.chat.safety_margin', 5));
+
+        return max(1, min($requested, $cap, $remaining));
+    }
+
+    /**
+     * Response for a turn that ran out of budget. Returned as HTTP 200 with an
+     * assistant message so the widget renders it instead of surfacing a gateway
+     * error, and flagged in meta so the UI can offer a retry.
+     */
+    private function chatBudgetExceededResponse(array $incomingMessages): JsonResponse
+    {
+        \Log::warning('Chat turn exceeded the AI budget; answering with a fallback message.', [
+            'route' => request()->route()?->getName(),
+            'budget' => (int) config('ai.chat.budget', 40),
+            'remaining_seconds' => round($this->remainingChatSeconds(), 1),
+        ]);
+
+        // Keep the user's question in the transcript so a reload does not lose
+        // it, but never persist the fallback text as if the assistant had said it.
+        $latestUserMessage = collect($incomingMessages)
+            ->filter(fn ($message) => is_array($message) && ($message['role'] ?? null) === 'user')
+            ->last();
+
+        if (is_array($latestUserMessage)) {
+            $this->saveSession([$latestUserMessage]);
+        }
+
+        return response()->json([
+            'message' => [
+                'role' => 'assistant',
+                'content' => 'That took longer than our response budget allows. Please try again with a narrower question.',
+            ],
+            'meta' => ['budget_exceeded' => true],
+        ]);
     }
 
     private function saveSession(array $userMessages): void
@@ -335,7 +410,6 @@ If get_request_details returns a "forbidden" error, tell the user the request ex
 SYMTPROMPT;
     }
 
-    
     private function getPageContextToolDefinition(): array
     {
         return [
@@ -665,21 +739,41 @@ SYMTPROMPT;
             $this->getSuggestedNavigationToolDefinition(),
         ];
 
-        $maxRounds = 4;
+        /*
+         * The system prompt orders the model to call get_page_context before
+         * answering, so early rounds legitimately come back with no prose. Keep
+         * the best prose seen so that a turn which runs out of rounds (or budget)
+         * still answers rather than falling through to the 500 path.
+         */
+        $lastContent = null;
+        $maxRounds = max(1, (int) config('ai.chat.max_rounds', 4));
 
         for ($round = 0; $round < $maxRounds; $round++) {
+            if ($this->chatBudgetSpent()) {
+                \Log::warning('Chat tool loop stopped: budget spent.', [
+                    'rounds_completed' => $round,
+                    'remaining_seconds' => round($this->remainingChatSeconds(), 1),
+                ]);
+
+                return $lastContent;
+            }
+
             $result = $this->ai->chatWithTools($messages, $tools, [
-                'timeout' => 120,
+                'timeout' => $this->chatCallTimeout(120),
                 'tool_choice' => 'auto',
                 'temperature' => 0,
             ]);
 
+            $roundContent = trim((string) ($result['content'] ?? ''));
+
+            if ($roundContent !== '') {
+                $lastContent = $roundContent;
+            }
+
             $toolCalls = $result['tool_calls'] ?? [];
 
             if (empty($toolCalls)) {
-                $content = trim((string) ($result['content'] ?? ''));
-
-                return $content !== '' ? $content : null;
+                return $roundContent !== '' ? $roundContent : $lastContent;
             }
 
             $messages[] = [
@@ -712,7 +806,7 @@ SYMTPROMPT;
             }
         }
 
-        return null; // exceeded max rounds without a final answer
+        return $lastContent; // out of rounds; hand back the best prose we saw
     }
 
     private function getRequestDetail(int $requestId): array
@@ -2549,6 +2643,8 @@ SYMTPROMPT;
 
     public function chat(Request $request): JsonResponse
     {
+        $this->beginChatBudget();
+
         try {
             $incomingMessages = $request->input('messages', []);
             $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
@@ -2599,20 +2695,35 @@ SYMTPROMPT;
             $debugToolCalls = [];
             $assistantReply = $this->processToolCalls($messages, $request, $debugToolCalls);
 
+            if ($assistantReply === null && $this->chatBudgetSpent()) {
+                return $this->chatBudgetExceededResponse($incomingMessages);
+            }
+
             if ($assistantReply === null) {
+                /*
+                 * Deliberately tool-free. This call exists to force a plain-text
+                 * answer after the tool loop came back empty-handed, but it used
+                 * to hand the model get_page_context with tool_choice=auto — so
+                 * the model could reply with yet another tool call and empty
+                 * content, which surfaced as "I did not receive a response from
+                 * the AI provider." Omitting tools makes a tool call impossible
+                 * (see OpenRouterClient::buildChatPayload), and tool_choice must
+                 * go with it or the provider rejects the request.
+                 */
                 $assistantReply = trim((string) $this->ai->chat($messages, [
-                    'timeout' => 120,
-                    'tools' => [$this->getPageContextToolDefinition()],
-                    'tool_choice' => 'auto',
+                    'timeout' => $this->chatCallTimeout(120),
+                    'tools' => [],
                 ]));
 
                 if ($assistantReply === '') {
-                    return response()->json([
-                        'message' => [
-                            'role' => 'assistant',
-                            'content' => 'I did not receive a response from the AI provider.',
-                        ],
-                    ], 500);
+                    /*
+                     * Soft failure: the turn produced no prose but nothing is
+                     * broken. Answer with usable text instead of a hard 500 so
+                     * the conversation survives and the user can rephrase.
+                     */
+                    \Log::warning('Chat turn produced no assistant content; returning a retry prompt.');
+
+                    $assistantReply = 'I could not put together an answer just now. Could you rephrase your question, or try again in a moment?';
                 }
             }
 
@@ -2669,6 +2780,8 @@ SYMTPROMPT;
 
     public function stream(Request $request): StreamedResponse
     {
+        $this->beginChatBudget();
+
         $incomingMessages = $request->input('messages', []);
         $latestUserMessage = $this->getLatestUserMessageContent($incomingMessages);
 
@@ -2729,7 +2842,7 @@ SYMTPROMPT;
             };
 
             $content = $this->ai->streamChat($messages, $onToken, [
-                'timeout' => 120,
+                'timeout' => $this->chatCallTimeout(120),
                 'tools' => [$this->getPageContextToolDefinition()],
                 'tool_choice' => 'auto',
             ]);

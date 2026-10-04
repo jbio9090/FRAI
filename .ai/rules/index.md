@@ -5,6 +5,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | Applies to | Rule file |
 | --- | --- |
 | resources/js/components/app-sidebar.tsx | .ai/rules/components.md |
+| app/Http/Controllers/ChatController.php | .ai/rules/controllers.md |
 | resources/{css,js}/** | .ai/rules/cssjs.md |
 | app/Mail/**, resources/views/emails/** | .ai/rules/emails.md |
 | ** | .ai/rules/general.md |
