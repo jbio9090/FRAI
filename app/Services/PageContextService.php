@@ -50,14 +50,25 @@ class PageContextService
         return array_merge($context, $pageSpecificContext);
     }
 
+    /**
+     * Resolves which *page* the user is looking at.
+     *
+     * The client-reported route wins, because this is only ever called from the
+     * chat endpoints (ChatController::getServerPageContext and the
+     * get_page_context tool), where `request()->route()->getName()` is the chat
+     * endpoint itself rather than the page being viewed. Preferring it made every
+     * page resolve to the endpoint name, so PageCapabilityMap and
+     * getPageSpecificContext matched nothing and the model was handed an empty
+     * context on every page.
+     */
     private function resolveRouteName(array $page): ?string
     {
-        $routeName = request()->route()?->getName();
-        if (is_string($routeName) && $routeName !== '' && ! str_starts_with($routeName, 'api.')) {
-            return $routeName;
+        $clientRoute = $page['route'] ?? null;
+        if (is_string($clientRoute) && $clientRoute !== '' && ! str_starts_with($clientRoute, 'api.')) {
+            return $clientRoute;
         }
 
-        $routeName = $page['route'] ?? null;
+        $routeName = request()->route()?->getName();
         if (is_string($routeName) && $routeName !== '' && ! str_starts_with($routeName, 'api.')) {
             return $routeName;
         }

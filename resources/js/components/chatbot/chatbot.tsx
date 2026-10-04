@@ -8,6 +8,22 @@ import { useChatAPI } from './hooks/useChatAPI';
 import { useMessages } from './hooks/useMessages';
 import { getCsrfToken } from './utils/csrfToken';
 
+/**
+ * Human labels for the SSE progress events the chat turn emits. Without these the
+ * user stares at a blank bubble for the whole multi-round tool loop, which reads
+ * as "it never responded" — the tool is running, there is just nothing to show.
+ */
+const TOOL_LABELS: Record<string, string> = {
+    thinking: 'Thinking through your request…',
+    writing: 'Writing the answer…',
+    get_page_context: 'Checking this page for context…',
+    get_request_details: 'Pulling up that request…',
+    check_facility_availability: 'Checking availability…',
+    get_suggested_alternatives: 'Looking for alternatives…',
+    get_my_permissions: 'Checking your permissions…',
+    suggest_navigation: 'Finding the right page…',
+};
+
 export default function Chatbot() {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const [input, setInput] = useState('');
@@ -21,6 +37,7 @@ export default function Chatbot() {
     const [debugRawResponse, setDebugRawResponse] = useState<string>('');
     const [debugToolCalls, setDebugToolCalls] = useState<unknown[]>([]);
     const [navigationSuggestion, setNavigationSuggestion] = useState<{ route: string; reason: string } | null>(null);
+    const [progressLabel, setProgressLabel] = useState<string | null>(null);
     const { messages, addMessage, setMessages, clearMessages } = useMessages();
     const { isLoading, sendMessage, abortPendingTurn } = useChatAPI();
     const pageContext = useCurrentPageContext();
@@ -163,6 +180,8 @@ export default function Chatbot() {
         }
 
         try {
+            setProgressLabel(null);
+
             await sendMessage(
                 queuedMessages,
                 undefined,
@@ -170,19 +189,6 @@ export default function Chatbot() {
                 false,
                 pageContext,
                 (token) => {
-                    // Handle navigation suggestion token
-                    if (token.startsWith('NAVIGATE_SUGGESTION:')) {
-                        const rest = token.substring('NAVIGATE_SUGGESTION:'.length);
-                        const parts = rest.split(':');
-                        if (parts.length >= 2) {
-                            const route = parts[0];
-                            const reason = parts.slice(1).join(':');
-                            setNavigationSuggestion({ route, reason });
-                            // Don't add this token to streaming content - render as Link instead
-                            return;
-                        }
-                    }
-
                     streamingContent += token;
                     if (devMode) {
                         setDebugRawResponse((previous) => previous + token);
@@ -207,10 +213,12 @@ export default function Chatbot() {
                 undefined,
                 undefined,
                 devMode,
-                (calls) => {
-                    if (devMode) {
-                        setDebugToolCalls(calls);
-                    }
+                undefined,
+                (status) => {
+                    setProgressLabel(status);
+                },
+                (suggestion) => {
+                    setNavigationSuggestion(suggestion);
                 },
             );
         } catch (err) {
@@ -390,7 +398,11 @@ export default function Chatbot() {
                                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.1s]" />
                                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
                                 </span>
-                                Thinking through your request…
+                                {progressLabel ? (
+                                    TOOL_LABELS[progressLabel] ?? TOOL_LABELS[progressLabel.replace(/_/g, ' ')] ?? 'Thinking through your request…'
+                                ) : (
+                                    'Thinking through your request…'
+                                )}
                             </div>
                         ) : null}
                     </div>

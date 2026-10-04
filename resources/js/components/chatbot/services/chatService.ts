@@ -118,9 +118,12 @@ export async function sendChatMessageStream(
     onDone: () => void,
     onError: (message: string) => void,
     pageContextOverride?: ClientPageContext,
+    signal?: AbortSignal,
+    onProgress?: (status: string) => void,
+    onNavigate?: (suggestion: { route: string; reason: string }) => void,
 ): Promise<void> {
     const pageContext = pageContextOverride ?? collectPageContext();
-    const response = await fetch(route('chat.stream'), {
+    const response = await fetch(route('api.chat.stream'), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -131,6 +134,7 @@ export async function sendChatMessageStream(
         },
         credentials: 'same-origin',
         body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext) }),
+        signal,
     });
 
     if (response.status === 419) {
@@ -174,6 +178,32 @@ export async function sendChatMessageStream(
 
             try {
                 const event = JSON.parse(jsonLine);
+
+                // Live progress. Without this the browser sees nothing at all
+                // until the entire turn finishes, which reads as "it never
+                // responded" even while the agent is working.
+                if (event.status) {
+                    onProgress?.(String(event.status));
+                }
+
+                if (event.tool) {
+                    onProgress?.(String(event.tool));
+                }
+
+                // Server strips the NAVIGATE_SUGGESTION marker out of the text
+                // before streaming and reports it here instead, so chunking
+                // cannot leak the raw marker into the visible answer.
+                if (event.navigate && typeof event.navigate === 'object') {
+                    const nav = event.navigate as { route?: unknown; reason?: unknown };
+
+                    if (nav.route) {
+                        onNavigate?.({
+                            route: String(nav.route),
+                            reason: String(nav.reason ?? ''),
+                        });
+                    }
+                }
+
                 const tokenVal = event.token ?? event.text;
 
                 if (tokenVal) {
