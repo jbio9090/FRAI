@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\ChatSessionStore;
 use App\Services\RAG\FaqMatchingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -237,11 +238,11 @@ class ChatBudgetTest extends TestCase
             ->actingAs($user)
             ->postJson(route('api.chat'), $this->chatPayload('Why is my request still pending?'));
 
-        $session = Cache::get('chat_session_v2_'.$user->id);
-
+        // Read the transcript straight off the cache: a follow-up HTTP request
+        // gets a brand-new session, and the transcript is session-scoped.
         $this->assertSame(
             [['role' => 'user', 'content' => 'Why is my request still pending?']],
-            $session,
+            Cache::get(app(ChatSessionStore::class)->transcriptKey()),
         );
     }
 
@@ -263,10 +264,10 @@ class ChatBudgetTest extends TestCase
 
         Http::assertSentCount(1);
 
-        $session = Cache::get('chat_session_v2_'.$user->id);
+        $messages = Cache::get(app(ChatSessionStore::class)->transcriptKey(), []);
 
-        $this->assertSame('user', $session[array_key_last($session) - 1]['role'] ?? null);
-        $this->assertSame('assistant', $session[array_key_last($session)]['role'] ?? null);
-        $this->assertSame('Assembly Hall is free at 10am.', $session[array_key_last($session)]['content'] ?? null);
+        $this->assertSame('user', $messages[array_key_last($messages) - 1]['role'] ?? null);
+        $this->assertSame('assistant', $messages[array_key_last($messages)]['role'] ?? null);
+        $this->assertSame('Assembly Hall is free at 10am.', $messages[array_key_last($messages)]['content'] ?? null);
     }
 }

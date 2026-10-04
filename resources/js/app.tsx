@@ -1,5 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
+import { watchAuthTransitions } from '@/lib/historyGuard';
 import { applyPageShell, type PageShell } from '@/layout.tsx/page-shell';
 import { ensureForegroundPushListener } from '@/lib/firebasePush';
 import '../css/app.css';
@@ -19,6 +20,10 @@ createInertiaApp({
         return applyPageShell(page.default, name);
     },
     setup({ el, App, props }) {
+        // Back after login used to restore the login page from Inertia's history
+        // state without a request, so the guest redirect never ran.
+        watchAuthTransitions(props);
+
         // Best-effort: attaches onMessage when permission was already granted.
         // When permission is granted later via Settings → Enable, registerWeb
         // calls ensureForegroundPushListener again (skips are not cached).

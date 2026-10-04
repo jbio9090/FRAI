@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAlternatives } from '@/hooks/use-alternatives';
 import { usePermission } from '@/hooks/use-permission';
+import { csrfHeaders } from '@/lib/csrfHeaders';
 import { cn } from '@/lib/utils';
 import type { Request, AlternativeSlot } from '@/types/request';
 import StatusTag from '../status-tag';
@@ -127,7 +128,7 @@ export function RecommendationPanel({ request, isLoading, variant = 'card' }: Re
                 headers: {
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    ...csrfHeaders(),
                 },
                 body: JSON.stringify({ alternatives: chosenAlternatives }),
             });

@@ -11,6 +11,7 @@ use App\Models\Request as RequestModel;
 use App\Models\Rule as RuleModel;
 use App\Services\AI\OpenRouterClient;
 use App\Services\AlternativeRecommendationService;
+use App\Services\ChatSessionStore;
 use App\Services\PageCapabilityMap;
 use App\Services\PageContextService;
 use App\Services\RAG\FaqMatchingService;
@@ -29,19 +30,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatController extends Controller
 {
-    private const SESSION_TTL_MINUTES = 15;
-
-    private const MAX_SESSION_MESSAGES = 10;
-
-    // Bump this string every time a deploy changes the system prompt, tool names,
-    // or tool definitions — this automatically invalidates all existing sessions
-    // without needing to touch the cache manually or wait out the TTL.
-    private const PROMPT_VERSION = 'v2';
-
     /**
      * Wall-clock deadline for the current chat turn, set by beginChatBudget().
      * Every AI call in a turn is clamped to what is left of it so one slow
-     * provider call can never push the request past the 60s nginx
+     * provider call can never push the request past the nginx
      * fastcgi_read_timeout and surface as a 504. See config('ai.chat').
      */
     private ?float $chatDeadlineAt = null;
@@ -53,24 +45,10 @@ class ChatController extends Controller
         protected OpenRouterClient $ai,
         protected RequestService $requestService,
         protected AlternativeRecommendationService $alternativeService,
+        protected ChatSessionStore $chatSession,
         PageContextService $pageContextService
     ) {
         $this->pageContextService = $pageContextService;
-    }
-
-    private function sessionCacheKey(): string
-    {
-        return 'chat_session_'.self::PROMPT_VERSION.'_'.Auth::id();
-    }
-
-    private function pageContextCacheKey(): string
-    {
-        return 'chat_page_context_'.Auth::id();
-    }
-
-    private function faqStateCacheKey(): string
-    {
-        return 'chat_faq_state_'.self::PROMPT_VERSION.'_'.Auth::id();
     }
 
     private function beginChatBudget(): void
@@ -147,20 +125,12 @@ class ChatController extends Controller
 
     private function saveSession(array $userMessages): void
     {
-        Cache::put(
-            $this->sessionCacheKey(),
-            array_slice($userMessages, -self::MAX_SESSION_MESSAGES),
-            now()->addMinutes(self::SESSION_TTL_MINUTES)
-        );
+        $this->chatSession->saveTranscript($userMessages);
     }
 
     private function loadSession(): array
     {
-        $messages = Cache::get($this->sessionCacheKey(), []);
-
-        return is_array($messages)
-            ? array_slice($messages, -self::MAX_SESSION_MESSAGES)
-            : [];
+        return $this->chatSession->loadTranscript();
     }
 
     private function getServerPageContext(array $clientPageContext): array
@@ -176,22 +146,11 @@ class ChatController extends Controller
             (string) ($page['path'] ?? ''),
             (string) ($page['route'] ?? ''),
         ]);
-        $cached = Cache::get($this->pageContextCacheKey());
 
-        if (is_array($cached)
-            && ($cached['fingerprint'] ?? null) === $fingerprint
-            && is_array($cached['context'] ?? null)) {
-            return $cached['context'];
-        }
-
-        $context = $this->pageContextService->getCurrentPageContext($page);
-        Cache::put(
-            $this->pageContextCacheKey(),
-            ['fingerprint' => $fingerprint, 'context' => $context],
-            now()->addMinutes(self::SESSION_TTL_MINUTES)
+        return $this->chatSession->rememberPageContext(
+            $fingerprint,
+            fn (): array => $this->pageContextService->getCurrentPageContext($page)
         );
-
-        return $context;
     }
 
     public function getSession(): JsonResponse
@@ -201,39 +160,43 @@ class ChatController extends Controller
         return response()->json(['messages' => $messages]);
     }
 
-    private function clearSession(): void
-    {
-        Cache::forget($this->sessionCacheKey());
-        Cache::forget($this->pageContextCacheKey());
-        Cache::forget($this->faqStateCacheKey());
-    }
-
     public function newSession(): JsonResponse
     {
-        $this->clearSession();
+        $this->chatSession->forget();
 
         return response()->json(['message' => 'Session cleared.']);
     }
 
+    /**
+     * Fresh CSRF token, and a re-issued XSRF-TOKEN cookie.
+     *
+     * The cookie is the only token source that survives a session rotation,
+     * because Inertia never re-renders the Blade root view that holds the
+     * csrf-token meta tag.
+     */
+    public function csrfToken(): JsonResponse
+    {
+        return response()->json(['token' => csrf_token()]);
+    }
+
     private function getFaqState(): array
     {
-        $state = Cache::get($this->faqStateCacheKey(), []);
-
-        return is_array($state) ? $state : [];
+        return $this->chatSession->getFaqState();
     }
 
     private function saveFaqState(array $state): void
     {
-        Cache::put(
-            $this->faqStateCacheKey(),
-            $state,
-            now()->addMinutes(self::SESSION_TTL_MINUTES)
-        );
+        $this->chatSession->saveFaqState($state);
     }
 
     private function clearFaqState(): void
     {
-        Cache::forget($this->faqStateCacheKey());
+        Cache::forget($this->chatSession->faqStateKey());
+    }
+
+    private function clearSession(): void
+    {
+        $this->chatSession->forget();
     }
 
     private function normalizePositiveIntValue(mixed $value): ?int

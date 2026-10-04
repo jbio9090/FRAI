@@ -203,6 +203,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
 
+    Route::get('/api/csrf', [ChatController::class, 'csrfToken'])->name('api.csrf');
+
     Route::post('/api/db/create-request', [ChatController::class, 'createRequestApi'])->name('api.db.create.request');
 });
 

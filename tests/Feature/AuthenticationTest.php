@@ -22,6 +22,27 @@ class AuthenticationTest extends TestCase
         );
     }
 
+    /**
+     * Inertia restores pages from history.state on browser Back without asking the
+     * server, so the `guest` redirect on /login never runs and an authenticated
+     * user gets the login form again. Encrypted history is what lets the client
+     * invalidate those entries (router.clearHistory()), so it must stay on.
+     */
+    public function test_inertia_history_is_encrypted_so_stale_entries_can_be_invalidated()
+    {
+        $response = $this->get(route('login.show'));
+
+        $this->assertTrue($response->viewData('page')['encryptHistory']);
+    }
+
+    public function test_authenticated_user_is_redirected_away_from_login_page()
+    {
+        $response = $this->actingAs(User::factory()->create())
+            ->get(route('login.show'));
+
+        $response->assertRedirect(route('dashboard'));
+    }
+
     public function test_user_can_login_with_valid_credentials()
     {
         $user = User::factory()->create([

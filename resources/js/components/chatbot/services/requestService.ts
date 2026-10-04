@@ -1,5 +1,5 @@
+import { csrfHeaders } from '@/lib/csrfHeaders';
 import type { CreateRequestPayload } from '../types';
-import { getCsrfToken } from '../utils/csrfToken';
 
 export async function createRequest(payload: CreateRequestPayload): Promise<{ request_id: string }> {
 
@@ -8,15 +8,14 @@ export async function createRequest(payload: CreateRequestPayload): Promise<{ re
         headers: {
             'Content-Type':     'application/json',
             'Accept':           'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN':     getCsrfToken(), 
+            ...csrfHeaders(),
         },
         credentials: 'same-origin',
         body: JSON.stringify(payload),
     });
 
     if (response.status === 419) {
-        return Promise.reject(new Error('Session timed out. Please try submitting your request again.'));
+        return Promise.reject(new Error('Your session expired. Please refresh the page and submit again.'));
     }
 
     if (!response.ok) {

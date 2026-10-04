@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { csrfHeaders } from '@/lib/csrfHeaders';
 import type { EquipmentConflict } from '@/types/equipment';
 import type { Facility } from '@/types/facility';
 import type { EquipmentAvailabilityData, FacilityScheduleData } from './types';
@@ -6,10 +7,6 @@ import type { EquipmentAvailabilityData, FacilityScheduleData } from './types';
 export type BorrowableAvailabilityMap = Record<number, Record<number, number>>;
 
 export type EquipmentAvailabilityMap = Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>;
-
-function getCsrfToken(): string {
-    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')!.content;
-}
 
 export async function loadSchedule(facilityId: number, date: Date): Promise<FacilityScheduleData | null> {
     try {
@@ -46,13 +43,12 @@ export async function fetchBorrowableAvailability(params: {
     const sourceFacilities = params.facilities.filter((f) => f.id !== params.selectedFacility);
     if (sourceFacilities.length === 0) return null;
 
-    const csrfToken = getCsrfToken();
-
     const results = await Promise.allSettled(
         sourceFacilities.map(async (facility) => {
             const res = await fetch(route('equipment.availability'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+                headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+                credentials: 'same-origin',
                 body: JSON.stringify({
                     facility_id: facility.id,
                     date: params.currentDate,
@@ -92,8 +88,9 @@ export async function fetchEquipmentConflicts(params: {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': getCsrfToken(),
+                ...csrfHeaders(),
             },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 equipment_ids: params.equipmentIds,
                 date: params.currentDate,
@@ -123,8 +120,9 @@ export async function fetchEquipmentAvailability(params: {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': getCsrfToken(),
+                ...csrfHeaders(),
             },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 facility_id: params.facilityId,
                 date: params.currentDate,

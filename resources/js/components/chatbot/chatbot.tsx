@@ -6,7 +6,7 @@ import ChatInput from './components/ChatInput';
 import MessageList from './components/MessageList';
 import { useChatAPI } from './hooks/useChatAPI';
 import { useMessages } from './hooks/useMessages';
-import { getCsrfToken } from './utils/csrfToken';
+import { csrfHeaders } from '@/lib/csrfHeaders';
 
 /**
  * Human labels for the SSE progress events the chat turn emits. Without these the
@@ -56,14 +56,46 @@ export default function Chatbot() {
 
     useEffect(() => () => abortPendingTurn(), [abortPendingTurn]);
 
+    /*
+     * Drop the transcript when the tab is really going away. pagehide (not
+     * beforeunload) is the reliable event and it also fires when the page enters
+     * the back/forward cache — `persisted` is exactly that case, and the tab is
+     * still there, so keep the history. keepalive lets the DELETE carry its CSRF
+     * header through unload; a plain fetch would be cancelled. Nothing is sent
+     * when the transcript is empty, so idle tabs never touch the cache.
+     */
+    useEffect(() => {
+        if (messages.length === 0) {
+            return;
+        }
+
+        const handlePageHide = (event: PageTransitionEvent) => {
+            if (event.persisted) {
+                return;
+            }
+
+            void fetch(route('chat.session.clear'), {
+                method: 'DELETE',
+                headers: { Accept: 'application/json', ...csrfHeaders() },
+                credentials: 'same-origin',
+                keepalive: true,
+            }).catch(() => {
+                // Best-effort only: the transcript also expires on its own TTL.
+            });
+        };
+
+        window.addEventListener('pagehide', handlePageHide);
+
+        return () => window.removeEventListener('pagehide', handlePageHide);
+    }, [messages]);
+
     useEffect(() => {
         const loadSession = async () => {
             try {
                 const response = await fetch(route('chat.session.get'), {
                     headers: {
                         Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': getCsrfToken(),
+                        ...csrfHeaders(),
                     },
                     credentials: 'same-origin',
                 });
@@ -96,12 +128,11 @@ export default function Chatbot() {
 
         try {
             const response = await fetch(route('api.page.context'), {
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
-                    'X-Page-URL': window.location.href,
-                },
+headers: {
+                        Accept: 'application/json',
+                        ...csrfHeaders(),
+                        'X-Page-URL': window.location.href,
+                    },
                 credentials: 'same-origin',
             });
             const payload = (await response.json()) as { context?: unknown; message?: string };
@@ -268,8 +299,7 @@ export default function Chatbot() {
                 method: 'DELETE',
                 headers: {
                     Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
+                    ...csrfHeaders(),
                 },
                 credentials: 'same-origin',
             });
