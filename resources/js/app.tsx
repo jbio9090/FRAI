@@ -1,91 +1,39 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
-import { isPushOptedOut } from '@/lib/pushPreferences';
+import { watchAuthTransitions } from '@/lib/historyGuard';
+import { applyPageShell, type PageShell } from '@/layout.tsx/page-shell';
+import { ensureForegroundPushListener } from '@/lib/firebasePush';
 import '../css/app.css';
 
 const appName = import.meta.env.VITE_APP_NAME || 'FRAI';
-
-function setupForegroundPushListener(firebaseConfig: Record<string, unknown> | undefined): void {
-    const isNative = typeof (window as Window & { Capacitor?: unknown }).Capacitor !== 'undefined';
-    const supportsWebPush = 'serviceWorker' in navigator && 'PushManager' in window;
-
-    if (isNative || !supportsWebPush || !firebaseConfig) {
-        return;
-    }
-
-    // Per-device opt-out: never mint a fresh FCM token after the user disabled
-    // push on this browser. Otherwise getToken() would recreate one and the
-    // settings toggle would snap back to enabled.
-    if (isPushOptedOut()) {
-        return;
-    }
-
-    // Register Service Worker for PWA web push notifications
-    void navigator.serviceWorker
-        .register('/firebase-messaging-sw.js', { scope: '/' })
-        .then((reg) => {
-            console.log('FCM Service Worker registered:', reg.scope);
-        })
-        .catch((err) => {
-            console.error('FCM Service Worker registration failed:', err);
-        });
-
-    void import('firebase/app')
-        .then(async ({ getApps, initializeApp }) => {
-            const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
-
-            const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-            const messaging = getMessaging(app);
-
-            try {
-                await getToken(messaging, {
-                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-                });
-            } catch (err) {
-                console.warn('FCM getToken init failed — foreground push may not fire:', err);
-            }
-
-            onMessage(messaging, (payload) => {
-                console.log('Foreground push received:', payload);
-
-                const title = payload.notification?.title || 'Notification';
-                const body = payload.notification?.body || '';
-                const options = {
-                    body,
-                    icon: '/FRAI.png',
-                    data: payload.data || {},
-                };
-
-                void navigator.serviceWorker.getRegistration().then((registration) => {
-                    if (registration) {
-                        void registration.showNotification(title, options);
-                        return;
-                    }
-
-                    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-                        new Notification(title, options);
-                    }
-                });
-            });
-        })
-        .catch((err) => {
-            console.error('Failed to initialize foreground push listener:', err);
-        });
-}
 
 const pages = import.meta.glob('./pages/**/*.tsx', { eager: true });
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     resolve: (name) => {
-        const page = (pages[`./pages/${name}.tsx`] || pages[`./pages/${name}/index.tsx`]) as { default: React.ComponentType };
+        const page = (pages[`./pages/${name}.tsx`] || pages[`./pages/${name}/index.tsx`]) as { default: React.ComponentType & { layout?: PageShell } } | undefined;
         if (!page) {
             throw new Error(`Page not found: ${name}`);
         }
-        return page;
+
+        return applyPageShell(page.default, name);
     },
     setup({ el, App, props }) {
-        setupForegroundPushListener((props as unknown as { firebaseConfig?: Record<string, unknown> }).firebaseConfig);
+        // Back after login used to restore the login page from Inertia's history
+        // state without a request, so the guest redirect never ran.
+        watchAuthTransitions(props);
+
+        // Best-effort: attaches onMessage when permission was already granted.
+        // When permission is granted later via Settings → Enable, registerWeb
+        // calls ensureForegroundPushListener again (skips are not cached).
+        void ensureForegroundPushListener(
+            (props as unknown as { firebaseConfig?: Record<string, unknown> }).firebaseConfig,
+        ).then((result) => {
+            if (result !== 'attached') {
+                console.debug(`FCM foreground listener not attached at boot: ${result}`);
+            }
+        });
 
         const root = createRoot(el);
         root.render(<App {...props} />);

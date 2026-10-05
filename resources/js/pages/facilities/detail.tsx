@@ -31,7 +31,6 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 
 interface Equipment {
@@ -137,11 +136,11 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
     };
 
     return (
-        <DefaultLayout hasPadding={false}>
+        <>
             <motion.div {...motionProps} className="flex flex-col gap-6 px-4 py-4 md:px-8">
                 {/* Header */}
                 <div className="flex flex-col gap-1">
-                    <p className="ads-eyebrow">Facility</p>
+                    <p className="frai-eyebrow">Facility</p>
                     <div className="flex flex-wrap items-center gap-2">
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{facility.name}</h1>
 
@@ -210,9 +209,9 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
                 </div>
 
                 {isEditing && (
-                    <form onSubmit={handleSubmit} className="ads-card flex max-w-sm flex-col gap-4 p-5">
+                    <form onSubmit={handleSubmit} className="frai-card flex max-w-sm flex-col gap-4 p-5">
                         <div className="border-b border-border pb-3">
-                            <span className="ads-eyebrow">Edit facility</span>
+                            <span className="frai-eyebrow">Edit facility</span>
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <Label htmlFor="name">Name</Label>
@@ -287,6 +286,7 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
                     <FacilityCalendar
                         facilityId={facility.id}
                         initialEvents={initialEvents}
+                        calendarTitle={facility.name}
                     />
                 </TabsContent>
 
@@ -303,7 +303,7 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
                     ) : (
                         <motion.div
                             {...motionProps}
-                            className="ads-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0"
+                            className="frai-card overflow-hidden [&_[data-slot='table-container']]:rounded-none [&_[data-slot='table-container']]:border-0"
                         >
                             <Table>
                                 <TableHeader>
@@ -327,6 +327,6 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
                     )}
                 </TabsContent>
             </Tabs>
-        </DefaultLayout>
+        </>
     );
 }

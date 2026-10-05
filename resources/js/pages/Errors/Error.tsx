@@ -68,13 +68,13 @@ export default function Error({ status }: ErrorPageProps) {
         <>
             <Head title={`${copy.heading} — ${copy.eyebrow}`} />
             <div className="flex min-h-svh items-center justify-center bg-background p-4 md:p-6">
-                <main className="ads-card motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 w-full max-w-md p-6 text-center shadow-none md:p-8">
+                <main className="frai-card motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300 w-full max-w-md p-6 text-center shadow-none md:p-8">
                     <div className="flex flex-col items-center gap-5">
                         <div className="flex size-12 items-center justify-center rounded-full bg-muted">
                             <Icon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
                         </div>
                         <div className="flex flex-col items-center gap-1.5">
-                            <p className="ads-eyebrow">{copy.eyebrow}</p>
+                            <p className="frai-eyebrow">{copy.eyebrow}</p>
                             <h1 className="font-display text-5xl font-semibold tracking-tight text-foreground md:text-6xl">
                                 {copy.heading}
                             </h1>

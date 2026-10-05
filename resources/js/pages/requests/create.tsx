@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import DefaultLayout from '@/layout.tsx/default';
 import { ChosenAlternativesPanel } from './create/components/ChosenAlternativesPanel';
 import { BookingActions } from './create/sections/booking-actions';
 import { DetailsTab } from './create/sections/details-tab';
@@ -112,7 +111,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         .map(([key, msg]) => ({ key, msg: msg as string }));
 
     return (
-        <DefaultLayout>
+        <>
             <AlertDialog
                 open={showDraftBanner}
                 onOpenChange={(open) => {
@@ -249,7 +248,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                 </div>
 
                                 {/* ── Right: sticky sidebar (desktop only) ── */}
-                                <div className="ads-card sticky top-6 hidden p-5 lg:block">
+                                <div className="frai-card sticky top-6 hidden p-5 lg:block">
                                     {/* ── Desktop: FacilityInfo manages its own facility + date ── */}
                                     <FacilityInfo facilities={facilities} isForSidebar={true} />
 
@@ -278,6 +277,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                     </div>
                 </form>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

@@ -185,7 +185,7 @@ export function BookingCard({
     return (
         <div
             className={`group relative flex flex-col transition-shadow ${
-                isEditing ? 'rounded-lg border border-primary bg-primary/5 ring-2 ring-primary/20' : 'ads-card'
+                isEditing ? 'rounded-lg border border-primary bg-primary/5 ring-2 ring-primary/20' : 'frai-card'
             } ${className ?? ''}`}
         >
             {/* Header */}
@@ -271,7 +271,7 @@ export function BookingCard({
             </div>
 
             {/* Content Body */}
-            <div className="flex-1 px-4 py-2">
+            <div className="flex-1">
                 {hasConflicts && (
                     <>
                         <button
@@ -333,20 +333,20 @@ export function BookingCard({
                 {/* Equipment summary + expandable details */}
                 {hasAnyEquipment && (
                     <>
-                        <button
+                        <Button
+                            variant="ghost"
                             type="button"
                             onClick={() => setIsEquipmentOpen((v) => !v)}
                             aria-expanded={isEquipmentOpen}
                             aria-controls={detailsId}
-                            className="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
                             <ChevronDown
                                 size={12}
                                 className={`shrink-0 text-muted-foreground transition-transform ${isEquipmentOpen ? 'rotate-180' : ''}`}
                             />
-                            <span className="ads-eyebrow">Equipment</span>
+                            <span className="frai-eyebrow">Equipment</span>
                             <span className="text-xs text-muted-foreground">{equipmentSummaryParts.join(' · ')}</span>
-                        </button>
+                        </Button>
 
                         {isEquipmentOpen && (
                             <div id={detailsId} className="mt-1">

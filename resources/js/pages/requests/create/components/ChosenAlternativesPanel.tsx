@@ -122,7 +122,7 @@ export function ChosenAlternativesPanel({
             )}
 
             {!loading && !error && chosenAlternatives && Object.keys(chosenAlternatives.alternatives).length === 0 && (
-                <div className="ads-card p-4 text-center text-sm text-muted-foreground">
+                <div className="frai-card p-4 text-center text-sm text-muted-foreground">
                     <AlertCircle className="h-5 w-5 mx-auto mb-2 text-muted-foreground/50" />
                     <p>No reschedule options have been suggested by an admin yet.</p>
                     <p className="mt-1 text-xs">Please check back later or contact the admin.</p>

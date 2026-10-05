@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCurrentPageContext } from '@/lib/useCurrentPageContext';
@@ -6,7 +6,23 @@ import ChatInput from './components/ChatInput';
 import MessageList from './components/MessageList';
 import { useChatAPI } from './hooks/useChatAPI';
 import { useMessages } from './hooks/useMessages';
-import { getCsrfToken } from './utils/csrfToken';
+import { csrfHeaders } from '@/lib/csrfHeaders';
+
+/**
+ * Human labels for the SSE progress events the chat turn emits. Without these the
+ * user stares at a blank bubble for the whole multi-round tool loop, which reads
+ * as "it never responded" — the tool is running, there is just nothing to show.
+ */
+const TOOL_LABELS: Record<string, string> = {
+    thinking: 'Thinking through your request…',
+    writing: 'Writing the answer…',
+    get_page_context: 'Checking this page for context…',
+    get_request_details: 'Pulling up that request…',
+    check_facility_availability: 'Checking availability…',
+    get_suggested_alternatives: 'Looking for alternatives…',
+    get_my_permissions: 'Checking your permissions…',
+    suggest_navigation: 'Finding the right page…',
+};
 
 export default function Chatbot() {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -21,10 +37,57 @@ export default function Chatbot() {
     const [debugRawResponse, setDebugRawResponse] = useState<string>('');
     const [debugToolCalls, setDebugToolCalls] = useState<unknown[]>([]);
     const [navigationSuggestion, setNavigationSuggestion] = useState<{ route: string; reason: string } | null>(null);
+    const [progressLabel, setProgressLabel] = useState<string | null>(null);
     const { messages, addMessage, setMessages, clearMessages } = useMessages();
-    const { isLoading, sendMessage } = useChatAPI();
+    const { isLoading, sendMessage, abortPendingTurn } = useChatAPI();
     const pageContext = useCurrentPageContext();
+    const { url } = usePage();
     const devMode = new URLSearchParams(window.location.search).has('devmode');
+
+    /*
+     * The app shell is a persistent Inertia layout, so this component no longer
+     * unmounts on navigation. Cancel an in-flight turn — in particular one parked
+     * on the 2-minute transient-failure retry — as soon as the URL changes, or it
+     * would answer a question from the page the user just left.
+     */
+    useEffect(() => {
+        abortPendingTurn();
+    }, [abortPendingTurn, url]);
+
+    useEffect(() => () => abortPendingTurn(), [abortPendingTurn]);
+
+    /*
+     * Drop the transcript when the tab is really going away. pagehide (not
+     * beforeunload) is the reliable event and it also fires when the page enters
+     * the back/forward cache — `persisted` is exactly that case, and the tab is
+     * still there, so keep the history. keepalive lets the DELETE carry its CSRF
+     * header through unload; a plain fetch would be cancelled. Nothing is sent
+     * when the transcript is empty, so idle tabs never touch the cache.
+     */
+    useEffect(() => {
+        if (messages.length === 0) {
+            return;
+        }
+
+        const handlePageHide = (event: PageTransitionEvent) => {
+            if (event.persisted) {
+                return;
+            }
+
+            void fetch(route('chat.session.clear'), {
+                method: 'DELETE',
+                headers: { Accept: 'application/json', ...csrfHeaders() },
+                credentials: 'same-origin',
+                keepalive: true,
+            }).catch(() => {
+                // Best-effort only: the transcript also expires on its own TTL.
+            });
+        };
+
+        window.addEventListener('pagehide', handlePageHide);
+
+        return () => window.removeEventListener('pagehide', handlePageHide);
+    }, [messages]);
 
     useEffect(() => {
         const loadSession = async () => {
@@ -32,8 +95,7 @@ export default function Chatbot() {
                 const response = await fetch(route('chat.session.get'), {
                     headers: {
                         Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': getCsrfToken(),
+                        ...csrfHeaders(),
                     },
                     credentials: 'same-origin',
                 });
@@ -66,12 +128,11 @@ export default function Chatbot() {
 
         try {
             const response = await fetch(route('api.page.context'), {
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
-                    'X-Page-URL': window.location.href,
-                },
+headers: {
+                        Accept: 'application/json',
+                        ...csrfHeaders(),
+                        'X-Page-URL': window.location.href,
+                    },
                 credentials: 'same-origin',
             });
             const payload = (await response.json()) as { context?: unknown; message?: string };
@@ -150,6 +211,8 @@ export default function Chatbot() {
         }
 
         try {
+            setProgressLabel(null);
+
             await sendMessage(
                 queuedMessages,
                 undefined,
@@ -157,19 +220,6 @@ export default function Chatbot() {
                 false,
                 pageContext,
                 (token) => {
-                    // Handle navigation suggestion token
-                    if (token.startsWith('NAVIGATE_SUGGESTION:')) {
-                        const rest = token.substring('NAVIGATE_SUGGESTION:'.length);
-                        const parts = rest.split(':');
-                        if (parts.length >= 2) {
-                            const route = parts[0];
-                            const reason = parts.slice(1).join(':');
-                            setNavigationSuggestion({ route, reason });
-                            // Don't add this token to streaming content - render as Link instead
-                            return;
-                        }
-                    }
-
                     streamingContent += token;
                     if (devMode) {
                         setDebugRawResponse((previous) => previous + token);
@@ -194,13 +244,37 @@ export default function Chatbot() {
                 undefined,
                 undefined,
                 devMode,
-                (calls) => {
-                    if (devMode) {
-                        setDebugToolCalls(calls);
-                    }
+                undefined,
+                (status) => {
+                    setProgressLabel(status);
+                },
+                (suggestion) => {
+                    setNavigationSuggestion(suggestion);
                 },
             );
         } catch (err) {
+            // The turn was cancelled deliberately (navigation or a newer send).
+            // Drop the empty assistant placeholder handleSend appended up-front,
+            // otherwise the user is left staring at a blank bubble that looks
+            // like the assistant never answered.
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                setMessages((previous) => {
+                    const trimmed = [...previous];
+
+                    while (
+                        trimmed.length > 0
+                        && trimmed[trimmed.length - 1].role === 'assistant'
+                        && (trimmed[trimmed.length - 1].content ?? '').trim() === ''
+                    ) {
+                        trimmed.pop();
+                    }
+
+                    return trimmed;
+                });
+
+                return;
+            }
+
             const message = err instanceof Error ? err.message : 'Unable to send message.';
             setError(message);
             setMessages((previous) => {
@@ -225,8 +299,7 @@ export default function Chatbot() {
                 method: 'DELETE',
                 headers: {
                     Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
+                    ...csrfHeaders(),
                 },
                 credentials: 'same-origin',
             });
@@ -355,7 +428,11 @@ export default function Chatbot() {
                                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:-0.1s]" />
                                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
                                 </span>
-                                Thinking through your request…
+                                {progressLabel ? (
+                                    TOOL_LABELS[progressLabel] ?? TOOL_LABELS[progressLabel.replace(/_/g, ' ')] ?? 'Thinking through your request…'
+                                ) : (
+                                    'Thinking through your request…'
+                                )}
                             </div>
                         ) : null}
                     </div>

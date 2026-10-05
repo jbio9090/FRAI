@@ -43,7 +43,17 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->respond(function (Response $response, Throwable $exception, Request $request) {
-            // Add future codes (e.g. 419, 500, 503) to this list — no other changes needed.
+            // A 419 means the CSRF token no longer matches the session, so the
+            // request never ran. For an Inertia visit, redirect back with a flash
+            // message instead of letting Inertia render a non-Inertia response as
+            // an error modal. Raw fetch() callers (the chatbot, push
+            // notifications) must keep the real 419 — they branch on the status
+            // to pull a fresh token and retry.
+            if ($response->getStatusCode() === 419 && $request->hasHeader('X-Inertia')) {
+                return back()->with('error', 'Your session expired. Please try again.');
+            }
+
+            // Add future codes (e.g. 500, 503) to this list — no other changes needed.
             $inertiaErrorStatuses = [403, 404];
 
             if (! app()->environment(['local', 'testing'])

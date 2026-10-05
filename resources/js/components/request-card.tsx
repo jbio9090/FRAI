@@ -53,6 +53,7 @@ export default function RequestCard({
     isSelecting = false,
     isSelected = false,
     className,
+    hideFacilityDecisionsWhenResolved = false,
 }: {
     request: Request;
     page_title?: string;
@@ -60,6 +61,8 @@ export default function RequestCard({
     isSelecting?: boolean;
     isSelected?: boolean;
     className?: string;
+    /** Hide each facility's decision controls once the request itself is already approved or conditionally approved. */
+    hideFacilityDecisionsWhenResolved?: boolean;
 }) {
     const { hasPermission } = usePermission();
     const [isCommentInputOpen, setCommentInputState] = useState(false);
@@ -186,7 +189,7 @@ export default function RequestCard({
             }}
             onClick={() => isSelecting && handleSelection?.(request.id)}
             className={cn(
-                'ads-card mx-auto min-h-0 w-full p-8 transition-all duration-200',
+                'frai-card mx-auto min-h-0 w-full p-8 transition-all duration-200',
                 className,
                 isSelecting && 'cursor-pointer hover:border-primary/50',
                 isSelected && 'border-primary ring-1 ring-primary',
@@ -249,7 +252,12 @@ export default function RequestCard({
                     </Link>
                 </div>
 
-                <RequestDetails request={request} isLoadingRecommendation={isLoadingRecommendation} files={request.files} />
+                <RequestDetails
+                    request={request}
+                    isLoadingRecommendation={isLoadingRecommendation}
+                    files={request.files}
+                    hideFacilityDecisionsWhenResolved={hideFacilityDecisionsWhenResolved}
+                />
 
                 {hasPermission('approve requests') && ['Pending', 'For Reschedule'].includes(request.status) && (
                     <div className="mt-auto mb-0 flex w-full flex-col">
@@ -346,15 +354,19 @@ function RequestDetails({
     request,
     isLoadingRecommendation,
     files,
+    hideFacilityDecisionsWhenResolved,
 }: {
     request: Request;
     isLoadingRecommendation: boolean;
     files?: typeof request.files;
+    hideFacilityDecisionsWhenResolved: boolean;
 }) {
     const [activeTab, setActiveTab] = useState('facilities');
     const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
     const [canScrollPrev, setCanScrollPrev] = useState(false);
     const [canScrollNext, setCanScrollNext] = useState(false);
+
+    const hideFacilityDecisions = hideFacilityDecisionsWhenResolved && (request.status === 'Approved' || request.status === 'Conditionally Approved');
 
     useEffect(() => {
         if (!carouselApi) return;
@@ -421,7 +433,7 @@ function RequestDetails({
                                 request_facility_status: rf.status ?? null,
                             };
 
-                            return <BookingCard key={rf.id} booking={booking} index={0} className="mt-4" />;
+                            return <BookingCard key={rf.id} booking={booking} index={0} className="mt-4" showActions={!hideFacilityDecisions} />;
                         })}
                     </div>
                 </ScrollArea>

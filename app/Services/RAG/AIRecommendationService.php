@@ -6,14 +6,12 @@ use App\Enums\RequestStatus;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\Rule;
-use App\Services\AI\EmbeddingService;
 use App\Services\AI\OpenRouterClient;
 use Illuminate\Support\Collection;
-use Pgvector\Laravel\Vector;
 
 class AIRecommendationService
 {
-    public function __construct(protected OpenRouterClient $ai, protected EmbeddingService $embedder) {}
+    public function __construct(protected OpenRouterClient $ai) {}
 
     /**
      * Evaluate each RequestFacility in isolation and return a map of results.
@@ -50,29 +48,28 @@ class AIRecommendationService
     }
 
     /**
-     * Run the full RAG + LLM pipeline for one specific RequestFacility.
+     * Build the policy prompt and LLM call for one specific RequestFacility.
      */
     private function evaluateFacility(FacilityRequest $request, RequestFacility $rf): array
     {
         $facilityContext = $this->buildRequestContext($request, $rf);
-        $ruleLimit = (int) config('ai.recommendation.rule_limit', 10);
 
-        $relevantRules = $this->retrieveRelevantRules($request, $rf, $ruleLimit);
+        $policyRules = $this->policyRules();
 
-        if ($relevantRules->isEmpty()) {
+        if ($policyRules->isEmpty()) {
             return $this->fallbackForFacility($rf);
         }
 
-        \Log::debug("Relevant rules for RequestFacility#{$rf->id}", [
-            'rules' => $relevantRules->pluck('rule')->all(),
+        \Log::debug("Policy rules sent for RequestFacility#{$rf->id}", [
+            'count' => $policyRules->count(),
         ]);
 
-        $ruleLines = collect($relevantRules)
+        $ruleLines = $policyRules
             ->values()
             ->map(fn ($r, $i) => ($i + 1).'. '.trim((string) $r->rule))
             ->join("\n");
 
-        $ruleCount = collect($relevantRules)->count();
+        $ruleCount = $policyRules->count();
         $validStatuses = implode(', ', array_column(
             array_filter(
                 RequestStatus::cases(),
@@ -87,8 +84,9 @@ class AIRecommendationService
         $prompt = <<<PROMPT
 TODAY'S DATE AND TIME: {$now}
 
-===RULES ({$ruleCount} total — you MUST apply every single one)===
+===POLICY RULES ({$ruleCount} total — this is the COMPLETE current policy set)===
 {$ruleLines}
+Every rule above is listed deliberately and none have been pre-filtered for you. Many of them will NOT apply to this particular request, because each rule governs a specific resource, event type, or user group. Decide applicability per rule from the request details below.
 
 ===PRE-EVALUATED SIGNALS===
 These are computed facts about THIS specific facility booking. Trust them exactly as written; do not reinterpret them.
@@ -100,8 +98,9 @@ These are computed facts about THIS specific facility booking. Trust them exactl
 ===YOUR TASK===
 Go through EACH of the {$ruleCount} rules above one by one.
 For every rule, decide: does this request comply, violate, or is the rule not applicable?
-If ANY rule is violated, the status must reflect that (Denied or Conditionally Approved as appropriate).
-If ALL rules are satisfied, default to Approved.
+A rule that is NOT APPLICABLE is NOT a violation. Ignore it completely — it must have no effect on the status. The full rule set is supplied so that nothing is MISSED, not so that every rule COUNTS.
+If ANY APPLICABLE rule is violated, the status must reflect that (Denied or Conditionally Approved as appropriate).
+If no applicable rule is violated, default to Approved.
 
 VALID STATUSES (choose exactly one): {$validStatuses}
 
@@ -124,57 +123,20 @@ PROMPT;
     }
 
     /**
-     * Retrieve the rules to apply for this RequestFacility.
+     * Load the complete policy rule set for inclusion in the prompt.
      *
-     * When vector search is enabled, the facility context is embedded and the
-     * top-K most semantically similar policy rules are returned via pgvector
-     * cosine distance. Otherwise (or if embedding fails / no embeddings exist
-     * yet) it falls back to the original priority-ordered selection so behavior
-     * is unchanged until embeddings are available.
+     * Every policy rule is supplied so that no rule can be silently dropped
+     * from evaluation. Ordering follows the admin-controlled priority so the
+     * reorder UI on the Rules page still controls the order the model reads
+     * them in. The prompt instructs the model to disregard any rule that does
+     * not apply to the request under review.
      */
-    private function retrieveRelevantRules(FacilityRequest $request, RequestFacility $rf, int $ruleLimit): Collection
-    {
-        $limit = max($ruleLimit, 1);
-
-        if (! $this->useVectorSearch()) {
-            return $this->priorityRules($limit);
-        }
-
-        try {
-            $queryText = $this->buildRequestContext($request, $rf);
-            $vector = new Vector($this->embedder->embed($queryText));
-
-            $rules = Rule::query()
-                ->policy()
-                ->join('rule_embeddings', 'rule_embeddings.rule_id', '=', 'rules.id')
-                ->select('rules.*')
-                ->orderByRaw('rule_embeddings.embedding <=> ?', [$vector])
-                ->limit($limit)
-                ->get();
-
-            if ($rules->isNotEmpty()) {
-                return $rules;
-            }
-        } catch (\Throwable $e) {
-            \Log::warning("AIRecommendationService: vector retrieval failed for RequestFacility#{$rf->id}, falling back to priority rules: ".$e->getMessage());
-        }
-
-        return $this->priorityRules($limit);
-    }
-
-    private function priorityRules(int $limit): Collection
+    private function policyRules(): Collection
     {
         return Rule::policy()
             ->orderBy('priority')
             ->orderBy('id')
-            ->limit($limit)
             ->get();
-    }
-
-    private function useVectorSearch(): bool
-    {
-        return $this->embedder->isConfigured()
-            && config('database.default') === 'pgsql';
     }
 
     /**

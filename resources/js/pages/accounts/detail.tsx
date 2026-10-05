@@ -22,7 +22,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 import type { AccountsDetailProps } from '@/types/auth';
 import type { Request } from '@/types/request';
@@ -150,7 +149,7 @@ export default function AccountDetailPage({
     ];
 
     return (
-        <DefaultLayout>
+        <>
             <div className="flex items-center gap-2 mb-4">
                 <Link
                     href={route('accounts.index')}
@@ -458,6 +457,6 @@ export default function AccountDetailPage({
                     </Card>
                 </TabsContent>
             </Tabs>
-        </DefaultLayout>
+        </>
     );
 }

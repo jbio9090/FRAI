@@ -90,6 +90,27 @@ class PushNotificationTest extends TestCase
             ->assertJson(['active' => false]);
     }
 
+    public function test_subscribe_reassigns_shared_device_token_to_current_user(): void
+    {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $owner->registerFcmToken('shared-device-token');
+
+        // Same browser, different login: must not 500 on the unique token.
+        $this->actingAs($other)
+            ->postJson(route('notification.subscribe'), ['token' => 'shared-device-token', 'platform' => 'web'])
+            ->assertOk()
+            ->assertJson(['active' => true]);
+
+        $this->assertDatabaseHas('device_tokens', [
+            'token' => 'shared-device-token',
+            'user_id' => $other->id,
+            'is_active' => true,
+        ]);
+        $this->assertSame(['shared-device-token'], $other->routeNotificationForFcm());
+        $this->assertSame([], $owner->routeNotificationForFcm());
+    }
+
     public function test_push_endpoints_require_token(): void
     {
         $user = User::factory()->create();
@@ -104,5 +125,17 @@ class PushNotificationTest extends TestCase
         $this->postJson(route('notification.subscribe'), ['token' => 'x'])->assertUnauthorized();
         $this->postJson(route('notification.unsubscribe'), ['token' => 'x'])->assertUnauthorized();
         $this->postJson(route('notification.status'), ['token' => 'x'])->assertUnauthorized();
+    }
+
+    public function test_sw_config_is_public_javascript_mirroring_firebase_config(): void
+    {
+        config()->set('services.firebase.project_id', 'test-project-123');
+
+        $response = $this->get(route('notification.sw-config'));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/javascript', $response->headers->get('Content-Type'));
+        $response->assertSee('self.__FIREBASE_CONFIG', false);
+        $response->assertSee('test-project-123', false);
     }
 }

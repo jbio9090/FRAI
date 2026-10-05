@@ -1,5 +1,5 @@
+import { csrfHeaders, refreshCsrfToken } from '@/lib/csrfHeaders';
 import type { ChatRequest } from '../types';
-import { getCsrfToken } from '../utils/csrfToken';
 import { collectPageContext, type ClientPageContext } from '../utils/pageContext';
 
 function getServerPageContext(pageContext: ClientPageContext): Pick<ClientPageContext, 'url' | 'path' | 'route' | 'component' | 'title'> {
@@ -66,6 +66,7 @@ export async function sendChatMessage(
     payload: ChatRequest,
     pageContextOverride?: ClientPageContext,
     devmode?: boolean,
+    signal?: AbortSignal,
 ): Promise<{
     content: string;
     bookingPayload: string | null;
@@ -78,12 +79,12 @@ export async function sendChatMessage(
         headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': getCsrfToken(),
+            ...csrfHeaders(),
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
         body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext), devmode: !!devmode }),
+        signal,
     });
 
     if (response.status === 419) {
@@ -116,23 +117,80 @@ export async function sendChatMessageStream(
     onDone: () => void,
     onError: (message: string) => void,
     pageContextOverride?: ClientPageContext,
+    signal?: AbortSignal,
+    onProgress?: (status: string) => void,
+    onNavigate?: (suggestion: { route: string; reason: string }) => void,
+): Promise<void> {
+    return streamTurn(
+        payload,
+        onToken,
+        onBookingPayload,
+        onDeterministic,
+        onViolation,
+        onDone,
+        onError,
+        pageContextOverride,
+        signal,
+        onProgress,
+        onNavigate,
+        false,
+    );
+}
+
+async function streamTurn(
+    payload: ChatRequest,
+    onToken: (token: string) => void,
+    onBookingPayload: (json: string) => void,
+    onDeterministic: (payload: Record<string, unknown>) => void,
+    onViolation: (message: string) => void,
+    onDone: () => void,
+    onError: (message: string) => void,
+    pageContextOverride: ClientPageContext | undefined,
+    signal: AbortSignal | undefined,
+    onProgress: ((status: string) => void) | undefined,
+    onNavigate: ((suggestion: { route: string; reason: string }) => void) | undefined,
+    isCsrfRetry: boolean,
 ): Promise<void> {
     const pageContext = pageContextOverride ?? collectPageContext();
-    const response = await fetch(route('chat.stream'), {
+    const response = await fetch(route('api.chat.stream'), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             Accept: 'text/event-stream',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': getCsrfToken(),
+            ...csrfHeaders(),
             'X-Page-URL': window.location.href,
         },
         credentials: 'same-origin',
         body: JSON.stringify({ ...payload, page_context: getServerPageContext(pageContext) }),
+        signal,
     });
 
     if (response.status === 419) {
-        onError('Session timed out. Please try refreshing the page.');
+        // The XSRF-TOKEN cookie can still be stale if the session was rotated
+        // since the last response (e.g. a login that never reloaded the page).
+        // Pull a live token once, which also re-issues the cookie, then retry.
+        if (!isCsrfRetry) {
+            const liveToken = await refreshCsrfToken();
+
+            if (liveToken && signal?.aborted !== true) {
+                return streamTurn(
+                    payload,
+                    onToken,
+                    onBookingPayload,
+                    onDeterministic,
+                    onViolation,
+                    onDone,
+                    onError,
+                    pageContextOverride,
+                    signal,
+                    onProgress,
+                    onNavigate,
+                    true,
+                );
+            }
+        }
+
+        onError('Your session expired. Please refresh the page to continue chatting.');
         return;
     }
 
@@ -172,6 +230,32 @@ export async function sendChatMessageStream(
 
             try {
                 const event = JSON.parse(jsonLine);
+
+                // Live progress. Without this the browser sees nothing at all
+                // until the entire turn finishes, which reads as "it never
+                // responded" even while the agent is working.
+                if (event.status) {
+                    onProgress?.(String(event.status));
+                }
+
+                if (event.tool) {
+                    onProgress?.(String(event.tool));
+                }
+
+                // Server strips the NAVIGATE_SUGGESTION marker out of the text
+                // before streaming and reports it here instead, so chunking
+                // cannot leak the raw marker into the visible answer.
+                if (event.navigate && typeof event.navigate === 'object') {
+                    const nav = event.navigate as { route?: unknown; reason?: unknown };
+
+                    if (nav.route) {
+                        onNavigate?.({
+                            route: String(nav.route),
+                            reason: String(nav.reason ?? ''),
+                        });
+                    }
+                }
+
                 const tokenVal = event.token ?? event.text;
 
                 if (tokenVal) {

@@ -25,6 +25,10 @@ Route::get('/requests/{id}/push-action/{action}', [RequestController::class, 'ha
     ->name('requests.push_action')
     ->middleware('signed');
 
+// Public Firebase config for the push service worker (imported via importScripts).
+// Must stay outside auth: the worker installs on first visit, even logged out.
+Route::get('/push/sw-config.js', [NotificationController::class, 'swConfig'])->name('notification.sw-config');
+
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
 
@@ -110,6 +114,9 @@ Route::middleware('auth')->group(function () {
         ->middleware(['role:admin|Super Admin', 'permission:approve requests'])
         ->name('settings.admin-email-notifications');
 
+    Route::post('/settings/email-notifications', [SettingsController::class, 'updateEmailNotifications'])
+        ->name('settings.email-notifications');
+
     // Admin-only request options (approvers, booking window, min advance days)
     Route::middleware('permission:manage request options')->group(function () {
         Route::get('/request-options', [RequestSettingsController::class, 'index'])->name('request-options');
@@ -121,7 +128,7 @@ Route::middleware('auth')->group(function () {
         ->name('equipment.check-conflicts');
     Route::post('/equipment/availability', [EquipmentController::class, 'getAvailability'])
         ->name('equipment.availability');
-    Route::middleware('permission:manage facilities')->group(function () {
+    Route::middleware('permission:manage equipments')->group(function () {
         Route::post('/equipments', [EquipmentController::class, 'store'])->name('equipments.store');
         Route::put('/equipments/{equipment}', [EquipmentController::class, 'update'])->name('equipments.update');
         Route::delete('/equipments/{equipment}', [EquipmentController::class, 'destroy'])->name('equipments.destroy');
@@ -189,11 +196,14 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('/chat')->group(function () {
         Route::post('/', [ChatController::class, 'chat'])->name('api.chat')->middleware(['throttle:60,1']);
+        Route::post('/stream', [ChatController::class, 'stream'])->name('api.chat.stream')->middleware(['throttle:60,1']);
         Route::get('/facilities', [ChatController::class, 'facilitiesList'])->name('chat.facilities');
         Route::get('/equipment', [ChatController::class, 'equipmentList'])->name('chat.equipment');
         Route::get('/session', [ChatController::class, 'getSession'])->name('chat.session.get');
         Route::delete('/session', [ChatController::class, 'newSession'])->name('chat.session.clear');
     });
+
+    Route::get('/api/csrf', [ChatController::class, 'csrfToken'])->name('api.csrf');
 
     Route::post('/api/db/create-request', [ChatController::class, 'createRequestApi'])->name('api.db.create.request');
 });

@@ -52,4 +52,25 @@ return [
 
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | History Encryption
+    |--------------------------------------------------------------------------
+    |
+    | Encrypts the page snapshot Inertia stores in the browser's history state.
+    | This is what makes router.clearHistory() meaningful: clearing drops the
+    | encryption key, so older entries can no longer be decrypted and Inertia
+    | re-requests the page from the server instead of restoring a stale one
+    | from the back/forward stack. Without it, Back after login renders the
+    | cached login page without ever contacting the server.
+    |
+    | Requires a secure context (HTTPS or localhost): over plain HTTP the
+    | browser exposes no crypto.subtle and Inertia silently stores plaintext.
+    |
+    */
+
+    'history' => [
+        'encrypt' => (bool) env('INERTIA_ENCRYPT_HISTORY', true),
+    ],
+
 ];

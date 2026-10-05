@@ -13,7 +13,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import DefaultLayout from '@/layout.tsx/default';
 import { cn } from '@/lib/utils';
 import type { RequestOptions } from '@/types/request';
 
@@ -86,11 +85,11 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
     };
 
     return (
-        <DefaultLayout>
+        <>
             <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
-                        <p className="ads-eyebrow">Request configuration</p>
+                        <p className="frai-eyebrow">Request configuration</p>
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Request Options</h1>
                         <p className="text-sm text-muted-foreground">
                             Defaults for new facility requests. Will not affect already sent requests.
@@ -100,9 +99,9 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
 
                 <motion.div {...motionProps}>
                     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-                        <section className="ads-card p-5 md:p-6">
+                        <section className="frai-card p-5 md:p-6">
                             <div className="mb-4 flex flex-col gap-1">
-                                <span className="ads-eyebrow">Approvers</span>
+                                <span className="frai-eyebrow">Approvers</span>
                                 <p className="text-sm text-muted-foreground">
                                     Who a requester can select in the "Approved By" section of the request form.
                                 </p>
@@ -159,9 +158,9 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
                             </div>
                         </section>
 
-                        <section className="ads-card p-5 md:p-6">
+                        <section className="frai-card p-5 md:p-6">
                             <div className="mb-4 flex flex-col gap-1">
-                                <span className="ads-eyebrow">Booking window</span>
+                                <span className="frai-eyebrow">Booking window</span>
                                 <p className="text-sm text-muted-foreground">
                                     Available hours and days for scheduling facility requests. Also used by the chatbot.
                                 </p>
@@ -272,7 +271,7 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
                             </div>
                         </section>
 
-                        <div className="ads-card sticky bottom-0 z-10 flex items-center justify-end gap-2 p-4">
+                        <div className="frai-card sticky bottom-0 z-10 flex items-center justify-end gap-2 p-4">
                             <Button type="submit" disabled={processing}>
                                 <Save size={16} />
                                 {processing ? 'Saving…' : 'Save changes'}
@@ -281,6 +280,6 @@ export default function RequestOptionsSettings({ settings }: PageProps) {
                     </form>
                 </motion.div>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

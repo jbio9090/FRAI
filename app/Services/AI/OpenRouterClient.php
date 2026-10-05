@@ -206,12 +206,16 @@ class OpenRouterClient
         $timeout = (int) ($options['timeout'] ?? config('ai.generate.timeout', 60));
         $payload = $this->buildChatPayload($messages, $stream, $options);
 
+        // A separate connect timeout keeps a black-holed connection from burning
+        // the entire request timeout before any bytes are exchanged.
         $request = Http::timeout($timeout)
+            ->connectTimeout((int) config('ai.generate.connect_timeout', 10))
             ->withToken($apiKey)
             ->withHeaders([
                 'Content-Type' => 'application/json',
             ]);
 
+        $startedAt = microtime(true);
         $response = $request->post($this->endpoint('/chat/completions'), $payload);
 
         Log::debug('AI chat response', [
@@ -221,6 +225,8 @@ class OpenRouterClient
         ]);
 
         if (! $response->successful()) {
+            $this->logCallTiming('chat', $startedAt, $response->status());
+
             Log::warning('AI chat failed', [
                 'provider' => $this->providerName(),
                 'status' => $response->status(),
@@ -231,11 +237,36 @@ class OpenRouterClient
         }
 
         $decoded = $response->json();
+        $this->logCallTiming('chat', $startedAt, $response->status(), is_array($decoded) ? $decoded : null);
+
         if (! is_array($decoded)) {
             throw new RuntimeException('AI chat response was not valid JSON.');
         }
 
         return $decoded;
+    }
+
+    /**
+     * Logs slow AI calls so the chat budget in config('ai.chat') can be tuned
+     * from real numbers instead of guesses.
+     */
+    private function logCallTiming(string $operation, float $startedAt, int $status, ?array $decoded = null): void
+    {
+        $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
+        $slowThresholdMs = (int) config('ai.chat.slow_call_ms', 8000);
+
+        if ($elapsedMs < $slowThresholdMs) {
+            return;
+        }
+
+        Log::info('Slow AI call', [
+            'provider' => $this->providerName(),
+            'operation' => $operation,
+            'status' => $status,
+            'elapsed_ms' => $elapsedMs,
+            'prompt_tokens' => $decoded['usage']['prompt_tokens'] ?? null,
+            'completion_tokens' => $decoded['usage']['completion_tokens'] ?? null,
+        ]);
     }
 
     private function buildChatPayload(array $messages, bool $stream, array $options = []): array

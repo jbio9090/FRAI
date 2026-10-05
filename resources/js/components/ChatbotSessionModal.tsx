@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getCsrfToken } from '@/components/chatbot/utils/csrfToken';
+import { csrfHeaders } from '@/lib/csrfHeaders';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -24,10 +24,9 @@ export default function ChatbotSessionModal({ isOpen, onClose }: ChatbotSessionM
 
         setIsLoading(true);
         fetch(route('chat.session.get'), {
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': getCsrfToken(),
+headers: {
+                Accept: 'application/json',
+                ...csrfHeaders(),
             },
             credentials: 'same-origin',
         })
@@ -47,8 +46,8 @@ export default function ChatbotSessionModal({ isOpen, onClose }: ChatbotSessionM
             await fetch(route('chat.session.clear'), {
                 method: 'DELETE',
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
+                    Accept: 'application/json',
+                    ...csrfHeaders(),
                 },
                 credentials: 'same-origin',
             });

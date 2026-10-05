@@ -42,9 +42,9 @@ export function DetailsTab({
     return (
         <TabsContent value="details" className="mt-6 max-w-3xl space-y-6">
             {/* Request details */}
-            <section className="ads-card p-5 md:p-6">
+            <section className="frai-card p-5 md:p-6">
                 <div className="mb-5 border-b border-border pb-3">
-                    <span className="ads-eyebrow">Request details</span>
+                    <span className="frai-eyebrow">Request details</span>
                 </div>
                 <div className="space-y-5">
                     <div className="space-y-2">
@@ -78,9 +78,9 @@ export function DetailsTab({
             </section>
 
             {/* Event type & approval */}
-            <section className="ads-card p-5 md:p-6">
+            <section className="frai-card p-5 md:p-6">
                 <div className="mb-5 border-b border-border pb-3">
-                    <span className="ads-eyebrow">Event type & approval</span>
+                    <span className="frai-eyebrow">Event type & approval</span>
                 </div>
                 <div className="space-y-5">
                     <div className="space-y-2">
@@ -139,9 +139,9 @@ export function DetailsTab({
             </section>
 
             {/* File Attachments */}
-            <section className="ads-card p-5 md:p-6">
+            <section className="frai-card p-5 md:p-6">
                 <div className="mb-5 border-b border-border pb-3">
-                    <span className="ads-eyebrow">Attachments</span>
+                    <span className="frai-eyebrow">Attachments</span>
                 </div>
                 <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">

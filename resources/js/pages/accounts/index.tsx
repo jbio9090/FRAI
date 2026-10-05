@@ -35,7 +35,8 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermission } from '@/hooks/use-permission';
-import DefaultLayout from "@/layout.tsx/default";
+import AccountFormFields from '@/pages/accounts/components/AccountFormFields';
+import type { AccountFormErrors, UserForm } from '@/pages/accounts/types';
 import type { User } from "@/types";
 
 interface RowUser extends User {
@@ -43,38 +44,8 @@ interface RowUser extends User {
     position?: string;
 }
 
-interface PaginatedUsers {
-    data: RowUser[];
-    links?: { url: string | null; label: string; active: boolean }[];
-    current_page: number;
-    last_page: number;
-    per_page?: number;
-    total?: number;
-}
-
-interface Props {
-    users: PaginatedUsers | RowUser[];
-    roles: string[];
-}
-
-interface UserForm {
-    username: string;
-    email: string;
-    role: string;
-    position: string;
-    profile: File | null;
-    preview?: string;
-}
-
-interface AccountForm {
-    username: string;
-    email: string;
-    password: string;
-    position?: string;
-}
-
 interface PageProps {
-    errors: Partial<Record<keyof AccountForm, string>>;
+    errors: AccountFormErrors;
     [key: string]: unknown;
     archived?: boolean;
     flash?: {
@@ -101,10 +72,24 @@ interface CsvRow {
     error?: string;
 }
 
-const emptyForm: UserForm = { username: "", email: "", role: "", position: "", profile: null };
+const emptyUserForm: UserForm = { username: "", email: "", role: "", position: "", profile: null };
+
+/**
+ * Release an object URL preview when the owning dialog goes away, so selecting
+ * several photos in a row does not leak blobs.
+ */
+function useRevokePreviewOnUnmount(preview: string | undefined) {
+    const latest = useRef(preview);
+    latest.current = preview;
+
+    useEffect(() => {
+        return () => {
+            if (latest.current) URL.revokeObjectURL(latest.current);
+        };
+    }, []);
+}
 
 const CSV_HEADERS = ['name', 'email', 'role'];
-const CSV_OPTIONAL_HEADERS = ['position'];
 const CSV_TEMPLATE = `name,email,role,position\nJohn Doe,johndoe@example.com,administrative staff,Registrar Clerk\nJane Smith,janesmith@example.com,administrative staff,`;
 
 export default function AccountsPage({ users = [], roles = [] }: { users?: RowUser[] | { data: RowUser[] }; roles?: string[] }) {
@@ -119,10 +104,11 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isBatchOpen, setIsBatchOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<RowUser | null>(null);
-    const [addForm, setAddForm] = useState<UserForm>(emptyForm);
-    const [editForm, setEditForm] = useState<UserForm>(emptyForm);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [addForm, setAddForm] = useState<UserForm>(emptyUserForm);
+    const [editForm, setEditForm] = useState<UserForm>(emptyUserForm);
     const csvInputRef = useRef<HTMLInputElement>(null);
+    useRevokePreviewOnUnmount(addForm.preview);
+    useRevokePreviewOnUnmount(editForm.preview);
     const { errors } = usePage<PageProps>().props;
     const { flash } = usePage<PageProps>().props;
     const { auth } = usePage<PageProps>().props;
@@ -237,6 +223,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
     const handleResetPassword = (targetUser: RowUser) => {
         if (window.confirm(`Are you sure you want to force a password reset for ${targetUser.name}?`)) {
             setEditingUser(null);
+            resetEditForm();
             router.post(route('accounts.reset-password', targetUser.id), {}, {
                 preserveScroll: true,
             });
@@ -305,15 +292,31 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
         return false;
     };
 
+    const resetAddForm = () => {
+        if (addForm.preview) URL.revokeObjectURL(addForm.preview);
+        setAddForm(emptyUserForm);
+    };
+
+    const resetEditForm = () => {
+        if (editForm.preview) URL.revokeObjectURL(editForm.preview);
+        setEditForm(emptyUserForm);
+    };
+
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
         router.post(route("accounts.store"), {
-            ...addForm,
             name: addForm.username,
+            email: addForm.email,
+            role: addForm.role,
+            position: addForm.position,
+            profile: addForm.profile,
         }, {
-            onSuccess: () => {
+            // A validation failure comes back as a redirect with errors, which
+            // Inertia still reports as a success — only close on a clean save.
+            onSuccess: (page) => {
+                if (Object.keys(page.props.errors ?? {}).length > 0) return;
                 setIsAddOpen(false);
-                setAddForm(emptyForm);
+                resetAddForm();
             },
         });
     };
@@ -341,7 +344,11 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             position: editForm.position,
             profile: editForm.profile,
         }, {
-            onSuccess: () => setEditingUser(null),
+            onSuccess: (page) => {
+                if (Object.keys(page.props.errors ?? {}).length > 0) return;
+                setEditingUser(null);
+                resetEditForm();
+            },
         });
     };
 
@@ -472,117 +479,12 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
         return `${warningCount} emails: ${existingWarningCount} already in system, ${duplicateWarningCount} duplicates in CSV`;
     })();
 
-    const FormFields = ({
-        form,
-        onChange,
-        isEdit = false,
-    }: {
-        form: UserForm;
-        onChange: (f: UserForm) => void;
-        isEdit?: boolean;
-    }) => (
-        <>
-            <div className="flex flex-col items-center gap-4 mb-4">
-                <AvatarWithInitials
-                    username={form.username || "User"}
-                    avatarSrc={isEdit ? editingUser?.profile : undefined}
-                    previewSrc={form.preview}
-                    size="lg"
-                />
-                <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                >
-                    Change Photo
-                </Button>
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept="image/*"
-                    onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                            onChange({
-                                ...form,
-                                profile: file,
-                                preview: URL.createObjectURL(file)
-                            });
-                        }
-                    }}
-                />
-            </div>
-
-            <div className="space-y-4">
-                <div className="flex flex-col gap-1.5">
-                    <Label>Username</Label>
-                    <Input
-                        type="text"
-                        placeholder="Enter username"
-                        value={form.username}
-                        className={errors.username ? "border-destructive" : ""}
-                        onChange={(e) => onChange({ ...form, username: e.target.value })}
-                    />
-                    {errors.username && <p className="text-sm text-destructive">{errors.username}</p>}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                    <Label>Email</Label>
-                    <Input
-                        type="email"
-                        placeholder="Enter email"
-                        value={form.email}
-                        className={errors.email ? "border-destructive" : ""}
-                        onChange={(e) => onChange({ ...form, email: e.target.value })}
-                    />
-                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                    <Label>Position</Label>
-                    <Input
-                        type="text"
-                        placeholder="Enter position"
-                        value={form.position}
-                        className={errors.position ? "border-destructive" : ""}
-                        onChange={(e) => onChange({ ...form, position: e.target.value })}
-                    />
-                    {errors.position && <p className="text-sm text-destructive">{errors.position}</p>}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                    <Label>Role</Label>
-                    <Select value={form.role} onValueChange={(v) => onChange({ ...form, role: v })}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {(isEdit ? editRoleOptions : addRoleOptions).map((r) => (
-                                <SelectItem key={r} value={r}>
-                                    {r[0].toUpperCase() + r.slice(1)}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                {!isEdit && (
-                    <div className="flex flex-col gap-1.5 mb-3 mt-2">
-                        <p className="text-center text-sm text-muted-foreground">A random password will appear once the account has been created. Copy it and send to the user</p>
-                    </div>
-                )}
-            </div>
-        </>
-    );
-
     return (
-        <DefaultLayout>
+        <>
             <div className="flex flex-col gap-6">
                 <motion.div {...motionProps}>
                     <div className="flex flex-col gap-1">
-                        <p className="ads-eyebrow">User administration</p>
+                        <p className="frai-eyebrow">User administration</p>
                         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
                             Account Management
                         </h1>
@@ -791,7 +693,7 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             {/* ── Add Dialog ───────────────────────────────────────────────── */}
             <Dialog open={isAddOpen} onOpenChange={(open) => {
                 setIsAddOpen(open);
-                if (!open) setAddForm(emptyForm);
+                if (!open) resetAddForm();
             }}>
                 <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85dvh] overflow-y-auto">
                     <DialogHeader>
@@ -803,9 +705,17 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                         </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAdd} className="flex flex-col gap-4 mb-8">
-                        <FormFields form={addForm} onChange={setAddForm} />
+                        <AccountFormFields
+                            form={addForm}
+                            onChange={setAddForm}
+                            errors={errors}
+                            roleOptions={addRoleOptions}
+                        />
                         <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-                            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setIsAddOpen(false)}>
+                            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => {
+                                setIsAddOpen(false);
+                                resetAddForm();
+                            }}>
                                 Cancel
                             </Button>
                             <Button type="submit" className="w-full sm:w-auto">Save Credentials</Button>
@@ -815,7 +725,12 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
             </Dialog>
 
             {/* ── Edit Dialog ──────────────────────────────────────────────── */}
-            <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+            <Dialog open={!!editingUser} onOpenChange={(open) => {
+                if (!open) {
+                    setEditingUser(null);
+                    resetEditForm();
+                }
+            }}>
                 <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85dvh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
@@ -827,7 +742,14 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                     </DialogHeader>
 
                     <form onSubmit={handleEdit} className="space-y-6">
-                        <FormFields form={editForm} onChange={setEditForm} isEdit />
+                        <AccountFormFields
+                            form={editForm}
+                            onChange={setEditForm}
+                            errors={errors}
+                            roleOptions={editRoleOptions}
+                            avatarSrc={editingUser?.profile}
+                            isEdit
+                        />
 
                         <div className="pt-4 border-t">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-lg bg-muted/50 border border-dashed">
@@ -851,7 +773,10 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                         </div>
 
                         <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-                            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setEditingUser(null)}>
+                            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => {
+                                setEditingUser(null);
+                                resetEditForm();
+                            }}>
                                 Cancel
                             </Button>
                             <Button type="submit" className="w-full sm:w-auto">Save Changes</Button>
@@ -1252,6 +1177,6 @@ export default function AccountsPage({ users = [], roles = [] }: { users?: RowUs
                 )}
                 </motion.div>
             </div>
-        </DefaultLayout>
+        </>
     );
 }

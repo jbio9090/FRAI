@@ -17,7 +17,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import DefaultLayout from '@/layout.tsx/default';
 
 type LogUser = {
     id: number;
@@ -140,7 +139,7 @@ export default function ChatbotLogsPage({
     };
 
     return (
-        <DefaultLayout>
+        <>
             <div className="flex min-w-0 flex-col gap-6 overflow-x-hidden px-3 sm:px-4 md:px-0">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -392,6 +391,6 @@ export default function ChatbotLogsPage({
                     </div>
                 )}
             </div>
-        </DefaultLayout>
+        </>
     );
 }

@@ -89,6 +89,22 @@ class SettingsController extends Controller
         );
     }
 
+    public function updateEmailNotifications(Request $request)
+    {
+        $validated = $request->validate([
+            'subscribed' => ['required', 'boolean'],
+        ]);
+
+        \App\Services\NotificationService::setUserEmailEnabled($request->user(), $validated['subscribed']);
+
+        return back()->with(
+            'success',
+            $validated['subscribed']
+                ? 'Email notifications enabled.'
+                : 'Email notifications disabled.'
+        );
+    }
+
     public function changePassword(Request $request)
     {
         $request->validate([

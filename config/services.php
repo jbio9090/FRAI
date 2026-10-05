@@ -43,6 +43,9 @@ return [
         'messaging_sender_id' => env('VITE_FIREBASE_MESSAGING_SENDER_ID'),
         'app_id' => env('VITE_FIREBASE_APP_ID'),
         'measurement_id' => env('VITE_FIREBASE_MEASUREMENT_ID'),
+        // Served to the browser at runtime (Inertia props) so web push works
+        // even when VITE_* was absent at Vite build time (Docker image).
+        'vapid_key' => env('VITE_FIREBASE_VAPID_KEY'),
     ],
 
 ];

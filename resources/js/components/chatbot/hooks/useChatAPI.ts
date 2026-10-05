@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { sendChatMessage } from '../services/chatService';
+import { useState, useCallback, useRef } from 'react';
+import { sendChatMessageStream } from '../services/chatService';
 import { createRequest } from '../services/requestService';
 import type { Message, ChatRequest, CreateRequestPayload } from '../types';
 import { collectPageContext, type ClientPageContext } from '../utils/pageContext';
@@ -24,100 +24,58 @@ function isTransientAiFailure(error: unknown): boolean {
 		|| message.includes('temporarily unavailable');
 }
 
-function typeOutContent(content: string, onToken?: (token: string) => void): Promise<void> {
-	return new Promise((resolve) => {
-		if (!content) {
-			resolve();
+function createAbortError(): DOMException {
+	return new DOMException('Chat turn aborted', 'AbortError');
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof DOMException && error.name === 'AbortError';
+}
+
+/**
+ * Sleep that ends early when the turn is aborted, so a pending transient-failure
+ * retry does not keep a stale turn alive after the user has navigated away.
+ */
+function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal.aborted) {
+			reject(createAbortError());
 			return;
 		}
 
-		let index = 0;
-		const chunkSize = 4;
-		const interval = window.setInterval(() => {
-			const nextIndex = Math.min(index + chunkSize, content.length);
-			const token = content.slice(index, nextIndex);
-			index = nextIndex;
-			onToken?.(token);
+		const timer = window.setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, delayMs);
 
-			if (index >= content.length) {
-				window.clearInterval(interval);
-				resolve();
-			}
-		}, 16);
+		function onAbort() {
+			window.clearTimeout(timer);
+			reject(createAbortError());
+		}
+
+		signal.addEventListener('abort', onAbort, { once: true });
 	});
 }
 
-function extractBookingPayloadFromText(content: string): string | null {
-	let depth = 0;
-	let start = -1;
-
-	for (let index = 0; index < content.length; index += 1) {
-		const char = content[index];
-
-		if (char === '{') {
-			if (depth === 0) {
-				start = index;
-			}
-			depth += 1;
-			continue;
-		}
-
-		if (char !== '}' || depth === 0) {
-			continue;
-		}
-
-		depth -= 1;
-		if (depth !== 0 || start < 0) {
-			continue;
-		}
-
-		const candidate = content.slice(start, index + 1);
-
-		try {
-			const parsed = JSON.parse(candidate);
-			if (parsed?.title && Array.isArray(parsed?.facility_bookings)) {
-				return JSON.stringify(parsed);
-			}
-		} catch {
-			// Continue scanning until a full valid JSON object is found.
-		}
-	}
-
-	return null;
-}
-
-function extractNavigationSuggestion(content: string): { route: string; reason: string } | null {
-	// Look for NAVIGATE_SUGGESTION marker: NAVIGATE_SUGGESTION:route=requests.index:reason=...
-	const markerMatch = content.match(/NAVIGATE_SUGGESTION:route=([^:]+):reason=(.+)/);
-	if (markerMatch) {
-		return {
-			route: markerMatch[1],
-			reason: markerMatch[2].trim(),
-		};
-	}
-
-	// Fall back to looking for a JSON object like {"navigate":"requests.index"} in the content
-	const jsonMatch = content.match(/\{[^}]*\}/);
-	if (jsonMatch) {
-		try {
-			const parsed = JSON.parse(jsonMatch[0]);
-			if (parsed.navigate) {
-				return {
-					route: String(parsed.navigate),
-					reason: 'Navigation suggested by AI',
-				};
-			}
-		} catch {
-			// Not a valid navigation suggestion, continue
-		}
-	}
-
-	return null;
-}
 
 export function useChatAPI() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+
+	/*
+	 * The app shell is a persistent Inertia layout, so this hook does not unmount
+	 * on navigation the way it used to. Every turn therefore owns an
+	 * AbortController: a new send supersedes the previous turn, and callers abort
+	 * on navigation/unmount (see chatbot.tsx) so a pending 2-minute transient
+	 * retry can never resolve into a stale answer on a page the user has left.
+	 */
+	const activeTurnRef = useRef<AbortController | null>(null);
+
+	const abortPendingTurn = useCallback(() => {
+		activeTurnRef.current?.abort();
+		activeTurnRef.current = null;
+		setIsLoading(false);
+	}, []);
 
 	const sendMessage = useCallback(async (
 		messages: Message[],
@@ -130,9 +88,18 @@ export function useChatAPI() {
 		onDeterministic?: (payload: Record<string, unknown>) => void,
 		devmode?: boolean,
 		onDebugToolCalls?: (calls: unknown[]) => void,
+		onProgress?: (status: string) => void,
+		onNavigate?: (suggestion: { route: string; reason: string }) => void,
 	) => {
+		// Supersede any turn still waiting to retry, then claim this turn's controller.
+		activeTurnRef.current?.abort();
+		const controller = new AbortController();
+		activeTurnRef.current = controller;
+		const { signal } = controller;
+
 		setIsLoading(true);
 		setError(null);
+		onProgress?.('thinking');
 
 		const runRequest = async () => {
 			const payload: ChatRequest = {
@@ -148,35 +115,51 @@ export function useChatAPI() {
 
 			while (true) {
 				try {
-					const response = await sendChatMessage(payload, pageContext, devmode);
-					fullContent = response.content;
+					/*
+					 * Server-sent events. The server runs the tool loop and emits
+					 * `{"tool":...}` while it works, so the UI can say what is
+					 * happening instead of sitting silent until the turn ends.
+					 */
+					let streamError: string | null = null;
 
-					if (response.deterministic) {
-						onDeterministic?.(response.deterministic);
-					}
+					await sendChatMessageStream(
+						payload,
+						(token) => {
+							fullContent += token;
+							onToken?.(token);
+						},
+						onBookingPayload ?? (() => {}),
+						onDeterministic ?? (() => {}),
+						(message) => {
+							streamError = message;
+						},
+						() => {
+							setIsLoading(false);
+						},
+						(message) => {
+							streamError = message;
+							setIsLoading(false);
+						},
+						pageContext,
+						signal,
+						onProgress,
+						onNavigate,
+					);
 
-					if (response.debug?.tool_calls?.length) {
-						onDebugToolCalls?.(response.debug.tool_calls);
-					}
-
-					if (response.bookingPayload) {
-						onBookingPayload?.(response.bookingPayload);
-					} else {
-						await typeOutContent(response.content, onToken);
-					}
-
-					// Check for navigation suggestion in the AI response
-					const navSuggestion = extractNavigationSuggestion(fullContent);
-					if (navSuggestion) {
-						// Render as a clickable Inertia Link
-						const navToken = `NAVIGATE_SUGGESTION:${navSuggestion.route}:${navSuggestion.reason}`;
-						onToken?.(navToken);
+					if (streamError !== null) {
+						throw new Error(streamError);
 					}
 
 					setIsLoading(false);
 					setError(null);
+
 					return fullContent;
 				} catch (error) {
+					// An aborted turn was cancelled on purpose — no retry, no error banner.
+					if (signal.aborted || isAbortError(error)) {
+						throw isAbortError(error) ? error : createAbortError();
+					}
+
 					const message = error instanceof Error ? error.message : 'Unknown error occurred';
 					const retryable = isTransientAiFailure(error);
 
@@ -188,12 +171,19 @@ export function useChatAPI() {
 
 					attempt += 1;
 					setError('AI request failed. Retrying automatically in 2 minutes…');
-					await new Promise((waitResolve) => window.setTimeout(waitResolve, RETRY_DELAY_MS));
+					await waitForRetry(RETRY_DELAY_MS, signal);
 				}
 			}
 		};
 
-		return runRequest();
+		try {
+			return await runRequest();
+		} finally {
+			// Only release this turn's slot; a newer send may already own the ref.
+			if (activeTurnRef.current === controller) {
+				activeTurnRef.current = null;
+			}
+		}
 	}, []);
 
 	const submitRequest = useCallback(async (payload: CreateRequestPayload) => {
@@ -237,5 +227,6 @@ export function useChatAPI() {
 		submitRequest,
 		detectAndSubmitRequest,
 		clearError: () => setError(null),
+		abortPendingTurn,
 	};
 }

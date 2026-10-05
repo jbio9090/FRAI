@@ -24,9 +24,13 @@ trait HasFcmTokens
 
     public function registerFcmToken(string $token, string $platform = 'web'): void
     {
-        $this->fcmTokens()->updateOrCreate(
+        // Tokens are globally unique (one row per device). The same browser
+        // yields the same token for different logins, so upsert by token and
+        // reassign ownership instead of scoping to this user (which would hit
+        // the unique constraint with a 500 on the second account).
+        DeviceToken::updateOrCreate(
             ['token' => $token],
-            ['platform' => $platform, 'is_active' => true]
+            ['user_id' => $this->getKey(), 'platform' => $platform, 'is_active' => true]
         );
     }
 
