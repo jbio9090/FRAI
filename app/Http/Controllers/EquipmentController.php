@@ -6,6 +6,7 @@ use App\Enums\RequestStatus;
 use App\Models\Equipment;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
+use App\Services\EquipmentAvailabilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -168,38 +169,40 @@ class EquipmentController extends Controller
                 'integer',
                 Rule::exists('facilities', 'id')->where(fn ($query) => $query->whereNull('deleted_at')),
             ],
-            'date' => 'required|date',
+            // One request covers every selected date. The composer used to fire
+            // one call per date, which turned a 10-date pick into 10 concurrent
+            // requests each running its own reservation query.
+            'dates' => ['required', 'array', 'min:1', 'max:62'],
+            'dates.*' => ['required', 'date'],
             'time_start' => 'required|string',
             'time_end' => 'required|string',
+            // Editing a request must not read its own reservation as stock taken.
+            'exclude_request_id' => ['nullable', 'integer', 'exists:requests,id'],
         ]);
 
-        $date = Carbon::parse($validated['date'])->format('Y-m-d');
         $timeStart = substr($validated['time_start'], 0, 5);
         $timeEnd = substr($validated['time_end'], 0, 5);
-        $facilityId = (int) $validated['facility_id'];
+        $excludeRequestId = isset($validated['exclude_request_id']) ? (int) $validated['exclude_request_id'] : null;
 
-        $facility = Facility::findOrFail($facilityId);
+        $facility = Facility::findOrFail((int) $validated['facility_id']);
+        $checker = app(EquipmentAvailabilityService::class);
 
-        $equipmentAvailability = $facility->equipment
-            ->map(function ($equipment) use ($facilityId, $date, $timeStart, $timeEnd) {
-                $totalInFacility = $equipment->quantityInFacility($facilityId);
-                $available = $equipment->quantityAvailableInFacility(
-                    $facilityId,
-                    $date,
+        $dates = [];
+
+        foreach ($validated['dates'] as $date) {
+            $dateOnly = Carbon::parse($date)->format('Y-m-d');
+
+            $dates[$dateOnly] = [
+                'availability' => $checker->availabilityForFacilityDate(
+                    $facility,
+                    $dateOnly,
                     $timeStart,
-                    $timeEnd
-                );
+                    $timeEnd,
+                    $excludeRequestId
+                ),
+            ];
+        }
 
-                return [
-                    'equipment_id' => $equipment->id,
-                    'equipment_name' => $equipment->name,
-                    'total_quantity' => $totalInFacility,
-                    'available_quantity' => max(0, $available),
-                    'is_limited' => $available < $totalInFacility,
-                ];
-            })
-            ->values();
-
-        return response()->json(['availability' => $equipmentAvailability]);
+        return response()->json(['dates' => $dates]);
     }
 }

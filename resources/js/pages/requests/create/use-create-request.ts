@@ -6,8 +6,8 @@ import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext'
 import type { EquipmentConflict } from '@/types/equipment';
 import type { FacilityEquipment } from '@/types/equipment';
 import type { AlternativeSlot } from '@/types/request';
-import { fetchBorrowableAvailability, fetchEquipmentAvailability, fetchEquipmentConflicts, loadSchedule as loadFacilitySchedule } from './api';
-import type { BorrowableAvailabilityMap, EquipmentAvailabilityMap } from './api';
+import { fetchEquipmentConflicts, loadSchedule as loadFacilitySchedule } from './api';
+import { resolveAvailabilityEntry } from './availability';
 import type { BorrowPanelProps } from './sections/borrow-panel';
 import type { ExternalEquipmentProps } from './sections/external-equipment';
 import type {
@@ -22,6 +22,7 @@ import type {
     FacilityBooking,
     FacilityScheduleData,
 } from './types';
+import { useEquipmentAvailability } from './use-equipment-availability';
 import {
     addCalendarDays,
     clearDraft,
@@ -101,9 +102,6 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         Record<string, { facilityId: number; timeStart: string; timeEnd: string; conflicts: Record<number, EquipmentConflict[]> }>
     >({});
     const equipmentRequestId = useRef(0);
-    const availabilityRequestId = useRef(0);
-    const [equipmentAvailability, setEquipmentAvailability] = useState<EquipmentAvailabilityMap>({});
-    const [borrowableAvailability, setBorrowableAvailability] = useState<BorrowableAvailabilityMap>({});
     const [isExternalOpen, setIsExternalOpen] = useState(false);
     const [isBorrowOpen, setIsBorrowOpen] = useState(false);
 
@@ -145,6 +143,21 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         pendingConflictChecks.current = Math.max(0, pendingConflictChecks.current - 1);
         if (pendingConflictChecks.current === 0) setCheckingConflicts(false);
     };
+
+    // Both availability fetches live in one hook with one token each. They used
+    // to be sibling effects here sharing a single ref, which made the second one
+    // always invalidate the first's response — so availability never arrived and
+    // the UI fell back to each facility's full allocation.
+    const { own: equipmentAvailability, borrowable: borrowableAvailability, tightestDate: equipmentTightestDate, dateCount: equipmentDateCount, shortfalls: equipmentShortfalls, isLoading: isAvailabilityLoading } =
+        useEquipmentAvailability({
+            facilityId: selectedFacility,
+            dates: selectedDates,
+            timeStart: currentTimeStart,
+            timeEnd: currentTimeEnd,
+            excludeRequestId: existingRequest?.id ?? null,
+            facilities,
+            selectedEquipment,
+        });
 
     // Edit-in-place state
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -302,53 +315,7 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         } else {
             setEquipmentConflicts({});
         }
-
-        if (selectedFacility && selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
-            const requestId = ++availabilityRequestId.current;
-            const facilityId = selectedFacility;
-            const currentDate = format(selectedDates[0], 'yyyy-MM-dd');
-            const timeStart = currentTimeStart;
-            const timeEnd = currentTimeEnd;
-            beginConflictCheck();
-            fetchEquipmentAvailability({
-                facilityId,
-                currentDate,
-                timeStart,
-                timeEnd,
-            })
-                .then((availability) => {
-                    if (availabilityRequestId.current !== requestId) return;
-                    if (availability) setEquipmentAvailability(availability);
-                })
-                .finally(endConflictCheck);
-        } else {
-            setEquipmentAvailability({});
-        }
     }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility, existingRequest?.id]);
-
-    useEffect(() => {
-        if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
-            const requestId = ++availabilityRequestId.current;
-            const currentDate = format(selectedDates[0], 'yyyy-MM-dd');
-            const timeStart = currentTimeStart;
-            const timeEnd = currentTimeEnd;
-            beginConflictCheck();
-            fetchBorrowableAvailability({
-                facilities,
-                selectedFacility,
-                currentDate,
-                timeStart,
-                timeEnd,
-            })
-                .then((map) => {
-                    if (availabilityRequestId.current !== requestId) return;
-                    if (map) setBorrowableAvailability(map);
-                })
-                .finally(endConflictCheck);
-        } else {
-            setBorrowableAvailability({});
-        }
-    }, [currentTimeStart, currentTimeEnd, selectedDates, selectedFacility]);
 
     useEffect(() => {
         setData(
@@ -620,12 +587,20 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
 
     function selectAllEquipment(e: React.MouseEvent<HTMLButtonElement>) {
         e.preventDefault();
-        const updated = availableEquipment.map((equipment) => ({
-            equipment_id: equipment.id,
-            equipment_name: equipment.name,
-            quantity_needed: equipment.pivot.quantity,
-            max_quantity: equipment.pivot.quantity,
-        }));
+        // Ask for what is actually free in the selected slot, not the facility's
+        // whole allocation — otherwise "Select All" silently requests units an
+        // approved request already holds and the submit gets rejected.
+        const updated = availableEquipment.map((equipment) => {
+            const availability = resolveAvailabilityEntry(equipmentAvailability, equipment.id);
+            const quantity = availability.isKnown ? availability.defaultQuantity : 1;
+
+            return {
+                equipment_id: equipment.id,
+                equipment_name: equipment.name,
+                quantity_needed: quantity,
+                max_quantity: availability.isKnown ? availability.total : equipment.pivot.quantity,
+            };
+        });
         setSelectedEquipment(updated);
 
         if (selectedDates.length > 0 && currentTimeStart && currentTimeEnd) {
@@ -649,13 +624,15 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                 return n;
             });
         } else {
+            const availability = resolveAvailabilityEntry(equipmentAvailability, equipment.id);
+
             updated = [
                 ...selectedEquipment,
                 {
                     equipment_id: equipment.id,
                     equipment_name: equipment.name,
-                    quantity_needed: equipment.pivot.quantity,
-                    max_quantity: equipment.pivot.quantity,
+                    quantity_needed: availability.isKnown ? availability.defaultQuantity : 1,
+                    max_quantity: availability.isKnown ? availability.total : equipment.pivot.quantity,
                 },
             ];
         }
@@ -968,7 +945,10 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         existingFiles,
         equipmentConflicts,
         equipmentAvailability,
-        checkingConflicts,
+        equipmentTightestDate,
+        equipmentDateCount,
+        equipmentShortfalls,
+        checkingConflicts: checkingConflicts || isAvailabilityLoading,
         editingIndex,
 
         // alternatives

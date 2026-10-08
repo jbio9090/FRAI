@@ -53,6 +53,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         existingFiles,
         equipmentConflicts,
         equipmentAvailability,
+        equipmentTightestDate,
+        equipmentDateCount,
+        equipmentShortfalls,
         checkingConflicts,
         editingIndex,
 
@@ -191,6 +194,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         setHasOutsiders={setHasOutsiders}
                                         scheduleConflicts={scheduleConflicts}
                                         checkingConflicts={checkingConflicts}
+                                        equipmentShortfalls={equipmentShortfalls}
                                         alternatives={alternatives}
                                         alternativesLoading={alternativesLoading}
                                         alternativesError={alternativesError}
@@ -211,6 +215,8 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         selectedEquipment={selectedEquipment}
                                         equipmentConflicts={equipmentConflicts}
                                         equipmentAvailability={equipmentAvailability}
+                                        tightestDate={equipmentTightestDate}
+                                        dateCount={equipmentDateCount}
                                         selectAllEquipment={selectAllEquipment}
                                         clearEquipmentSelection={clearEquipmentSelection}
                                         handleEquipmentToggle={handleEquipmentToggle}

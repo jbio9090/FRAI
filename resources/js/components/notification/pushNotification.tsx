@@ -1,7 +1,7 @@
 import { usePage } from '@inertiajs/react';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { csrfHeaders } from '@/lib/csrfHeaders';
 import { Button } from '@/components/ui/button';
+import { csrfHeaders } from '@/lib/csrfHeaders';
 import { getPushServiceWorkerRegistration, isFirebaseConfigValid, resolveVapidKey, ensureForegroundPushListener } from '@/lib/firebasePush';
 import { isPushOptedOut, setPushOptedOut } from '@/lib/pushPreferences';
 

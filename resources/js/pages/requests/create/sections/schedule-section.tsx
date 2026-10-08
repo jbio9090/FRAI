@@ -10,11 +10,62 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
+import type { AvailabilityShortfall } from '../availability';
 import { AlternativesPanel } from '../components/AlternativesPanel';
 import type { BookingSchedule } from '../types';
 import type { Facility } from '../types';
 import type { AlternativeSlot } from '../use-create-request';
 import { addCalendarDays, formatTime } from '../utils';
+
+/** Beyond this the list stops being scannable; the rest is summarised. */
+const MAX_SHORTFALL_LINES = 3;
+
+function formatShortfallDate(date: string): string {
+    const parsed = new Date(`${date}T00:00:00`);
+
+    return isNaN(parsed.getTime()) ? date : format(parsed, 'MMM d, yyyy');
+}
+
+/**
+ * Names the selected dates that cannot satisfy the current equipment selection.
+ *
+ * The equipment list already shows a single tightest count, which on a multi-date
+ * pick leaves the user unable to tell WHICH day is the problem. This is the only
+ * place that says so.
+ */
+function EquipmentShortfallSummary({ shortfalls }: { shortfalls: AvailabilityShortfall[] }) {
+    if (shortfalls.length === 0) return null;
+
+    const shown = shortfalls.slice(0, MAX_SHORTFALL_LINES);
+    const hidden = shortfalls.length - shown.length;
+
+    return (
+        <div className="space-y-1 rounded-md border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/40 px-2.5 py-2 text-xs text-[var(--ads-amber)]">
+            {shown.map((shortfall) => (
+                <p key={`${shortfall.date}-${shortfall.equipment_id}`} className="flex items-start gap-1.5">
+                    <AlertCircleIcon size={12} className="mt-0.5 shrink-0" />
+                    <span>
+                        <strong>{formatShortfallDate(shortfall.date)}</strong> — {shortfall.equipment_name}:{' '}
+                        {shortfall.isEmpty ? (
+                            <>
+                                none available<span className="opacity-75"> (all {shortfall.total} reserved)</span>
+                            </>
+                        ) : shortfall.requested > 0 ? (
+                            <>
+                                only <strong>{shortfall.remaining}</strong> of {shortfall.total} available, you asked for {shortfall.requested}
+                            </>
+                        ) : (
+                            <>
+                                only <strong>{shortfall.remaining}</strong> of {shortfall.total} available
+                            </>
+                        )}
+                    </span>
+                </p>
+            ))}
+            {hidden > 0 && <p className="pl-[18px] opacity-75">+{hidden} more</p>}
+        </div>
+    );
+}
 
 function formatConflictDate(date?: string): string | null {
     if (!date) {
@@ -48,6 +99,12 @@ interface ScheduleSectionProps {
     setHasOutsiders: (value: boolean) => void;
     scheduleConflicts: BookingSchedule[];
     checkingConflicts: boolean;
+    /**
+     * Selected dates that cannot satisfy the current equipment selection. Only
+     * rendered for a multi-date pick, where a single merged count cannot say
+     * which day is the problem.
+     */
+    equipmentShortfalls?: AvailabilityShortfall[];
 
     // Alternatives (for mobile/tablet inline rendering)
     alternatives?: Record<number, AlternativeSlot[]>;
@@ -80,6 +137,7 @@ export function ScheduleSection({
     setHasOutsiders,
     scheduleConflicts,
     checkingConflicts,
+    equipmentShortfalls = [],
     alternatives,
     alternativesLoading,
     alternativesError,
@@ -131,6 +189,7 @@ export function ScheduleSection({
                                 />
                             </PopoverContent>
                         </Popover>
+                        {selectedDates.length > 1 && <EquipmentShortfallSummary shortfalls={equipmentShortfalls} />}
                         {hasNearMinimumScheduleDate && (
                             <Alert className="border-[var(--ads-amber)]/50 bg-[var(--ads-amber-bg)] text-[var(--ads-amber)]">
                                 <AlertCircleIcon className="text-[var(--ads-amber)]" />

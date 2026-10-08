@@ -2,11 +2,71 @@ import { format } from 'date-fns';
 import { csrfHeaders } from '@/lib/csrfHeaders';
 import type { EquipmentConflict } from '@/types/equipment';
 import type { Facility } from '@/types/facility';
+import { mergeSlotAvailability } from './availability';
 import type { EquipmentAvailabilityData, FacilityScheduleData } from './types';
 
 export type BorrowableAvailabilityMap = Record<number, Record<number, number>>;
 
-export type EquipmentAvailabilityMap = Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>;
+/** One approved booking holding part of an equipment's stock in the slot. */
+export interface EquipmentReservation {
+    request_id: number;
+    request_title: string;
+    requester: string;
+    date: string;
+    time_start: string;
+    time_end: string;
+    quantity: number;
+    /** The facility the booking happens at. */
+    facility_name: string;
+    /** Only set when the units were borrowed away from another facility. */
+    source_facility_name: string | null;
+    is_borrowed: boolean;
+}
+
+export interface EquipmentAvailabilityEntry {
+    equipment_name: string;
+    total_quantity: number;
+    reserved_quantity: number;
+    available_quantity: number;
+    is_limited: boolean;
+    is_empty: boolean;
+    reservations: EquipmentReservation[];
+}
+
+export type EquipmentAvailabilityMap = Record<number, EquipmentAvailabilityEntry>;
+
+/** Wire shape: one bucket per requested date, each holding a list of rows. */
+export type AvailabilityWireResponse = Record<string, { availability: EquipmentAvailabilityData[] }>;
+
+/**
+ * Reshape the endpoint's per-date row lists into per-date maps keyed by
+ * equipment id. Every requested date is present in the response even when the
+ * facility holds no equipment, so an empty array means "nothing there" rather
+ * than "not fetched".
+ */
+export function normaliseAvailabilityByDate(dates: AvailabilityWireResponse | null | undefined): EquipmentAvailabilityByDate {
+    const byDate: EquipmentAvailabilityByDate = {};
+
+    for (const [date, bucket] of Object.entries(dates ?? {})) {
+        const map: EquipmentAvailabilityMap = {};
+
+        for (const item of bucket?.availability ?? []) {
+            map[item.equipment_id] = {
+                equipment_name: item.equipment_name,
+                total_quantity: item.total_quantity,
+                reserved_quantity: item.reserved_quantity,
+                available_quantity: item.available_quantity,
+                is_limited: item.is_limited,
+                is_empty: item.is_empty ?? item.available_quantity <= 0,
+                reservations: item.reservations ?? [],
+            };
+        }
+
+        byDate[date] = map;
+    }
+
+    return byDate;
+}
 
 export async function loadSchedule(facilityId: number, date: Date): Promise<FacilityScheduleData | null> {
     try {
@@ -31,14 +91,16 @@ export async function loadSchedule(facilityId: number, date: Date): Promise<Faci
     }
 }
 
+export type EquipmentAvailabilityByDate = Record<string, EquipmentAvailabilityMap>;
+
 export async function fetchBorrowableAvailability(params: {
     facilities: Facility[];
     selectedFacility: number | null;
-    currentDate: string;
+    dates: string[];
     timeStart: string;
     timeEnd: string;
 }): Promise<BorrowableAvailabilityMap | null> {
-    if (!params.currentDate || !params.timeStart || !params.timeEnd) return null;
+    if (params.dates.length === 0 || !params.timeStart || !params.timeEnd) return null;
 
     const sourceFacilities = params.facilities.filter((f) => f.id !== params.selectedFacility);
     if (sourceFacilities.length === 0) return null;
@@ -51,24 +113,34 @@ export async function fetchBorrowableAvailability(params: {
                 credentials: 'same-origin',
                 body: JSON.stringify({
                     facility_id: facility.id,
-                    date: params.currentDate,
+                    dates: params.dates,
                     time_start: params.timeStart,
                     time_end: params.timeEnd,
                 }),
             });
             const json = await res.json();
-            return { facilityId: facility.id, availability: json.availability ?? [] };
+
+            return { facilityId: facility.id, byDate: normaliseAvailabilityByDate(json.dates) };
         }),
     );
 
     const map: BorrowableAvailabilityMap = {};
+
     for (const result of results) {
-        if (result.status === 'fulfilled') {
-            const { facilityId, availability } = result.value;
-            map[facilityId] = {};
-            for (const item of availability) {
-                map[facilityId][item.equipment_id] = item.available_quantity;
-            }
+        if (result.status !== 'fulfilled') continue;
+
+        // Tightest date wins: a borrowable that is free on one selected day and
+        // gone on another is not borrowable for this submission. Previously this
+        // read only the first date, so later days were under-detected and the
+        // rejection surfaced as a 422 at submit.
+
+        const { facilityId, byDate } = result.value;
+        const { merged } = mergeSlotAvailability(byDate);
+
+        map[facilityId] = {};
+
+        for (const [equipmentIdKey, entry] of Object.entries(merged)) {
+            map[facilityId][Number(equipmentIdKey)] = entry.available_quantity;
         }
     }
     return map;
@@ -109,11 +181,12 @@ export async function fetchEquipmentConflicts(params: {
 
 export async function fetchEquipmentAvailability(params: {
     facilityId: number | null;
-    currentDate: string;
+    dates: string[];
     timeStart: string;
     timeEnd: string;
-}): Promise<EquipmentAvailabilityMap | null> {
-    if (!params.facilityId || !params.currentDate || !params.timeStart || !params.timeEnd) return null;
+    excludeRequestId?: number | null;
+}): Promise<EquipmentAvailabilityByDate | null> {
+    if (!params.facilityId || params.dates.length === 0 || !params.timeStart || !params.timeEnd) return null;
 
     try {
         const res = await fetch(route('equipment.availability'), {
@@ -125,23 +198,15 @@ export async function fetchEquipmentAvailability(params: {
             credentials: 'same-origin',
             body: JSON.stringify({
                 facility_id: params.facilityId,
-                date: params.currentDate,
+                dates: params.dates,
                 time_start: params.timeStart,
                 time_end: params.timeEnd,
+                exclude_request_id: params.excludeRequestId ?? null,
             }),
         });
         const data = await res.json();
-        return (data.availability ?? []).reduce(
-            (map: Record<number, { total_quantity: number; available_quantity: number; is_limited: boolean }>, item: EquipmentAvailabilityData) => {
-                map[item.equipment_id] = {
-                    total_quantity: item.total_quantity,
-                    available_quantity: item.available_quantity,
-                    is_limited: item.is_limited,
-                };
-                return map;
-            },
-            {},
-        );
+
+        return normaliseAvailabilityByDate(data.dates);
     } catch (err) {
         console.error('Failed to check equipment availability', err);
         return null;

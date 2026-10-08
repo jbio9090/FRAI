@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Enums\RequestStatus;
 use App\Models\Equipment;
 use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ChatEquipmentAvailabilityTest extends TestCase
@@ -231,6 +233,17 @@ class ChatEquipmentAvailabilityTest extends TestCase
         $this->assertSame($sourceFacility->id, (int) $savedPivot->source_facility_id);
     }
 
+    /**
+     * Builds an approved request that actually reserves the slot's stock.
+     *
+     * Both links are set explicitly because availability is derived from them,
+     * and the application always populates both (see
+     * RequestService::syncBookingsAndEquipment): the booking row carries the
+     * reservation status, and request_equipment points at that booking row.
+     * Leaving either to a default produced an Approved parent over a Pending
+     * slot with a NULL link — a state the app never creates — which reserved
+     * nothing.
+     */
     private function reserveEquipmentForSlot(
         int $facilityId,
         int $equipmentId,
@@ -243,17 +256,23 @@ class ChatEquipmentAvailabilityTest extends TestCase
             'on_hold' => false,
         ]);
 
-        $request->requestFacilities()->create([
+        $requestFacility = $request->requestFacilities()->create([
             'facility_id' => $facilityId,
             'date_requested' => $date,
             'time_start' => $timeStart,
             'time_end' => $timeEnd,
+            'status' => RequestStatus::APPROVED,
         ]);
 
-        $request->equipment()->attach($equipmentId, [
+        DB::table('request_equipment')->insert([
+            'request_id' => $request->id,
+            'request_facility_id' => $requestFacility->id,
+            'equipment_id' => $equipmentId,
             'quantity_needed' => $quantity,
             'is_borrowed' => false,
             'source_facility_id' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 }

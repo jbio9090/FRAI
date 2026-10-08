@@ -5,8 +5,26 @@ import { useId, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { usePermission } from '@/hooks/use-permission';
-import type { EquipmentConflict } from '@/types/equipment';
+import { cn } from '@/lib/utils';
+import type { EquipmentConflict, SlotAvailability } from '@/types/equipment';
 import StatusTag from './status-tag';
+
+/**
+ * Shows what is left in the booking's slot next to what was requested. Renders
+ * nothing when the payload carried no availability, so an older cached response
+ * never displays a misleading "all free".
+ */
+function SlotAvailabilityLabel({ quantity, availability }: { quantity: number; availability?: SlotAvailability | null }) {
+    if (!availability) return null;
+
+    const isShort = quantity > availability.available_quantity;
+
+    return (
+        <span className={cn('text-xs', isShort ? 'font-medium text-[var(--ads-amber)]' : 'text-muted-foreground')}>
+            {availability.available_quantity} of {availability.total_quantity} available
+        </span>
+    );
+}
 
 interface BorrowedEquipmentRequest {
     equipment_id: number;
@@ -15,6 +33,7 @@ interface BorrowedEquipmentRequest {
     source_facility_name: string;
     quantity_needed: number;
     max_quantity: number;
+    availability?: SlotAvailability | null;
 }
 
 interface EquipmentRequest {
@@ -23,6 +42,7 @@ interface EquipmentRequest {
     quantity_needed: number;
     max_quantity: number;
     conflicts?: EquipmentConflict[];
+    availability?: SlotAvailability | null;
 }
 
 interface BookingSchedule {
@@ -364,6 +384,7 @@ export function BookingCard({
                                             <CategoryTag>Facility</CategoryTag>
                                             <span className="font-medium text-foreground/90">{eq.equipment_name}</span>
                                             <span className="text-muted-foreground">×{eq.quantity_needed}</span>
+                                            <SlotAvailabilityLabel quantity={eq.quantity_needed} availability={eq.availability} />
                                         </div>
                                     ))}
                                     {borrowedNames.map((name) => {
@@ -384,6 +405,10 @@ export function BookingCard({
                                                         </span>
                                                     ))}
                                                 </span>
+                                                <SlotAvailabilityLabel
+                                                    quantity={items.reduce((s, e) => s + e.quantity_needed, 0)}
+                                                    availability={items.find((e) => e.availability)?.availability}
+                                                />
                                             </div>
                                         );
                                     })}

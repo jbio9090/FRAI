@@ -1,4 +1,4 @@
-import type { EquipmentConflict } from '@/types/equipment';
+import type { EquipmentConflict, SlotAvailability } from '@/types/equipment';
 
 export interface Request {
     id: number;
@@ -90,6 +90,7 @@ interface FacilityEquipmentItem {
     quantity_needed: number;
     max_quantity: number;
     conflicts?: EquipmentConflict[];
+    availability?: SlotAvailability;
 }
 
 interface BorrowedEquipmentItem {
@@ -99,6 +100,7 @@ interface BorrowedEquipmentItem {
     source_facility_name: string;
     quantity_needed: number;
     max_quantity: number;
+    availability?: SlotAvailability;
 }
 
 interface RequestFacility {

@@ -1,6 +1,7 @@
-import type { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
+import type { EquipmentConflict, FacilityEquipment, SlotAvailability } from '@/types/equipment';
 import type { Facility } from '@/types/facility';
 import type { RequestOptions } from '@/types/request';
+import type { EquipmentReservation } from './api';
 
 export interface BorrowableEquipment extends FacilityEquipment {
     facilityId: number;
@@ -15,6 +16,7 @@ export interface BorrowedEquipmentRequest {
     source_facility_name: string;
     quantity_needed: number;
     max_quantity: number;
+    availability?: SlotAvailability;
 }
 
 export interface EquipmentRequest {
@@ -23,6 +25,7 @@ export interface EquipmentRequest {
     quantity_needed: number;
     max_quantity: number;
     conflicts?: EquipmentConflict[];
+    availability?: SlotAvailability;
 }
 
 export interface BookingSchedule {
@@ -110,9 +113,13 @@ export interface AttachedFile {
 
 export interface EquipmentAvailabilityData {
     equipment_id: number;
+    equipment_name: string;
     total_quantity: number;
+    reserved_quantity: number;
     available_quantity: number;
     is_limited: boolean;
+    is_empty: boolean;
+    reservations?: EquipmentReservation[];
 }
 
 export type BorrowSort = 'name-asc' | 'name-desc' | 'qty-asc' | 'qty-desc';

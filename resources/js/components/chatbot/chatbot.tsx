@@ -1,12 +1,12 @@
 import { Link, usePage } from '@inertiajs/react';
 import { Braces, MessageCircle, RefreshCw, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { csrfHeaders } from '@/lib/csrfHeaders';
 import { useCurrentPageContext } from '@/lib/useCurrentPageContext';
 import ChatInput from './components/ChatInput';
 import MessageList from './components/MessageList';
 import { useChatAPI } from './hooks/useChatAPI';
 import { useMessages } from './hooks/useMessages';
-import { csrfHeaders } from '@/lib/csrfHeaders';
 
 /**
  * Human labels for the SSE progress events the chat turn emits. Without these the

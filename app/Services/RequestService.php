@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
+use App\Models\Equipment;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class RequestService
 {
@@ -353,6 +355,13 @@ class RequestService
         return DB::transaction(function () use ($validated) {
             $priorityLevel = PriorityLevel::from($validated['priority_level'] ?? 0);
 
+            // Authoritative availability check. The form request already ran the
+            // same check, but that happened before this transaction and could
+            // have raced another submission; the lock plus this re-check is what
+            // makes the guarantee real. Same pre-validate / lock / re-validate
+            // shape the chatbot path uses.
+            $this->assertEquipmentAvailable($validated['facility_bookings'], null);
+
             $facilityRequest = FacilityRequest::create([
                 'user_id' => Auth::id(),
                 'title' => $validated['title'],
@@ -406,6 +415,8 @@ class RequestService
             }
 
             abort_if($facilityRequest->on_hold, 403);
+
+            $this->assertEquipmentAvailable($validated['facility_bookings'], $facilityRequest->id);
 
             $original = $facilityRequest->only([
                 'title',
@@ -499,6 +510,25 @@ class RequestService
 
             return $facilityRequest;
         });
+    }
+
+    /**
+     * Locks the facilities' equipment rows and re-checks the submission's demand
+     * against free stock, throwing a 422 that lands on the offending field.
+     *
+     * @param  array<int, array<string, mixed>>  $bookings
+     */
+    private function assertEquipmentAvailable(array $bookings, ?int $excludeRequestId): void
+    {
+        $checker = app(EquipmentAvailabilityService::class);
+
+        $checker->lockFacilityEquipmentRows($checker->involvedFacilityIds($bookings));
+
+        $violations = $checker->violations($bookings, $excludeRequestId);
+
+        if ($violations !== []) {
+            throw ValidationException::withMessages($violations);
+        }
     }
 
     private function syncBookingsAndEquipment(FacilityRequest $facilityRequest, array $bookings): void
@@ -1332,6 +1362,8 @@ class RequestService
             ->flatMap(fn ($eq) => $eq->facilities)
             ->keyBy('id');
 
+        $equipmentById = $detail->equipment->keyBy('id');
+
         return [
             'id' => $detail->id,
             'title' => $detail->title,
@@ -1379,6 +1411,27 @@ class RequestService
                     $dateOnly = Carbon::parse($rf->date_requested)->format('Y-m-d');
                     $timeStart = substr($rf->time_start, 0, 5);
                     $timeEnd = substr($rf->time_end, 0, 5);
+
+                    // Net of this request's own reservation so editing never reads
+                    // its saved units as already taken. Equipment is resolved from
+                    // the already-eager-loaded relation rather than re-queried.
+                    $slotAvailability = function (array $item, ?int $facilityId) use ($equipmentById, $dateOnly, $timeStart, $timeEnd, $detail): ?array {
+                        if ($facilityId === null) {
+                            return null;
+                        }
+
+                        $equipment = $equipmentById->get($item['equipment_id']);
+
+                        return $equipment?->slotAvailabilityInFacility($facilityId, $dateOnly, $timeStart, $timeEnd, $detail->id);
+                    };
+
+                    $ownEquipment = $ownEquipment
+                        ->map(fn ($item) => $item + ['availability' => $slotAvailability($item, $rf->facility_id)])
+                        ->values();
+
+                    $borrowedEquipment = $borrowedEquipment
+                        ->map(fn ($item) => $item + ['availability' => $slotAvailability($item, $item['source_facility_id'])])
+                        ->values();
 
                     $scheduleConflicts = RequestFacility::where('facility_id', $rf->facility_id)
                         ->where('date_requested', $dateOnly)
@@ -1516,6 +1569,17 @@ class RequestService
             ->keyBy('id');
 
         foreach ($request->requestFacilities as $rf) {
+            // Availability is net of this request's own reservation, otherwise a
+            // saved booking reports its units as already taken by itself.
+            $slotAvailability = fn (Equipment $equipment, int $facilityId): array => $equipment
+                ->slotAvailabilityInFacility(
+                    $facilityId,
+                    Carbon::parse($rf->date_requested)->format('Y-m-d'),
+                    substr($rf->time_start, 0, 5),
+                    substr($rf->time_end, 0, 5),
+                    $request->id
+                );
+
             $ownEquipment = $request->equipment
                 ->filter(
                     fn ($eq) => ! $eq->pivot->is_borrowed &&
@@ -1528,18 +1592,26 @@ class RequestService
                     'max_quantity' => $eq->facilities
                         ->firstWhere('id', $rf->facility_id)
                         ?->pivot->quantity ?? $eq->quantity,
+                    'availability' => $slotAvailability($eq, $rf->facility_id),
                 ])->values();
 
             $borrowedEquipment = $request->equipment
                 ->filter(fn ($eq) => (bool) $eq->pivot->is_borrowed)
-                ->map(fn ($eq) => [
-                    'equipment_id' => $eq->id,
-                    'equipment_name' => $eq->name,
-                    'source_facility_id' => $eq->pivot->source_facility_id,
-                    'source_facility_name' => $sourceFacilities->get($eq->pivot->source_facility_id)?->name ?? '',
-                    'quantity_needed' => $eq->pivot->quantity_needed,
-                    'max_quantity' => $eq->pivot->quantity_needed,
-                ])->values();
+                ->map(function ($eq) use ($sourceFacilities, $slotAvailability) {
+                    $sourceFacilityId = $eq->pivot->source_facility_id;
+
+                    return [
+                        'equipment_id' => $eq->id,
+                        'equipment_name' => $eq->name,
+                        'source_facility_id' => $sourceFacilityId,
+                        'source_facility_name' => $sourceFacilities->get($sourceFacilityId)?->name ?? '',
+                        'quantity_needed' => $eq->pivot->quantity_needed,
+                        'max_quantity' => $eq->pivot->quantity_needed,
+                        'availability' => $sourceFacilityId
+                            ? $slotAvailability($eq, $sourceFacilityId)
+                            : null,
+                    ];
+                })->values();
 
             $rf->setRelation('equipment', $ownEquipment);
             $rf->setRelation('borrowed_equipment', $borrowedEquipment);

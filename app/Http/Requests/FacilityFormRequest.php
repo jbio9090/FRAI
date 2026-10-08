@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Equipment;
 use App\Models\Facility;
+use App\Services\EquipmentAvailabilityService;
 use App\Services\RequestSettingsService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -132,7 +133,29 @@ class FacilityFormRequest extends FormRequest
                     }
                 }
             }
+
+            $violations = $this->availabilityChecker()->violations($bookings, $this->excludeRequestId());
+
+            foreach ($violations as $field => $message) {
+                $validator->errors()->add($field, $message);
+            }
         });
+    }
+
+    /**
+     * An update must not count the request's own reservation as stock taken, or
+     * every edit of an approved request would report its own units as unavailable.
+     */
+    private function excludeRequestId(): ?int
+    {
+        $request = $this->route('request');
+
+        return $request !== null ? (int) $request : null;
+    }
+
+    private function availabilityChecker(): EquipmentAvailabilityService
+    {
+        return app(EquipmentAvailabilityService::class);
     }
 
     public function attributes(): array

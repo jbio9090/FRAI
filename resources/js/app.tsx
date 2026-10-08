@@ -1,8 +1,8 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
-import { watchAuthTransitions } from '@/lib/historyGuard';
 import { applyPageShell, type PageShell } from '@/layout.tsx/page-shell';
 import { ensureForegroundPushListener } from '@/lib/firebasePush';
+import { watchAuthTransitions } from '@/lib/historyGuard';
 import '../css/app.css';
 
 const appName = import.meta.env.VITE_APP_NAME || 'FRAI';

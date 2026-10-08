@@ -10,9 +10,11 @@ import { cn } from '@/lib/utils';
 import type { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
 import type { Facility } from '@/types/facility';
 import type { EquipmentAvailabilityMap } from '../api';
+import { resolveAvailabilityEntry } from '../availability';
 import type { EquipmentRequest } from '../types';
 import { BorrowPanel } from './borrow-panel';
 import type { BorrowPanelProps } from './borrow-panel';
+import { EquipmentAvailabilityHint, EquipmentReservationsTooltip } from './equipment-reservations-tooltip';
 import { ExternalEquipmentCollapsible } from './external-equipment';
 import type { ExternalEquipmentProps } from './external-equipment';
 
@@ -24,6 +26,10 @@ interface EquipmentSectionProps {
     selectedEquipment: EquipmentRequest[];
     equipmentConflicts: Record<number, EquipmentConflict[]>;
     equipmentAvailability: EquipmentAvailabilityMap;
+    /** Date the tightest count came from, for tooltip attribution. */
+    tightestDate: string | null;
+    /** Total selected dates, so the tooltip knows if it spans more than one. */
+    dateCount: number;
     selectAllEquipment: (e: React.MouseEvent<HTMLButtonElement>) => void;
     clearEquipmentSelection: (e: React.MouseEvent<HTMLButtonElement>) => void;
     handleEquipmentToggle: (equipment: FacilityEquipment) => void;
@@ -39,7 +45,9 @@ export function EquipmentSection({
     availableEquipment,
     selectedEquipment,
     equipmentConflicts,
-    equipmentAvailability,
+equipmentAvailability,
+    tightestDate,
+    dateCount,
     selectAllEquipment,
     clearEquipmentSelection,
     handleEquipmentToggle,
@@ -50,7 +58,7 @@ export function EquipmentSection({
     return (
         <section className="frai-card p-5 md:p-6">
             <div className="mb-5 border-b border-border pb-3">
-                <span className="frai-eyebrow">Facility & equipment</span>
+                <span className="frai-eyebrow">Facility and Equipment</span>
             </div>
             <div className="space-y-5">
                 {/* Facility picker */}
@@ -132,10 +140,8 @@ export function EquipmentSection({
                             {availableEquipment.map((equipment) => {
                                 const selected = selectedEquipment.find((e) => e.equipment_id === equipment.id);
                                 const conflicts = equipmentConflicts[equipment.id] ?? [];
-                                const availability = equipmentAvailability[equipment.id];
-                                const displayQty = availability ? availability.available_quantity : equipment.pivot.quantity;
-                                const isLimited = availability ? availability.is_limited : false;
-                                const exceedsAvailable = selected && availability && selected.quantity_needed > availability.available_quantity;
+                                const availability = resolveAvailabilityEntry(equipmentAvailability, equipment.id, dateCount, tightestDate);
+                                const exceedsAvailable = selected && availability.isKnown && selected.quantity_needed > availability.remaining;
 
                                 return (
                                     <div key={equipment.id} className="space-y-1">
@@ -145,20 +151,32 @@ export function EquipmentSection({
                                                     id={`equipment-${equipment.id}`}
                                                     checked={!!selected}
                                                     onCheckedChange={() => handleEquipmentToggle(equipment)}
+                                                    disabled={availability.isEmpty && !selected}
                                                 />
                                                 <div className="flex-1">
                                                     <Label htmlFor={`equipment-${equipment.id}`} className="cursor-pointer text-sm font-medium">
                                                         {equipment.name}
                                                     </Label>
-                                                    <Label
-                                                        className={cn(
-                                                            'block text-xs',
-                                                            isLimited ? 'font-medium text-[var(--ads-amber)]' : 'text-muted-foreground',
-                                                        )}
-                                                    >
-                                                        Available: {displayQty}
-                                                        {isLimited && ` (${availability?.total_quantity} total)`}
-                                                    </Label>
+                                                    <div className="flex items-center gap-1">
+                                                        <Label
+                                                            className={cn(
+                                                                'block text-xs',
+                                                                availability.isEmpty
+                                                                    ? 'font-medium text-destructive'
+                                                                    : availability.isLimited
+                                                                      ? 'font-medium text-[var(--ads-amber)]'
+                                                                      : 'text-muted-foreground',
+                                                            )}
+                                                        >
+                                                            {availability.label}
+                                                        </Label>
+                                                        <EquipmentReservationsTooltip
+                                                            reservations={availability.reservations}
+                                                            tightestDate={availability.tightestDate ?? tightestDate}
+                                                            isMultiDate={dateCount > 1}
+                                                        />
+                                                    </div>
+                                                    <EquipmentAvailabilityHint isEmpty={availability.isEmpty} total={availability.total} />
                                                 </div>
                                             </div>
                                             {selected && (
@@ -167,14 +185,12 @@ export function EquipmentSection({
                                                     <Input
                                                         type="number"
                                                         min="1"
-                                                        max={displayQty}
                                                         value={selected.quantity_needed}
-                                                        onChange={(e) =>
-                                                            updateEquipmentQuantity(equipment.id, Math.min(Number(e.target.value), displayQty))
-                                                        }
+                                                        onChange={(e) => updateEquipmentQuantity(equipment.id, Number(e.target.value))}
+                                                        aria-describedby={`equipment-${equipment.id}-shortfall`}
                                                         className={cn(
                                                             'w-20 p-2 text-sm',
-                                                            exceedsAvailable && 'border-[var(--ads-amber)]/60 bg-[var(--ads-amber-bg)]/40',
+                                                            exceedsAvailable && 'border-destructive/60 bg-destructive/10',
                                                         )}
                                                     />
                                                 </div>
@@ -182,10 +198,27 @@ export function EquipmentSection({
                                         </div>
 
                                         {exceedsAvailable && (
-                                            <div className="ml-7 flex items-start gap-1.5 rounded border border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/50 px-2 py-1 text-xs text-[var(--ads-amber)]">
+                                            <div
+                                                id={`equipment-${equipment.id}-shortfall`}
+                                                className={cn(
+                                                    'ml-7 flex items-start gap-1.5 rounded border px-2 py-1 text-xs',
+                                                    availability.isEmpty
+                                                        ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                                                        : 'border-[var(--ads-amber)]/40 bg-[var(--ads-amber-bg)]/50 text-[var(--ads-amber)]',
+                                                )}
+                                            >
                                                 <AlertCircleIcon size={12} className="mt-0.5 shrink-0" />
                                                 <span>
-                                                    Only <strong>{availability?.available_quantity}</strong> available for the selected time
+                                                    {availability.isEmpty ? (
+                                                        <>
+                                                            None available for this time slot
+                                                            {availability.total > 0 && ` — all ${availability.total} are already reserved`}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            Only <strong>{availability.remaining}</strong> available for the selected time
+                                                        </>
+                                                    )}
                                                 </span>
                                             </div>
                                         )}

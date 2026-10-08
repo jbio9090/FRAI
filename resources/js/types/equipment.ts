@@ -17,6 +17,17 @@ export interface EquipmentConflict {
     status: string;
 }
 
+/**
+ * Per-slot availability attached to equipment on a saved booking. Optional
+ * everywhere because it is computed per booking row server-side and an older
+ * payload simply won't carry it — absence means "not reported", never "all free".
+ */
+export interface SlotAvailability {
+    total_quantity: number;
+    reserved_quantity: number;
+    available_quantity: number;
+}
+
 export interface FacilityEquipment extends Equipment {
     pivot: {
         quantity: number; // how many this facility holds
