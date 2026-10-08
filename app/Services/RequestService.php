@@ -1381,7 +1381,7 @@ class RequestService
                 'path' => $f->path,
             ]),
             'facility_bookings' => $detail->requestFacilities->map(
-                function ($rf) use ($detail, $sourceFacilities) {
+                function ($rf) use ($detail, $sourceFacilities, $equipmentById) {
 
                     $ownEquipment = $detail->equipment
                         ->filter(

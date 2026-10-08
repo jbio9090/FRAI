@@ -37,15 +37,10 @@ export interface UseEquipmentAvailabilityParams {
 export interface UseEquipmentAvailabilityResult {
     /** Own facility, merged to the tightest selected date. */
     own: EquipmentAvailabilityMap;
-    /** Per date, so a count can be attributed to a day. */
-    byDate: EquipmentAvailabilityByDate;
-    /** The date behind the tightest own-facility count. */
-    tightestDate: string | null;
     /** Per source facility, for the borrow panel, merged across dates. */
     borrowable: BorrowableAvailabilityMap;
     /** Selected dates the current selection cannot satisfy. */
     shortfalls: AvailabilityShortfall[];
-    dateCount: number;
     isLoading: boolean;
 }
 
@@ -109,7 +104,14 @@ export function useEquipmentAvailability({
 
         const requestId = ++borrowableRequestId.current;
 
-        fetchBorrowableAvailability({ facilities, selectedFacility: facilityId, dates: dateKeys, timeStart, timeEnd })
+        fetchBorrowableAvailability({
+            facilities,
+            selectedFacility: facilityId,
+            dates: dateKeys,
+            timeStart,
+            timeEnd,
+            excludeRequestId,
+        })
             .then((map) => {
                 if (borrowableRequestId.current !== requestId) return;
 
@@ -121,19 +123,16 @@ export function useEquipmentAvailability({
                 }
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [facilityId, dateKeySignature, timeStart, timeEnd, facilities]);
+    }, [facilityId, dateKeySignature, timeStart, timeEnd, facilities, excludeRequestId]);
 
-    const { merged, tightestDate } = useMemo(() => mergeSlotAvailability(byDate), [byDate]);
+    const { merged } = useMemo(() => mergeSlotAvailability(byDate), [byDate]);
 
     const shortfalls = useMemo(() => deriveShortfalls(byDate, selectedEquipment), [byDate, selectedSignature]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return {
         own: merged,
-        byDate,
-        tightestDate,
         borrowable,
         shortfalls,
-        dateCount: dateKeys.length,
         isLoading,
     };
 }

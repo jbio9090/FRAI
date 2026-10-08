@@ -246,83 +246,58 @@ class EquipmentAvailabilityTest extends TestCase
         ], $request->id);
     }
 
-    public function test_reservations_explain_where_the_stock_is_committed(): void
-    {
-        $user = User::factory()->create();
-        $facility = Facility::factory()->create();
-        $equipment = $this->equipmentHeldBy($facility, 10);
-        $requester = User::factory()->create(['name' => 'Juan Dela Cruz']);
-
-        $request = FacilityRequest::factory()->create([
-            'user_id' => $requester->id,
-            'title' => 'Community Outreach',
-            'status' => RequestStatus::APPROVED,
-            'on_hold' => false,
-        ]);
-        $this->reserveOn($request, $facility, $equipment, 7, RequestStatus::APPROVED);
-
-        $reservation = $this->availabilityRow($user, $facility)['reservations'][0] ?? null;
-
-        $this->assertNotNull($reservation);
-        $this->assertSame($request->id, $reservation['request_id']);
-        $this->assertSame('Community Outreach', $reservation['request_title']);
-        $this->assertSame('Juan Dela Cruz', $reservation['requester']);
-        $this->assertSame(7, $reservation['quantity']);
-        $this->assertSame('09:00', $reservation['time_start']);
-        $this->assertSame('11:00', $reservation['time_end']);
-        $this->assertSame(self::DATE, $reservation['date']);
-        $this->assertSame($facility->name, $reservation['facility_name']);
-        $this->assertFalse($reservation['is_borrowed']);
-        $this->assertNull($reservation['source_facility_name']);
-    }
-
-    public function test_reservations_exclude_pending_bookings(): void
+    /**
+     * POST /equipment/check-conflicts backs the composer's "also requested by"
+     * line. It must report ONLY pending requests: approved and conditionally
+     * approved bookings are already subtracted from the availability figure shown on
+     * the same row, so including them made the row contradict itself.
+     */
+    public function test_check_conflicts_reports_pending_but_not_approved_requests(): void
     {
         $user = User::factory()->create();
         $facility = Facility::factory()->create();
         $equipment = $this->equipmentHeldBy($facility, 10);
 
-        $this->reserve($facility, $equipment, 4, RequestStatus::PENDING);
+        $this->reserve($facility, $equipment, 7, RequestStatus::APPROVED);
 
-        $this->assertSame([], $this->availabilityRow($user, $facility)['reservations']);
+        $approved = $this->conflictsFor($user, $equipment);
+
+        $this->assertSame([], $approved, 'An approved booking is already reflected in availability and must not be reported as a conflict.');
+
+        $this->reserve($facility, $equipment, 3, RequestStatus::PENDING);
+
+        $pending = $this->conflictsFor($user, $equipment);
+
+        $this->assertCount(1, $pending);
+        $this->assertSame('Pending', $pending[0]['status']);
     }
 
-    public function test_reservations_name_the_source_facility_for_borrowed_units(): void
-    {
-        $user = User::factory()->create();
-        $source = Facility::factory()->create(['name' => 'Assembly Hall']);
-        $borrowing = Facility::factory()->create(['name' => 'COED AVR']);
-        $equipment = $this->equipmentHeldBy($source, 10);
-
-        $request = FacilityRequest::factory()->approved()->create(['on_hold' => false]);
-        $rf = $this->slot($request, $borrowing, '09:00', '11:00', RequestStatus::APPROVED);
-
-        DB::table('request_equipment')->insert([
-            'request_id' => $request->id,
-            'request_facility_id' => $rf->id,
-            'equipment_id' => $equipment->id,
-            'quantity_needed' => 8,
-            'is_borrowed' => true,
-            'source_facility_id' => $source->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $reservation = $this->availabilityRow($user, $source)['reservations'][0] ?? null;
-
-        $this->assertNotNull($reservation);
-        $this->assertTrue($reservation['is_borrowed']);
-        $this->assertSame('Assembly Hall', $reservation['source_facility_name']);
-        $this->assertSame('COED AVR', $reservation['facility_name']);
-    }
-
-    public function test_reservations_are_empty_when_nothing_is_booked(): void
+    public function test_check_conflicts_ignores_conditionally_approved_for_the_same_reason(): void
     {
         $user = User::factory()->create();
         $facility = Facility::factory()->create();
-        $this->equipmentHeldBy($facility, 10);
+        $equipment = $this->equipmentHeldBy($facility, 10);
 
-        $this->assertSame([], $this->availabilityRow($user, $facility)['reservations']);
+        $this->reserve($facility, $equipment, 7, RequestStatus::CONDITIONALLY_APPROVED);
+
+        $this->assertSame([], $this->conflictsFor($user, $equipment));
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function conflictsFor(User $user, Equipment $equipment): array
+    {
+        $response = $this->actingAs($user)->postJson(route('equipment.check-conflicts'), [
+            'equipment_ids' => [$equipment->id],
+            'date' => self::DATE,
+            'time_start' => '09:00',
+            'time_end' => '11:00',
+        ]);
+
+        $response->assertOk();
+
+        return $response->json('conflicts.'.$equipment->id) ?? [];
     }
 
     private function equipmentHeldBy(Facility $facility, int $quantity): Equipment
@@ -391,28 +366,6 @@ class EquipmentAvailabilityTest extends TestCase
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    private function availabilityRow(User $user, Facility $facility, ?int $excludeRequestId = null, string $date = self::DATE): array
-    {
-        $response = $this->actingAs($user)->postJson(route('equipment.availability'), [
-            'facility_id' => $facility->id,
-            'dates' => [$date],
-            'time_start' => '09:00',
-            'time_end' => '11:00',
-            'exclude_request_id' => $excludeRequestId,
-        ]);
-
-        $response->assertOk();
-
-        $row = collect($response->json("dates.{$date}.availability"))->first();
-
-        $this->assertNotNull($row, 'Expected an availability row for the facility equipment.');
-
-        return $row;
-    }
-
-    /**
      * @param  array<string, mixed>  $expected
      */
     private function assertAvailabilityForWindow(
@@ -468,7 +421,7 @@ class EquipmentAvailabilityTest extends TestCase
      * borrowable stock, so a day other than the first went undetected and the
      * rejection only surfaced as a 422 at submit.
      */
-    public function test_each_date_carries_its_own_reservations(): void
+    public function test_each_date_carries_its_own_counts(): void
     {
         $user = User::factory()->create();
         $facility = Facility::factory()->create();
@@ -509,11 +462,10 @@ class EquipmentAvailabilityTest extends TestCase
         $second = collect($response->json('dates.'.$secondDate.'.availability'))->first();
 
         $this->assertSame(10, $first['available_quantity']);
-        $this->assertSame([], $first['reservations']);
+        $this->assertSame(0, $first['reserved_quantity']);
 
         $this->assertSame(4, $second['available_quantity']);
-        $this->assertCount(1, $second['reservations']);
-        $this->assertSame($secondDate, $second['reservations'][0]['date']);
+        $this->assertSame(6, $second['reserved_quantity']);
     }
 
     public function test_a_date_with_no_equipment_returns_an_empty_array_rather_than_being_omitted(): void

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import type { Facility } from '@/types/facility';
 import type { BorrowableAvailabilityMap } from '../api';
+import { resolveBorrowEntry, summariseBorrowAvailability } from '../availability';
 import type { BorrowableEquipment, BorrowedEquipmentRequest, BorrowSort } from '../types';
 
 export interface BorrowPanelProps {
@@ -144,13 +145,13 @@ export function BorrowPanel({
                                             filteredBorrowableEquipment.map((equipment) => {
                                                 const isExpanded = borrowingEquipmentId === equipment.id;
                                                 const borrowed = selectedBorrowedEquipment.filter((e) => e.equipment_id === equipment.id);
-                                                const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
-                                                const totalAvailable = equipment.sources.reduce(
-                                                    (s, src) => s + (borrowableAvailability[src.facilityId]?.[equipment.id] ?? src.quantity),
-                                                    0,
-                                                );
-                                                const totalStock = equipment.sources.reduce((s, src) => s + src.quantity, 0);
-                                                const isAnyLimited = totalAvailable < totalStock;
+const totalBorrowed = borrowed.reduce((s, e) => s + e.quantity_needed, 0);
+                                                 const summary = summariseBorrowAvailability(
+                                                     equipment.sources.map((src) => ({
+                                                         known: borrowableAvailability[src.facilityId]?.[equipment.id],
+                                                         total: src.quantity,
+                                                     })),
+                                                 );
 
                                                 return (
                                                     <div key={equipment.id}>
@@ -168,16 +169,16 @@ export function BorrowPanel({
                                                                 {totalBorrowed > 0 && (
                                                                     <span className="text-xs font-medium text-primary">{totalBorrowed} selected</span>
                                                                 )}
-                                                                <span
-                                                                    className={cn(
-                                                                        'text-xs tabular-nums',
-                                                                        isAnyLimited
-                                                                            ? 'font-medium text-[var(--ads-amber)]'
-                                                                            : 'text-muted-foreground',
-                                                                    )}
-                                                                >
-                                                                    {totalAvailable} avail.
-                                                                </span>
+<span
+                                                                className={cn(
+                                                                    'text-xs tabular-nums',
+                                                                    summary.isLimited
+                                                                        ? 'font-medium text-[var(--ads-amber)]'
+                                                                        : 'text-muted-foreground',
+                                                                )}
+                                                            >
+                                                                {summary.isKnown ? `${summary.remaining} avail.` : 'Checking…'}
+                                                            </span>
                                                                 <MotionChevron openCollapsible={isExpanded} />
                                                             </div>
                                                         </button>
@@ -192,11 +193,15 @@ export function BorrowPanel({
                                                                             source.facilityId === Number(borrowFacilityFilter),
                                                                     )
                                                                     .map((source) => {
-                                                                        const item = borrowed.find((e) => e.source_facility_id === source.facilityId);
-                                                                        const available =
-                                                                            borrowableAvailability[source.facilityId]?.[equipment.id] ??
-                                                                            source.quantity;
-                                                                        const isLimited = available < source.quantity;
+const item = borrowed.find((e) => e.source_facility_id === source.facilityId);
+                                                 // `known` stays undefined until this source
+                                                 // resolves. It drives the LABEL only —
+                                                 // `available` still falls back to the raw
+                                                 // allocation so the qty input keeps its
+                                                 // existing max/clamp behaviour.
+                                                 const known = borrowableAvailability[source.facilityId]?.[equipment.id];
+                                                 const available = known ?? source.quantity;
+                                                 const entry = resolveBorrowEntry(known, source.quantity);
 
                                                                         return (
                                                                             <div key={source.facilityId} className="flex items-center gap-3 py-2.5">
@@ -236,17 +241,18 @@ export function BorrowPanel({
                                                                                     >
                                                                                         {source.facilityName}
                                                                                     </Label>
-                                                                                    <span
-                                                                                        className={cn(
-                                                                                            'text-xs',
-                                                                                            isLimited
-                                                                                                ? 'font-medium text-[var(--ads-amber)]'
-                                                                                                : 'text-muted-foreground',
-                                                                                        )}
-                                                                                    >
-                                                                                        {available} available
-                                                                                        {isLimited && ` of ${source.quantity}`}
-                                                                                    </span>
+<span
+                                                                className={cn(
+                                                                    'text-xs',
+                                                                    entry.isEmpty
+                                                                        ? 'font-medium text-destructive'
+                                                                        : entry.isLimited
+                                                                          ? 'font-medium text-[var(--ads-amber)]'
+                                                                          : 'text-muted-foreground',
+                                                                )}
+                                                            >
+                                                                {entry.label}
+                                                            </span>
                                                                                 </div>
                                                                                 {item && (
                                                                                     <div className="flex shrink-0 items-center gap-1.5">

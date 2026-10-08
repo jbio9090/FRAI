@@ -1,7 +1,6 @@
 import type { EquipmentConflict, FacilityEquipment, SlotAvailability } from '@/types/equipment';
 import type { Facility } from '@/types/facility';
 import type { RequestOptions } from '@/types/request';
-import type { EquipmentReservation } from './api';
 
 export interface BorrowableEquipment extends FacilityEquipment {
     facilityId: number;
@@ -119,7 +118,6 @@ export interface EquipmentAvailabilityData {
     available_quantity: number;
     is_limited: boolean;
     is_empty: boolean;
-    reservations?: EquipmentReservation[];
 }
 
 export type BorrowSort = 'name-asc' | 'name-desc' | 'qty-asc' | 'qty-desc';

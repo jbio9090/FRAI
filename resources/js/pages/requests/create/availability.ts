@@ -1,4 +1,4 @@
-import type { EquipmentAvailabilityByDate, EquipmentAvailabilityMap, EquipmentReservation } from './api';
+import type { EquipmentAvailabilityByDate, EquipmentAvailabilityMap } from './api';
 
 /**
  * Availability presentation helpers.
@@ -32,13 +32,6 @@ export interface AvailabilityEntry {
     label: string;
     /** Largest quantity the form should default to when this row is ticked. */
     defaultQuantity: number;
-    /** Approved bookings holding this equipment; explains the remaining count. */
-    reservations: EquipmentReservation[];
-    /**
-     * Which selected date the counts came from. Null when a single date is
-     * selected, or when nothing is reserved anywhere.
-     */
-    tightestDate: string | null;
 }
 
 /** One date where a selection cannot be satisfied as requested. */
@@ -58,9 +51,7 @@ export interface AvailabilityShortfall {
 export interface MergedSlotAvailability {
     /** Tightest remaining count per equipment across every selected date. */
     merged: EquipmentAvailabilityMap;
-    /** The date that produced the tightest count, or null when none is tighter. */
-    tightestDate: string | null;
-    /** Unmodified per-date view, so callers can attribute a count to a day. */
+    /** Unmodified per-date view, so shortfalls can name the offending day. */
     byDate: EquipmentAvailabilityByDate;
 }
 
@@ -73,8 +64,6 @@ const UNKNOWN: AvailabilityEntry = {
     isEmpty: false,
     label: 'Checking availability…',
     defaultQuantity: 1,
-    reservations: [],
-    tightestDate: null,
 };
 
 /**
@@ -86,15 +75,12 @@ const UNKNOWN: AvailabilityEntry = {
  * from the input are ignored rather than treated as zero — a date whose fetch
  * failed must not read as fully booked.
  *
- * The date that produced the minimum is returned as `tightestDate`, and the full
- * per-date view is preserved in `byDate`. Losing that attribution is what made
- * multi-date picks impossible to explain: the UI could show a count but never
- * name the day it came from.
+ * Day-level attribution lives in `deriveShortfalls`, which works off the
+ * preserved `byDate` view; the merged map itself carries no dates.
  */
 export function mergeSlotAvailability(byDate: EquipmentAvailabilityByDate): MergedSlotAvailability {
     const dateKeys = Object.keys(byDate).sort();
     const merged: EquipmentAvailabilityMap = {};
-    let tightestDate: string | null = null;
 
     for (const dateKey of dateKeys) {
         const bucket = byDate[dateKey];
@@ -104,27 +90,14 @@ export function mergeSlotAvailability(byDate: EquipmentAvailabilityByDate): Merg
         for (const [equipmentIdKey, value] of Object.entries(bucket)) {
             const equipmentId = Number(equipmentIdKey);
             const existing = merged[equipmentId];
-            const reservations = dedupeReservations([...(existing?.reservations ?? []), ...(value.reservations ?? [])]);
 
-            if (!existing) {
-                merged[equipmentId] = { ...value, reservations };
-                tightestDate = dateKey;
-
-                continue;
-            }
-
-            merged[equipmentId] = { ...existing, reservations };
-
-            // Strictly less, so a tie keeps the earliest date and the label does
-            // not flicker when two days are equally constrained.
-            if (value.available_quantity < existing.available_quantity) {
-                merged[equipmentId] = { ...value, reservations };
-                tightestDate = dateKey;
+            if (!existing || value.available_quantity < existing.available_quantity) {
+                merged[equipmentId] = value;
             }
         }
     }
 
-    return { merged, tightestDate, byDate };
+    return { merged, byDate };
 }
 
 /**
@@ -135,28 +108,13 @@ export function mergeToTightest(byDate: EquipmentAvailabilityByDate): EquipmentA
     return mergeSlotAvailability(byDate).merged;
 }
 
-function dedupeReservations(reservations: readonly EquipmentReservation[]): EquipmentReservation[] {
-    const seen = new Set<string>();
-
-    return reservations.filter((reservation) => {
-        const key = `${reservation.request_id}|${reservation.date}|${reservation.time_start}|${reservation.time_end}|${reservation.quantity}`;
-
-        if (seen.has(key)) {
-            return false;
-        }
-
-        seen.add(key);
-        return true;
-    });
-}
-
 /**
  * Resolve one equipment row's availability.
  *
  * `defaultQuantity` floors at 1 because `quantity_needed` is validated with
  * `min:1`; a zero default would submit an invalid payload.
  */
-export function resolveAvailabilityEntry(map: EquipmentAvailabilityMap, equipmentId: number, dateCount = 1, tightestDate: string | null = null): AvailabilityEntry {
+export function resolveAvailabilityEntry(map: EquipmentAvailabilityMap, equipmentId: number): AvailabilityEntry {
     const entry = map[equipmentId];
 
     if (!entry) {
@@ -177,9 +135,71 @@ export function resolveAvailabilityEntry(map: EquipmentAvailabilityMap, equipmen
         isEmpty,
         label: isLimited ? `Available: ${remaining} (${total} total)` : `Available: ${remaining}`,
         defaultQuantity: Math.max(1, remaining),
-        reservations: entry.reservations ?? [],
-        tightestDate: dateCount > 1 && isLimited ? tightestDate : null,
     };
+}
+
+/**
+ * The borrow panel's counterpart to `resolveAvailabilityEntry`, deliberately
+ * shaped and worded the same way so the two panels read identically.
+ *
+ * `known` is `undefined` until the source facility's slot has resolved. It must
+ * stay unknown: the panel used to fall back to the facility's whole allocation
+ * (`?? source.quantity`), which is entirely unconsumed, so it announced the
+ * pre-approval number whenever availability had not loaded — or when no time had
+ * been picked yet, which is the common case.
+ */
+export interface BorrowAvailabilityEntry {
+    isKnown: boolean;
+    remaining: number;
+    total: number;
+    isLimited: boolean;
+    isEmpty: boolean;
+    label: string;
+}
+
+export function resolveBorrowEntry(known: number | undefined, total: number): BorrowAvailabilityEntry {
+    if (known === undefined) {
+        return {
+            isKnown: false,
+            remaining: 0,
+            total,
+            isLimited: false,
+            isEmpty: false,
+            label: 'Checking availability…',
+        };
+    }
+
+    const remaining = Math.max(0, known);
+    const isLimited = remaining < total;
+    const isEmpty = remaining <= 0;
+
+    return {
+        isKnown: true,
+        remaining,
+        total,
+        isLimited,
+        isEmpty,
+        label: isLimited ? `Available: ${remaining} of ${total}` : `Available: ${remaining}`,
+    };
+}
+
+/**
+ * Roll several source facilities into the borrow panel's collapsed header.
+ *
+ * Sums only when every source resolved — a partial total would read as a real
+ * figure — so an unresolved source reports unknown instead of a smaller number
+ * that looks authoritative.
+ */
+export function summariseBorrowAvailability(sources: { known: number | undefined; total: number }[]): { isKnown: boolean; remaining: number; total: number; isLimited: boolean } {
+    const total = sources.reduce((sum, source) => sum + source.total, 0);
+
+    if (sources.length === 0 || sources.some((source) => source.known === undefined)) {
+        return { isKnown: false, remaining: 0, total, isLimited: false };
+    }
+
+    const remaining = sources.reduce((sum, source) => sum + Math.max(0, source.known ?? 0), 0);
+
+    return { isKnown: true, remaining, total, isLimited: remaining < total };
 }
 
 /**

@@ -148,7 +148,7 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
     // to be sibling effects here sharing a single ref, which made the second one
     // always invalidate the first's response — so availability never arrived and
     // the UI fell back to each facility's full allocation.
-    const { own: equipmentAvailability, borrowable: borrowableAvailability, tightestDate: equipmentTightestDate, dateCount: equipmentDateCount, shortfalls: equipmentShortfalls, isLoading: isAvailabilityLoading } =
+    const { own: equipmentAvailability, borrowable: borrowableAvailability, shortfalls: equipmentShortfalls, isLoading: isAvailabilityLoading } =
         useEquipmentAvailability({
             facilityId: selectedFacility,
             dates: selectedDates,
@@ -945,8 +945,6 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         existingFiles,
         equipmentConflicts,
         equipmentAvailability,
-        equipmentTightestDate,
-        equipmentDateCount,
         equipmentShortfalls,
         checkingConflicts: checkingConflicts || isAvailabilityLoading,
         editingIndex,

@@ -7,7 +7,10 @@ import '../css/app.css';
 
 const appName = import.meta.env.VITE_APP_NAME || 'FRAI';
 
-const pages = import.meta.glob('./pages/**/*.tsx', { eager: true });
+// Test files must never join the page map: a *.test.tsx under pages/ would be
+// eagerly bundled (pulling `vitest` into the browser and crashing boot), and
+// resolve() looks pages up by exact name so exclusions change nothing.
+const pages = import.meta.glob(['./pages/**/*.tsx', '!./pages/**/*.test.tsx'], { eager: true });
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),

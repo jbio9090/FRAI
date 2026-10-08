@@ -131,7 +131,17 @@ class EquipmentController extends Controller
         $timeStart = substr($validated['time_start'], 0, 5);
         $timeEnd = substr($validated['time_end'], 0, 5);
 
-        $conflictingRequests = FacilityRequest::whereIn('status', [RequestStatus::PENDING, RequestStatus::APPROVED])
+        // Pending only. Approved/Conditionally Approved bookings already subtract
+        // from the availability figure, so reporting them here as well made the
+        // row contradict itself ("Available: 3" beside "also requested by an
+        // Approved request"). A pending request does NOT consume stock, so it is
+        // the only conflict worth surfacing here.
+        //
+        // Do NOT confuse this with RequestService::checkForEquipmentConflicts(),
+        // which feeds the stored pending/approved conflict buckets used by the
+        // requests-list filters, dashboard KPIs and reports. That one is
+        // intentionally broader and must stay that way.
+        $conflictingRequests = FacilityRequest::whereIn('status', [RequestStatus::PENDING])
             ->where('on_hold', false)
             ->when($validated['exclude_request_id'] ?? null, fn ($q, $id) => $q->where('id', '!=', $id))
             ->whereHas('equipment', fn ($q) => $q->whereIn('equipments.id', $validated['equipment_ids']))

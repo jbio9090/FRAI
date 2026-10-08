@@ -1,22 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { EquipmentAvailabilityByDate, EquipmentAvailabilityMap, EquipmentReservation } from '@/pages/requests/create/api';
-import { deriveShortfalls, mergeSlotAvailability, resolveAvailabilityEntry } from '@/pages/requests/create/availability';
-
-function reservation(overrides: Partial<EquipmentReservation> = {}): EquipmentReservation {
-    return {
-        request_id: 1,
-        request_title: 'Outreach',
-        requester: 'Juan',
-        date: '2026-10-20',
-        time_start: '09:00',
-        time_end: '11:00',
-        quantity: 4,
-        facility_name: 'Main Auditorium',
-        source_facility_name: null,
-        is_borrowed: false,
-        ...overrides,
-    };
-}
+import type { EquipmentAvailabilityByDate, EquipmentAvailabilityMap } from '@/pages/requests/create/api';
+import { deriveShortfalls, mergeSlotAvailability, resolveAvailabilityEntry, resolveBorrowEntry, summariseBorrowAvailability } from '@/pages/requests/create/availability';
 
 function entry(available: number, total = 10, reserved = total - available): EquipmentAvailabilityMap[number] {
     return {
@@ -26,7 +10,6 @@ function entry(available: number, total = 10, reserved = total - available): Equ
         available_quantity: available,
         is_limited: available < total,
         is_empty: available <= 0,
-        reservations: [],
     };
 }
 
@@ -45,31 +28,14 @@ function byDate(dates: Record<string, number | null>, total = 10): EquipmentAvai
 }
 
 describe('mergeSlotAvailability', () => {
-    it('returns empty output when nothing resolved', () => {
-        const { merged, tightestDate } = mergeSlotAvailability({});
-
-        expect(merged).toEqual({});
-        expect(tightestDate).toBeNull();
+    it('returns an empty map when nothing resolved', () => {
+        expect(mergeSlotAvailability({}).merged).toEqual({});
     });
 
     it('takes the tightest remaining quantity across dates', () => {
         const { merged } = mergeSlotAvailability(byDate({ '2026-10-20': 10, '2026-10-21': 3, '2026-10-22': 7 }));
 
         expect(merged[8].available_quantity).toBe(3);
-    });
-
-    // The bug this whole exercise exists for: the count survived but the date it
-    // came from did not, so nothing downstream could name the offending day.
-    it('reports which date produced the tightest count', () => {
-        const { tightestDate } = mergeSlotAvailability(byDate({ '2026-10-20': 10, '2026-10-21': 3, '2026-10-22': 7 }));
-
-        expect(tightestDate).toBe('2026-10-21');
-    });
-
-    it('breaks ties on the earliest date so the label does not flicker', () => {
-        const { tightestDate } = mergeSlotAvailability(byDate({ '2026-10-22': 3, '2026-10-20': 3, '2026-10-21': 9 }));
-
-        expect(tightestDate).toBe('2026-10-20');
     });
 
     it('ignores dates whose fetch failed instead of treating them as zero', () => {
@@ -79,10 +45,9 @@ describe('mergeSlotAvailability', () => {
     });
 
     it('carries a zero-remaining date through, since that is a real answer', () => {
-        const { merged, tightestDate } = mergeSlotAvailability(byDate({ '2026-10-20': 10, '2026-10-21': 0 }));
+        const { merged } = mergeSlotAvailability(byDate({ '2026-10-20': 10, '2026-10-21': 0 }));
 
         expect(merged[8].available_quantity).toBe(0);
-        expect(tightestDate).toBe('2026-10-21');
     });
 
     it('merges independent equipment ids independently', () => {
@@ -96,35 +61,13 @@ describe('mergeSlotAvailability', () => {
         expect(merged[2].available_quantity).toBe(5);
     });
 
-    it('preserves the unmodified per-date view for attribution', () => {
+    it('preserves the unmodified per-date view for shortfall attribution', () => {
         const input = byDate({ '2026-10-20': 10, '2026-10-21': 3 });
         const { byDate: preserved } = mergeSlotAvailability(input);
 
         expect(Object.keys(preserved).sort()).toEqual(['2026-10-20', '2026-10-21']);
         expect(preserved['2026-10-20'][8].available_quantity).toBe(10);
         expect(preserved['2026-10-21'][8].available_quantity).toBe(3);
-    });
-
-    it('unions reservations across dates while keeping the tightest count', () => {
-        const input: EquipmentAvailabilityByDate = {
-            '2026-10-20': { 8: { ...entry(10), reservations: [reservation({ date: '2026-10-20' })] } },
-            '2026-10-21': { 8: { ...entry(3), reservations: [reservation({ date: '2026-10-21', request_id: 2 })] } },
-        };
-        const { merged } = mergeSlotAvailability(input);
-
-        expect(merged[8].available_quantity).toBe(3);
-        expect(merged[8].reservations).toHaveLength(2);
-    });
-
-    it('dedupes the same reservation seen on two dates', () => {
-        const shared = reservation({ request_id: 5, time_start: '14:00', time_end: '16:00' });
-        const input: EquipmentAvailabilityByDate = {
-            '2026-10-20': { 8: { ...entry(10), reservations: [shared] } },
-            '2026-10-21': { 8: { ...entry(10), reservations: [shared] } },
-        };
-        const { merged } = mergeSlotAvailability(input);
-
-        expect(merged[8].reservations).toHaveLength(1);
     });
 });
 
@@ -179,15 +122,6 @@ describe('resolveAvailabilityEntry', () => {
     it('floors the default at 1 so a fully booked row still submits a valid payload', () => {
         expect(resolveAvailabilityEntry(map(0), 8).defaultQuantity).toBe(1);
     });
-
-    it('attributes the count to a date only when several dates are selected', () => {
-        expect(resolveAvailabilityEntry(map(3), 8, 1, '2026-10-20').tightestDate).toBeNull();
-        expect(resolveAvailabilityEntry(map(3), 8, 3, '2026-10-21').tightestDate).toBe('2026-10-21');
-    });
-
-    it('has no reservations while availability is unknown, so no tooltip renders', () => {
-        expect(resolveAvailabilityEntry({}, 8).reservations).toEqual([]);
-    });
 });
 
 describe('deriveShortfalls', () => {
@@ -232,5 +166,80 @@ describe('deriveShortfalls', () => {
         const shortfalls = deriveShortfalls(byDate({ '2026-10-22': 1, '2026-10-20': 10, '2026-10-21': 2 }), selection);
 
         expect(shortfalls.map((s) => s.date)).toEqual(['2026-10-21', '2026-10-22']);
+    });
+});
+describe('resolveBorrowEntry', () => {
+    it('stays unknown until the source slot has resolved', () => {
+        const entry = resolveBorrowEntry(undefined, 10);
+
+        expect(entry.isKnown).toBe(false);
+        expect(entry.label).toBe('Checking availability\u2026');
+    });
+
+    // The bug: `?? source.quantity` substituted the facility's whole allocation
+    // whenever availability had not loaded, announcing the pre-approval number.
+    it('never reports the full allocation as available while unknown', () => {
+        expect(resolveBorrowEntry(undefined, 10).label).not.toContain('10');
+    });
+
+    it('matches the Equipment panel wording when nothing is reserved', () => {
+        const entry = resolveBorrowEntry(10, 10);
+
+        expect(entry.isKnown).toBe(true);
+        expect(entry.isLimited).toBe(false);
+        expect(entry.label).toBe('Available: 10');
+    });
+
+    it('shows remaining of total so approved consumption is visible', () => {
+        const entry = resolveBorrowEntry(3, 10);
+
+        expect(entry.isLimited).toBe(true);
+        expect(entry.label).toBe('Available: 3 of 10');
+    });
+
+    it('treats a fully borrowed slot as empty, not merely limited', () => {
+        const entry = resolveBorrowEntry(0, 10);
+
+        expect(entry.isEmpty).toBe(true);
+        expect(entry.isLimited).toBe(true);
+        expect(entry.label).toBe('Available: 0 of 10');
+    });
+
+    it('clamps a negative reading to zero rather than going amber-free', () => {
+        expect(resolveBorrowEntry(-2, 10).remaining).toBe(0);
+    });
+});
+
+describe('summariseBorrowAvailability', () => {
+    it('sums across sources when all have resolved', () => {
+        const summary = summariseBorrowAvailability([
+            { known: 3, total: 4 },
+            { known: 2, total: 6 },
+        ]);
+
+        expect(summary.isKnown).toBe(true);
+        expect(summary.remaining).toBe(5);
+        expect(summary.total).toBe(10);
+        expect(summary.isLimited).toBe(true);
+    });
+
+    // A partial total would read as authoritative, which is the same lie the
+    // per-source fallback was telling.
+    it('stays unknown while any source is unresolved', () => {
+        const summary = summariseBorrowAvailability([
+            { known: 3, total: 4 },
+            { known: undefined, total: 6 },
+        ]);
+
+        expect(summary.isKnown).toBe(false);
+        expect(summary.isLimited).toBe(false);
+    });
+
+    it('stays unknown with no sources at all', () => {
+        expect(summariseBorrowAvailability([]).isKnown).toBe(false);
+    });
+
+    it('is not limited when everything is free', () => {
+        expect(summariseBorrowAvailability([{ known: 4, total: 4 }]).isLimited).toBe(false);
     });
 });

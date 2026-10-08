@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { AlertCircleIcon, CalendarIcon, Clock } from 'lucide-react';
+import { AlertCircleIcon, CalendarIcon, Clock, Users } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import type { AvailabilityShortfall } from '../availability';
 import { AlternativesPanel } from '../components/AlternativesPanel';
 import type { BookingSchedule } from '../types';
-import type { Facility } from '../types';
+import type { Facility } from '@/types/facility';
 import type { AlternativeSlot } from '../use-create-request';
 import { addCalendarDays, formatTime } from '../utils';
 
@@ -114,6 +114,8 @@ interface ScheduleSectionProps {
     setIncludeEquipmentFilter?: (v: boolean) => void;
     applyAlternative?: (slot: AlternativeSlot) => void;
     facilities?: Facility[];
+    /** Id of the facility picked in EquipmentSection; drives the inline capacity hint. */
+    selectedFacilityId?: number | null;
     isEditing?: boolean;
     existingRequest?: { status?: string } | null;
     editingIndex?: number | null;
@@ -145,10 +147,24 @@ export function ScheduleSection({
     setIncludeEquipmentFilter,
     applyAlternative,
     facilities,
+    selectedFacilityId = null,
     isEditing,
     existingRequest,
     editingIndex,
 }: ScheduleSectionProps) {
+    // Inline capacity feedback, derived live like the conflict preview so the
+    // user sees it before adding the booking (BookingCard only shows it after).
+    // Same normalization as BookingCard: capacities can arrive as strings.
+    const selectedFacility = facilities?.find((f) => f.id === selectedFacilityId) ?? null;
+    const facilityCapacityNum = selectedFacility?.capacity != null ? Number(String(selectedFacility.capacity).trim()) : null;
+    const expectedCapacityNum = expectedCapacity === '' ? null : Number(expectedCapacity);
+    const isCapacityExceeded =
+        facilityCapacityNum != null &&
+        expectedCapacityNum != null &&
+        !Number.isNaN(facilityCapacityNum) &&
+        !Number.isNaN(expectedCapacityNum) &&
+        expectedCapacityNum > facilityCapacityNum;
+
     return (
         <section className="frai-card p-5 md:p-6">
             <div className="mb-5 border-b border-border pb-3">
@@ -242,26 +258,44 @@ export function ScheduleSection({
                     </div>
                 </div>
 
-                {/* Attendees + Outsiders */}
-                <div className="flex w-fit items-end gap-4">
-                    <div className="flex-1 space-y-2">
-                        <Label htmlFor="expected_capacity">Expected Attendees</Label>
-                        <Input
-                            id="expected_capacity"
-                            type="number"
-                            min="1"
-                            value={expectedCapacity}
-                            onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
-                            placeholder="How many attendees?"
-                            className="max-w-84 text-sm"
-                        />
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2 pb-2">
+                {/* Attendees + Outsiders: checkbox lives in the input's row so the
+                capacity hint below can grow without dragging it down. */}
+                <div className="grid w-fit grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2">
+                    <Label htmlFor="expected_capacity" className="col-start-1 row-start-1">
+                        Expected Attendees
+                    </Label>
+                    <Input
+                        id="expected_capacity"
+                        type="number"
+                        min="1"
+                        value={expectedCapacity}
+                        onChange={(e) => setExpectedCapacity(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="How many attendees?"
+                        className="col-start-1 row-start-2 max-w-84 text-sm"
+                    />
+                    <div className="col-start-2 row-start-2 flex shrink-0 items-center gap-2">
                         <Checkbox id="has_outsiders" checked={hasOutsiders} onCheckedChange={(checked) => setHasOutsiders(!!checked)} />
                         <Label htmlFor="has_outsiders" className="cursor-pointer text-sm whitespace-nowrap">
                             Has Outsiders
                         </Label>
                     </div>
+                    {facilityCapacityNum != null &&
+                        !Number.isNaN(facilityCapacityNum) &&
+                        (isCapacityExceeded ? (
+                            <p
+                                role="status"
+                                className="col-start-1 row-start-3 flex max-w-84 items-center gap-1.5 text-xs font-medium text-[var(--ads-amber)]"
+                            >
+                                <Users size={12} className="shrink-0" />
+                                Expected attendees exceed this facility&apos;s capacity ({expectedCapacityNum} expected, {facilityCapacityNum}{' '}
+                                capacity).
+                            </p>
+                        ) : (
+                            <p className="col-start-1 row-start-3 flex max-w-84 items-center gap-1.5 text-xs text-muted-foreground">
+                                <Users size={12} className="shrink-0" />
+                                Capacity: {facilityCapacityNum}
+                            </p>
+                        ))}
                 </div>
 
                 {checkingConflicts && (

@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import type { EquipmentConflict, FacilityEquipment } from '@/types/equipment';
 import type { Facility } from '@/types/facility';
+import { allocationsForEquipment } from '../allocation';
 import type { EquipmentAvailabilityMap } from '../api';
 import { resolveAvailabilityEntry } from '../availability';
 import type { EquipmentRequest } from '../types';
+import { pendingConflictsOnly } from '../utils';
 import { BorrowPanel } from './borrow-panel';
 import type { BorrowPanelProps } from './borrow-panel';
-import { EquipmentAvailabilityHint, EquipmentReservationsTooltip } from './equipment-reservations-tooltip';
 import { ExternalEquipmentCollapsible } from './external-equipment';
 import type { ExternalEquipmentProps } from './external-equipment';
 
@@ -26,10 +27,6 @@ interface EquipmentSectionProps {
     selectedEquipment: EquipmentRequest[];
     equipmentConflicts: Record<number, EquipmentConflict[]>;
     equipmentAvailability: EquipmentAvailabilityMap;
-    /** Date the tightest count came from, for tooltip attribution. */
-    tightestDate: string | null;
-    /** Total selected dates, so the tooltip knows if it spans more than one. */
-    dateCount: number;
     selectAllEquipment: (e: React.MouseEvent<HTMLButtonElement>) => void;
     clearEquipmentSelection: (e: React.MouseEvent<HTMLButtonElement>) => void;
     handleEquipmentToggle: (equipment: FacilityEquipment) => void;
@@ -45,9 +42,7 @@ export function EquipmentSection({
     availableEquipment,
     selectedEquipment,
     equipmentConflicts,
-equipmentAvailability,
-    tightestDate,
-    dateCount,
+    equipmentAvailability,
     selectAllEquipment,
     clearEquipmentSelection,
     handleEquipmentToggle,
@@ -139,8 +134,11 @@ equipmentAvailability,
                         <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-3">
                             {availableEquipment.map((equipment) => {
                                 const selected = selectedEquipment.find((e) => e.equipment_id === equipment.id);
-                                const conflicts = equipmentConflicts[equipment.id] ?? [];
-                                const availability = resolveAvailabilityEntry(equipmentAvailability, equipment.id, dateCount, tightestDate);
+                                const conflicts = pendingConflictsOnly(equipmentConflicts[equipment.id]);
+                                const availability = resolveAvailabilityEntry(equipmentAvailability, equipment.id);
+                                // Other facilities' shares of the same item, so the row also
+                                // answers "who else holds this" without another request.
+                                const allocations = allocationsForEquipment(facilities, equipment.id, selectedFacility);
                                 const exceedsAvailable = selected && availability.isKnown && selected.quantity_needed > availability.remaining;
 
                                 return (
@@ -170,13 +168,18 @@ equipmentAvailability,
                                                         >
                                                             {availability.label}
                                                         </Label>
-                                                        <EquipmentReservationsTooltip
-                                                            reservations={availability.reservations}
-                                                            tightestDate={availability.tightestDate ?? tightestDate}
-                                                            isMultiDate={dateCount > 1}
-                                                        />
                                                     </div>
-                                                    <EquipmentAvailabilityHint isEmpty={availability.isEmpty} total={availability.total} />
+                                                    {allocations.length > 0 && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Also held by{' '}
+                                                            {allocations.map((allocation) => `${allocation.facilityName} ×${allocation.quantity}`).join(' · ')}
+                                                        </p>
+                                                    )}
+                                                    {availability.isEmpty && (
+                                                        <span className="sr-only">
+                                                            All {availability.total} units are already reserved for the selected time.
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                             {selected && (
@@ -233,9 +236,7 @@ equipmentAvailability,
                                                         <AlertCircleIcon size={12} className="mt-0.5 shrink-0" />
                                                         <span>
                                                             Also requested by <strong>{c.requester}</strong> ("{c.request_title}") —{' '}
-                                                            <span className={c.status === 'Approved' ? 'font-semibold text-[var(--ads-danger)]' : ''}>
-                                                                {c.status}
-                                                            </span>
+                                                            <span className="font-semibold">{c.status}</span>, so it is not holding stock yet
                                                         </span>
                                                     </div>
                                                 ))}

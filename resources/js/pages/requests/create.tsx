@@ -53,8 +53,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
         existingFiles,
         equipmentConflicts,
         equipmentAvailability,
-        equipmentTightestDate,
-        equipmentDateCount,
         equipmentShortfalls,
         checkingConflicts,
         editingIndex,
@@ -202,6 +200,7 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         setIncludeEquipmentFilter={setIncludeEquipmentFilter}
                                         applyAlternative={applyAlternative}
                                         facilities={facilities}
+                                        selectedFacilityId={selectedFacility}
                                         isEditing={isEditing}
                                         existingRequest={existingRequest}
                                         editingIndex={editingIndex}
@@ -215,8 +214,6 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                                         selectedEquipment={selectedEquipment}
                                         equipmentConflicts={equipmentConflicts}
                                         equipmentAvailability={equipmentAvailability}
-                                        tightestDate={equipmentTightestDate}
-                                        dateCount={equipmentDateCount}
                                         selectAllEquipment={selectAllEquipment}
                                         clearEquipmentSelection={clearEquipmentSelection}
                                         handleEquipmentToggle={handleEquipmentToggle}

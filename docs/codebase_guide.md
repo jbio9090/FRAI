@@ -121,7 +121,7 @@ config/                           # 16 configuration files (app, auth, ai, webpu
 database/
 ├── factories/                    # 10 model factories
 ├── migrations/                   # 33 migration files
-└── seeders/                      # 6 seeders (incl. SettingSeeder for request options)
+└── seeders/                      # 5 seeders (incl. SettingSeeder for request options)
 
 resources/
 ├── css/app.css                   # Tailwind v4 stylesheet

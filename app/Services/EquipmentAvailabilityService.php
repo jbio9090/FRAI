@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\RequestStatus;
 use App\Models\Equipment;
 use App\Models\Facility;
 use Illuminate\Support\Carbon;
@@ -70,9 +69,7 @@ class EquipmentAvailabilityService
     }
 
     /**
-     * Every equipment row for one facility on one date, with what is free and who
-     * holds it. Both halves come from the same reservation predicate, so the tooltip
-     * can never explain a count the number did not include.
+     * Every equipment row for one facility on one date, with what is free.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -85,18 +82,8 @@ class EquipmentAvailabilityService
     ): array {
         $facilityId = (int) $facility->id;
 
-        // One query for the whole facility's bookings, so the composer's tooltip
-        // can explain every equipment row without an N+1.
-        $reservationsByEquipment = $this->reservationsByEquipment(
-            $facilityId,
-            $date,
-            $timeStart,
-            $timeEnd,
-            $excludeRequestId
-        );
-
         return $facility->equipment
-            ->map(function (Equipment $equipment) use ($facilityId, $date, $timeStart, $timeEnd, $excludeRequestId, $reservationsByEquipment) {
+            ->map(function (Equipment $equipment) use ($facilityId, $date, $timeStart, $timeEnd, $excludeRequestId) {
                 $slot = $equipment->slotAvailabilityInFacility(
                     $facilityId,
                     $date,
@@ -113,91 +100,10 @@ class EquipmentAvailabilityService
                     'available_quantity' => $slot['remaining_quantity'],
                     'is_limited' => $slot['remaining_quantity'] < $slot['total_quantity'],
                     'is_empty' => $slot['remaining_quantity'] <= 0,
-                    'reservations' => $reservationsByEquipment[$equipment->id] ?? [],
                 ];
             })
             ->values()
             ->all();
-    }
-
-    /**
-     * Who currently holds the facility's stock in this slot, grouped by equipment.
-     *
-     * One query for the whole facility rather than one per equipment, because this
-     * runs on every date/time change in the composer. Same reservation predicate as
-     * Equipment::quantityReservedInFacility() — Approved/Conditionally Approved
-     * BOOKING rows only — so the tooltip can never explain a number the availability
-     * figure did not count.
-     *
-     * @return array<int, array<int, array<string, mixed>>>
-     */
-    public function reservationsByEquipment(
-        int $facilityId,
-        string $date,
-        string $timeStart,
-        string $timeEnd,
-        ?int $excludeRequestId = null
-    ): array {
-        $rows = DB::table('request_equipment as re')
-            ->join('request_facilities as rf', 'rf.id', '=', 're.request_facility_id')
-            ->join('requests as r', 'r.id', '=', 'rf.request_id')
-            ->join('users as u', 'u.id', '=', 'r.user_id')
-            ->join('facilities as booking_f', 'booking_f.id', '=', 'rf.facility_id')
-            ->leftJoin('facilities as source_f', 'source_f.id', '=', 're.source_facility_id')
-            ->where(function ($q) use ($facilityId) {
-                $q->where(function ($inHouse) use ($facilityId) {
-                    $inHouse
-                        ->where('re.is_borrowed', false)
-                        ->where('rf.facility_id', $facilityId);
-                })->orWhere(function ($borrowedAway) use ($facilityId) {
-                    $borrowedAway
-                        ->where('re.is_borrowed', true)
-                        ->where('re.source_facility_id', $facilityId);
-                });
-            })
-            ->whereIn('rf.status', [
-                RequestStatus::APPROVED->value,
-                RequestStatus::CONDITIONALLY_APPROVED->value,
-            ])
-            ->where('r.on_hold', false)
-            ->when($excludeRequestId, fn ($q) => $q->where('r.id', '!=', $excludeRequestId))
-            ->where('rf.date_requested', $date)
-            ->where('rf.time_start', '<', $timeEnd)
-            ->where('rf.time_end', '>', $timeStart)
-            ->orderBy('re.equipment_id')
-            ->orderBy('rf.time_start')
-            ->get([
-                're.equipment_id',
-                're.quantity_needed',
-                're.is_borrowed',
-                'r.id as request_id',
-                'r.title as request_title',
-                'u.name as requester',
-                'rf.date_requested',
-                'rf.time_start',
-                'rf.time_end',
-                'booking_f.name as facility_name',
-                'source_f.name as source_facility_name',
-            ]);
-
-        $grouped = [];
-
-        foreach ($rows as $row) {
-            $grouped[(int) $row->equipment_id][] = [
-                'request_id' => (int) $row->request_id,
-                'request_title' => $row->request_title,
-                'requester' => $row->requester,
-                'date' => $row->date_requested,
-                'time_start' => substr((string) $row->time_start, 0, 5),
-                'time_end' => substr((string) $row->time_end, 0, 5),
-                'quantity' => (int) $row->quantity_needed,
-                'facility_name' => $row->facility_name,
-                'source_facility_name' => $row->is_borrowed ? $row->source_facility_name : null,
-                'is_borrowed' => (bool) $row->is_borrowed,
-            ];
-        }
-
-        return $grouped;
     }
 
     /**

@@ -17,7 +17,6 @@ class DatabaseSeeder extends Seeder
             SettingSeeder::class,
             FacilitySeeder::class,
             EquipmentSeeder::class,
-            // RequestSeeder::class,
         ]);
     }
 }

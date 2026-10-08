@@ -111,6 +111,27 @@ export function draftDiffersFromExisting(draft: DraftData, existing: ExistingReq
     return false;
 }
 
+/**
+ * Conflicts that do not yet consume stock.
+ *
+ * Approved and Conditionally Approved bookings are already subtracted from the
+ * availability figure on the same row, so warning about them repeated a fact the
+ * number already carried and read as a contradiction — "Available: 3" sitting
+ * beside "also requested by an Approved request". Pending requests are a soft
+ * hold that does not reduce availability, so they are the only conflict worth
+ * surfacing.
+ *
+ * Kept as a client-side guard even though the endpoint now returns pending only:
+ * a payload already in flight when that changed must not repaint an amber box.
+ */
+export function pendingConflictsOnly<T extends { status: string }>(conflicts: readonly T[] | null | undefined): T[] {
+    if (!conflicts) {
+        return [];
+    }
+
+    return conflicts.filter((conflict) => conflict.status === 'Pending');
+}
+
 export function doTimeRangesOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
     return timeToMinutes(startA) < timeToMinutes(endB) && timeToMinutes(endA) > timeToMinutes(startB);
 }

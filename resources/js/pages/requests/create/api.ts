@@ -7,22 +7,6 @@ import type { EquipmentAvailabilityData, FacilityScheduleData } from './types';
 
 export type BorrowableAvailabilityMap = Record<number, Record<number, number>>;
 
-/** One approved booking holding part of an equipment's stock in the slot. */
-export interface EquipmentReservation {
-    request_id: number;
-    request_title: string;
-    requester: string;
-    date: string;
-    time_start: string;
-    time_end: string;
-    quantity: number;
-    /** The facility the booking happens at. */
-    facility_name: string;
-    /** Only set when the units were borrowed away from another facility. */
-    source_facility_name: string | null;
-    is_borrowed: boolean;
-}
-
 export interface EquipmentAvailabilityEntry {
     equipment_name: string;
     total_quantity: number;
@@ -30,7 +14,6 @@ export interface EquipmentAvailabilityEntry {
     available_quantity: number;
     is_limited: boolean;
     is_empty: boolean;
-    reservations: EquipmentReservation[];
 }
 
 export type EquipmentAvailabilityMap = Record<number, EquipmentAvailabilityEntry>;
@@ -58,7 +41,6 @@ export function normaliseAvailabilityByDate(dates: AvailabilityWireResponse | nu
                 available_quantity: item.available_quantity,
                 is_limited: item.is_limited,
                 is_empty: item.is_empty ?? item.available_quantity <= 0,
-                reservations: item.reservations ?? [],
             };
         }
 
@@ -99,6 +81,8 @@ export async function fetchBorrowableAvailability(params: {
     dates: string[];
     timeStart: string;
     timeEnd: string;
+    /** Editing a request must not count its own borrow against the source. */
+    excludeRequestId?: number | null;
 }): Promise<BorrowableAvailabilityMap | null> {
     if (params.dates.length === 0 || !params.timeStart || !params.timeEnd) return null;
 
@@ -116,6 +100,7 @@ export async function fetchBorrowableAvailability(params: {
                     dates: params.dates,
                     time_start: params.timeStart,
                     time_end: params.timeEnd,
+                    exclude_request_id: params.excludeRequestId ?? null,
                 }),
             });
             const json = await res.json();

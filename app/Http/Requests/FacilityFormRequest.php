@@ -6,6 +6,7 @@ use App\Models\Equipment;
 use App\Models\Facility;
 use App\Services\EquipmentAvailabilityService;
 use App\Services\RequestSettingsService;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -148,9 +149,21 @@ class FacilityFormRequest extends FormRequest
      */
     private function excludeRequestId(): ?int
     {
-        $request = $this->route('request');
+        $route = $this->route('request');
 
-        return $request !== null ? (int) $request : null;
+        if ($route === null) {
+            return null;
+        }
+
+        // Route model binding resolves this to a Request INSTANCE on the update
+        // route, not the raw id. Casting the model straight to int emitted a
+        // PHP warning and silently evaluated to 1, so every edit excluded
+        // request #1 instead of itself.
+        if ($route instanceof Model) {
+            return (int) $route->getKey();
+        }
+
+        return (int) $route;
     }
 
     private function availabilityChecker(): EquipmentAvailabilityService

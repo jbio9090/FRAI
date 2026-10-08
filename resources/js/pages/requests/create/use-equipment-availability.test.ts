@@ -24,7 +24,6 @@ function slot(available: number) {
         available_quantity: available,
         is_limited: available < 10,
         is_empty: available <= 0,
-        reservations: [],
     };
 }
 
@@ -79,7 +78,7 @@ describe('useEquipmentAvailability', () => {
         });
     });
 
-    it('merges the tightest date when several are selected and names it', async () => {
+    it('merges the tightest date when several are selected', async () => {
         fetchEquipmentAvailability.mockResolvedValue({
             '2026-10-20': { 8: slot(9) },
             '2026-10-21': { 8: slot(2) },
@@ -92,26 +91,31 @@ describe('useEquipmentAvailability', () => {
         await waitFor(() => {
             expect(result.current.own[8]?.available_quantity).toBe(2);
         });
-
-        expect(result.current.tightestDate).toBe('2026-10-21');
-        expect(result.current.dateCount).toBe(3);
     });
 
-    it('keeps the per-date view so a count can be attributed to a day', async () => {
+    it('derives no shortfalls when every date can satisfy the selection', async () => {
         fetchEquipmentAvailability.mockResolvedValue({
             '2026-10-20': { 8: slot(9) },
-            '2026-10-21': { 8: slot(2) },
+            '2026-10-21': { 8: slot(8) },
         });
         fetchBorrowableAvailability.mockResolvedValue({});
 
-        const { result } = renderHook(() => useEquipmentAvailability({ facilityId: 1, dates, timeStart: '09:00', timeEnd: '12:00', facilities }));
+        const { result } = renderHook(() =>
+            useEquipmentAvailability({
+                facilityId: 1,
+                dates,
+                timeStart: '09:00',
+                timeEnd: '12:00',
+                facilities,
+                selectedEquipment: [{ equipment_id: 8, equipment_name: 'Folding Table', quantity_needed: 4 }],
+            }),
+        );
 
         await waitFor(() => {
-            expect(Object.keys(result.current.byDate)).toHaveLength(2);
+            expect(result.current.own[8]).toBeDefined();
         });
 
-        expect(result.current.byDate['2026-10-21'][8].available_quantity).toBe(2);
-        expect(result.current.byDate['2026-10-20'][8].available_quantity).toBe(9);
+        expect(result.current.shortfalls).toEqual([]);
     });
 
     it('reports the date a selection cannot satisfy', async () => {
