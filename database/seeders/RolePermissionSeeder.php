@@ -40,6 +40,10 @@ class RolePermissionSeeder extends Seeder
         $superAdminRole = Role::updateOrCreate(['name' => 'Super Admin']);
         $superAdminRole->givePermissionTo(Permission::all());
 
+        if (! config('seed.create_account_seeds')) {
+            return;
+        }
+
         $superAdmin = User::firstOrCreate(
             ['email' => 'gso@example.com'],
             ['name' => 'GSO', 'password' => Hash::make('password')]
