@@ -44,6 +44,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
     Route::get('/requests/{request_id}', [RequestController::class, 'detail'])->name('requests.detail');
+    Route::get('/requests/{request_id}/preview', [RequestController::class, 'preview'])->name('requests.preview');
     Route::get('/requests/{request}/edit', [RequestController::class, 'edit'])->name('requests.edit');
     Route::put('/requests/{request}', [RequestController::class, 'update'])->name('requests.update');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store')->middleware(['throttle:60,1']);

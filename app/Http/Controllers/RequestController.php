@@ -230,6 +230,40 @@ class RequestController extends Controller
         ]);
     }
 
+    public function preview(int $request_id)
+    {
+        $requestModel = FacilityRequest::findOrFail($request_id);
+
+        abort_unless(
+            in_array($requestModel->status, [RequestStatus::APPROVED, RequestStatus::CONDITIONALLY_APPROVED], true),
+            404
+        );
+
+        $requestModel->load([
+            'requestFacilities.facility:id,name,building',
+            'user:id,name',
+        ]);
+
+        $isOwnerOrAdmin = $requestModel->user_id === auth()->id() || auth()->user()->hasRole(['admin', 'Super Admin']);
+
+        return response()->json([
+            'id' => $requestModel->id,
+            'title' => $requestModel->title,
+            'status' => $requestModel->status->value,
+            'requester' => $isOwnerOrAdmin ? $requestModel->user->name : 'Another User',
+            'can_view_full' => $isOwnerOrAdmin,
+            'facilities' => $requestModel->requestFacilities->map(function ($rf) {
+                return [
+                    'facility_name' => $rf->facility->name ?? 'Unknown',
+                    'building' => $rf->facility->building ?? 'Unknown',
+                    'date' => $rf->date_requested,
+                    'time_start' => $rf->time_start,
+                    'time_end' => $rf->time_end,
+                ];
+            })->values()->all(),
+        ]);
+    }
+
     public function auditLogs(Request $request, int $id)
     {
         $requestModel = FacilityRequest::findOrFail($id);

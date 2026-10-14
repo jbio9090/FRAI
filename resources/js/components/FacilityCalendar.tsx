@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { toJpeg } from 'html-to-image';
-import { ChevronLeft, ChevronRight, Clock, LoaderCircle, Printer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, LoaderCircle, Printer, ExternalLink } from 'lucide-react';
 import moment from 'moment';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ToolbarProps, View } from 'react-big-calendar';
@@ -9,6 +9,16 @@ import { Calendar, momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { downloadCalendarPdf } from '@/lib/pdf';
 import { cn } from '@/lib/utils';
@@ -62,6 +72,74 @@ function CalendarExportHeader({ title, date }: { title: string; date: Date }) {
                 <span className="text-xs text-muted-foreground">Generated {moment().format('MMMM D, YYYY')}</span>
             </div>
         </div>
+    );
+}
+
+interface PreviewData {
+    id: number;
+    title: string;
+    status: string;
+    requester: string;
+    can_view_full: boolean;
+    facilities: {
+        facility_name: string;
+        building: string;
+        date: string;
+        time_start: string;
+        time_end: string;
+    }[];
+}
+
+function PreviewModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: PreviewData | null }) {
+    if (!isOpen || !data) return null;
+
+    const formatTime = (time: string) => moment(time, 'HH:mm:ss').format('h:mm A');
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{data.title}</DialogTitle>
+                    <DialogDescription>Request Preview</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Status</span>
+                        <Badge variant={data.status === 'Approved' ? 'default' : 'secondary'}>
+                            {data.status}
+                        </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Requested by</span>
+                        <span>{data.requester}</span>
+                    </div>
+                    <div className="border-t pt-2 space-y-2">
+                        {data.facilities.map((f, i) => (
+                            <div key={i} className="space-y-1 text-sm">
+                                <p className="font-medium">{f.facility_name}</p>
+                                <p className="text-muted-foreground">
+                                    {f.building} • {moment(f.date).format('MMMM D, YYYY')} • {formatTime(f.time_start)}–{formatTime(f.time_end)}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <DialogFooter className="gap-2">
+                    {data.can_view_full && (
+                        <Button asChild onClick={() => {
+                            onClose();
+                            window.location.href = route('requests.detail', [data.id]);
+                        }}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            View Details
+                        </Button>
+                    )}
+                    <Button variant="outline" onClick={onClose}>
+                        Close
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -149,7 +227,7 @@ function CustomToolbar(toolbar: ToolbarProps) {
 
 const FACILITY_SEPARATOR = ' — ';
 
-function CustomEvent({ event, isDashboard }: { event: Event; isDashboard: boolean }) {
+function CustomEvent({ event, isDashboard, onEventClick }: { event: Event; isDashboard: boolean; onEventClick: (requestId: string | number) => void }) {
     const [facilityName, requestTitle] =
         isDashboard && event.title.includes(FACILITY_SEPARATOR) ? event.title.split(FACILITY_SEPARATOR) : [event.title, event.title];
 
@@ -157,22 +235,25 @@ function CustomEvent({ event, isDashboard }: { event: Event; isDashboard: boolea
     const style = wordToColor(colorSeed);
 
     return (
-        <Link href={route('requests.detail', [event.request_id])} className="block min-w-full">
-            <div
-                className="tag frai-cal-event min-w-0 border-1 mx-2 flex h-full flex-row rounded-sm px-1 lg:flex-col"
-                style={style}
-            >
-                <span className="min-w-0 truncate text-xs font-bold" title={requestTitle}>
-                    {requestTitle}
+        <div
+            className="tag frai-cal-event min-w-0 border-1 mx-2 flex h-full flex-row rounded-sm px-1 lg:flex-col cursor-pointer"
+            style={style}
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEventClick(event.request_id);
+            }}
+        >
+            <span className="min-w-0 truncate text-xs font-bold" title={requestTitle}>
+                {requestTitle}
+            </span>
+            <div className="flex min-w-0 items-center gap-1 text-left">
+                <Clock size={12} className="shrink-0" />
+                <span className="min-w-0 truncate whitespace-nowrap text-xs">
+                    {moment(event.start).format('h:mma')}-{moment(event.end).format('h:mma')}
                 </span>
-                <div className="flex min-w-0 items-center gap-1 text-left">
-                    <Clock size={12} className="shrink-0" />
-                    <span className="min-w-0 truncate whitespace-nowrap text-xs">
-                        {moment(event.start).format('h:mma')}-{moment(event.end).format('h:mma')}
-                    </span>
-                </div>
             </div>
-        </Link>
+        </div>
     );
 }
 
@@ -189,9 +270,31 @@ export default function FacilityCalendar({
     const [exporting, setExporting] = useState(false);
     const [currentView, setCurrentView] = useState<View>('month');
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewLoading, setPreviewLoading] = useState(false);
     const captureRef = useRef<HTMLDivElement>(null);
 
     const canExport = !loading && !exporting && rawEvents.length > 0;
+
+    const handleEventClick = async (requestId: string | number) => {
+        setPreviewLoading(true);
+        try {
+            const response = await axios.get(route('requests.preview', [requestId]));
+            setPreviewData(response.data);
+            setPreviewOpen(true);
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 403) {
+                toast.error('Access restricted');
+            } else if (axios.isAxiosError(error) && error.response?.status === 404) {
+                toast.error('Request not found or not available for preview');
+            } else {
+                toast.error('Failed to load preview');
+            }
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
 
     const events = useMemo(
         () =>
@@ -299,7 +402,7 @@ export default function FacilityCalendar({
                         className={cn('min-h-0 flex-1', loading && '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50')}
                         components={{
                             toolbar: CustomToolbar,
-                            event: (props) => <CustomEvent {...props} isDashboard={isDashboard} />,
+                            event: (props) => <CustomEvent {...props} isDashboard={isDashboard} onEventClick={handleEventClick} />,
                         }}
                         popup
                         step={60}
@@ -307,6 +410,11 @@ export default function FacilityCalendar({
                     />
                 </div>
             </div>
+            <PreviewModal
+                isOpen={previewOpen}
+                onClose={() => setPreviewOpen(false)}
+                data={previewData}
+            />
         </CalendarExportContext.Provider>
     );
 }
