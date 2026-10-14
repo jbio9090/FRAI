@@ -9,6 +9,7 @@ import { Calendar, momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Dialog,
     DialogContent,
@@ -90,10 +91,46 @@ interface PreviewData {
     }[];
 }
 
-function PreviewModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: PreviewData | null }) {
-    if (!isOpen || !data) return null;
+function PreviewModal({ isOpen, onClose, data, isLoading }: { 
+    isOpen: boolean; 
+    onClose: () => void; 
+    data: PreviewData | null; 
+    isLoading: boolean;
+}) {
+    if (!isOpen) return null;
 
     const formatTime = (time: string) => moment(time, 'HH:mm:ss').format('h:mm A');
+
+    if (isLoading || !data) {
+        return (
+            <Dialog open={isOpen} onOpenChange={onClose}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>
+                            <Skeleton className="h-6 w-48" />
+                        </DialogTitle>
+                        <DialogDescription>
+                            <Skeleton className="h-4 w-32" />
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <Skeleton className="h-6 w-24" />
+                        <Skeleton className="h-6 w-32" />
+                        <div className="border-t pt-2 space-y-2">
+                            <Skeleton className="h-20 w-full" />
+                            <Skeleton className="h-20 w-full" />
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Skeleton className="h-10 w-28" />
+                        <Button variant="outline" onClick={onClose} disabled>
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        );
+    }
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -278,11 +315,12 @@ export default function FacilityCalendar({
     const canExport = !loading && !exporting && rawEvents.length > 0;
 
     const handleEventClick = async (requestId: string | number) => {
+        setPreviewData(null); // Clear previous data
+        setPreviewOpen(true);  // Open modal IMMEDIATELY
         setPreviewLoading(true);
         try {
             const response = await axios.get(route('requests.preview', [requestId]));
             setPreviewData(response.data);
-            setPreviewOpen(true);
         } catch (error) {
             if (axios.isAxiosError(error) && error.response?.status === 403) {
                 toast.error('Access restricted');
@@ -291,6 +329,7 @@ export default function FacilityCalendar({
             } else {
                 toast.error('Failed to load preview');
             }
+            setPreviewOpen(false); // Close on error
         } finally {
             setPreviewLoading(false);
         }
@@ -414,6 +453,7 @@ export default function FacilityCalendar({
                 isOpen={previewOpen}
                 onClose={() => setPreviewOpen(false)}
                 data={previewData}
+                isLoading={previewLoading}
             />
         </CalendarExportContext.Provider>
     );
