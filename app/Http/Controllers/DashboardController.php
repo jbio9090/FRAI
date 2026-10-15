@@ -30,6 +30,7 @@ class DashboardController extends Controller
 
         $chartData = AuditLog::query()
             ->when(! $isAdmin, fn ($q) => $q->where('user_id', $user->id))
+            ->visibleOnDashboard()
             ->selectRaw('DATE(created_at) as date, COUNT(*) as total')
             ->whereBetween('created_at', [$start, $end])
             ->groupBy('date')
@@ -86,7 +87,7 @@ class DashboardController extends Controller
             // Filter recent logs list
             'auditLogs' => $this->auditLogQuery($request, $auditRange)->paginate(10),
             'auditEvents' => collect(AuditEvent::cases())
-                ->filter(fn ($case) => $case !== AuditEvent::Unknown)
+                ->filter(fn ($case) => $case->showOnDashboard())
                 ->map(fn ($case) => [
                     'value' => $case->value,
                     'label' => $case->label(),
@@ -149,7 +150,8 @@ class DashboardController extends Controller
         $range = $request->input('range', 'week');
 
         $query = AuditLog::query()
-            ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id));
+            ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
+            ->visibleOnDashboard();
 
         if ($range === 'day' || $range === 'today') {
             $logs = $query
@@ -213,11 +215,12 @@ class DashboardController extends Controller
         $event = $request->input('event');
         $sort = $request->input('sort', 'newest');
 
-        $validEvents = array_column(AuditEvent::cases(), 'value');
+        $validEvents = AuditEvent::dashboardValues();
         $event = $event && in_array($event, $validEvents, true) ? $event : null;
 
         return AuditLog::with('user')
             ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
+            ->visibleOnDashboard()
             ->when($event, fn ($q) => $q->where('event', $event))
             ->whereBetween('created_at', $range)
             ->orderBy('created_at', $sort === 'oldest' ? 'asc' : 'desc');
@@ -229,6 +232,7 @@ class DashboardController extends Controller
 
         return AuditLog::query()
             ->when(! $user->hasRole(['admin', 'Super Admin']), fn ($q) => $q->where('user_id', $user->id))
+            ->visibleOnDashboard()
             ->whereBetween('created_at', $range)
             ->selectRaw('event, COUNT(*) as count')
             ->groupBy('event')

@@ -29,6 +29,50 @@ enum AuditEvent: string
     case AuthPasswordSelfUpdated = 'auth.password_self_updated';
     case AdminDemoted = 'admin.demoted';
 
+    /**
+     * Events hidden from the dashboard Activity feed, charts, and breakdown.
+     * Auth/system noise (logins, passwords, settings, role changes) and
+     * granular request noise (edits, comments, file uploads/removals) are
+     * excluded; only meaningful request lifecycle events stay visible.
+     *
+     * @return array<int, self>
+     */
+    public static function hiddenFromDashboard(): array
+    {
+        return [
+            self::AuthLogin,
+            self::AuthLoginFailed,
+            self::AuthLogout,
+            self::AuthPasswordResetInitiated,
+            self::AuthPasswordSelfUpdated,
+            self::AdminDemoted,
+            self::SettingsUpdated,
+            self::Unknown,
+            self::RequestUpdated,
+            self::RequestCommentAdded,
+            self::RequestFileUploaded,
+            self::RequestFileRemoved,
+        ];
+    }
+
+    public function showOnDashboard(): bool
+    {
+        return ! in_array($this, self::hiddenFromDashboard(), true);
+    }
+
+    /**
+     * Raw event values visible on the dashboard.
+     *
+     * @return array<int, string>
+     */
+    public static function dashboardValues(): array
+    {
+        return array_map(
+            fn (self $case): string => $case->value,
+            array_filter(self::cases(), fn (self $case): bool => $case->showOnDashboard())
+        );
+    }
+
     public function label(): string
     {
         return match ($this) {

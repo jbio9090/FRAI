@@ -36,6 +36,16 @@ class AuditLog extends Model
         return $this->morphTo();
     }
 
+    public function scopeVisibleOnDashboard($query)
+    {
+        $hidden = array_map(
+            fn (AuditEvent $event): string => $event->value,
+            AuditEvent::hiddenFromDashboard()
+        );
+
+        return $query->whereNotIn('event', $hidden);
+    }
+
     public function scopeForEvent($query, string|AuditEvent $event)
     {
         return $query->where('event', $event);
