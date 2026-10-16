@@ -1,5 +1,5 @@
 import { router, useForm, usePage } from '@inertiajs/react';
-import { UserRoundPen, Mail, Info } from 'lucide-react';
+import { UserRoundPen, Mail, Info, Eye, EyeOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import PushNotifications from '@/components/notification/pushNotification';
@@ -56,6 +56,9 @@ export default function Settings() {
     const [theme, setTheme] = useState(localStorage.theme);
     const [preview, setPreview] = useState<string | null>(null);
     const [pwDialogOpen, setPwDialogOpen] = useState(false);
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [emailNotificationProcessing, setEmailNotificationProcessing] = useState(false);
     const [userEmailNotificationProcessing, setUserEmailNotificationProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,13 +97,21 @@ export default function Settings() {
         postPw(route('settings.change-password'), {
             onSuccess: () => {
                 resetPw();
+                setShowCurrentPassword(false);
+                setShowNewPassword(false);
+                setShowConfirmPassword(false);
                 setPwDialogOpen(false);
             },
         });
     };
 
     const handleDialogOpenChange = (open: boolean) => {
-        if (!open) resetPw();
+        if (!open) {
+            resetPw();
+            setShowCurrentPassword(false);
+            setShowNewPassword(false);
+            setShowConfirmPassword(false);
+        }
         setPwDialogOpen(open);
     };
 
@@ -274,13 +285,26 @@ export default function Settings() {
                         <div className="flex flex-col gap-3 py-2">
                             <div className="flex flex-col gap-1.5">
                                 <Label className="text-sm">Current Password</Label>
-                                <Input
-                                    type="password"
-                                    value={pwData.current_password}
-                                    onChange={e => setPwData('current_password', e.target.value)}
-                                    placeholder="Enter current password"
-                                    disabled={pwProcessing}
-                                />
+                                <div className="relative">
+                                    <Input
+                                        type={showCurrentPassword ? "text" : "password"}
+                                        value={pwData.current_password}
+                                        onChange={e => setPwData('current_password', e.target.value)}
+                                        placeholder="Enter current password"
+                                        disabled={pwProcessing}
+                                        className="pr-10"
+                                    />
+                                    <Button
+                                        type="button"
+                                        onClick={() => setShowCurrentPassword(prev => !prev)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                        aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                                        variant="ghost"
+                                        size="icon-sm"
+                                    >
+                                        {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </Button>
+                                </div>
                                 {pwErrors.current_password && (
                                     <span className="text-xs text-destructive">{pwErrors.current_password}</span>
                                 )}
@@ -288,13 +312,26 @@ export default function Settings() {
 
                             <div className="flex flex-col gap-1.5">
                                 <Label className="text-sm">New Password</Label>
-                                <Input
-                                    type="password"
-                                    value={pwData.password}
-                                    onChange={e => setPwData('password', e.target.value)}
-                                    placeholder="Enter new password"
-                                    disabled={pwProcessing}
-                                />
+                                <div className="relative">
+                                    <Input
+                                        type={showNewPassword ? "text" : "password"}
+                                        value={pwData.password}
+                                        onChange={e => setPwData('password', e.target.value)}
+                                        placeholder="Enter new password"
+                                        disabled={pwProcessing}
+                                        className="pr-10"
+                                    />
+                                    <Button
+                                        type="button"
+                                        onClick={() => setShowNewPassword(prev => !prev)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                        aria-label={showNewPassword ? "Hide password" : "Show password"}
+                                        variant="ghost"
+                                        size="icon-sm"
+                                    >
+                                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </Button>
+                                </div>
                                 {pwErrors.password && (
                                     <span className="text-xs text-destructive">{pwErrors.password}</span>
                                 )}
@@ -302,13 +339,26 @@ export default function Settings() {
 
                             <div className="flex flex-col gap-1.5">
                                 <Label className="text-sm">Confirm New Password</Label>
-                                <Input
-                                    type="password"
-                                    value={pwData.password_confirmation}
-                                    onChange={e => setPwData('password_confirmation', e.target.value)}
-                                    placeholder="Confirm new password"
-                                    disabled={pwProcessing}
-                                />
+                                <div className="relative">
+                                    <Input
+                                        type={showConfirmPassword ? "text" : "password"}
+                                        value={pwData.password_confirmation}
+                                        onChange={e => setPwData('password_confirmation', e.target.value)}
+                                        placeholder="Confirm new password"
+                                        disabled={pwProcessing}
+                                        className="pr-10"
+                                    />
+                                    <Button
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword(prev => !prev)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                                        variant="ghost"
+                                        size="icon-sm"
+                                    >
+                                        {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </Button>
+                                </div>
                                 {pwErrors.password_confirmation && (
                                     <span className="text-xs text-destructive">{pwErrors.password_confirmation}</span>
                                 )}
