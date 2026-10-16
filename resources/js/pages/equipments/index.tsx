@@ -626,8 +626,6 @@ export default function EquipmentsPage({
                                                     ratioTone
                                                 )}>
                                                     <span className="font-semibold tabular-nums">{assigned}</span>
-                                                    <span className="opacity-60">/</span>
-                                                    <span className="tabular-nums">{eq.quantity}</span>
                                                 </span>
                                             </TableCell>
                                             <TableCell>
