@@ -96,20 +96,21 @@ class DashboardController extends Controller
             'chartData' => $chartData,
             'pending' => $pending,
             'kpis' => $kpis,
-            'notifications' => $user->notifications()
-                ->latest()
-                ->limit(20)
-                ->get()
-                ->map(fn ($notification) => [
-                    'id' => $notification->id,
-                    'title' => $notification->data['title'] ?? 'Notification',
-                    'body' => $notification->data['body'] ?? '',
-                    'url' => $notification->data['url'] ?? route('dashboard'),
-                    'category' => $notification->data['category'] ?? null,
-                    'status' => $notification->data['status'] ?? null,
-                    'created_at' => $notification->created_at?->toISOString(),
-                    'read_at' => $notification->read_at?->toISOString(),
-                ]),
+            'notifications' => Inertia::scroll(
+                $user->notifications()
+                    ->latest()
+                    ->paginate(20, ['*'], 'notifications_page')
+                    ->through(fn ($notification) => [
+                        'id' => $notification->id,
+                        'title' => $notification->data['title'] ?? 'Notification',
+                        'body' => $notification->data['body'] ?? '',
+                        'url' => $notification->data['url'] ?? route('dashboard'),
+                        'category' => $notification->data['category'] ?? null,
+                        'status' => $notification->data['status'] ?? null,
+                        'created_at' => $notification->created_at?->toISOString(),
+                        'read_at' => $notification->read_at?->toISOString(),
+                    ])
+            ),
         ]);
     }
 

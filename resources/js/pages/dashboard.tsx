@@ -1,4 +1,4 @@
-import { Link, router, usePage } from '@inertiajs/react';
+import { InfiniteScroll, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     Activity,
@@ -30,6 +30,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
@@ -68,6 +69,14 @@ type InboxNotification = {
     read_at: string | null;
 };
 
+type InboxNotificationsPage = {
+    data: InboxNotification[];
+    current_page?: number;
+    last_page?: number;
+    total?: number;
+    per_page?: number;
+};
+
 const TABS = ['overview', 'calendar', 'activity', 'inbox'] as const;
 type Tab = (typeof TABS)[number];
 
@@ -99,7 +108,7 @@ export default function Dashboard({
     auditEvents = [],
     breakdown = [],
     chartData = [],
-    notifications: notificationsProp = [],
+    notifications: notificationsProp = { data: [] },
     kpis = { awaitingDecision: 0, needsAction: 0, approvedThisWeek: 0, eventsToday: 0 },
 }: {
     pending?: { data: FacilityRequest[] };
@@ -109,7 +118,7 @@ export default function Dashboard({
     auditEvents?: { value: string; label: string }[];
     breakdown?: { event: string; label: string; count: number }[];
     chartData?: ChartRow[];
-    notifications?: InboxNotification[];
+    notifications?: InboxNotificationsPage;
     kpis?: Kpis;
 }) {
     const [selectedBuildings, setSelectedBuildings] = useState<string[]>(buildings ?? []);
@@ -147,9 +156,13 @@ export default function Dashboard({
         })),
     );
     const [activeTab, setActiveTab] = useState<Tab>(getInitialTab);
-    const [notifications, setNotifications] = useState<InboxNotification[]>(notificationsProp ?? []);
+    const [notifications, setNotifications] = useState<InboxNotificationsPage>(notificationsProp ?? { data: [] });
     const [unreadCount, setUnreadCount] = useState(Number(auth.user.notification_unread_count ?? 0));
     const [markingNotificationsRead, setMarkingNotificationsRead] = useState(false);
+
+    useEffect(() => {
+        setNotifications(notificationsProp ?? { data: [] });
+    }, [notificationsProp]);
 
     const fetchAuditLogs = async (page = 1, selectedRange = range, event = logFilter, sort = logSort) => {
         setLogsLoading(true);
@@ -179,12 +192,13 @@ export default function Dashboard({
         try {
             await axios.post('/dashboard/notifications/mark-read');
             const readAt = new Date().toISOString();
-            setNotifications((prev) =>
-                prev.map((notification) => ({
+            setNotifications((prev) => ({
+                ...prev,
+                data: prev.data.map((notification) => ({
                     ...notification,
                     read_at: notification.read_at ?? readAt,
                 })),
-            );
+            }));
             setUnreadCount(0);
             router.reload({ only: ['auth'] });
         } finally {
@@ -290,12 +304,6 @@ export default function Dashboard({
                             </div>
                             <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">
                                 <RoleBadge roles={roles} position={auth.user.position} />
-                                <Button size="sm" className="shrink-0" asChild>
-                                    <Link href={route('request.create')}>
-                                        <CirclePlus className="h-4 w-4" />
-                                        New request
-                                    </Link>
-                                </Button>
                             </div>
                         </div>
 
@@ -809,7 +817,7 @@ export default function Dashboard({
                                 {markingNotificationsRead && <span className="text-xs text-muted-foreground">Marking as seen...</span>}
                             </div>
 
-                            {notifications.length === 0 ? (
+                            {notifications.data.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-14 text-center">
                                     <div className="flex size-11 items-center justify-center rounded-full bg-muted">
                                         <MailOpen className="h-5 w-5 text-muted-foreground" />
@@ -820,8 +828,26 @@ export default function Dashboard({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex w-full max-w-full min-w-0 flex-col gap-2 overflow-hidden">
-                                    {notifications.map((notification) => {
+                                <InfiniteScroll
+                                    data="notifications"
+                                    preserveUrl
+                                    className="flex w-full max-w-full min-w-0 flex-col gap-2 overflow-hidden"
+                                    loading={
+                                        <div className="flex w-full max-w-full min-w-0 flex-col gap-2">
+                                            {[0, 1].map((i) => (
+                                                <div key={i} className="flex w-full items-start gap-3 rounded-lg border p-4">
+                                                    <Skeleton className="size-9 shrink-0 rounded-full" />
+                                                    <div className="flex-1 space-y-2">
+                                                        <Skeleton className="h-4 w-1/3" />
+                                                        <Skeleton className="h-3 w-full" />
+                                                        <Skeleton className="h-3 w-2/3" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    }
+                                >
+                                    {notifications.data.map((notification) => {
                                         const isUnread = !notification.read_at;
 
                                         return (
@@ -862,7 +888,7 @@ export default function Dashboard({
                                             </Link>
                                         );
                                     })}
-                                </div>
+                                </InfiniteScroll>
                             )}
                         </div>
                     </TabsContent>

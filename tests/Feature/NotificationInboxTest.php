@@ -56,8 +56,8 @@ class NotificationInboxTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('dashboard')
                 ->where('auth.user.notification_unread_count', 1)
-                ->has('notifications', 1)
-                ->where('notifications.0.title', 'Mine')
+                ->has('notifications.data', 1)
+                ->where('notifications.data.0.title', 'Mine')
             );
     }
 
