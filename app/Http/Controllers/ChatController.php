@@ -798,11 +798,11 @@ SYMTPROMPT;
 
                 // Conditionally merge in facilities/equipment when requested and not already present
                 if (($arguments['include_facilities'] ?? false) && empty($pageContext['facilities'])) {
-                    $pageContext['facilities'] = $this->pageContextService->getFacilities(50);
+                    $pageContext['facilities'] = $this->pageContextService->getFacilities(20);
                 }
 
                 if (($arguments['include_equipment'] ?? false) && empty($pageContext['equipment'])) {
-                    $pageContext['equipment'] = $this->pageContextService->getEquipment(50);
+                    $pageContext['equipment'] = $this->pageContextService->getEquipment(20);
                 }
 
                 /*
@@ -899,11 +899,21 @@ SYMTPROMPT;
                 ? ['type' => 'function', 'function' => ['name' => 'get_page_context']]
                 : 'auto';
 
-            $result = $this->ai->chatWithTools($messages, $tools, [
-                'timeout' => $this->chatCallTimeout(120),
-                'tool_choice' => $toolChoice,
-                'temperature' => 0,
-            ]);
+            $result = null;
+            try {
+                $result = $this->ai->chatWithTools($messages, $tools, [
+                    'timeout' => $this->chatCallTimeout(120),
+                    'tool_choice' => $toolChoice,
+                    'temperature' => 0,
+                ]);
+            } catch (\Throwable $e) {
+                \Log::warning('Chat tool loop AI call failed; stopping loop.', [
+                    'round' => $round,
+                    'exception' => get_class($e),
+                    'message' => $e->getMessage(),
+                ]);
+                break;
+            }
 
             $roundContent = trim((string) ($result['content'] ?? ''));
 
@@ -2951,10 +2961,19 @@ SYMTPROMPT;
                  * (see OpenRouterClient::buildChatPayload), and tool_choice must
                  * go with it or the provider rejects the request.
                  */
-                $assistantReply = trim((string) $this->ai->chat($messages, [
-                    'timeout' => $this->chatCallTimeout(120),
-                    'tools' => [],
-                ]));
+                $assistantReply = null;
+                try {
+                    $assistantReply = trim((string) $this->ai->chat($messages, [
+                        'timeout' => $this->chatCallTimeout(120),
+                        'tools' => [],
+                    ]));
+                } catch (\Throwable $e) {
+                    \Log::warning('Chat fallback AI call failed; returning retry prompt.', [
+                        'exception' => get_class($e),
+                        'message' => $e->getMessage(),
+                    ]);
+                    $assistantReply = '';
+                }
 
                 if ($assistantReply === '') {
                     /*
@@ -3085,10 +3104,19 @@ SYMTPROMPT;
 
                 // Tool-free for the same reason as the JSON endpoint: it must be
                 // able to produce prose, not another tool call.
-                $assistantReply = trim((string) $this->ai->chat($messages, [
-                    'timeout' => $this->chatCallTimeout(120),
-                    'tools' => [],
-                ]));
+                $assistantReply = null;
+                try {
+                    $assistantReply = trim((string) $this->ai->chat($messages, [
+                        'timeout' => $this->chatCallTimeout(120),
+                        'tools' => [],
+                    ]));
+                } catch (\Throwable $e) {
+                    \Log::warning('Chat stream fallback AI call failed; returning retry prompt.', [
+                        'exception' => get_class($e),
+                        'message' => $e->getMessage(),
+                    ]);
+                    $assistantReply = '';
+                }
 
                 if ($assistantReply === '') {
                     \Log::warning('Chat stream turn produced no assistant content; returning a retry prompt.');

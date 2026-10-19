@@ -34,12 +34,10 @@ export default function StatTile({ label, value, sub, icon: Icon, variant = 'def
             <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-lg', iconStyles[variant])}>
                 <Icon className="h-5 w-5" />
             </div>
-            <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex min-w-0 flex-col gap-2">
                 <span className="truncate text-xs leading-tight font-medium opacity-90">{label}</span>
-                <div className="flex items-baseline gap-2">
-                    <span className="font-display text-2xl leading-none font-semibold tabular-nums">{value}</span>
-                    {sub && <span className={cn('truncate text-xs leading-tight', subStyles[variant])}>{sub}</span>}
-                </div>
+                <span className="font-sans text-3xl leading-none font-bold tabular-nums">{value}</span>
+                {sub && <span className={cn('truncate text-xs leading-tight', subStyles[variant])}>{sub}</span>}
             </div>
         </div>
     );

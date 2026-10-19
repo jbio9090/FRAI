@@ -283,7 +283,7 @@ export default function Dashboard({
         <>
             <div className="flex w-full max-w-full min-w-0 flex-col overflow-x-clip p-6 md:p-8">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full max-w-full min-w-0 overflow-x-clip">
-                    <TabsList variant="line" className="h-auto min-h-9 w-full max-w-full min-w-0 flex-wrap">
+                    <TabsList variant="line" className="h-auto min-h-9 border-b w-full flex *:flex-none justify-start">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Schedule</TabsTrigger>
                         <TabsTrigger value="activity">Activity</TabsTrigger>
