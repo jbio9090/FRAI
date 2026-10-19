@@ -8,8 +8,8 @@ import type { ToolbarProps, View } from 'react-big-calendar';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
     Dialog,
     DialogContent,
@@ -17,10 +17,9 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { downloadCalendarPdf } from '@/lib/pdf';
 import { cn } from '@/lib/utils';
 import wordToColor from '@/lib/wordToColor';
@@ -106,12 +105,14 @@ function PreviewModal({ isOpen, onClose, data, isLoading }: {
             <Dialog open={isOpen} onOpenChange={onClose}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>
-                            <Skeleton className="h-6 w-48" />
-                        </DialogTitle>
-                        <DialogDescription>
-                            <Skeleton className="h-4 w-32" />
+                        <DialogTitle className="sr-only">Loading request preview</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Please wait while the request details are loading.
                         </DialogDescription>
+                        <div className="space-y-2">
+                            <Skeleton className="h-6 w-48" />
+                            <Skeleton className="h-4 w-32" />
+                        </div>
                     </DialogHeader>
                     <div className="space-y-3 py-2">
                         <Skeleton className="h-6 w-24" />
@@ -163,12 +164,11 @@ function PreviewModal({ isOpen, onClose, data, isLoading }: {
                 </div>
                 <DialogFooter className="gap-2">
                     {data.can_view_full && (
-                        <Button asChild onClick={() => {
-                            onClose();
-                            window.location.href = route('requests.detail', [data.id]);
-                        }}>
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            View Details
+                        <Button asChild>
+                            <Link href={route('requests.detail', [data.id])} onClick={onClose}>
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                View Details
+                            </Link>
                         </Button>
                     )}
                     <Button variant="outline" onClick={onClose}>

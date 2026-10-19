@@ -30,10 +30,16 @@ yarn-error.log
 /.vscode
 /.zed
 vite-dev.log   
+# AI coding agents / assistants
 /boost.json
 /.mcp.json
 /CLAUDE.md
 /AGENTS.md
+/.claude/
+/.agents/
+/.ai/
+/.cursor/
+/.windsurf/
+/.aider*
 /junie/
-.claude/worktrees/analysis-worktree/
 /.opencode
