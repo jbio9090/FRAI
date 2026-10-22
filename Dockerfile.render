@@ -51,6 +51,9 @@ ENV VITE_APP_NAME=$VITE_APP_NAME \
 RUN npm ci
 RUN npm run build
 
+# Runtime banner reads node/build time from here (node is not in the final image)
+RUN printf 'node=%s\nbuilt=%s\n' "$(node -v)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /app/.build-info
+
 # ==========================================
 # Stage 3: Final Production Image (Render — single container)
 # ==========================================
@@ -77,6 +80,7 @@ WORKDIR /var/www/html
 # Copy application source + compiled assets from previous stages
 COPY --from=vendor /app /var/www/html
 COPY --from=frontend /app/public/build /var/www/html/public/build
+COPY --from=frontend /app/.build-info /var/www/html/.build-info
 
 # Remove any local .env that got baked in from the vendor stage
 RUN rm -f /var/www/html/.env

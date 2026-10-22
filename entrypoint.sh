@@ -3,6 +3,58 @@
 # Exit immediately if any command fails
 set -e
 
+# ------------------------------------------------------------------
+# 0a. Boot banner (diagnostics only — never aborts the deploy)
+# ------------------------------------------------------------------
+# Makes the running PHP patch visible so a stale base image is obvious
+# in Render logs. Every probe degrades to "unknown" so `set -e` never
+# trips on a diagnostic. Secrets are never printed: APP_KEY is only
+# reported as set/missing, and the DB host is masked.
+mask_db_host() {
+    case "$1" in
+        "")  echo "unset" ;;
+        *.*) echo "*****.${1#*.}" ;;
+        *)   echo "*****" ;;
+    esac
+}
+
+log_banner() {
+    php_ver=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo unknown)
+    php_meta=$(php -r 'echo PHP_SAPI, " ", (PHP_INT_SIZE * 8), "-bit";' 2>/dev/null || echo unknown)
+    fpm_ver=$(php-fpm -v 2>/dev/null | sed -n '1s/^PHP \([^ ]*\).*/\1/p' || echo unknown)
+    laravel_ver=$(php /var/www/html/artisan --version 2>/dev/null | sed -n 's/^Laravel Framework //p' || echo unknown)
+    node_ver=$(sed -n 's/^node=//p' /var/www/html/.build-info 2>/dev/null || true)
+    built_ts=$(sed -n 's/^built=//p' /var/www/html/.build-info 2>/dev/null || true)
+    commit=$(echo "${RENDER_GIT_COMMIT:-unknown}" | cut -c1-7)
+    app_key_state=$(if [ -n "${APP_KEY:-}" ]; then echo set; else echo missing; fi)
+
+    exts=""
+    for ext in pdo_pgsql gd gmp bcmath; do
+        if php -r "exit(extension_loaded('$ext') ? 0 : 1);" 2>/dev/null; then
+            exts="$exts $ext"
+        else
+            exts="$exts $ext(missing)"
+        fi
+    done
+    if php -m 2>/dev/null | grep -qi 'Zend OPcache'; then
+        opc="enabled"
+    else
+        opc="absent"
+    fi
+
+    echo "🚀 FRAI boot — ${built_ts:-unknown}"
+    echo "   PHP        $php_ver ($php_meta)"
+    echo "   PHP-FPM    ${fpm_ver:-unknown}"
+    echo "   Laravel    ${laravel_ver:-unknown}"
+    echo "   App        env=${APP_ENV:-unset} debug=${APP_DEBUG:-unset} url=${APP_URL:-unset} key=$app_key_state"
+    echo "   DB         $(mask_db_host "${DB_HOST:-}")"
+    echo "   Ext       ${exts# } opcache=$opc"
+    echo "   Limits     $(php -r 'echo "memory=", ini_get("memory_limit"), " upload=", ini_get("upload_max_filesize"), " post=", ini_get("post_max_size");' 2>/dev/null || echo unknown)"
+    echo "   Node       ${node_ver:-unknown} (build-time only)"
+    echo "   Commit     $commit"
+}
+log_banner || true
+
 echo "🚀 Starting deployment tasks..."
 
 # ------------------------------------------------------------------

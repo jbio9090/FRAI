@@ -3,12 +3,13 @@ import axios from 'axios';
 import { toJpeg } from 'html-to-image';
 import { ChevronLeft, ChevronRight, Clock, LoaderCircle, Printer, ExternalLink } from 'lucide-react';
 import moment from 'moment';
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ShowMoreProps, ToolbarProps, View } from 'react-big-calendar';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { toast } from 'sonner';
 import { CalendarDayEventsPopover, CalendarShowMoreButton, useCalendarOverflow } from '@/components/calendar-day-events-popover';
+import FacilityDayGantt from '@/components/FacilityDayGantt';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -180,19 +181,6 @@ function CustomToolbar(toolbar: ToolbarProps<Event>) {
             );
         }
 
-        if (toolbar.view === 'week') {
-            const startOfWeek = date.clone().startOf('week');
-            const endOfWeek = date.clone().endOf('week');
-            return (
-                <div className="flex flex-col text-sm font-light">
-                    <h4>{date.format('YYYY')}</h4>
-                    <h3 className="text-lg font-bold">
-                        {startOfWeek.format('MMM D')} – {endOfWeek.format('MMM D')}
-                    </h3>
-                </div>
-            );
-        }
-
         return (
             <div className="flex flex-col text-sm font-light">
                 <h4>{date.format('YYYY')}</h4>
@@ -222,7 +210,6 @@ function CustomToolbar(toolbar: ToolbarProps<Event>) {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="month">Month</SelectItem>
-                        <SelectItem value="week">Week</SelectItem>
                         <SelectItem value="day">Day</SelectItem>
                     </SelectContent>
                 </Select>
@@ -355,7 +342,7 @@ export default function FacilityCalendar({
         );
     }, [initialEvents]);
 
-    const fetchEvents = async (start: Date, end: Date) => {
+    const fetchEvents = useCallback(async (start: Date, end: Date) => {
         setLoading(true);
         try {
             const response = await axios.get(isDashboard ? route('dashboard.calendar') : route('facility.schedule.calendar', [facilityId]), {
@@ -378,7 +365,7 @@ export default function FacilityCalendar({
         } finally {
             setLoading(false);
         }
-    };
+    }, [isDashboard, facilityId]);
 
     const handleRangeChange = (range: Date[] | { start: Date; end: Date }) => {
         let start: Date, end: Date;
@@ -393,6 +380,14 @@ export default function FacilityCalendar({
 
         void fetchEvents(start, end);
     };
+
+    // When the gantt day view is active, fetch events for that single day
+    // (react-big-calendar's onRangeChange won't fire since it's not rendered).
+    useEffect(() => {
+        if (currentView === 'day') {
+            void fetchEvents(currentDate, currentDate);
+        }
+    }, [currentView, currentDate, fetchEvents]);
 
     const handleExportPdf = async () => {
         if (!canExport || !captureRef.current) return;
@@ -431,32 +426,88 @@ export default function FacilityCalendar({
         return ShowMore;
     }, [overflowPopover?.date, openOverflow]);
 
+    const showGantt = currentView === 'day';
+
     return (
         <CalendarExportContext.Provider value={{ canExport, exporting, onExport: handleExportPdf }}>
-            <div ref={calendarContainerRef} className="relative h-[60rem]">
-                <div ref={captureRef} className="flex h-full flex-col bg-background">
+            <div ref={calendarContainerRef} className={cn('relative', showGantt ? undefined : 'h-[60rem]')}>
+                <div ref={captureRef} className={cn('flex flex-col bg-background', showGantt ? undefined : 'h-full')}>
                     {exporting && <CalendarExportHeader title={calendarTitle} date={currentDate} />}
-                    <Calendar
-                        views={['month', 'week', 'day']}
-                        localizer={localizer}
-                        events={events}
-                        startAccessor="start"
-                        endAccessor="end"
-                        view={currentView}
-                        onView={(view) => setCurrentView(view)}
-                        date={currentDate}
-                        onNavigate={(newDate) => setCurrentDate(newDate)}
-                        onRangeChange={handleRangeChange}
-                        toolbar={!exporting}
-                        className={cn('min-h-0 flex-1', loading && '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50')}
-                        components={{
-                            toolbar: CustomToolbar,
-                            event: (props) => <CustomEvent {...props} isDashboard={isDashboard} onEventClick={handleEventClick} />,
-                            showMore: showMoreComponent,
-                        }}
-                        step={60}
-                        timeslots={1}
-                    />
+                    {currentView === 'day' ? (
+                        <>
+                            <div className="sticky left-0 mb-4 flex w-full flex-wrap items-center justify-between gap-4 p-2">
+                                <div className="flex items-center gap-1">
+                                    <Button variant="outline" size="icon" onClick={() => setCurrentDate(moment(currentDate).subtract(1, 'day').toDate())}>
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="outline" onClick={() => setCurrentDate(new Date())}>
+                                        Today
+                                    </Button>
+                                    <Button variant="outline" size="icon" onClick={() => setCurrentDate(moment(currentDate).add(1, 'day').toDate())}>
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                <div className="flex-1 text-center">
+                                    <div className="flex flex-col text-sm font-light">
+                                        <h4>{moment(currentDate).format('YYYY')}</h4>
+                                        <h3 className="text-lg font-bold">{moment(currentDate).format('MMMM D')}</h3>
+                                        <span className="text-xs text-muted-foreground">{moment(currentDate).format('dddd')}</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Select value={currentView} onValueChange={(v) => setCurrentView(v as View)}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select view" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="month">Month</SelectItem>
+                                            <SelectItem value="day">Day</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={handleExportPdf}
+                                        disabled={!canExport}
+                                        aria-label="Print day schedule to PDF"
+                                        title={canExport ? 'Print day schedule to PDF' : 'No data to print'}
+                                    >
+                                        {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                                    </Button>
+                                </div>
+                            </div>
+                            <FacilityDayGantt
+                                events={events}
+                                date={currentDate}
+                                calendarTitle={calendarTitle}
+                                onEventClick={handleEventClick}
+                                isDashboard={isDashboard}
+                                loading={loading}
+                            />
+                        </>
+                    ) : (
+                        <Calendar
+                            views={['month', 'day']}
+                            localizer={localizer}
+                            events={events}
+                            startAccessor="start"
+                            endAccessor="end"
+                            view={currentView}
+                            onView={(view) => setCurrentView(view)}
+                            date={currentDate}
+                            onNavigate={(newDate) => setCurrentDate(newDate)}
+                            onRangeChange={handleRangeChange}
+                            toolbar={!exporting}
+                            className={cn('min-h-0 flex-1', loading && '[&>.rbc-month-view]:opacity-50 [&>.rbc-time-view]:opacity-50')}
+                            components={{
+                                toolbar: CustomToolbar,
+                                event: (props) => <CustomEvent {...props} isDashboard={isDashboard} onEventClick={handleEventClick} />,
+                                showMore: showMoreComponent,
+                            }}
+                            step={60}
+                            timeslots={1}
+                        />
+                    )}
                 </div>
                 {overflowPopover && (
                     <div aria-hidden="true" className="absolute inset-0 z-30 bg-background/60 dark:bg-black/50" onClick={closeOverflow} />
