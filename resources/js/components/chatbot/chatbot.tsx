@@ -315,7 +315,7 @@ headers: {
     return (
         <div className="fixed right-4 bottom-4 z-[110] flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
             {devMode && isContextOpen ? (
-                <section className="flex h-[min(560px,calc(100vh-8rem))] w-[min(560px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-amber-300 bg-slate-950 text-slate-100 shadow-2xl">
+                <section className="flex h-[calc(100vh-8rem)] w-[min(560px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-amber-300 bg-slate-950 text-slate-100 shadow-2xl">
                     <header className="flex items-center justify-between gap-3 border-b border-amber-300/30 bg-amber-300/10 px-4 py-3">
                         <div>
                             <p className="text-xs font-semibold tracking-[0.2em] text-amber-300 uppercase">Developer mode</p>
@@ -366,7 +366,7 @@ headers: {
             {isOpen ? (
                 <section
                     aria-label="FRAI AI Assistant"
-                    className="flex h-[min(680px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl ring-1 ring-black/5"
+                    className="flex h-[calc(100vh-7rem)] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl ring-1 ring-black/5"
                 >
                     <header className="flex items-center justify-between gap-3 bg-primary px-4 py-3 text-primary-foreground">
                         <div>

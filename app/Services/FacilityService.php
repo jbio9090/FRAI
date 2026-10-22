@@ -34,6 +34,8 @@ class FacilityService
                 return [
                     'id' => $booking->id,
                     'title' => $booking->request->title,
+                    'request_title' => $booking->request->title,
+                    'facility_name' => $booking->facility->name,
                     'start' => $booking->date_requested.'T'.$booking->time_start,
                     'end' => $booking->date_requested.'T'.$booking->time_end,
                     'request_id' => $booking->request->id,
@@ -92,6 +94,8 @@ class FacilityService
                 return [
                     'id' => $booking->id,
                     'title' => $booking->facility->name.' — '.$booking->request->title,
+                    'request_title' => $booking->request->title,
+                    'facility_name' => $booking->facility->name,
                     'start' => $booking->date_requested.'T'.$booking->time_start,
                     'end' => $booking->date_requested.'T'.$booking->time_end,
                     'request_id' => $booking->request->id,

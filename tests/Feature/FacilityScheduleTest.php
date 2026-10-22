@@ -34,6 +34,10 @@ class FacilityScheduleTest extends TestCase
         $events = app(FacilityService::class)->getSchedule($facility->id, '2026-09-01', '2026-09-30');
 
         $this->assertTrue($events->contains(fn ($event) => $event['id'] === $booking->id));
+
+        $event = $events->firstWhere('id', $booking->id);
+        $this->assertSame($request->title, $event['request_title']);
+        $this->assertSame($facility->name, $event['facility_name']);
     }
 
     public function test_get_schedule_shows_conditionally_approved_rows_and_hides_pending_but_includes_held(): void
@@ -135,6 +139,11 @@ class FacilityScheduleTest extends TestCase
 
         $this->assertTrue($events->contains(fn ($event) => $event['id'] === $booking->id));
         $this->assertTrue($events->contains(fn ($event) => $event['id'] === $held->id));
+
+        $event = $events->firstWhere('id', $booking->id);
+        $this->assertSame($request->title, $event['request_title']);
+        $this->assertSame($facility->name, $event['facility_name']);
+        $this->assertSame($facility->name.' — '.$request->title, $event['title']);
     }
 
     public function test_facility_detail_page_includes_partially_approved_bookings(): void

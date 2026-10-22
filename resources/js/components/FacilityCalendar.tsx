@@ -4,36 +4,24 @@ import { toJpeg } from 'html-to-image';
 import { ChevronLeft, ChevronRight, Clock, LoaderCircle, Printer, ExternalLink } from 'lucide-react';
 import moment from 'moment';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { ToolbarProps, View } from 'react-big-calendar';
+import type { ShowMoreProps, ToolbarProps, View } from 'react-big-calendar';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { toast } from 'sonner';
+import { CalendarDayEventsPopover, CalendarShowMoreButton, useCalendarOverflow } from '@/components/calendar-day-events-popover';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { eventColorSeed, eventFacilityName, eventRequestTitle, type CalendarEvent } from '@/lib/calendar-events';
 import { downloadCalendarPdf } from '@/lib/pdf';
 import { cn } from '@/lib/utils';
 import wordToColor from '@/lib/wordToColor';
 
 const localizer = momentLocalizer(moment);
 
-interface Event {
-    start: Date;
-    end: Date;
-    title: string;
-    id: number;
-    request_id: string | number;
-    building?: string;
-}
+type Event = CalendarEvent;
 
 interface CalendarProps {
     facilityId: number;
@@ -90,12 +78,7 @@ interface PreviewData {
     }[];
 }
 
-function PreviewModal({ isOpen, onClose, data, isLoading }: { 
-    isOpen: boolean; 
-    onClose: () => void; 
-    data: PreviewData | null; 
-    isLoading: boolean;
-}) {
+function PreviewModal({ isOpen, onClose, data, isLoading }: { isOpen: boolean; onClose: () => void; data: PreviewData | null; isLoading: boolean }) {
     if (!isOpen) return null;
 
     const formatTime = (time: string) => moment(time, 'HH:mm:ss').format('h:mm A');
@@ -106,9 +89,7 @@ function PreviewModal({ isOpen, onClose, data, isLoading }: {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="sr-only">Loading request preview</DialogTitle>
-                        <DialogDescription className="sr-only">
-                            Please wait while the request details are loading.
-                        </DialogDescription>
+                        <DialogDescription className="sr-only">Please wait while the request details are loading.</DialogDescription>
                         <div className="space-y-2">
                             <Skeleton className="h-6 w-48" />
                             <Skeleton className="h-4 w-32" />
@@ -117,7 +98,7 @@ function PreviewModal({ isOpen, onClose, data, isLoading }: {
                     <div className="space-y-3 py-2">
                         <Skeleton className="h-6 w-24" />
                         <Skeleton className="h-6 w-32" />
-                        <div className="border-t pt-2 space-y-2">
+                        <div className="space-y-2 border-t pt-2">
                             <Skeleton className="h-20 w-full" />
                             <Skeleton className="h-20 w-full" />
                         </div>
@@ -143,15 +124,13 @@ function PreviewModal({ isOpen, onClose, data, isLoading }: {
                 <div className="space-y-3 py-2">
                     <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Status</span>
-                        <Badge variant={data.status === 'Approved' ? 'default' : 'secondary'}>
-                            {data.status}
-                        </Badge>
+                        <Badge variant={data.status === 'Approved' ? 'default' : 'secondary'}>{data.status}</Badge>
                     </div>
                     <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Requested by</span>
                         <span>{data.requester}</span>
                     </div>
-                    <div className="border-t pt-2 space-y-2">
+                    <div className="space-y-2 border-t pt-2">
                         {data.facilities.map((f, i) => (
                             <div key={i} className="space-y-1 text-sm">
                                 <p className="font-medium">{f.facility_name}</p>
@@ -180,7 +159,7 @@ function PreviewModal({ isOpen, onClose, data, isLoading }: {
     );
 }
 
-function CustomToolbar(toolbar: ToolbarProps) {
+function CustomToolbar(toolbar: ToolbarProps<Event>) {
     const goToBack = () => toolbar.onNavigate('PREV');
     const goToNext = () => toolbar.onNavigate('NEXT');
     const goToToday = () => toolbar.onNavigate('TODAY');
@@ -262,19 +241,29 @@ function CustomToolbar(toolbar: ToolbarProps) {
     );
 }
 
-const FACILITY_SEPARATOR = ' — ';
+function CustomEvent({
+    event,
+    isDashboard,
+    onEventClick,
+}: {
+    event: Event;
+    isDashboard: boolean;
+    onEventClick: (requestId: string | number) => void;
+}) {
+    // The API sends `request_title` / `facility_name`; the split on the combined
+    // dashboard title is only a fallback for payloads that predate those fields.
+    const facilityName = eventFacilityName(event, isDashboard);
+    const requestTitle = eventRequestTitle(event, isDashboard);
+    const style = wordToColor(eventColorSeed(event, isDashboard));
 
-function CustomEvent({ event, isDashboard, onEventClick }: { event: Event; isDashboard: boolean; onEventClick: (requestId: string | number) => void }) {
-    const [facilityName, requestTitle] =
-        isDashboard && event.title.includes(FACILITY_SEPARATOR) ? event.title.split(FACILITY_SEPARATOR) : [event.title, event.title];
-
-    const colorSeed = isDashboard ? facilityName : event.title + event.start + event.end;
-    const style = wordToColor(colorSeed);
+    const timeRange = `${moment(event.start).format('h:mma')}-${moment(event.end).format('h:mma')}`;
+    const tooltip = [requestTitle, facilityName, timeRange].filter(Boolean).join('\n');
 
     return (
         <div
-            className="tag frai-cal-event min-w-0 border-1 mx-2 flex h-full flex-row rounded-sm px-1 lg:flex-col cursor-pointer"
+            className="tag frai-cal-event mx-2 flex h-full min-w-0 cursor-pointer flex-row rounded-sm border-1 px-1 lg:flex-col"
             style={style}
+            title={tooltip}
             onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -284,11 +273,19 @@ function CustomEvent({ event, isDashboard, onEventClick }: { event: Event; isDas
             <span className="min-w-0 truncate text-xs font-bold" title={requestTitle}>
                 {requestTitle}
             </span>
-            <div className="flex min-w-0 items-center gap-1 text-left">
+            <div className="frai-cal-event-time flex min-w-0 items-center gap-1 text-left">
                 <Clock size={12} className="shrink-0" />
-                <span className="min-w-0 truncate whitespace-nowrap text-xs">
-                    {moment(event.start).format('h:mma')}-{moment(event.end).format('h:mma')}
-                </span>
+                <span className="shrink-0 text-xs whitespace-nowrap">{timeRange}</span>
+                {facilityName && (
+                    <>
+                        <span aria-hidden className="shrink-0 text-xs opacity-60">
+                            ·
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-xs" title={facilityName}>
+                            {facilityName}
+                        </span>
+                    </>
+                )}
             </div>
         </div>
     );
@@ -311,12 +308,14 @@ export default function FacilityCalendar({
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
     const captureRef = useRef<HTMLDivElement>(null);
+    const calendarContainerRef = useRef<HTMLDivElement>(null);
+    const { popover: overflowPopover, open: openOverflow, close: closeOverflow } = useCalendarOverflow();
 
     const canExport = !loading && !exporting && rawEvents.length > 0;
 
     const handleEventClick = async (requestId: string | number) => {
         setPreviewData(null); // Clear previous data
-        setPreviewOpen(true);  // Open modal IMMEDIATELY
+        setPreviewOpen(true); // Open modal IMMEDIATELY
         setPreviewLoading(true);
         try {
             const response = await axios.get(route('requests.preview', [requestId]));
@@ -335,11 +334,14 @@ export default function FacilityCalendar({
         }
     };
 
+    const handleOpenDayView = (date: Date) => {
+        closeOverflow();
+        setCurrentDate(date);
+        setCurrentView('day');
+    };
+
     const events = useMemo(
-        () =>
-            filterBuildings
-                ? rawEvents.filter((e) => !e.building || filterBuildings.includes(e.building))
-                : rawEvents,
+        () => (filterBuildings ? rawEvents.filter((e) => !e.building || filterBuildings.includes(e.building)) : rawEvents),
         [rawEvents, filterBuildings],
     );
 
@@ -378,7 +380,7 @@ export default function FacilityCalendar({
         }
     };
 
-    const handleRangeChange = async (range: Date[] | { start: Date; end: Date }) => {
+    const handleRangeChange = (range: Date[] | { start: Date; end: Date }) => {
         let start: Date, end: Date;
 
         if (Array.isArray(range)) {
@@ -389,7 +391,7 @@ export default function FacilityCalendar({
             end = range.end;
         }
 
-        await fetchEvents(start, end);
+        void fetchEvents(start, end);
     };
 
     const handleExportPdf = async () => {
@@ -421,9 +423,17 @@ export default function FacilityCalendar({
         }
     };
 
+    const showMoreComponent = useMemo(() => {
+        function ShowMore(props: ShowMoreProps<Event>) {
+            return <CalendarShowMoreButton {...props} isOpen={overflowPopover?.date.getTime() === props.slotDate.getTime()} onOpen={openOverflow} />;
+        }
+
+        return ShowMore;
+    }, [overflowPopover?.date, openOverflow]);
+
     return (
         <CalendarExportContext.Provider value={{ canExport, exporting, onExport: handleExportPdf }}>
-            <div className="relative h-[57rem]">
+            <div ref={calendarContainerRef} className="relative h-[60rem]">
                 <div ref={captureRef} className="flex h-full flex-col bg-background">
                     {exporting && <CalendarExportHeader title={calendarTitle} date={currentDate} />}
                     <Calendar
@@ -442,19 +452,30 @@ export default function FacilityCalendar({
                         components={{
                             toolbar: CustomToolbar,
                             event: (props) => <CustomEvent {...props} isDashboard={isDashboard} onEventClick={handleEventClick} />,
+                            showMore: showMoreComponent,
                         }}
-                        popup
                         step={60}
                         timeslots={1}
                     />
                 </div>
+                {overflowPopover && (
+                    <div aria-hidden="true" className="absolute inset-0 z-30 bg-background/60 dark:bg-black/50" onClick={closeOverflow} />
+                )}
+                {overflowPopover && (
+                    <CalendarDayEventsPopover
+                        date={overflowPopover.date}
+                        events={overflowPopover.events}
+                        containerRef={calendarContainerRef}
+                        anchor={overflowPopover.cell}
+                        trigger={overflowPopover.trigger}
+                        isDashboard={isDashboard}
+                        focusFirstRow={overflowPopover.focusFirstRow}
+                        onClose={closeOverflow}
+                        onOpenDayView={handleOpenDayView}
+                    />
+                )}
             </div>
-            <PreviewModal
-                isOpen={previewOpen}
-                onClose={() => setPreviewOpen(false)}
-                data={previewData}
-                isLoading={previewLoading}
-            />
+            <PreviewModal isOpen={previewOpen} onClose={() => setPreviewOpen(false)} data={previewData} isLoading={previewLoading} />
         </CalendarExportContext.Provider>
     );
 }

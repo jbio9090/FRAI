@@ -102,7 +102,6 @@
     outline-offset: 1px;
 }
 
-
 /* ===== React Big Calendar Border Overrides ===== */
 
 .rbc-calendar,
@@ -117,22 +116,22 @@
 .rbc-timeslot-group,
 .rbc-day-slot,
 .rbc-agenda-view table,
-.rbc-agenda-view table tbody>tr>td,
-.rbc-agenda-view table thead>tr>th {
+.rbc-agenda-view table tbody > tr > td,
+.rbc-agenda-view table thead > tr > th {
     border-color: var(--border) !important;
 }
 
 /* Month view grid lines */
-.rbc-month-row+.rbc-month-row {
+.rbc-month-row + .rbc-month-row {
     border-top: 1px solid var(--border) !important;
 }
 
-.rbc-day-bg+.rbc-day-bg {
+.rbc-day-bg + .rbc-day-bg {
     border-left: 1px solid var(--border) !important;
 }
 
 /* Time view vertical separators */
-.rbc-time-content>*+*>* {
+.rbc-time-content > * + * > * {
     border-left: 1px solid var(--border) !important;
 }
 
@@ -193,33 +192,75 @@
     padding: 0.5rem !important;
 } */
 
-.rbc-overlay {
-    background-color: var(--popover) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important;
-    padding: 0.5rem !important;
-    z-index: 30;
-}
-
-.rbc-overlay-header {
-    border-bottom: 1px solid var(--border) !important;
-    color: var(--popover-foreground) !important;
-    font-size: 0.75rem !important;
-    font-weight: 600 !important;
-    padding: 0.25rem 0.5rem 0.5rem !important;
-    margin-bottom: 0.25rem !important;
-}
-
 .rbc-show-more {
     color: var(--primary) !important;
     font-size: 0.75rem !important;
     font-weight: 600 !important;
     background: transparent !important;
-    padding: 0 2px !important;
+    /* Match the event card's `mx-2` / `px-1` so the "+N more" row lines up. */
+    margin: 0 0.5rem !important;
+    padding: 0 0.25rem !important;
 }
 
 .rbc-show-more:hover {
     color: var(--primary) !important;
     text-decoration: underline !important;
 }
+
+/* ===== Month View Chip Height =====
+ *
+ * react-big-calendar derives the month row limit from a DOM measurement: it
+ * renders a dummy row whose event holds a single non-breaking space and
+ * divides the available height by that dummy's height. Our chip is two lines
+ * tall, so the dummy has to be pinned to the very same height — otherwise the
+ * library over-estimates the rows that fit, renders one row too many, and the
+ * "+N more" button (always the last row) gets clipped by
+ * `.rbc-month-row { overflow: hidden }`.
+ *
+ * The dummy and the real chip are both `.rbc-event-content` elements inside
+ * the month grid, so pinning that element keeps the measurement honest. The
+ * "+N more" popover is rendered outside the month grid, so it still keeps
+ * its natural, roomier height.
+ */
+.rbc-month-view {
+    --frai-month-line: 0.8125rem; /* 13px text line */
+    /* Two 13px lines plus the chip's 1px top and bottom borders. */
+    --frai-month-event-height: calc(var(--frai-month-line) * 2 + 2px); /* 28px */
+}
+
+.rbc-month-view .rbc-row-content .rbc-event-content {
+    height: var(--frai-month-event-height);
+    min-height: var(--frai-month-event-height);
+    max-height: var(--frai-month-event-height);
+}
+
+/* The month grid always uses the two-line chip, at every viewport width. */
+.rbc-month-view .rbc-row-content .frai-cal-event {
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.rbc-month-view .rbc-row-content .frai-cal-event,
+.rbc-month-view .rbc-row-content .frai-cal-event span,
+.rbc-month-view .rbc-row-content .frai-cal-event-time {
+    line-height: var(--frai-month-line);
+}
+
+/* The "+N more" row occupies one reserved event row; keep the label centred
+ * in it so the cell reads as a uniform stack of rows. */
+.rbc-month-view .rbc-row-content .rbc-show-more {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: var(--frai-month-event-height);
+}
+
+/* ===== Day Events Popover =====
+ *
+ * The popover lives inside the calendar container and stays neutral: only the
+ * bullet in front of each event carries the colour of that event (the same
+ * `--tag-*` variables `.tag` uses), so the list still reads as one surface.
+ */
