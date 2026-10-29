@@ -248,6 +248,8 @@
     --ads-danger-bg: #ffeceb;
     --ads-neutral: #44546f;
     --ads-neutral-bg: #091e420f;
+    --ads-expired: #6b7280;
+    --ads-expired-bg: #f3f4f6;
 
     /* ADS event-type accents (fill + ink) */
     --ads-ac-routine: #091e420f;
@@ -371,6 +373,8 @@
     --ads-danger-bg: #4d1a14;
     --ads-neutral: #b6c2cf;
     --ads-neutral-bg: #161a1d;
+    --ads-expired: #9ca3af;
+    --ads-expired-bg: #374151;
 
     /* ADS event-type accents (dark) */
     --ads-ac-routine: #a1bdd914;

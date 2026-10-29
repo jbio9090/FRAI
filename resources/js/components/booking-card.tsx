@@ -291,7 +291,7 @@ export function BookingCard({
             </div>
 
             {/* Content Body */}
-            <div className="flex-1">
+            <div className="flex-1 m-2 max-w-full">
                 {hasConflicts && (
                     <>
                         <button
@@ -299,7 +299,7 @@ export function BookingCard({
                             onClick={() => setIsConflictsOpen((v) => !v)}
                             aria-expanded={isConflictsOpen}
                             aria-controls={conflictsId}
-                            className="mb-2 mx-2 flex w-full items-center gap-1.5 rounded-md border border-[var(--ads-danger)]/40 bg-[var(--ads-danger-bg)]/50 px-2 py-1.5 text-left text-xs font-medium text-[var(--ads-danger)] transition-colors hover:bg-[var(--ads-danger-bg)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            className="mb-2 cursor-pointer flex w-full items-center gap-1.5 rounded-md border border-[var(--ads-danger)]/40 bg-[var(--ads-danger-bg)]/50 px-2 py-1.5 text-left text-xs font-medium text-[var(--ads-danger)] transition-colors hover:bg-[var(--ads-danger-bg)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
                             <AlertCircleIcon size={12} className="shrink-0" />
                             <span className="flex-1">
