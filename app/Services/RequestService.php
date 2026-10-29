@@ -1909,4 +1909,68 @@ class RequestService
 
         return empty($conflicts);
     }
+
+    /**
+     * Expire past-due pending request facilities, then expire any parent
+     * request whose facilities are all expired.
+     *
+     * Idempotent: re-running only touches PENDING rows, so already-expired
+     * facilities/requests are skipped.
+     *
+     * @return array{
+     *     expired_facilities: int,
+     *     expired_requests: int,
+     *     expired_facility_ids: array<int>,
+     *     expired_request_ids: array<int>,
+     * }
+     */
+    public function expireOverduePendingRequests(): array
+    {
+        $today = now()->toDateString();
+
+        $expiredFacilityIds = [];
+        $expiredRequestIds = [];
+
+        DB::transaction(function () use ($today, &$expiredFacilityIds, &$expiredRequestIds) {
+            // 1. Expire past-due PENDING facilities.
+            $facilities = RequestFacility::where('date_requested', '<', $today)
+                ->where('status', RequestStatus::PENDING->value)
+                ->get();
+
+            foreach ($facilities as $facility) {
+                $facility->update([
+                    'status' => RequestStatus::EXPIRED,
+                    'expired_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $expiredFacilityIds[] = $facility->id;
+                AuditLogger::requestFacilityExpired($facility);
+            }
+
+            // 2. Expire parent requests where ALL facilities are Expired.
+            $requests = FacilityRequest::where('status', RequestStatus::PENDING->value)
+                ->has('requestFacilities', '>', 0)
+                ->whereDoesntHave('requestFacilities', function ($q) {
+                    $q->where('status', '!=', RequestStatus::EXPIRED->value);
+                })
+                ->get();
+
+            foreach ($requests as $request) {
+                $request->update([
+                    'status' => RequestStatus::EXPIRED,
+                    'expired_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $expiredRequestIds[] = $request->id;
+                AuditLogger::requestExpired($request);
+            }
+        });
+
+        return [
+            'expired_facilities' => count($expiredFacilityIds),
+            'expired_requests' => count($expiredRequestIds),
+            'expired_facility_ids' => $expiredFacilityIds,
+            'expired_request_ids' => $expiredRequestIds,
+        ];
+    }
 }

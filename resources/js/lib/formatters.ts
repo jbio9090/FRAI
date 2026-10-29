@@ -1,6 +1,6 @@
-export type RequestStatusValue = 'Pending' | 'Approved' | 'Denied' | 'Conditionally Approved' | 'On Hold' | 'For Reschedule' | 'Partially Approved';
+export type RequestStatusValue = 'Pending' | 'Approved' | 'Denied' | 'Conditionally Approved' | 'On Hold' | 'For Reschedule' | 'Partially Approved' | 'Expired';
 
-export type RequestStatusKey = 'pending' | 'approved' | 'denied' | 'conditionally_approved' | 'on_hold' | 'for_reschedule' | 'partially_approved';
+export type RequestStatusKey = 'pending' | 'approved' | 'denied' | 'conditionally_approved' | 'on_hold' | 'for_reschedule' | 'partially_approved' | 'expired';
 
 export function formatRequestStatus(status: string): string {
     const statusMap: Record<RequestStatusKey, string> = {
@@ -11,6 +11,7 @@ export function formatRequestStatus(status: string): string {
         on_hold: 'On Hold',
         for_reschedule: 'For Reschedule',
         partially_approved: 'Partially Approved',
+        expired: 'Expired',
     };
 
     return statusMap[status as RequestStatusKey] ?? formatRequestStatusKey(status);

@@ -97,6 +97,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
         { label: 'Conditionally Approved', value: 'conditionally_approved' },
         { label: 'Partially Approved', value: 'partially_approved' },
         { label: 'For Reschedule', value: 'for_reschedule' },
+        { label: 'Expired', value: 'expired' },
     ];
 
     const toggleStatus = (value: string) => {

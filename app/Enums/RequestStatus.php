@@ -13,6 +13,8 @@ enum RequestStatus: string
 
     case PARTIALLY_APPROVED = 'Partially Approved';
 
+    case EXPIRED = 'Expired';
+
     /**
      * Resolve a status from a filter string, accepting either the enum
      * name (e.g. partially_approved) or the stored value

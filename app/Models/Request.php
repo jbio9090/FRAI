@@ -31,6 +31,7 @@ class Request extends Model
         'held_by_request_id',
         'processed_by',
         'processed_at',
+        'expired_at',
         'pending_conflict_rf_ids',
         'approved_conflict_rf_ids',
         'approved_by',

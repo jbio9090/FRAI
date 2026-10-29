@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AuditEvent;
 use App\Models\AuditLog;
 use App\Models\Request as FacilityRequest;
+use App\Models\RequestFacility;
 use App\Models\RequestFile;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
@@ -236,5 +237,47 @@ class AuditLogger
             userId: $admin->id,
             properties: ['previous_roles' => $targetUser->roles->pluck('name')->toArray()],
         );
+    }
+
+    public static function requestExpired(FacilityRequest $request): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::RequestExpired,
+            description: "Request expired: \"{$request->title}\"",
+            subject: $request,
+            properties: [
+                'title' => $request->title,
+                'status' => $request->status?->value,
+                'expired_at' => $request->expired_at?->toISOString(),
+            ],
+        );
+    }
+
+    public static function requestFacilityExpired(RequestFacility $facility): AuditLog
+    {
+        return self::log(
+            event: AuditEvent::RequestFacilityExpired,
+            description: "Request facility expired: facility \"{$facility->facility?->name}\" on {$facility->date_requested}",
+            subject: $facility,
+            properties: [
+                'request_id' => $facility->request_id,
+                'facility_id' => $facility->facility_id,
+                'date_requested' => self::toIso($facility->date_requested),
+                'expired_at' => self::toIso($facility->expired_at),
+            ],
+        );
+    }
+
+    private static function toIso(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ($value instanceof \Carbon\CarbonInterface) {
+            return $value->toISOString();
+        }
+
+        return (string) $value;
     }
 }

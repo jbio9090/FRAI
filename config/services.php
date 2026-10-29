@@ -48,4 +48,8 @@ return [
         'vapid_key' => env('VITE_FIREBASE_VAPID_KEY'),
     ],
 
+    'expire_requests' => [
+        'token' => env('EXPIRE_REQUESTS_TOKEN'),
+    ],
+
 ];

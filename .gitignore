@@ -43,3 +43,4 @@ vite-dev.log
 /.aider*
 /junie/
 /.opencode
+/tests/Feature/seed_expired_request.php

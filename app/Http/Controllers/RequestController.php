@@ -148,6 +148,11 @@ class RequestController extends Controller
         return back()->with('success', ucfirst(str_replace('_', ' ', $action)).' successful');
     }
 
+    public function expireOverdue(): \Illuminate\Http\JsonResponse
+    {
+        return response()->json($this->service->expireOverduePendingRequests());
+    }
+
     public function approve(Request $request, $id)
     {
         $commentBody = $request->input('comment', 'Your request has been approved.');

@@ -29,6 +29,13 @@ Route::get('/requests/{id}/push-action/{action}', [RequestController::class, 'ha
 // Must stay outside auth: the worker installs on first visit, even logged out.
 Route::get('/push/sw-config.js', [NotificationController::class, 'swConfig'])->name('notification.sw-config');
 
+// Expire overdue pending requests. Triggered by a third-party cron via a
+// shared bearer token header (X-Expire-Requests-Token). No session auth.
+Route::post('/requests/expire-overdue', [RequestController::class, 'expireOverdue'])
+    ->name('requests.expire-overdue')
+    ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class)
+    ->middleware(['throttle:5,1', 'expire.requests.token']);
+
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
 

@@ -29,6 +29,9 @@ enum AuditEvent: string
     case AuthPasswordSelfUpdated = 'auth.password_self_updated';
     case AdminDemoted = 'admin.demoted';
 
+    case RequestExpired = 'request.expired';
+    case RequestFacilityExpired = 'request.facility_expired';
+
     /**
      * Events hidden from the dashboard Activity feed, charts, and breakdown.
      * Auth/system noise (logins, passwords, settings, role changes) and
@@ -52,6 +55,8 @@ enum AuditEvent: string
             self::RequestCommentAdded,
             self::RequestFileUploaded,
             self::RequestFileRemoved,
+            self::RequestExpired,
+            self::RequestFacilityExpired,
         ];
     }
 
@@ -95,6 +100,8 @@ enum AuditEvent: string
             self::AdminDemoted => 'Admin Demoted',
             self::SettingsUpdated => 'Settings Updated',
             self::Unknown => 'Unknown',
+            self::RequestExpired => 'Request Expired',
+            self::RequestFacilityExpired => 'Request Facility Expired',
         };
     }
 }
