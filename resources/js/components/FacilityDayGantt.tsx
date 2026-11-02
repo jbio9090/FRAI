@@ -2,6 +2,7 @@ import { Clock } from 'lucide-react';
 import moment from 'moment';
 import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import type {
     CalendarEvent} from '@/lib/calendar-events';
 import {
@@ -11,7 +12,6 @@ import {
     formatCalendarEventTime,
 } from '@/lib/calendar-events';
 import wordToColor from '@/lib/wordToColor';
-import { Skeleton } from '@/components/ui/skeleton';
 
 interface FacilityDayGanttProps {
     events: CalendarEvent[];

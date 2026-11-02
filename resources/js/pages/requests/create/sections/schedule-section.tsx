@@ -10,10 +10,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
+import type { Facility } from '@/types/facility';
 import type { AvailabilityShortfall } from '../availability';
 import { AlternativesPanel } from '../components/AlternativesPanel';
 import type { BookingSchedule } from '../types';
-import type { Facility } from '@/types/facility';
 import type { AlternativeSlot } from '../use-create-request';
 import { addCalendarDays, formatTime } from '../utils';
 
