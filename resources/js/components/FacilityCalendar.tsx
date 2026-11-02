@@ -381,11 +381,31 @@ export default function FacilityCalendar({
         void fetchEvents(start, end);
     };
 
-    // When the gantt day view is active, fetch events for that single day
-    // (react-big-calendar's onRangeChange won't fire since it's not rendered).
+    // Track the previous view so we can distinguish "entering" a view from
+    // staying in it (e.g. navigating dates within month view).
+    const prevViewRef = useRef<View | undefined>(undefined);
+
+    // Fetch events whenever the view or date changes. react-big-calendar's
+    // onRangeChange covers month navigation and the initial mount, but it does
+    // not reliably refire on a pure day <-> month view switch, so we fetch
+    // explicitly when entering day or month view.
     useEffect(() => {
+        const prev = prevViewRef.current;
+        prevViewRef.current = currentView;
+
+        // Skip the initial mount: onRangeChange handles the first load.
+        if (prev === undefined) {
+            return;
+        }
+
         if (currentView === 'day') {
             void fetchEvents(currentDate, currentDate);
+        } else if (currentView === 'month' && prev !== 'month') {
+            // Just entered month view: fetch the full month range.
+            void fetchEvents(
+                moment(currentDate).startOf('month').toDate(),
+                moment(currentDate).endOf('month').toDate(),
+            );
         }
     }, [currentView, currentDate, fetchEvents]);
 
@@ -509,6 +529,14 @@ export default function FacilityCalendar({
                         />
                     )}
                 </div>
+                {loading && (
+                    <div
+                        data-testid="calendar-loading-overlay"
+                        className="absolute inset-0 z-20 flex items-center justify-center bg-background/80"
+                    >
+                        <LoaderCircle className="h-10 w-10 animate-spin text-primary" aria-hidden="true" />
+                    </div>
+                )}
                 {overflowPopover && (
                     <div aria-hidden="true" className="absolute inset-0 z-30 bg-background/60 dark:bg-black/50" onClick={closeOverflow} />
                 )}
