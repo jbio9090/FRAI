@@ -62,14 +62,6 @@ type Filters = {
     search: string;
 };
 
-type PageProps = {
-    logs: PaginatedLogs;
-    filters: Filters;
-    users: LogUser[];
-    statusOptions: Option[];
-    intentOptions: Option[];
-};
-
 function preview(text: string | null, max = 90): string {
     if (!text) return '-';
 

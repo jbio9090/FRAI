@@ -98,7 +98,7 @@ export default function FacilityDetail({ facility, initialEvents, facilities, ca
     const [campusId, setCampusId] = useState(facility.campus_id ? String(facility.campus_id) : '');
     const [buildingId, setBuildingId] = useState(facility.building_id ? String(facility.building_id) : '');
     const [capacity, setCapacity] = useState(facility.capacity);
-    const [status, setStatus] = useState<'active' | 'unavailable'>(facility.status);
+    const [status] = useState<'active' | 'unavailable'>(facility.status);
     const filteredBuildings = buildings.filter((building) => String(building.campus_id) === campusId);
     const canSave = isFormValid(name, campusId, buildingId, capacity);
 

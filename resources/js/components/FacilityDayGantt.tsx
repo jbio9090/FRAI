@@ -1,7 +1,6 @@
 import { Clock } from 'lucide-react';
 import moment from 'moment';
 import { useMemo } from 'react';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type {
     CalendarEvent} from '@/lib/calendar-events';
@@ -31,8 +30,6 @@ function toMinutes(d: Date): number {
 
 export default function FacilityDayGantt({
     events,
-    date,
-    calendarTitle,
     onEventClick,
     isDashboard = false,
     loading = false,

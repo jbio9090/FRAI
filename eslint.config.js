@@ -73,7 +73,7 @@ export default [
         },
     },
     {
-        ignores: ['vendor', 'node_modules', 'public', 'bootstrap/ssr', 'tailwind.config.js', 'vite.config.ts', 'vitest.config.ts',
+        ignores: ['vendor', 'node_modules', 'public', 'dist', 'bootstrap/ssr', 'tailwind.config.js', 'vite.config.ts', 'vitest.config.ts',
             "resources/js/ziggy.js", "resources/js/ziggy.d.ts",],
     },
     prettier, // Turn off all rules that might conflict with Prettier

@@ -9,8 +9,6 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -54,8 +52,6 @@ interface LineChartProps {
 export function LineChart({
   data,
   config,
-  title,
-  description,
   showArea = true,
   yAxisLabel,
   dateKey = "date",

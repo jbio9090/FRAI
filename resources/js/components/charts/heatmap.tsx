@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
+import { type ChartConfig } from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
 
 interface HeatmapDataPoint {
@@ -62,7 +62,6 @@ function interpolateColor(color1: string, color2: string, t: number): string {
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const cssVar = `var(--${hex})`;
   const computed = getComputedStyle(document.documentElement).getPropertyValue(`--${hex}`).trim();
   if (computed) {
     const match = computed.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
@@ -75,15 +74,18 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 
 export function HeatmapChart({
   data,
-  config,
   title,
   description,
   dayLabels = DEFAULT_DAY_LABELS,
   hourLabels = DEFAULT_HOUR_LABELS,
   className,
-  height = 400,
   minValue = 0,
 }: HeatmapChartProps) {
+  const maxValue = useMemo(
+    () => Math.max(...data.map((d) => d.value), minValue + 1),
+    [data, minValue]
+  );
+
   if (!data.length) {
     return (
       <div className={cn("flex items-center justify-center h-[300px]", className)}>
@@ -91,13 +93,6 @@ export function HeatmapChart({
       </div>
     );
   }
-
-  const maxValue = useMemo(
-    () => Math.max(...data.map((d) => d.value), minValue + 1),
-    [data, minValue]
-  );
-
-  const cellSize = Math.min((height - 80) / 7, 32);
 
   return (
     <div className={cn("w-full", className)}>

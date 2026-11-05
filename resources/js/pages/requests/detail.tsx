@@ -12,7 +12,6 @@ import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
 import { RecommendationPanel } from '@/components/request/recommendation-panel';
 import SmartPagination from '@/components/SmartPagination';
 import StatusTag from '@/components/status-tag';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -25,7 +24,7 @@ import { downloadSingleRequestCSV } from '@/lib/downloadCSV';
 import { clearRichPageContext, setRichPageContext } from '@/lib/richPageContext';
 import { cn, conflictsForBooking } from '@/lib/utils';
 import { PRIORITY_ACCENT, PRIORITY_LABELS } from '@/types/request';
-import type { Request, ChosenAlternative } from '@/types/request';
+import type { Request } from '@/types/request';
 
 interface DetailProps {
     children?: React.ReactNode;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Filter, X, ChevronDown, ChevronUp, Building2, MapPin, Users, ClipboardList, Settings } from "lucide-react";
+import { Calendar, Filter, X, ChevronDown, ChevronUp, MapPin, ClipboardList, Settings } from "lucide-react";
 import { useState, useMemo, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { ReportFilters, Granularity } from "@/types/reports";
 
 interface FilterPanelProps {
   filters: ReportFilters;
-  defaultFilters: ReportFilters;
   meta: {
     campuses: { id: number; name: string }[];
     buildings: { id: number; name: string; campus_id: number }[];
@@ -45,12 +43,10 @@ type DateType = typeof DATE_TYPE_OPTIONS[number]["value"];
 
 export function FilterPanel({
   filters,
-  defaultFilters,
   meta,
   onFiltersChange,
   onReset,
 }: FilterPanelProps) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     location: true,
     request: true,

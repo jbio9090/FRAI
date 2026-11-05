@@ -1,18 +1,17 @@
 import { router, Link, usePage } from '@inertiajs/react';
 import {
-    Eye, Mail, Calendar, Shield, User, Key, ArrowLeft,
-    Search, Filter, ArrowDownUp, ChevronLeft, ChevronRight,
+    ArrowLeft,
+    Search, Filter, ArrowDownUp,
     FileText, UserRoundPen, Activity
 } from 'lucide-react';
 import moment from 'moment';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { route } from 'ziggy-js';
 import { ActivityFeed } from '@/components/activity-feed';
 import type { AuditLog } from '@/components/activity-feed';
 import AvatarWithInitials from '@/components/avatar-with-initials';
 import RequestCard from '@/components/request-card';
 import SmartPagination from '@/components/SmartPagination';
-import StatusTag from '@/components/status-tag';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,7 +20,6 @@ import { RoleBadge } from '@/components/ui/role-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
 import type { AccountsDetailProps } from '@/types/auth';
 import type { Request } from '@/types/request';
@@ -35,8 +33,6 @@ export default function AccountDetailPage({
     can_edit_own,
 }: AccountsDetailProps) {
     const { auth } = usePage<{ auth: { user: { id: number } } }>().props;
-    const { hasRole } = usePermission();
-    const isAdmin = hasRole('admin') || hasRole('Super Admin');
     const isOwnAccount = auth.user.id === user.id;
 
     const [activeTab, setActiveTab] = useState<'activity' | 'requests'>('activity');
@@ -51,18 +47,18 @@ export default function AccountDetailPage({
     const [auditLogsData, setAuditLogsData] = useState<AuditLog[]>(audit_logs.data);
     const [auditCurrentPage, setAuditCurrentPage] = useState(audit_logs.current_page);
     const [auditLastPage, setAuditLastPage] = useState(audit_logs.last_page);
-    const [auditTotal, setAuditTotal] = useState(audit_logs.total);
+    const [, setAuditTotal] = useState(audit_logs.total);
 
     const [requestStatus, setRequestStatus] = useState<string[]>([]);
     const [requestSearch, setRequestSearch] = useState('');
     const [requestSort, setRequestSort] = useState<'created_at' | 'title' | 'priority_level'>('created_at');
     const setRequestSortTyped = setRequestSort as (value: 'created_at' | 'title' | 'priority_level') => void;
-    const [requestOrder, setRequestOrder] = useState<'asc' | 'desc'>('desc');
+    const [requestOrder] = useState<'asc' | 'desc'>('desc');
     const [requestsLoading, setRequestsLoading] = useState(false);
     const [requestsData, setRequestsData] = useState<Request[]>(requests.data);
     const [requestsCurrentPage, setRequestsCurrentPage] = useState(requests.current_page);
     const [requestsLastPage, setRequestsLastPage] = useState(requests.last_page);
-    const [requestsTotal, setRequestsTotal] = useState(requests.total);
+    const [, setRequestsTotal] = useState(requests.total);
 
     const isInitialMount = useRef(true);
 

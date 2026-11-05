@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { usePermission } from '@/hooks/use-permission';
+import type { RequestOptions } from '@/types/request';
 import GeneralTab from './general-tab';
 import RequestTab from './request-tab';
 
@@ -18,7 +19,7 @@ interface PageProps extends Record<string, unknown> {
             email_notifications_enabled: boolean;
         };
     };
-    requestOptions: import('@/types/request').RequestOptions;
+    requestOptions: RequestOptions;
 }
 
 export default function Settings() {

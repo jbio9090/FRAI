@@ -91,7 +91,7 @@ export default function ReportsPage({
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [kpis, setKpis] = useState<ReportKpis | null>(null);
   const [kpiComparison, setKpiComparison] = useState<KpiComparison | null>(null);
-  const [methodology, setMethodology] = useState<Record<string, string> | null>(null);
+  const [, setMethodology] = useState<Record<string, string> | null>(null);
   const [loading, setLoading] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -111,8 +111,6 @@ export default function ReportsPage({
   const facilityUtilizationRef = useRef<HTMLDivElement>(null);
   const priorityDistributionRef = useRef<HTMLDivElement>(null);
   const processingTimeRef = useRef<HTMLDivElement>(null);
-  const userActivityRef = useRef<HTMLDivElement>(null);
-  const equipmentUsageRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(async (type: ReportType, currentFilters: ReportFilters) => {
     setLoading(true);

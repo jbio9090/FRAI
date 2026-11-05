@@ -1,4 +1,4 @@
-import { Link, router, usePage } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { Calendar, Clock, Sparkles, LayoutGrid, Filter, CheckSquare, Send, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -70,7 +70,6 @@ function getSlotKey(slot: AlternativeSlot): string {
 }
 
 export function RecommendationPanel({ request, isLoading, variant = 'card' }: RecommendationPanelProps) {
-    const auth = usePage().props.auth;
     const { hasRole } = usePermission();
     const isAdmin = hasRole('admin') || hasRole('Super Admin');
 

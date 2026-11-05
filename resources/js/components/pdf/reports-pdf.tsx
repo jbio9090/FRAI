@@ -2,11 +2,6 @@ import { Buffer } from "buffer";
 import { Document, Font, Page, Text, View, StyleSheet, pdf, Image } from "@react-pdf/renderer";
 import { format } from "date-fns";
 
-// @react-pdf/renderer expects a Node-style global Buffer when fetching and
-// embedding images (chart PNGs). Browsers don't provide one, so polyfill it.
-if (typeof globalThis !== "undefined" && !(globalThis as unknown as Record<string, unknown>).Buffer) {
-  (globalThis as unknown as Record<string, unknown>).Buffer = Buffer;
-}
 import {
   STATUS_KEYS,
   STATUS_SHORT_LABELS,
@@ -17,6 +12,14 @@ import {
   statusLabel,
   trimLeadingZeroBuckets,
 } from "@/lib/report-palette";
+
+import type { ReportMeta, ChartDataPoint, UserActivityDataPoint } from "@/types/reports";
+
+// @react-pdf/renderer expects a Node-style global Buffer when fetching and
+// embedding images (chart PNGs). Browsers don't provide one, so polyfill it.
+if (typeof globalThis !== "undefined" && !(globalThis as unknown as Record<string, unknown>).Buffer) {
+  (globalThis as unknown as Record<string, unknown>).Buffer = Buffer;
+}
 
 Font.register({
   family: "Manrope",
@@ -388,7 +391,7 @@ interface ChartDataForPdf {
   type: string;
   title: string;
   description: string;
-  data: any[];
+  data: (ChartDataPoint | UserActivityDataPoint)[];
   imageUrl?: string;
 }
 
@@ -419,17 +422,17 @@ export interface ReportsPdfData {
   methodology?: MethodologyData;
 }
 
-function formatFilterValue(key: string, value: any, meta: any): string {
+function formatFilterValue(key: string, value: string | number | string[] | number[] | undefined, meta: ReportMeta): string {
   if (Array.isArray(value)) {
     if (value.length === 0) return "";
     if (key === "facilityIds") {
-      return value.map((id) => meta.facilities?.find((f: any) => f.id === id)?.name ?? id).join(", ");
+      return value.map((id) => meta.facilities?.find((f) => f.id === id)?.name ?? id).join(", ");
     }
     if (key === "buildingIds") {
-      return value.map((id) => meta.buildings?.find((b: any) => b.id === id)?.name ?? id).join(", ");
+      return value.map((id) => meta.buildings?.find((b) => b.id === id)?.name ?? id).join(", ");
     }
     if (key === "campusIds") {
-      return value.map((id) => meta.campuses?.find((c: any) => c.id === id)?.name ?? id).join(", ");
+      return value.map((id) => meta.campuses?.find((c) => c.id === id)?.name ?? id).join(", ");
     }
     if (key === "statuses") {
       return value.join(", ");
@@ -441,7 +444,7 @@ function formatFilterValue(key: string, value: any, meta: any): string {
     return priorities[value] ?? String(value);
   }
   if (key === "userId" && value !== undefined) {
-    return meta.users?.find((u: any) => u.id === value)?.name ?? String(value);
+    return meta.users?.find((u) => u.id === value)?.name ?? String(value);
   }
   if (key === "granularity") {
     const labels: Record<string, string> = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
@@ -743,7 +746,7 @@ type ChartPage =
   | { kind: "donuts"; facility?: ChartDataForPdf; events?: ChartDataForPdf }
   | { kind: "processing"; chart: ChartDataForPdf };
 
-export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta: any }) {
+export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta: ReportMeta }) {
   const { filters, kpis, kpiDeltas, chartsData, methodology } = data;
 
   const filterTags = Object.entries(filters)
@@ -1006,7 +1009,7 @@ export function ReportsPdfDocument({ data, meta }: { data: ReportsPdfData; meta:
   );
 }
 
-export async function downloadReportsPdf(data: ReportsPdfData, meta: any) {
+export async function downloadReportsPdf(data: ReportsPdfData, meta: ReportMeta) {
   const blob = await pdf(<ReportsPdfDocument data={data} meta={meta} />).toBlob();
 
   const url = URL.createObjectURL(blob);
