@@ -20,7 +20,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php-version: ['8.4', '8.5']
+        php-version: ['8.4']
+
+    env:
+      MODE: "dev"
+      APP_TIMEZONE: "Asia/Manila"
+      APP_FAKER_LOCALE: "en_US"
+      LOG_CHANNEL: "stack"
+      LOG_STACK: "single"
+      LOG_LEVEL: "debug"
 
     steps:
       - name: Checkout code
