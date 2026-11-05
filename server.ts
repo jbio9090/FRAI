@@ -1498,27 +1498,6 @@ async function startServer() {
         });
     });
 
-    app.get('/settings/request-options', (req: ExpRequest, res: ExpResponse) => {
-        renderInertia(req, res, 'settings/request-options', {
-            page_title: 'Request Options Configuration',
-            breadcrumbs: [
-                { title: 'Settings', url: '/settings' },
-                { title: 'Request Options', url: '/settings/request-options' }
-            ],
-            approvers: settingsData.approvers,
-            bookingWindow: settingsData.booking_window,
-            minAdvanceDays: settingsData.min_advance_days
-        });
-    });
-
-    app.put('/settings/request-options', (req: ExpRequest, res: ExpResponse) => {
-        const { approvers, bookingWindow, minAdvanceDays } = req.body;
-        if (approvers) settingsData.approvers = approvers;
-        if (bookingWindow) settingsData.booking_window = bookingWindow;
-        if (minAdvanceDays !== undefined) settingsData.min_advance_days = Number(minAdvanceDays);
-        res.redirect(303, '/settings/request-options');
-    });
-
     // -------------------------------------------------------------
     // 8. CHATBOT & AI RECOMMENDATION
     // -------------------------------------------------------------

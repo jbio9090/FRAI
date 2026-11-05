@@ -127,8 +127,13 @@ Route::middleware('auth')->group(function () {
 
     // Admin-only request options (approvers, booking window, min advance days)
     Route::middleware('permission:manage request options')->group(function () {
-        Route::get('/request-options', [RequestSettingsController::class, 'index'])->name('request-options');
-        Route::post('/request-options', [RequestSettingsController::class, 'update'])->name('request-options.update');
+        Route::post('/settings/request/approvers/add', [RequestSettingsController::class, 'addApprover'])->name('settings.request.approvers.add');
+        Route::post('/settings/request/approvers/remove', [RequestSettingsController::class, 'removeApprover'])->name('settings.request.approvers.remove');
+        Route::post('/settings/request/booking-window/start-time', [RequestSettingsController::class, 'updateStartTime'])->name('settings.request.booking-window.start-time');
+        Route::post('/settings/request/booking-window/end-time', [RequestSettingsController::class, 'updateEndTime'])->name('settings.request.booking-window.end-time');
+        Route::post('/settings/request/booking-window/step-minutes', [RequestSettingsController::class, 'updateStepMinutes'])->name('settings.request.booking-window.step-minutes');
+        Route::post('/settings/request/booking-window/days-of-week/toggle', [RequestSettingsController::class, 'toggleDay'])->name('settings.request.booking-window.days-of-week.toggle');
+        Route::post('/settings/request/min-advance-days', [RequestSettingsController::class, 'updateMinAdvanceDays'])->name('settings.request.min-advance-days');
     });
 
     Route::get('/equipments', [EquipmentController::class, 'index'])->name('equipments');

@@ -66,12 +66,6 @@ class PageCapabilityMap
                 'has_facilities' => false,
                 'has_equipment' => false,
             ],
-            'request-options' => [
-                'has_requests' => false,
-                'requests_scope' => 'N/A - request options page only',
-                'has_facilities' => false,
-                'has_equipment' => false,
-            ],
             default => [
                 'has_requests' => false,
                 'requests_scope' => 'unknown - route not yet mapped',

@@ -74,7 +74,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             { title: 'Facilities', url: 'facilities', icon: OfficeBuildingIcon },
             { title: 'Equipments', url: 'equipments', icon: ComponentIcon },
             ...(hasPermission('manage users') ? [{ title: 'Accounts', url: 'accounts.index', icon: PersonIcon }] : []),
-            ...(hasPermission('manage request options') ? [{ title: 'Request Options', url: 'request-options', icon: SettingsIcon }] : []),
             ...(hasPermission('approve requests') ? [{ title: 'Reports', url: 'reports.index', icon: ChartBarIcon }] : []),
         ],
         navMenu: [
@@ -285,7 +284,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     </SidebarMenuItem>
                     <SidebarMenuItem className="px-2">
                         <SidebarMenuButton asChild>
-                            <Link href={route('settings')}>
+                            <Link href={route('settings')} className='cursor-pointer'>
                                 <SettingsIcon label="Settings" color="currentColor" />
                                 <span>Settings</span>
                             </Link>

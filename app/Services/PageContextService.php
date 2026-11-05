@@ -102,7 +102,6 @@ class PageContextService
             '/rules' => 'rules',
             '/facilities' => 'facilities',
             '/settings' => 'settings',
-            '/request-options' => 'request-options',
             '/equipments' => 'equipments',
             '/requests' => 'requests.index',
             '/requests/create' => 'request.create',
@@ -186,10 +185,6 @@ class PageContextService
         }
 
         if (in_array($routeName, ['settings'], true)) {
-            return $context;
-        }
-
-        if (in_array($routeName, ['request-options'], true)) {
             return $context;
         }
 
