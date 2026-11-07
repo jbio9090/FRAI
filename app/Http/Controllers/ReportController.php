@@ -2,85 +2,56 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ReportDocxService;
 use App\Services\ReportService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ReportController extends Controller
 {
     public function __construct(protected ReportService $reportService) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $meta = $this->reportService->getMeta();
+        $year = $request->integer('year', now()->year);
+        $month = $request->integer('month', now()->month);
 
         return Inertia::render('reports/index', [
-            'labeledBreadcrumb' => 'Reports',
-            'meta' => $meta,
-            'defaultFilters' => [
-                'start' => now()->subDays(30)->format('Y-m-d'),
-                'end' => now()->addDays(90)->format('Y-m-d'),
-                'granularity' => 'daily',
-            ],
+            'year' => $year,
+            'month' => $month,
+            'report' => $this->reportService->getMonthlyReport($year, $month),
         ]);
     }
 
     public function getData(Request $request): JsonResponse
     {
-        $type = $request->input('type');
-        $filters = $this->parseFilters($request);
-
-        $data = match ($type) {
-            'volume' => $this->reportService->getVolumeData($filters),
-            'approval-rate' => $this->reportService->getApprovalRateData($filters),
-            'facility-utilization' => $this->reportService->getFacilityUtilizationData($filters),
-            'facility-usage-pie' => $this->reportService->getFacilityUsagePieData($filters),
-            'equipment-usage' => $this->reportService->getEquipmentUsageData($filters),
-            'priority-distribution' => $this->reportService->getPriorityDistributionData($filters),
-            'conflict-analysis' => $this->reportService->getConflictAnalysisData($filters),
-            'user-activity' => $this->reportService->getUserActivityData($filters),
-            'user-activity-over-time' => $this->reportService->getUserActivityOverTimeData($filters),
-            'processing-time' => $this->reportService->getProcessingTimeData($filters),
-            'kpis' => $this->reportService->getKpis($filters),
-            'kpis-comparison' => $this->reportService->getKpisWithComparison($filters),
-            'methodology' => $this->reportService->getMethodology(),
-            default => [],
-        };
-
-        return response()->json([
-            'data' => $data,
-            'filters' => $filters,
+        $validated = $request->validate([
+            'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
         ]);
+
+        return response()->json(
+            $this->reportService->getMonthlyReport((int) $validated['year'], (int) $validated['month'])
+        );
     }
 
-    public function getMeta(): JsonResponse
+    public function export(Request $request, ReportDocxService $reportDocxService): BinaryFileResponse
     {
-        return response()->json($this->reportService->getMeta());
-    }
+        $validated = $request->validate([
+            'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
 
-    private function parseFilters(Request $request): array
-    {
-        $facilityIds = $request->input('facility_ids');
-        $buildingIds = $request->input('building_ids');
-        $campusIds = $request->input('campus_ids');
-        $statuses = $request->input('statuses');
-        $priorityLevel = $request->input('priority_level');
-        $userId = $request->input('user_id');
-        $dateType = $request->input('date_type');
+        $year = (int) $validated['year'];
+        $month = (int) $validated['month'];
 
-        return [
-            'start' => $request->input('start'),
-            'end' => $request->input('end'),
-            'granularity' => $request->input('granularity', 'daily'),
-            'date_type' => in_array($dateType, ['event_date', 'approval_date', 'submission_date']) ? $dateType : 'event_date',
-            'facility_ids' => $facilityIds ? array_map('intval', (array) $facilityIds) : null,
-            'building_ids' => $buildingIds ? array_map('intval', (array) $buildingIds) : null,
-            'campus_ids' => $campusIds ? array_map('intval', (array) $campusIds) : null,
-            'statuses' => $statuses ? (array) $statuses : null,
-            'priority_level' => $priorityLevel !== null && $priorityLevel !== '' ? (int) $priorityLevel : null,
-            'user_id' => $userId !== null && $userId !== '' ? (int) $userId : null,
-        ];
+        $path = $reportDocxService->generate($year, $month);
+        $filename = 'Facility_Reservation_Activity_Report_'.Carbon::create($year, $month, 1)->format('F_Y').'.docx';
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
 }

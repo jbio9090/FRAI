@@ -4,665 +4,240 @@ namespace App\Services;
 
 use App\Enums\PriorityLevel;
 use App\Enums\RequestStatus;
-use App\Models\Building;
-use App\Models\Campus;
-use App\Models\Facility;
-use App\Models\Request as FacilityRequest;
-use App\Models\RequestFacility;
-use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 class ReportService
 {
-    public function __construct(protected RequestService $requestService) {}
+    /**
+     * Statuses shown in the Request Status breakdown, in template order.
+     *
+     * @var array<int, RequestStatus>
+     */
+    private const STATUSES = [
+        RequestStatus::PENDING,
+        RequestStatus::APPROVED,
+        RequestStatus::CONDITIONALLY_APPROVED,
+        RequestStatus::PARTIALLY_APPROVED,
+        RequestStatus::FOR_RESCHEDULE,
+        RequestStatus::DENIED,
+    ];
 
-    public function getMeta(): array
+    /**
+     * Build the full monthly activity report.
+     *
+     * The reporting period is defined by the submission date
+     * (requests.created_at), and every metric is counted at the request level.
+     */
+    public function getMonthlyReport(int $year, int $month, bool $withComparison = false): array
     {
-        return [
-            'facilities' => Facility::select('id', 'name', 'building_id')->orderBy('name')->get(),
-            'buildings' => Building::select('id', 'name', 'campus_id')->orderBy('name')->get(),
-            'campuses' => Campus::select('id', 'name')->orderBy('name')->get(),
-            'users' => User::select('id', 'name')->where('is_active', true)->orderBy('name')->get(),
-            'statuses' => collect(RequestStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->value])->values(),
-            'priorities' => collect(PriorityLevel::cases())->map(fn ($p) => ['value' => $p->value, 'label' => $p->label()])->values(),
-        ];
-    }
+        $start = Carbon::create($year, $month, 1)->startOfDay();
+        $end = $start->copy()->endOfMonth();
 
-    public function getVolumeData(array $filters): array
-    {
-        $query = $this->baseRequestQuery($filters);
+        $startDate = $start->format('Y-m-d');
+        $endDate = $end->format('Y-m-d');
 
-        $granularity = $filters['granularity'] ?? 'daily';
-        $dateColumn = 'requests.created_at';
-
-        return $this->aggregateByDate($query, $dateColumn, $granularity, 'total');
-    }
-
-    public function getApprovalRateData(array $filters): array
-    {
-        $query = FacilityRequest::query()
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['priority_level'] ?? null, fn ($q, $v) => $q->where('priority_level', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->whereIn('status', $v));
-
-        $granularity = $filters['granularity'] ?? 'daily';
-        $dateColumn = 'requests.created_at';
-
-        $statuses = [
-            RequestStatus::PENDING->value,
-            RequestStatus::APPROVED->value,
-            RequestStatus::CONDITIONALLY_APPROVED->value,
-            RequestStatus::DENIED->value,
-            RequestStatus::FOR_RESCHEDULE->value,
-            RequestStatus::PARTIALLY_APPROVED->value,
+        $report = [
+            'period' => [
+                'start' => $startDate,
+                'end' => $endDate,
+                'label' => $start->format('M j').'-'.$end->format('j, Y'),
+            ],
+            'kpis' => $this->getKpis($startDate, $endDate),
+            'volume' => $this->getVolume($startDate, $endDate),
+            'status' => $this->getStatusBreakdown($startDate, $endDate),
+            'event_types' => $this->getEventTypes($startDate, $endDate),
+            'facility_usage' => $this->getFacilityUsage($startDate, $endDate),
+            'building_usage' => $this->getBuildingUsage($startDate, $endDate),
         ];
 
-        $selectParts = [
-            "DATE_TRUNC('{$this->granularityToSql($granularity)}', {$dateColumn}) as date",
-        ];
-
-        foreach ($statuses as $status) {
-            $colName = strtolower(str_replace(' ', '_', $status));
-            $selectParts[] = "COUNT(*) FILTER (WHERE status = '{$status}') as {$colName}";
+        if ($withComparison) {
+            $report['previous_kpis'] = $this->getPreviousMonthKpis($year, $month);
+            $report['kpi_deltas'] = $this->getKpiDeltas($report['kpis'], $report['previous_kpis']);
         }
-        $selectParts[] = 'COUNT(*) as total';
 
-        $results = $query->selectRaw(implode(', ', $selectParts))
+        return $report;
+    }
+
+    /**
+     * Requests submitted within the period.
+     */
+    private function requestSetQuery(string $start, string $end): Builder
+    {
+        return DB::table('requests')
+            ->whereBetween('requests.created_at', [$start, $end]);
+    }
+
+    private function getKpis(string $start, string $end): array
+    {
+        $base = $this->requestSetQuery($start, $end);
+
+        $total = (clone $base)->count();
+
+        $approved = (clone $base)
+            ->whereIn('status', [
+                RequestStatus::APPROVED->value,
+                RequestStatus::CONDITIONALLY_APPROVED->value,
+            ])
+            ->count();
+
+        $requesters = (clone $base)->distinct()->count('user_id');
+
+        // Compute in PHP so the metric works across database drivers.
+        $avgDays = (clone $base)
+            ->whereNotNull('processed_at')
+            ->select('created_at', 'processed_at')
+            ->get()
+            ->map(fn ($row) => Carbon::parse($row->created_at)->diffInSeconds(Carbon::parse($row->processed_at)) / 86400)
+            ->average();
+
+        return [
+            'requests_received' => $total,
+            'approval_rate' => $total > 0 ? round($approved / $total * 100, 1) : 0,
+            'total_requesters' => $requesters,
+            'avg_processing_days' => $avgDays ? round((float) $avgDays, 1) : 0,
+        ];
+    }
+
+    /**
+     * KPIs for the month immediately preceding the given year/month.
+     * Handles the January -> December year boundary.
+     */
+    private function getPreviousMonthKpis(int $year, int $month): array
+    {
+        $previous = Carbon::create($year, $month, 1)->subMonthNoOverflow();
+
+        $start = $previous->copy()->startOfDay()->format('Y-m-d');
+        $end = $previous->copy()->endOfMonth()->format('Y-m-d');
+
+        return $this->getKpis($start, $end);
+    }
+
+    /**
+     * Compute absolute and percentage deltas between current and previous KPIs.
+     * delta_percent is null when the previous value is 0 (no basis for comparison).
+     *
+     * @param  array<string, float|int>  $current
+     * @param  array<string, float|int>  $previous
+     * @return array<string, array{delta: float|int, delta_percent: float|null}>
+     */
+    private function getKpiDeltas(array $current, array $previous): array
+    {
+        $keys = ['requests_received', 'approval_rate', 'total_requesters', 'avg_processing_days'];
+        $deltas = [];
+
+        foreach ($keys as $key) {
+            $currentValue = (float) ($current[$key] ?? 0);
+            $previousValue = (float) ($previous[$key] ?? 0);
+            $delta = $currentValue - $previousValue;
+            $deltaPercent = $previousValue > 0 ? round($delta / $previousValue * 100, 1) : null;
+
+            $deltas[$key] = [
+                'delta' => $delta,
+                'delta_percent' => $deltaPercent,
+            ];
+        }
+
+        return $deltas;
+    }
+
+    /**
+     * Distinct requests per submission date across the whole month (zero-filled).
+     */
+    private function getVolume(string $start, string $end): array
+    {
+        $rows = DB::table('requests')
+            ->whereBetween('requests.created_at', [$start, $end])
+            ->selectRaw('DATE(requests.created_at) as date, COUNT(*) as value')
             ->groupBy('date')
             ->orderBy('date')
-            ->get();
+            ->get()
+            ->keyBy(fn ($row) => Carbon::parse($row->date)->format('Y-m-d'));
 
-        return $results->map(function ($row) use ($filters, $statuses) {
-            $data = [
-                'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
-                'total' => (int) $row->total,
+        $result = [];
+        $cursor = Carbon::parse($start);
+        $endCursor = Carbon::parse($end);
+
+        while ($cursor <= $endCursor) {
+            $key = $cursor->format('Y-m-d');
+            $result[] = [
+                'date' => $key,
+                'value' => (int) ($rows->get($key)->value ?? 0),
             ];
-
-            foreach ($statuses as $status) {
-                $colName = strtolower(str_replace(' ', '_', $status));
-                $data[$colName] = (int) $row->$colName;
-            }
-
-            return $data;
-        })->values()->toArray();
-    }
-
-    public function getFacilityUtilizationData(array $filters): array
-    {
-        $dateColumn = $this->getDateColumnForFacilityQuery($filters);
-        $whereColumn = $this->getDateWhereColumn($filters);
-
-        $query = RequestFacility::query()
-            ->join('requests', 'request_facilities.request_id', '=', 'requests.id')
-            ->join('facilities', 'request_facilities.facility_id', '=', 'facilities.id')
-            ->whereIn('request_facilities.status', [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->when($filters['start'] ?? null, fn ($q) => $q->where($whereColumn, '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where($whereColumn, '<=', $filters['end']))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereIn('request_facilities.facility_id', $v))
-            ->when($filters['building_ids'] ?? null, fn ($q, $v) => $q->whereIn('facilities.building_id', $v))
-            ->when($filters['campus_ids'] ?? null, fn ($q, $v) => $q->whereIn('facilities.campus_id', $v))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('requests.user_id', $v));
-
-        $granularity = $filters['granularity'] ?? 'daily';
-
-        if ($granularity === 'daily') {
-            $results = $query->selectRaw("
-                    {$dateColumn} as date,
-                    facilities.name as category,
-                    COUNT(*) as value
-                ")
-                ->groupBy($dateColumn, 'facilities.name')
-                ->orderBy($dateColumn)
-                ->get();
-        } else {
-            $results = $query->selectRaw("
-                    DATE_TRUNC('{$this->granularityToSql($granularity)}', {$dateColumn}) as date,
-                    facilities.name as category,
-                    COUNT(*) as value
-                ")
-                ->groupBy('date', 'facilities.name')
-                ->orderBy('date')
-                ->get();
+            $cursor->addDay();
         }
 
-        return $results->map(function ($row) use ($filters) {
-            return [
-                'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
-                'category' => $row->category,
-                'value' => (int) $row->value,
-            ];
-        })->values()->toArray();
+        return $result;
     }
 
-    public function getFacilityUsagePieData(array $filters): array
+    private function getStatusBreakdown(string $start, string $end): array
     {
-        $whereColumn = $this->getDateWhereColumn($filters);
+        $counts = $this->requestSetQuery($start, $end)
+            ->whereIn('status', array_map(fn (RequestStatus $status) => $status->value, self::STATUSES))
+            ->selectRaw('status, COUNT(*) as value')
+            ->groupBy('status')
+            ->pluck('value', 'status');
 
-        $query = RequestFacility::query()
+        return array_map(fn (RequestStatus $status) => [
+            'status' => $status->value,
+            'value' => (int) ($counts[$status->value] ?? 0),
+        ], self::STATUSES);
+    }
+
+    private function getEventTypes(string $start, string $end): array
+    {
+        $counts = $this->requestSetQuery($start, $end)
+            ->selectRaw('priority_level, COUNT(*) as value')
+            ->groupBy('priority_level')
+            ->pluck('value', 'priority_level');
+
+        return array_map(fn (PriorityLevel $priority) => [
+            'category' => $priority->label(),
+            'value' => (int) ($counts[$priority->value] ?? 0),
+        ], PriorityLevel::cases());
+    }
+
+    private function getFacilityUsage(string $start, string $end): array
+    {
+        $rows = DB::table('request_facilities')
             ->join('requests', 'request_facilities.request_id', '=', 'requests.id')
             ->join('facilities', 'request_facilities.facility_id', '=', 'facilities.id')
-            ->whereIn('request_facilities.status', [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->when($filters['start'] ?? null, fn ($q) => $q->where($whereColumn, '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where($whereColumn, '<=', $filters['end']))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereIn('request_facilities.facility_id', $v))
-            ->when($filters['building_ids'] ?? null, fn ($q, $v) => $q->whereIn('facilities.building_id', $v))
-            ->when($filters['campus_ids'] ?? null, fn ($q, $v) => $q->whereIn('facilities.campus_id', $v))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('requests.user_id', $v));
-
-        $results = $query->selectRaw('
-                facilities.name as category,
-                COUNT(*) as value
-            ')
+            ->whereBetween('requests.created_at', [$start, $end])
+            ->selectRaw('facilities.name as name, COUNT(DISTINCT request_facilities.request_id) as amount')
             ->groupBy('facilities.name')
-            ->orderByDesc('value')
+            ->orderByDesc('amount')
             ->get();
 
-        return $results->map(function ($row) {
-            return [
-                'category' => $row->category,
-                'value' => (int) $row->value,
-            ];
-        })->values()->toArray();
+        return $this->withPercentages($rows);
     }
 
-    public function getEquipmentUsageData(array $filters): array
+    private function getBuildingUsage(string $start, string $end): array
     {
-        $dateColumn = $this->getDateColumnForFacilityQuery($filters);
-        $whereColumn = $this->getDateWhereColumn($filters);
-
-        $query = DB::table('request_equipment')
-            ->join('request_facilities', 'request_equipment.request_facility_id', '=', 'request_facilities.id')
+        $rows = DB::table('request_facilities')
             ->join('requests', 'request_facilities.request_id', '=', 'requests.id')
-            ->join('equipments', 'request_equipment.equipment_id', '=', 'equipments.id')
-            ->whereIn('request_facilities.status', [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->when($filters['start'] ?? null, fn ($q) => $q->where($whereColumn, '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where($whereColumn, '<=', $filters['end']))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereIn('request_facilities.facility_id', $v))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('requests.user_id', $v));
-
-        $granularity = $filters['granularity'] ?? 'daily';
-
-        if ($granularity === 'daily') {
-            $results = $query->selectRaw("
-                    {$dateColumn} as date,
-                    equipments.name as category,
-                    SUM(request_equipment.quantity_needed) as value
-                ")
-                ->groupBy($dateColumn, 'equipments.name')
-                ->orderBy($dateColumn)
-                ->get();
-        } else {
-            $results = $query->selectRaw("
-                    DATE_TRUNC('{$this->granularityToSql($granularity)}', {$dateColumn}) as date,
-                    equipments.name as category,
-                    SUM(request_equipment.quantity_needed) as value
-                ")
-                ->groupBy('date', 'equipments.name')
-                ->orderBy('date')
-                ->get();
-        }
-
-        return $results->map(function ($row) use ($filters) {
-            return [
-                'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
-                'category' => $row->category,
-                'value' => (int) $row->value,
-            ];
-        })->values()->toArray();
-    }
-
-    public function getPriorityDistributionData(array $filters): array
-    {
-        $query = FacilityRequest::query()
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->whereIn('status', $v));
-
-        $granularity = $filters['granularity'] ?? 'daily';
-
-        $results = $query->selectRaw("
-                DATE_TRUNC('{$this->granularityToSql($granularity)}', created_at) as date,
-                priority_level,
-                COUNT(*) as value
-            ")
-            ->groupBy('date', 'priority_level')
-            ->orderBy('date')
+            ->join('facilities', 'request_facilities.facility_id', '=', 'facilities.id')
+            ->leftJoin('buildings', 'facilities.building_id', '=', 'buildings.id')
+            ->whereBetween('requests.created_at', [$start, $end])
+            ->selectRaw('COALESCE(buildings.name, facilities.building) as name, COUNT(DISTINCT request_facilities.request_id) as amount')
+            ->groupByRaw('COALESCE(buildings.name, facilities.building)')
+            ->orderByDesc('amount')
             ->get();
 
-        return $results->map(function ($row) use ($filters) {
-            $priorityValue = $row->priority_level instanceof PriorityLevel ? $row->priority_level->value : $row->priority_level;
-            $priority = PriorityLevel::tryFrom($priorityValue);
-
-            return [
-                'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
-                'category' => $priority?->label() ?? 'Unknown',
-                'value' => (int) $row->value,
-            ];
-        })->values()->toArray();
+        return $this->withPercentages($rows);
     }
 
-    public function getConflictAnalysisData(array $filters): array
+    /**
+     * @param  \Illuminate\Support\Collection<int, object>  $rows
+     */
+    private function withPercentages($rows): array
     {
-        $timeConflicts = $this->getTimeConflictData($filters);
-        $equipmentConflicts = $this->getEquipmentConflictData($filters);
+        $total = (int) $rows->sum('amount');
 
-        $merged = collect($timeConflicts)
-            ->merge($equipmentConflicts)
-            ->groupBy('date')
-            ->map(function ($items, $date) {
-                $time = $items->firstWhere('type', 'time_conflict')?->value ?? 0;
-                $equipment = $items->firstWhere('type', 'equipment_conflict')?->value ?? 0;
-
-                return [
-                    'date' => $date,
-                    'time_conflicts' => $time,
-                    'equipment_conflicts' => $equipment,
-                    'total' => $time + $equipment,
-                ];
-            })
-            ->values();
-
-        return $merged->toArray();
-    }
-
-    private function getTimeConflictData(array $filters): array
-    {
-        $query = DB::table('requests as r1')
-            ->join('request_facilities as rf1', 'r1.id', '=', 'rf1.request_id')
-            ->join('request_facilities as rf2', function ($join) {
-                $join->on('rf1.facility_id', '=', 'rf2.facility_id')
-                    ->on('rf1.date_requested', '=', 'rf2.date_requested')
-                    ->whereRaw('rf1.id < rf2.id');
-            })
-            ->join('requests as r2', 'rf2.request_id', '=', 'r2.id')
-            ->whereIn('rf1.status', [RequestStatus::PENDING->value, RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->whereIn('rf2.status', [RequestStatus::PENDING->value, RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->where('r1.on_hold', false)
-            ->where('r2.on_hold', false)
-            ->whereRaw('rf1.time_start < rf2.time_end AND rf1.time_end > rf2.time_start')
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('rf1.date_requested', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('rf1.date_requested', '<=', $filters['end']))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereIn('rf1.facility_id', $v));
-
-        $granularity = $filters['granularity'] ?? 'daily';
-
-        $results = $query->selectRaw("
-                DATE_TRUNC('{$this->granularityToSql($granularity)}', rf1.date_requested) as date,
-                COUNT(DISTINCT rf1.id) as value
-            ")
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
-
-        return $results->map(function ($row) use ($filters) {
-            return [
-                'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
-                'type' => 'time_conflict',
-                'value' => (int) $row->value,
-            ];
-        })->toArray();
-    }
-
-    private function getEquipmentConflictData(array $filters): array
-    {
-        $query = DB::table('request_equipment as re1')
-            ->join('request_facilities as rf1', 're1.request_facility_id', '=', 'rf1.id')
-            ->join('requests as r1', 'rf1.request_id', '=', 'r1.id')
-            ->join('request_equipment as re2', function ($join) {
-                $join->on('re1.equipment_id', '=', 're2.equipment_id')
-                    ->whereRaw('re1.request_facility_id < re2.request_facility_id');
-            })
-            ->join('request_facilities as rf2', 're2.request_facility_id', '=', 'rf2.id')
-            ->join('requests as r2', 'rf2.request_id', '=', 'r2.id')
-            ->whereIn('rf1.status', [RequestStatus::PENDING->value, RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->whereIn('rf2.status', [RequestStatus::PENDING->value, RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->where('r1.on_hold', false)
-            ->where('r2.on_hold', false)
-            ->whereRaw('rf1.date_requested = rf2.date_requested')
-            ->whereRaw('rf1.time_start < rf2.time_end AND rf1.time_end > rf2.time_start')
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('rf1.date_requested', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('rf1.date_requested', '<=', $filters['end']));
-
-        $granularity = $filters['granularity'] ?? 'daily';
-
-        $results = $query->selectRaw("
-                DATE_TRUNC('{$this->granularityToSql($granularity)}', rf1.date_requested) as date,
-                COUNT(DISTINCT re1.id) as value
-            ")
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
-
-        return $results->map(function ($row) use ($filters) {
-            return [
-                'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
-                'type' => 'equipment_conflict',
-                'value' => (int) $row->value,
-            ];
-        })->toArray();
-    }
-
-    public function getUserActivityData(array $filters): array
-    {
-        $query = FacilityRequest::query()
-            ->select('user_id')
-            ->selectRaw('COUNT(*) as total')
-            ->selectRaw("COUNT(*) FILTER (WHERE status IN ('".RequestStatus::APPROVED->value."','".RequestStatus::CONDITIONALLY_APPROVED->value."')) as approved")
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->whereIn('status', $v))
-            ->when($filters['priority_level'] ?? null, fn ($q, $v) => $q->where('priority_level', $v))
-            ->groupBy('user_id')
-            ->orderByDesc('total')
-            ->limit(20)
-            ->get();
-
-        $userIds = $query->pluck('user_id')->toArray();
-        $users = User::whereIn('id', $userIds)->get()->keyBy('id');
-
-        return $query->map(function ($row) use ($users) {
-            $user = $users->get($row->user_id);
-            $total = (int) $row->total;
-            $approved = (int) $row->approved;
-
-            return [
-                'user_id' => $row->user_id,
-                'user_name' => $user?->name ?? 'Unknown',
-                'total_requests' => $total,
-                'approved_requests' => $approved,
-                'approval_rate' => $total > 0 ? round($approved / $total * 100, 1) : 0,
-            ];
-        })->values()->toArray();
-    }
-
-    public function getUserActivityOverTimeData(array $filters): array
-    {
-        $query = FacilityRequest::query()
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->whereIn('status', $v))
-            ->when($filters['priority_level'] ?? null, fn ($q, $v) => $q->where('priority_level', $v));
-
-        return $this->aggregateByDate($query, 'created_at', $filters['granularity'] ?? 'daily', 'total', $filters);
-    }
-
-    public function getProcessingTimeData(array $filters): array
-    {
-        $query = FacilityRequest::query()
-            ->whereNotNull('processed_at')
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('processed_at', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('processed_at', '<=', $filters['end'].' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->whereIn('status', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->when($filters['priority_level'] ?? null, fn ($q, $v) => $q->where('priority_level', $v));
-
-        $granularity = $filters['granularity'] ?? 'daily';
-
-        $results = $query->selectRaw("
-                DATE_TRUNC('{$this->granularityToSql($granularity)}', processed_at) as date,
-                AVG(EXTRACT(EPOCH FROM (processed_at - created_at)) / 86400) as avg_days
-            ")
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
-
-        return $results->map(function ($row) use ($filters) {
-            return [
-                'date' => $this->formatDateForGranularity($row->date, $filters['granularity'] ?? 'daily'),
-                'value' => round((float) $row->avg_days, 1),
-            ];
-        })->values()->toArray();
-    }
-
-    public function getKpis(array $filters): array
-    {
-        $start = $filters['start'] ?? Carbon::now()->subDays(30)->format('Y-m-d');
-        $end = $filters['end'] ?? Carbon::now()->format('Y-m-d');
-
-        $totalRequests = FacilityRequest::query()
-            ->whereNotNull('processed_at')
-            ->when($start, fn ($q) => $q->where('processed_at', '>=', $start))
-            ->when($end, fn ($q) => $q->where('processed_at', '<=', $end.' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->count();
-
-        $approvedCount = FacilityRequest::query()
-            ->whereIn('status', [RequestStatus::APPROVED->value, RequestStatus::CONDITIONALLY_APPROVED->value])
-            ->when($start, fn ($q) => $q->where('processed_at', '>=', $start))
-            ->when($end, fn ($q) => $q->where('processed_at', '<=', $end.' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->count();
-
-        $processedCount = FacilityRequest::query()
-            ->whereNotNull('processed_at')
-            ->when($start, fn ($q) => $q->where('processed_at', '>=', $start))
-            ->when($end, fn ($q) => $q->where('processed_at', '<=', $end.' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->count();
-
-        $avgProcessingDays = FacilityRequest::query()
-            ->whereNotNull('processed_at')
-            ->when($start, fn ($q) => $q->where('processed_at', '>=', $start))
-            ->when($end, fn ($q) => $q->where('processed_at', '<=', $end.' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->selectRaw('AVG(EXTRACT(EPOCH FROM (processed_at - created_at)) / 86400) as avg_days')
-            ->value('avg_days');
-
-        $activeConflicts = FacilityRequest::query()
-            ->whereJsonLength('pending_conflict_rf_ids', '>', 0)
-            ->orWhereJsonLength('approved_conflict_rf_ids', '>', 0)
-            ->when($start, fn ($q) => $q->where('processed_at', '>=', $start))
-            ->when($end, fn ($q) => $q->where('processed_at', '<=', $end.' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)))
-            ->count();
-
-        return [
-            'total_requests' => $totalRequests,
-            'approval_rate' => $processedCount > 0 ? round($approvedCount / $processedCount * 100, 1) : 0,
-            'avg_processing_days' => $avgProcessingDays ? round((float) $avgProcessingDays, 1) : 0,
-            'active_conflicts' => $activeConflicts,
-        ];
-    }
-
-    public function getMethodology(): array
-    {
-        return [
-            'total_requests' => 'Count of requests with processed_at in the selected date range (i.e., requests that received a final decision in this period).',
-            'approval_rate' => '(Approved + Conditionally Approved) / Processed requests × 100. Processed = requests with processed_at not null. Excludes Pending, Denied, For Reschedule, Partially Approved from numerator.',
-            'avg_processing_days' => 'AVG(processed_at - created_at) in calendar days for requests with processed_at in range.',
-            'active_conflicts' => 'Requests currently having pending_conflict_rf_ids or approved_conflict_rf_ids JSON arrays with length > 0.',
-            'facility_usage' => 'Count of request_facility rows with status = Approved or Conditionally Approved, grouped by facility. Uses date_requested by default (configurable via date_type).',
-            'event_types' => 'Count of requests grouped by priority_level (Academic/Organization/University/Government).',
-            'processing_time' => 'Average calendar days from created_at to processed_at per date bucket.',
-        ];
-    }
-
-    public function getKpisWithComparison(array $filters): array
-    {
-        $current = $this->getKpis($filters);
-
-        $start = $filters['start'] ?? Carbon::now()->subDays(30)->format('Y-m-d');
-        $end = $filters['end'] ?? Carbon::now()->format('Y-m-d');
-
-        $periodStart = Carbon::parse($start);
-        $periodEnd = Carbon::parse($end);
-        $diffInDays = $periodStart->diffInDays($periodEnd) + 1;
-
-        $prevStart = $periodStart->copy()->subDays($diffInDays)->format('Y-m-d');
-        $prevEnd = $periodStart->copy()->subDay()->format('Y-m-d');
-
-        $prevFilters = array_merge($filters, [
-            'start' => $prevStart,
-            'end' => $prevEnd,
-        ]);
-
-        $previous = $this->getKpis($prevFilters);
-
-        $deltas = [
-            'total_requests_pct' => $previous['total_requests'] > 0
-                ? round(($current['total_requests'] - $previous['total_requests']) / $previous['total_requests'] * 100, 1)
-                : null,
-            'approval_rate_pct' => $previous['approval_rate'] > 0
-                ? round(($current['approval_rate'] - $previous['approval_rate']) / $previous['approval_rate'] * 100, 1)
-                : null,
-            'avg_processing_days_pct' => $previous['avg_processing_days'] > 0
-                ? round(($current['avg_processing_days'] - $previous['avg_processing_days']) / $previous['avg_processing_days'] * 100, 1)
-                : null,
-            'active_conflicts_pct' => $previous['active_conflicts'] > 0
-                ? round(($current['active_conflicts'] - $previous['active_conflicts']) / $previous['active_conflicts'] * 100, 1)
-                : null,
-        ];
-
-        return [
-            'current' => $current,
-            'previous' => $previous,
-            'deltas' => $deltas,
-        ];
-    }
-
-    private function baseRequestQuery(array $filters): Builder
-    {
-        return FacilityRequest::query()
-            ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
-            ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
-            ->when($filters['user_id'] ?? null, fn ($q, $v) => $q->where('user_id', $v))
-            ->when($filters['status'] ?? null, fn ($q, $v) => $q->whereIn('status', $v))
-            ->when($filters['priority_level'] ?? null, fn ($q, $v) => $q->where('priority_level', $v))
-            ->when($filters['facility_ids'] ?? null, fn ($q, $v) => $q->whereHas('requestFacilities', fn ($q2) => $q2->whereIn('facility_id', $v)));
-    }
-
-    private function getDateColumn(array $filters): string
-    {
-        return match ($filters['date_type'] ?? 'event_date') {
-            'approval_date' => 'requests.processed_at',
-            'submission_date' => 'requests.created_at',
-            default => 'request_facilities.date_requested',
-        };
-    }
-
-    private function getDateColumnForFacilityQuery(array $filters): string
-    {
-        return match ($filters['date_type'] ?? 'event_date') {
-            'approval_date' => 'requests.processed_at',
-            'submission_date' => 'requests.created_at',
-            default => 'request_facilities.date_requested',
-        };
-    }
-
-    private function getDateWhereColumn(array $filters): string
-    {
-        return match ($filters['date_type'] ?? 'event_date') {
-            'approval_date' => 'requests.processed_at',
-            'submission_date' => 'requests.created_at',
-            default => 'request_facilities.date_requested',
-        };
-    }
-
-    private function aggregateByDate(Builder $query, string $dateColumn, string $granularity, string $valueColumn, array $filters = []): array
-    {
-        $results = $query->selectRaw("
-                DATE_TRUNC('{$this->granularityToSql($granularity)}', {$dateColumn}) as date,
-                COUNT(*) as {$valueColumn}
-            ")
-            ->groupBy('date')
-            ->orderBy('date')
-            ->get();
-
-        $data = $results->map(function ($row) use ($granularity, $valueColumn) {
-            return [
-                'date' => $this->formatDateForGranularity($row->date, $granularity),
-                'value' => (int) $row->{$valueColumn},
-            ];
-        })->keyBy('date');
-
-        // Fill missing dates with 0
-        $start = $filters['start'] ?? now()->subDays(30)->format('Y-m-d');
-        $end = $filters['end'] ?? now()->format('Y-m-d');
-
-        $allDates = $this->generateDateRange($start, $end, $granularity);
-
-        return $allDates->map(function ($dateStr) use ($data) {
-            return [
-                'date' => $dateStr,
-                'value' => $data->has($dateStr) ? $data[$dateStr]['value'] : 0,
-            ];
-        })->values()->toArray();
-    }
-
-    private function generateDateRange(string $start, string $end, string $granularity): \Illuminate\Support\Collection
-    {
-        $startCarbon = Carbon::parse($start);
-        $endCarbon = Carbon::parse($end);
-        $dates = collect();
-
-        switch ($granularity) {
-            case 'daily':
-                $current = $startCarbon->copy();
-                while ($current <= $endCarbon) {
-                    $dates->push($current->format('Y-m-d'));
-                    $current->addDay();
-                }
-                break;
-            case 'weekly':
-                $current = $startCarbon->copy()->startOfWeek();
-                while ($current <= $endCarbon) {
-                    $dates->push($current->format('Y-\\WW'));
-                    $current->addWeek();
-                }
-                break;
-            case 'monthly':
-                $current = $startCarbon->copy()->startOfMonth();
-                while ($current <= $endCarbon) {
-                    $dates->push($current->format('Y-m'));
-                    $current->addMonth();
-                }
-                break;
-            default:
-                $current = $startCarbon->copy();
-                while ($current <= $endCarbon) {
-                    $dates->push($current->format('Y-m-d'));
-                    $current->addDay();
-                }
-        }
-
-        return $dates;
-    }
-
-    private function granularityToSql(string $granularity): string
-    {
-        return match ($granularity) {
-            'daily' => 'day',
-            'weekly' => 'week',
-            'monthly' => 'month',
-            default => 'day',
-        };
-    }
-
-    private function formatDateForGranularity(string $date, string $granularity): string
-    {
-        $carbon = Carbon::parse($date);
-
-        return match ($granularity) {
-            'daily' => $carbon->format('Y-m-d'),
-            'weekly' => $carbon->format('Y-\\WW'),
-            'monthly' => $carbon->format('Y-m'),
-            default => $carbon->format('Y-m-d'),
-        };
+        return $rows->map(fn ($row) => [
+            'name' => $row->name,
+            'amount' => (int) $row->amount,
+            'percentage' => $total > 0 ? round($row->amount / $total * 100, 1) : 0,
+        ])->values()->toArray();
     }
 }

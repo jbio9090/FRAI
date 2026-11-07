@@ -1,892 +1,496 @@
-"use client";
+import { Download, Funnel } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Cell, Pie, PieChart } from 'recharts';
+import { DiscreteBarChart } from '@/components/charts/discrete-bar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { format, parseISO } from "date-fns";
-import { toPng } from "html-to-image";
-import {
-  BarChart2,
-  Calendar,
-  Download,
-  Loader2,
-  ClipboardList,
-  AlertTriangle,
-  CheckCircle2,
-  Filter,
-} from "lucide-react";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { flushSync } from "react-dom";
-import { PieChart, Pie, Cell, Legend } from "recharts";
-import { DiscreteBarChart } from "@/components/charts/discrete-bar";
-import { StackedBarChart } from "@/components/charts/stacked-bar";
-import { downloadReportsPdf } from "@/components/pdf/reports-pdf";
-import { FilterPanel } from "@/components/reports/filter-panel";
-import StatTile from "@/components/stat-tile";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatRequestStatus } from "@/lib/formatters";
-import {
-  PROCESSING_BAR_COLOR,
-  SLA_LINE_COLOR,
-  VOLUME_BAR_COLOR,
-  categoryColor,
-  sortedCategoryNames,
-} from "@/lib/report-palette";
-import type { ReportFilters, ReportMeta, ReportKpis, ReportType, ChartDataPoint, Granularity, KpiComparison } from "@/types/reports";
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
 
-const REPORT_TABS: { id: ReportType; label: string; description: string }[] = [
-  { id: "volume", label: "Request Volume", description: "Total requests created over time" },
-  { id: "approval-rate", label: "Status Breakdown", description: "Requests by status over time" },
-  { id: "facility-utilization", label: "Facility Usage", description: "Total bookings per facility" },
-  { id: "priority-distribution", label: "Event Types", description: "Requests by event type" },
-  { id: "processing-time", label: "Processing Time", description: "Average days from creation to decision" },
-];
+const TEMPLATE_COLORS = ['#4472C4', '#ED7D31', '#A5A5A5', '#FFC000', '#5B9BD5', '#70AD47'];
 
-const CHART_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--chart-6)",
-];
-
-function formatDisplayDate(dateStr: string, granularity: Granularity): string {
-  const date = parseISO(dateStr);
-  switch (granularity) {
-    case "daily":
-      return format(date, "MMM d, yyyy");
-    case "weekly":
-      return format(date, "'Week' w, yyyy");
-    case "monthly":
-      return format(date, "MMMM yyyy");
-    default:
-      return format(date, "MMM d, yyyy");
-  }
+interface ReportPeriod {
+    start: string;
+    end: string;
+    label: string;
 }
 
-function formatDeltaSub(pct: number | null | undefined): string | undefined {
-  if (pct === null || pct === undefined) {
-    return undefined;
-  }
-  const sign = pct > 0 ? "+" : "";
-  return `${sign}${pct.toFixed(1)}% vs prev period`;
+interface ReportKpis {
+    requests_received: number;
+    approval_rate: number;
+    total_requesters: number;
+    avg_processing_days: number;
 }
 
-export default function ReportsPage({
-  meta,
-  defaultFilters,
-}: {
-  meta: ReportMeta;
-  defaultFilters: ReportFilters;
-}) {
-  const [filters, setFilters] = useState<ReportFilters>(defaultFilters);
-  const [activeTab, setActiveTab] = useState<ReportType>("volume");
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const [kpis, setKpis] = useState<ReportKpis | null>(null);
-  const [kpiComparison, setKpiComparison] = useState<KpiComparison | null>(null);
-  const [, setMethodology] = useState<Record<string, string> | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [pdfGenerating, setPdfGenerating] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [allChartData, setAllChartData] = useState<Record<ReportType, ChartDataPoint[]>>({
-    volume: [],
-    "approval-rate": [],
-    "facility-utilization": [],
-    "priority-distribution": [],
-    "processing-time": [],
-    "user-activity": [],
-    "equipment-usage": [],
-  });
-  const [allFacilityPieData, setAllFacilityPieData] = useState<ChartDataPoint[]>([]);
+interface VolumePoint {
+    date: string;
+    value: number;
+}
 
-  const volumeRef = useRef<HTMLDivElement>(null);
-  const approvalRateRef = useRef<HTMLDivElement>(null);
-  const facilityUtilizationRef = useRef<HTMLDivElement>(null);
-  const priorityDistributionRef = useRef<HTMLDivElement>(null);
-  const processingTimeRef = useRef<HTMLDivElement>(null);
+interface CategoryPoint {
+    category: string;
+    value: number;
+}
 
-  const fetchData = useCallback(async (type: ReportType, currentFilters: ReportFilters) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        type,
-        start: currentFilters.start,
-        end: currentFilters.end,
-        granularity: currentFilters.granularity,
-        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
-        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
-        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
-        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
-        ...(currentFilters.statuses?.length && { statuses: currentFilters.statuses.join(",") }),
-        ...(currentFilters.priorityLevel !== undefined && { priority_level: String(currentFilters.priorityLevel) }),
-        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
-      });
+interface StatusPoint {
+    status: string;
+    value: number;
+}
 
-      const res = await fetch(`/reports/data?${params.toString()}`);
-      const json = await res.json();
-      setChartData(json.data || []);
+interface UsagePoint {
+    name: string;
+    amount: number;
+    percentage: number;
+}
 
-      // Also fetch pie data for facility usage
-      if (type === "facility-utilization") {
-        const pieParams = new URLSearchParams({
-          type: "facility-usage-pie",
-          start: currentFilters.start,
-          end: currentFilters.end,
-          ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
-          ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
-          ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
-          ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
-          ...(currentFilters.statuses?.length && { statuses: currentFilters.statuses.join(",") }),
-          ...(currentFilters.priorityLevel !== undefined && { priority_level: String(currentFilters.priorityLevel) }),
-          ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
-        });
-        const pieRes = await fetch(`/reports/data?${pieParams.toString()}`);
-        const pieJson = await pieRes.json();
-        const pieData = pieJson.data || [];
-        setFacilityPieData(pieData);
-      }
-    } catch (error) {
-      console.error("Failed to fetch report data:", error);
-      setChartData([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+interface ReportData {
+    period: ReportPeriod;
+    kpis: ReportKpis;
+    volume: VolumePoint[];
+    status: StatusPoint[];
+    event_types: CategoryPoint[];
+    facility_usage: UsagePoint[];
+    building_usage: UsagePoint[];
+}
 
-  const [facilityPieData, setFacilityPieData] = useState<ChartDataPoint[]>([]);
+interface ReportsPageProps {
+    year: number;
+    month: number;
+    report: ReportData;
+}
 
-  const fetchKpis = useCallback(async (currentFilters: ReportFilters) => {
-    try {
-      const params = new URLSearchParams({
-        type: "kpis",
-        start: currentFilters.start,
-        end: currentFilters.end,
-        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
-        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
-        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
-        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
-        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
-      });
+type ReportTab = 'request-volume' | 'request-status' | 'event-types' | 'facility-usage';
 
-      const res = await fetch(`/reports/data?${params.toString()}`);
-      const json = await res.json();
-      setKpis(json.data || null);
-    } catch (error) {
-      console.error("Failed to fetch KPIs:", error);
-      setKpis(null);
-    }
-  }, []);
+function monthOptions(year: number) {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
 
-  const fetchKpisComparison = useCallback(async (currentFilters: ReportFilters) => {
-    try {
-      const params = new URLSearchParams({
-        type: "kpis-comparison",
-        start: currentFilters.start,
-        end: currentFilters.end,
-        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
-        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
-        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
-        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
-        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
-      });
+    return MONTHS.map((month, index) => {
+        const value = String(index + 1).padStart(2, '0');
+        const disabled = year === currentYear && index + 1 > currentMonth;
 
-      const res = await fetch(`/reports/data?${params.toString()}`);
-      const json = await res.json();
-      setKpiComparison(json.data || null);
-    } catch (error) {
-      console.error("Failed to fetch KPI comparison:", error);
-      setKpiComparison(null);
-    }
-  }, []);
+        return { value, label: month, disabled };
+    });
+}
 
-  const fetchMethodology = useCallback(async (currentFilters: ReportFilters) => {
-    try {
-      const params = new URLSearchParams({
-        type: "methodology",
-        start: currentFilters.start,
-        end: currentFilters.end,
-        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
-        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
-        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
-        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
-        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
-      });
+function yearOptions(currentYear: number) {
+    return Array.from({ length: 6 }, (_, i) => currentYear - 5 + i).map((year) => ({
+        value: String(year),
+        label: String(year),
+    }));
+}
 
-      const res = await fetch(`/reports/data?${params.toString()}`);
-      const json = await res.json();
-      return json.data || {};
-    } catch (error) {
-      console.error("Failed to fetch methodology:", error);
-      return {};
-    }
-  }, []);
-
-  const fetchAllChartData = useCallback(async (currentFilters: ReportFilters) => {
-    const types: ReportType[] = [
-      "volume",
-      "approval-rate",
-      "facility-utilization",
-      "priority-distribution",
-      "processing-time",
-      "user-activity",
-      "equipment-usage",
-    ];
-
-    const results: Record<ReportType, ChartDataPoint[]> = {
-      volume: [],
-      "approval-rate": [],
-      "facility-utilization": [],
-      "priority-distribution": [],
-      "processing-time": [],
-      "user-activity": [],
-      "equipment-usage": [],
-    };
-
-    await Promise.all(
-      types.map(async (type) => {
-        try {
-          const params = new URLSearchParams({
-            type,
-            start: currentFilters.start,
-            end: currentFilters.end,
-            granularity: currentFilters.granularity,
-            ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
-            ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
-            ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
-            ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
-            ...(currentFilters.statuses?.length && { statuses: currentFilters.statuses.join(",") }),
-            ...(currentFilters.priorityLevel !== undefined && { priority_level: String(currentFilters.priorityLevel) }),
-            ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
-          });
-
-          const res = await fetch(`/reports/data?${params.toString()}`);
-          const json = await res.json();
-          results[type] = json.data || [];
-        } catch (error) {
-          console.error(`Failed to fetch ${type} data:`, error);
-          results[type] = [];
-        }
-      })
-    );
-
-    // Also fetch facility usage pie data
-    let pieData: ChartDataPoint[] = [];
-    try {
-      const pieParams = new URLSearchParams({
-        type: "facility-usage-pie",
-        start: currentFilters.start,
-        end: currentFilters.end,
-        ...(currentFilters.dateType && { date_type: currentFilters.dateType }),
-        ...(currentFilters.facilityIds?.length && { facility_ids: currentFilters.facilityIds.join(",") }),
-        ...(currentFilters.buildingIds?.length && { building_ids: currentFilters.buildingIds.join(",") }),
-        ...(currentFilters.campusIds?.length && { campus_ids: currentFilters.campusIds.join(",") }),
-        ...(currentFilters.statuses?.length && { statuses: currentFilters.statuses.join(",") }),
-        ...(currentFilters.priorityLevel !== undefined && { priority_level: String(currentFilters.priorityLevel) }),
-        ...(currentFilters.userId !== undefined && { user_id: String(currentFilters.userId) }),
-      });
-      const pieRes = await fetch(`/reports/data?${pieParams.toString()}`);
-      const pieJson = await pieRes.json();
-      pieData = pieJson.data || [];
-      setAllFacilityPieData(pieData);
-    } catch (error) {
-      console.error("Failed to fetch facility-usage-pie data:", error);
-      pieData = [];
-      setAllFacilityPieData([]);
-    }
-
-    flushSync(() => {
-      setAllChartData(results);
+function CategoryPie({ points, nameKey }: { points: { label: string; value: number }[]; nameKey: string }) {
+    const total = points.reduce((sum, point) => sum + point.value, 0);
+    const config: ChartConfig = {};
+    const data = points.map((point, index) => {
+        const color = TEMPLATE_COLORS[index % TEMPLATE_COLORS.length];
+        config[point.label] = { label: point.label, color };
+        return { [nameKey]: point.label, value: point.value, fill: color };
     });
 
-    // Return fresh data so callers don't read stale React state
-    // (the closure's `allChartData` is still empty on first export).
-    return { results, pieData };
-  }, []);
-
-  const waitForOffscreenCharts = async (
-    freshData: Record<ReportType, ChartDataPoint[]>,
-    freshPieData: ChartDataPoint[],
-    timeoutMs = 8000
-  ) => {
-    const start = Date.now();
-    const refsByType: Partial<Record<ReportType, React.RefObject<HTMLDivElement | null>>> = {
-      volume: volumeRef,
-      "approval-rate": approvalRateRef,
-      "facility-utilization": facilityUtilizationRef,
-      "priority-distribution": priorityDistributionRef,
-      "processing-time": processingTimeRef,
-    };
-    const hasData = (type: ReportType) =>
-      (type === "facility-utilization" ? freshPieData : freshData[type] ?? []).length > 0;
-
-    // Poll until every chart with data has rendered an <svg>, so html-to-image
-    // captures real content instead of an empty container on first export.
-    for (;;) {
-      await new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-      );
-      const pending = (Object.keys(refsByType) as ReportType[]).filter((type) => {
-        if (!hasData(type)) return false;
-        const el = refsByType[type]?.current;
-        if (!el) return true;
-        return !el.querySelector("svg");
-      });
-      if (pending.length === 0) return;
-      if (Date.now() - start > timeoutMs) {
-        console.warn(`Timed out waiting for off-screen charts: ${pending.join(", ")}`);
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 200));
+    if (total === 0) {
+        return (
+            <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">No data available for the selected period.</div>
+        );
     }
-  };
 
-  const captureChartImages = async (
-    freshData?: Record<ReportType, ChartDataPoint[]>,
-    freshPieData?: ChartDataPoint[]
-  ) => {
-    const images: Record<ReportType, string> = {
-      volume: "",
-      "approval-rate": "",
-      "facility-utilization": "",
-      "equipment-usage": "",
-      "priority-distribution": "",
-      "user-activity": "",
-      "processing-time": "",
-    };
+    return (
+        <ChartContainer config={config} className="mx-auto h-[300px] w-full max-w-[340px]">
+            <PieChart>
+                <ChartTooltip content={<ChartTooltipContent nameKey={nameKey} hideLabel />} />
+                <Pie data={data} dataKey="value" nameKey={nameKey} innerRadius={0} outerRadius="70%" stroke="#ffffff" strokeWidth={2}>
+                    {data.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={String(entry.fill)} />
+                    ))}
+                </Pie>
+            </PieChart>
+        </ChartContainer>
+    );
+}
 
-    // Prefer explicitly passed fresh data; fall back to state for other callers.
-    // Reading `allChartData` directly here would use a stale closure on the
-    // first export (state hasn't re-rendered yet when this runs).
-    const source = freshData ?? allChartData;
-    const pieSource = freshPieData ?? allFacilityPieData;
+function UsageTable({ rows, showColors }: { rows: UsagePoint[]; showColors?: boolean }) {
+    if (rows.length === 0) {
+        return <p className="p-4 text-sm text-muted-foreground">No data available for the selected period.</p>;
+    }
 
-    const chartConfigs: { type: ReportType; ref: React.RefObject<HTMLDivElement | null>; data: ChartDataPoint[] }[] = [
-      { type: "volume", ref: volumeRef, data: source.volume },
-      { type: "approval-rate", ref: approvalRateRef, data: source["approval-rate"] },
-      { type: "facility-utilization", ref: facilityUtilizationRef, data: pieSource },
-      { type: "priority-distribution", ref: priorityDistributionRef, data: source["priority-distribution"] },
-      { type: "processing-time", ref: processingTimeRef, data: source["processing-time"] },
-    ];
+    return (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="text-right">Percentage</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {rows.map((row, index) => (
+                    <TableRow key={row.name}>
+                        <TableCell>
+                            {showColors ? (
+                                <div className="flex items-center gap-2">
+                                    <span
+                                        className="inline-block size-2.5 shrink-0 rounded-sm"
+                                        style={{ background: TEMPLATE_COLORS[index % TEMPLATE_COLORS.length] }}
+                                    />
+                                    <span>{row.name}</span>
+                                </div>
+                            ) : (
+                                row.name
+                            )}
+                        </TableCell>
+                        <TableCell className="text-right">{row.percentage}%</TableCell>
+                        <TableCell className="text-right">{row.amount}</TableCell>
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+    );
+}
 
-    for (const { type, ref, data } of chartConfigs) {
-      // Check if ref is attached
-      if (!ref.current) {
-        console.warn(`Ref not attached for ${type} chart`);
-        images[type] = "";
-        continue;
-      }
-      
-      if (data.length > 0) {
-        try {
-          // Delay to ensure Recharts is fully rendered
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          const pngDataUrl = await toPng(ref.current!, {
-            backgroundColor: "#ffffff",
-            pixelRatio: 2,
-            skipFonts: true,
-          });
-          images[type] = pngDataUrl;
-        } catch (error) {
-          console.error(`Failed to capture ${type} chart:`, error);
-          images[type] = "";
+export default function ReportsPage({ year: initialYear, month: initialMonth, report: initialReport }: ReportsPageProps) {
+    const [month, setMonth] = useState(String(initialMonth).padStart(2, '0'));
+    const [year, setYear] = useState(String(initialYear));
+    const [report, setReport] = useState<ReportData>(initialReport);
+    const [loading, setLoading] = useState(false);
+    const firstRender = useRef(true);
+    const [activeTab, setActiveTab] = useState<ReportTab>('request-volume');
+    const [dateRangeOpen, setDateRangeOpen] = useState(false);
+    const [workingMonth, setWorkingMonth] = useState(month);
+    const [workingYear, setWorkingYear] = useState(year);
+
+    function openDateRange() {
+        setWorkingMonth(month);
+        setWorkingYear(year);
+        setDateRangeOpen(true);
+    }
+
+    function saveDateRange() {
+        setMonth(workingMonth);
+        setYear(workingYear);
+        setDateRangeOpen(false);
+    }
+
+    function cancelDateRange() {
+        setDateRangeOpen(false);
+    }
+
+    useEffect(() => {
+        if (firstRender.current) {
+            firstRender.current = false;
+            return;
         }
-      } else {
-        images[type] = "";
-      }
-    }
 
-    return images;
-  };
+        let cancelled = false;
 
-  useEffect(() => {
-    fetchData(activeTab, filters);
-    fetchKpis(filters);
-    fetchKpisComparison(filters);
-  }, [activeTab, filters, fetchData, fetchKpis, fetchKpisComparison]);
+        const load = async () => {
+            setLoading(true);
+            try {
+                const res = await fetch(`/reports/data?year=${year}&month=${parseInt(month, 10)}`, {
+                    headers: { Accept: 'application/json' },
+                });
 
-  const handleFilterChange = (newFilters: Partial<ReportFilters>) => {
-    setFilters((prev) => ({ ...prev, ...newFilters }));
-  };
+                if (!res.ok) {
+                    throw new Error(`Request failed: ${res.status}`);
+                }
 
-  const resetFilters = () => {
-    setFilters(defaultFilters);
-  };
-
-  const renderChart = () => {
-    const dataToCheck = activeTab === "facility-utilization" ? facilityPieData : chartData;
-    if (!dataToCheck.length) {
-      return (
-        <div className="flex flex-col items-center justify-center h-[400px] text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
-            <BarChart2 className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <p className="text-sm font-medium text-foreground">No data available</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            No records match the selected filters.
-          </p>
-        </div>
-      );
-    }
-
-    switch (activeTab) {
-      case "volume": {
-        const config: ChartConfig = {
-          value: { label: "Requests", color: VOLUME_BAR_COLOR },
-        };
-        return (
-          <DiscreteBarChart
-            data={chartData as ChartDataPoint[]}
-            config={config}
-            yAxisLabel="Requests"
-            height={350}
-            granularity={filters.granularity}
-            barColor={VOLUME_BAR_COLOR}
-          />
-        );
-      }
-      case "approval-rate": {
-        const statusKeys = [
-          "pending",
-          "approved",
-          "conditionally_approved",
-          "partially_approved",
-          "denied",
-          "for_reschedule",
-        ] as const;
-        const config: ChartConfig = {};
-        const categories: string[] = [];
-        statusKeys.forEach((key, i) => {
-          config[key] = { label: formatRequestStatus(key), color: CHART_COLORS[i % CHART_COLORS.length] };
-          categories.push(key);
-        });
-        return (
-          <StackedBarChart
-            data={chartData as ChartDataPoint[]}
-            config={config}
-            categories={categories}
-            yAxisLabel="Requests"
-            height={350}
-            granularity={filters.granularity}
-          />
-        );
-      }
-      case "facility-utilization": {
-        const categories = sortedCategoryNames(facilityPieData as ChartDataPoint[]);
-        const config: ChartConfig = {};
-        categories.forEach((cat) => {
-          config[cat] = { label: cat, color: categoryColor(cat, categories) };
-        });
-        return (
-          <div className="space-y-4">
-            <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
-                <Legend verticalAlign="bottom" height={36} />
-                <Pie
-                  data={facilityPieData as ChartDataPoint[]}
-                  dataKey="value"
-                  nameKey="category"
-                  cx="50%"
-                  cy="42%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  label={({ category, value }) => `${category}: ${value}`}
-                  labelLine={false}
-                >
-                  {facilityPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-          </div>
-        );
-      }
-      case "priority-distribution": {
-        // Aggregate data across all dates to get total per category
-        const aggregated = (chartData as ChartDataPoint[]).reduce((acc, d) => {
-          if (d.category) {
-            acc[d.category] = (acc[d.category] || 0) + d.value;
-          }
-          return acc;
-        }, {} as Record<string, number>);
-        const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
-        const categories = sortedCategoryNames(pieData);
-        const config: ChartConfig = {};
-        categories.forEach((cat) => {
-          config[cat] = { label: cat, color: categoryColor(cat, categories) };
-        });
-        return (
-          <div className="space-y-4">
-            <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
-                <Legend verticalAlign="bottom" height={36} />
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="category"
-                  cx="50%"
-                  cy="42%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  label={({ category, value }) => `${category}: ${value}`}
-                  labelLine={false}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-          </div>
-        );
-      }
-      case "processing-time": {
-        const config: ChartConfig = {
-          value: { label: "Avg Days", color: PROCESSING_BAR_COLOR },
-        };
-        return (
-          <DiscreteBarChart
-            data={chartData as ChartDataPoint[]}
-            config={config}
-            yAxisLabel="Days"
-            height={350}
-            granularity={filters.granularity}
-            barColor={PROCESSING_BAR_COLOR}
-            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: SLA_LINE_COLOR, strokeDasharray: "5 5" }}
-          />
-        );
-      }
-      default:
-        return null;
-    }
-  };
-
-  const handleExportPdf = async () => {
-    setPdfGenerating(true);
-    try {
-      // Fetch all chart data first. Use the RETURNED data directly instead of
-      // `allChartData` state, which is still stale (empty) on first export.
-      const { results: freshCharts, pieData: freshPie } = await fetchAllChartData(filters);
-      // Fetch methodology
-      const methodologyData = await fetchMethodology(filters);
-      setMethodology(methodologyData);
-
-      // Wait for off-screen charts to re-render with the fresh data, then
-      // capture images. Polls for <svg> so first export isn't blank.
-      await waitForOffscreenCharts(freshCharts, freshPie);
-      // Extra delay for Recharts internal rendering
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Capture chart images from off-screen render
-      const images = await captureChartImages(freshCharts, freshPie);
-
-      await downloadReportsPdf(
-        {
-          filters,
-          kpis: kpis || {
-            total_requests: 0,
-            approval_rate: 0,
-            avg_processing_days: 0,
-            active_conflicts: 0,
-          },
-          kpiDeltas: kpiComparison?.deltas ?? {
-            total_requests_pct: null,
-            approval_rate_pct: null,
-            avg_processing_days_pct: null,
-            active_conflicts_pct: null,
-          },
-          chartsData: REPORT_TABS.map((tab) => ({
-            type: tab.id,
-            title: tab.label,
-            description: tab.description,
-            data: tab.id === "facility-utilization" ? freshPie : freshCharts[tab.id] || [],
-            imageUrl: images[tab.id],
-          })),
-          methodology: methodologyData,
-        },
-        meta
-      );
-    } catch (error) {
-      console.error("Failed to generate PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
-    } finally {
-      setPdfGenerating(false);
-    }
-  };
-
-  const dateRangeLabel = `${formatDisplayDate(filters.start, filters.granularity)} – ${formatDisplayDate(filters.end, filters.granularity)}`;
-
-  // Off-screen chart rendering for PDF export
-  const offScreenCharts = (
-    <div
-      style={{
-        position: "fixed",
-        left: -9999,
-        top: -9999,
-        width: 800,
-        height: 600,
-        opacity: 0,
-        pointerEvents: "none",
-        zIndex: -1,
-      }}
-      aria-hidden="true"
-    >
-      <div ref={volumeRef} style={{ width: 800, height: 400 }}>
-        {allChartData.volume.length > 0 && (
-          <DiscreteBarChart
-            data={allChartData.volume as ChartDataPoint[]}
-            config={{ value: { label: "Requests", color: VOLUME_BAR_COLOR } }}
-            yAxisLabel="Requests"
-            height={350}
-            granularity={filters.granularity}
-            barColor={VOLUME_BAR_COLOR}
-          />
-        )}
-      </div>
-      <div ref={approvalRateRef} style={{ width: 800, height: 400 }}>
-        {allChartData["approval-rate"].length > 0 && (() => {
-          const statusKeys = [
-            "pending", "approved", "conditionally_approved", "partially_approved", "denied", "for_reschedule",
-          ] as const;
-          const config: ChartConfig = {};
-          const categories: string[] = [];
-          statusKeys.forEach((key, i) => {
-            config[key] = { label: formatRequestStatus(key), color: CHART_COLORS[i % CHART_COLORS.length] };
-            categories.push(key);
-          });
-          return (
-            <StackedBarChart
-              data={allChartData["approval-rate"] as ChartDataPoint[]}
-              config={config}
-              categories={categories}
-              yAxisLabel="Requests"
-              height={350}
-              granularity={filters.granularity}
-            />
-          );
-        })()}
-      </div>
-      <div ref={facilityUtilizationRef} style={{ width: 400, height: 350 }}>
-        {allFacilityPieData.length > 0 && (() => {
-          const categories = sortedCategoryNames(allFacilityPieData);
-          const config: ChartConfig = {};
-          categories.forEach((cat) => {
-            config[cat] = { label: cat, color: categoryColor(cat, categories) };
-          });
-          return (
-            <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
-                <Legend verticalAlign="bottom" height={36} />
-                <Pie
-                  data={allFacilityPieData as ChartDataPoint[]}
-                  dataKey="value"
-                  nameKey="category"
-                  cx="50%"
-                  cy="42%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  label={({ category, value }) => `${category}: ${value}`}
-                  labelLine={false}
-                >
-                  {allFacilityPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-          );
-        })()}
-      </div>
-      <div ref={priorityDistributionRef} style={{ width: 400, height: 350 }}>
-        {allChartData["priority-distribution"].length > 0 && (() => {
-          const aggregated = (allChartData["priority-distribution"] as ChartDataPoint[]).reduce((acc, d) => {
-            if (d.category) {
-              acc[d.category] = (acc[d.category] || 0) + d.value;
+                const json = (await res.json()) as ReportData;
+                if (!cancelled) {
+                    setReport(json);
+                }
+            } catch (error) {
+                console.error('Failed to load report data:', error);
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
-            return acc;
-          }, {} as Record<string, number>);
-          const pieData = Object.entries(aggregated).map(([category, value]) => ({ category, value }));
-          const categories = sortedCategoryNames(pieData);
-          const config: ChartConfig = {};
-          categories.forEach((cat) => {
-            config[cat] = { label: cat, color: categoryColor(cat, categories) };
-          });
-          return (
-            <ChartContainer config={config} className="h-[350px] w-full" initialDimension={{ width: 400, height: 350 }}>
-              <PieChart>
-                <ChartTooltip content={<ChartTooltipContent nameKey="category" />} />
-                <Legend verticalAlign="bottom" height={36} />
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="category"
-                  cx="50%"
-                  cy="42%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  label={({ category, value }) => `${category}: ${value}`}
-                  labelLine={false}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={categoryColor(entry.category ?? "", categories)} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ChartContainer>
-          );
-        })()}
-      </div>
-      <div ref={processingTimeRef} style={{ width: 800, height: 400 }}>
-        {allChartData["processing-time"].length > 0 && (
-          <DiscreteBarChart
-            data={allChartData["processing-time"] as ChartDataPoint[]}
-            config={{ value: { label: "Avg Days", color: PROCESSING_BAR_COLOR } }}
-            yAxisLabel="Days"
-            height={350}
-            granularity={filters.granularity}
-            barColor={PROCESSING_BAR_COLOR}
-            referenceLine={{ y: 2, label: "SLA Target (2 days)", stroke: SLA_LINE_COLOR, strokeDasharray: "5 5" }}
-          />
-        )}
-      </div>
-    </div>
-  );
+        };
 
-  return (
-    <>
-      {offScreenCharts}
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <p className="frai-eyebrow">GSO Reports · {dateRangeLabel}</p>
-            <h1 className="font-display text-2xl font-semibold tracking-tight mt-1">Reports</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="gap-2"
-            >
-              <Filter className="h-4 w-4" />
-              {showFilters ? "Hide Filters" : "Show Filters"}
-            </Button>
-            <Button
-              onClick={handleExportPdf}
-              disabled={pdfGenerating || loading}
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              {pdfGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : loading ? (
-                "Preparing data..."
-              ) : (
-                "Export PDF"
-              )}
-            </Button>
-          </div>
-        </div>
+        void load();
 
-        {showFilters && (
-          <FilterPanel
-            filters={filters}
-            defaultFilters={defaultFilters}
-            meta={meta}
-            onFiltersChange={handleFilterChange}
-            onReset={resetFilters}
-          />
-        )}
+        return () => {
+            cancelled = true;
+        };
+    }, [year, month]);
 
-{kpis && (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {(() => {
-                const deltas = kpiComparison?.deltas ?? {
-                  total_requests_pct: null,
-                  approval_rate_pct: null,
-                  avg_processing_days_pct: null,
-                  active_conflicts_pct: null,
-                };
-                return (
-                  <>
-                    <StatTile
-                      icon={ClipboardList}
-                      label="Total Requests"
-                      value={kpis.total_requests.toLocaleString()}
-                      sub={formatDeltaSub(deltas.total_requests_pct)}
-                    />
-                    <StatTile
-                      icon={CheckCircle2}
-                      label="Approval Rate"
-                      value={`${kpis.approval_rate}%`}
-                      sub={formatDeltaSub(deltas.approval_rate_pct)}
-                    />
-                    <StatTile
-                      icon={Calendar}
-                      label="Avg Processing Time"
-                      value={`${kpis.avg_processing_days} days`}
-                      sub={formatDeltaSub(deltas.avg_processing_days_pct)}
-                    />
-                    <StatTile
-                      icon={AlertTriangle}
-                      label="Active Conflicts"
-                      value={kpis.active_conflicts}
-                      sub={formatDeltaSub(deltas.active_conflicts_pct)}
-                      variant={kpis.active_conflicts > 0 ? "warning" : "default"}
-                    />
-                  </>
-                );
-              })()}
+    const { period } = report;
+    const exportUrl = `/reports/export?year=${year}&month=${parseInt(month, 10)}`;
+
+    return (
+        <div className="flex w-full max-w-full min-w-0 flex-col overflow-x-clip">
+            {/* ── Header ── */}
+            <div className="mb-6 flex w-full max-w-full min-w-0 flex-wrap items-end justify-between gap-4">
+                <div className="flex max-w-full min-w-0 flex-col gap-1">
+                    <p className="frai-eyebrow">Facility Reservation Activity Report</p>
+                    <div className="flex items-center gap-2">
+                        <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{period.label}</h1>
+                        {loading && <Spinner className="size-4" />}
+                    </div>
+                </div>
+                <div className="flex max-w-full min-w-0 flex-wrap items-center gap-3">
+                    <Dialog open={dateRangeOpen} onOpenChange={(open) => {
+                        if (!open) {
+                            setWorkingMonth(month);
+                            setWorkingYear(year);
+                        }
+                        setDateRangeOpen(open);
+                    }}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 gap-2" disabled={loading} onClick={openDateRange}>
+                                <Funnel className="size-4" />
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>Filter by date range</DialogTitle>
+                            </DialogHeader>
+                            <div className="grid w-full gap-4 p-4">
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm text-muted-foreground">Month</label>
+                                    <Select value={workingMonth} onValueChange={setWorkingMonth} disabled={loading}>
+                                        <SelectTrigger className="h-8 w-full text-sm">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {monthOptions(parseInt(workingYear, 10)).map((opt) => (
+                                                <SelectItem key={opt.value} value={opt.value} disabled={opt.disabled}>
+                                                    {opt.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm text-muted-foreground">Year</label>
+                                    <Select value={workingYear} onValueChange={setWorkingYear} disabled={loading}>
+                                        <SelectTrigger className="h-8 w-full text-sm">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {yearOptions(parseInt(workingYear, 10)).map((opt) => (
+                                                <SelectItem key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" size="sm" onClick={cancelDateRange}>
+                                    Cancel
+                                </Button>
+                                <Button variant="default" size="sm" onClick={saveDateRange} disabled={loading}>
+                                    Save
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-2" disabled={loading}>
+                                <Download className="size-4" />
+                                Export
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => window.location.assign(exportUrl)}>Export DOCX</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
-          )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList variant="line" scrollable className="flex gap-1">
-            {REPORT_TABS.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id} className="px-3 py-1.5 text-sm font-medium">
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportTab)} className="w-full max-w-full min-w-0 overflow-x-clip">
+                <TabsList variant="line" className="flex h-auto min-h-9 w-full justify-start border-b *:flex-none">
+                    <TabsTrigger value="request-volume">Request Volume</TabsTrigger>
+                    <TabsTrigger value="request-status">Request Status</TabsTrigger>
+                    <TabsTrigger value="event-types">Event Types</TabsTrigger>
+                    <TabsTrigger value="facility-usage">Facility Usage</TabsTrigger>
+                </TabsList>
 
-          {REPORT_TABS.map((tab) => (
-            <TabsContent key={tab.id} value={tab.id} className="mt-6">
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-sm font-semibold">{tab.label}</CardTitle>
-                      <CardDescription className="mt-1">{tab.description}</CardDescription>
+                {/* ── Request Volume ── */}
+                <TabsContent value="request-volume" className="mt-6">
+                    <div className="mb-4 flex items-center justify-between gap-2">
+                        <h2 className="text-lg font-semibold tracking-tight">Request Volume</h2>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 md:p-5 pt-0">
-                  {loading ? (
-                    <div className="flex flex-col items-center justify-center h-[350px] gap-3">
-                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Loading chart data...</p>
+                    <Card className="px-6 md:px-8 w-full max-w-full min-w-0 overflow-hidden">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-semibold">Requests per day</CardTitle>
+                            <CardDescription>Distinct requests submitted on each date of the selected period.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="max-w-full min-w-0 overflow-hidden">
+                            <DiscreteBarChart
+                                data={report.volume}
+                                config={{ value: { label: 'Requests', color: '#4472C4' } }}
+                                height={360}
+                                granularity="daily"
+                                barColor="#4472C4"
+                                barRadius={[0, 0, 0, 0]}
+                                barCategoryGap="62%"
+                                maxBarSize={40}
+                                gridStroke="var(--border)"
+                                gridDasharray="none"
+                                xAxisAngle={-60}
+                                xAxisInterval={1}
+                                xAxisLineStroke="var(--border)"
+                                tickFontSize={11}
+                                tickColor="var(--muted-foreground)"
+                            />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* ── Request Status ── */}
+                <TabsContent value="request-status" className="mt-6">
+                    <div className="mb-4 flex items-center justify-between gap-2">
+                        <h2 className="text-lg font-semibold tracking-tight">Request Status</h2>
                     </div>
-                  ) : (
-                    renderChart()
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          ))}
-        </Tabs>
-      </div>
-    </>
-  );
+                    <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr] px-6 md:px-8">
+                        <Card className="w-full max-w-full min-w-0 overflow-hidden">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-semibold">Request Status</CardTitle>
+                                <CardDescription>Distribution of requests by status.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="max-w-full min-w-0 overflow-hidden">
+                                <CategoryPie points={report.status.map((row) => ({ label: row.status, value: row.value }))} nameKey="status" />
+                            </CardContent>
+                        </Card>
+                        <Card className="w-full max-w-full min-w-0 overflow-hidden">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-semibold">Status breakdown</CardTitle>
+                                <CardDescription>Counts per request status.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="max-w-full min-w-0 overflow-hidden p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Request Status</TableHead>
+                                            <TableHead className="text-right">Amount</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {report.status.map((row, index) => (
+                                            <TableRow key={row.status}>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className="inline-block size-2.5 shrink-0 rounded-sm"
+                                                            style={{ background: TEMPLATE_COLORS[index % TEMPLATE_COLORS.length] }}
+                                                        />
+                                                        <span>{row.status}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">{row.value}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* ── Event Types ── */}
+                <TabsContent value="event-types" className="mt-6">
+                    <div className="mb-4 flex items-center justify-between gap-2">
+                        <h2 className="text-lg font-semibold tracking-tight">Event Types</h2>
+                    </div>
+                    <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr] px-6 md:px-8">
+                        <Card className="w-full max-w-full min-w-0 overflow-hidden">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-semibold">Event Types</CardTitle>
+                                <CardDescription>Requests by event type.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="max-w-full min-w-0 overflow-hidden">
+                                <CategoryPie
+                                    points={report.event_types.map((row) => ({ label: row.category, value: row.value }))}
+                                    nameKey="category"
+                                />
+                            </CardContent>
+                        </Card>
+                        <Card className="w-full max-w-full min-w-0 overflow-hidden">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-semibold">Event type breakdown</CardTitle>
+                                <CardDescription>Counts per event type.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="max-w-full min-w-0 overflow-hidden p-0">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Event Type</TableHead>
+                                            <TableHead className="text-right">Amount</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {report.event_types.map((row, index) => (
+                                            <TableRow key={row.category}>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <span
+                                                            className="inline-block size-2.5 shrink-0 rounded-sm"
+                                                            style={{ background: TEMPLATE_COLORS[index % TEMPLATE_COLORS.length] }}
+                                                        />
+                                                        <span>{row.category}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">{row.value}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* ── Facility Usage ── */}
+                <TabsContent value="facility-usage" className="mt-6">
+                    <div className="mb-4 flex items-center justify-between gap-2">
+                        <h2 className="text-lg font-semibold tracking-tight">Facility Usage</h2>
+                    </div>
+                    <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr] px-6 md:px-8">
+                        <Card className="w-full max-w-full min-w-0 overflow-hidden">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-semibold">Facilities</CardTitle>
+                                <CardDescription>Bookings per facility.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="max-w-full min-w-0 overflow-hidden">
+                                <CategoryPie
+                                    points={report.facility_usage.map((row) => ({ label: row.name, value: row.amount }))}
+                                    nameKey="facility"
+                                />
+                            </CardContent>
+                        </Card>
+                        <Card className="w-full max-w-full min-w-0 overflow-hidden">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-sm font-semibold">Facility usage detail</CardTitle>
+                                <CardDescription>Share of bookings per facility.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="max-w-full min-w-0 overflow-hidden p-0">
+                                <UsageTable rows={report.facility_usage} showColors />
+                            </CardContent>
+                        </Card>
+                    </div>
+                    <Card className="mt-6 px-6 md:px-8 w-full max-w-full min-w-0 overflow-hidden">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-semibold">Building usage</CardTitle>
+                            <CardDescription>Share of bookings per building.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="max-w-full min-w-0 overflow-hidden p-0">
+                            <UsageTable rows={report.building_usage} showColors />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
 }

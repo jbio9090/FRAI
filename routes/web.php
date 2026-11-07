@@ -200,7 +200,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware(['permission:approve requests'])->group(function () {
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
         Route::get('/reports/data', [ReportController::class, 'getData'])->name('reports.data');
-        Route::get('/reports/meta', [ReportController::class, 'getMeta'])->name('reports.meta');
+        Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
     });
     // chatbot
     Route::get('/chatbot', function () {
