@@ -199,6 +199,8 @@ Route::middleware('auth')->group(function () {
     // Reports (admin only)
     Route::middleware(['permission:approve requests'])->group(function () {
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('/reports/data', [ReportController::class, 'getData'])->name('reports.data');
+        Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
     });
     // chatbot
     Route::get('/chatbot', function () {
