@@ -1,15 +1,15 @@
 "use client";
 
 import { Calendar, Filter, X, ChevronDown, ChevronUp, MapPin, ClipboardList, Settings } from "lucide-react";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ReportFilters, Granularity } from "@/types/reports";
 
@@ -27,11 +27,37 @@ interface FilterPanelProps {
   onReset: () => void;
 }
 
-const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
+const GRANULARITY_OPTIONS: {
+  value: Granularity;
+  label: string;
+  disabled?: boolean;
+  tooltip?: string;
+}[] = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
 ];
+
+const MONTH_OPTIONS = [
+  { value: "01", label: "January" },
+  { value: "02", label: "February" },
+  { value: "03", label: "March" },
+  { value: "04", label: "April" },
+  { value: "05", label: "May" },
+  { value: "06", label: "June" },
+  { value: "07", label: "July" },
+  { value: "08", label: "August" },
+  { value: "09", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+];
+
+const currentYear = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from(
+  { length: currentYear - 2025 + 1 },
+  (_, i) => ({ value: String(2025 + i), label: String(2025 + i) })
+);
 
 const DATE_TYPE_OPTIONS = [
   { value: "event_date", label: "Event Date" },
@@ -101,12 +127,46 @@ export function FilterPanel({
     [onFiltersChange]
   );
 
-  const handleDateChange = useCallback(
-    (field: "start" | "end", value: string) => {
-      onFiltersChange({ [field]: value });
+  const parseMonthParts = useCallback(
+    (value: string | undefined) => {
+      const parts = (value ?? "").split("-");
+      return {
+        year: parts[0] ?? String(new Date().getFullYear()),
+        month: parts[1] ?? "01",
+      };
     },
-    [onFiltersChange]
+    []
   );
+
+  const monthSpan = useMemo(() => {
+    const start = parseMonthParts(filters.start);
+    const end = parseMonthParts(filters.end);
+    const s = new Date(Number(start.year), Number(start.month) - 1, 1);
+    const e = new Date(Number(end.year), Number(end.month) - 1, 1);
+    return (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+  }, [filters.start, filters.end, parseMonthParts]);
+
+  const handleMonthPartChange = useCallback(
+    (field: "start" | "end", part: "year" | "month", value: string) => {
+      const current = field === "start" ? filters.start : filters.end;
+      const parts = (current ?? "").split("-");
+      const updated =
+        part === "year"
+          ? [value, parts[1] ?? "01"]
+          : [parts[0] ?? String(new Date().getFullYear()), value];
+      onFiltersChange({ [field]: updated.join("-") });
+    },
+    [filters.start, filters.end, onFiltersChange]
+  );
+
+  useEffect(() => {
+    const invalid =
+      (filters.granularity === "daily" && monthSpan > 12) ||
+      (filters.granularity === "weekly" && monthSpan > 24);
+    if (invalid) {
+      onFiltersChange({ granularity: "monthly" });
+    }
+  }, [filters.granularity, monthSpan, onFiltersChange]);
 
   const renderSection = (
     title: string,
@@ -194,30 +254,86 @@ export function FilterPanel({
                 "Date Range",
                 <Calendar className="h-4 w-4 text-muted-foreground" />,
                 (
-                  <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="start-date" className="text-xs font-medium text-muted-foreground">
-                        Start Date
+                      <Label htmlFor="start-year" className="text-xs font-medium text-muted-foreground">
+                        Start Year
                       </Label>
-                      <Input
-                        id="start-date"
-                        type="date"
-                        value={filters.start}
-                        onChange={(e) => handleDateChange("start", e.target.value)}
-                        className="h-9"
-                      />
+                      <Select
+                        value={parseMonthParts(filters.start).year}
+                        onValueChange={(v) => handleMonthPartChange("start", "year", v)}
+                      >
+                        <SelectTrigger id="start-year-trigger" className="h-9 w-full">
+                          <SelectValue placeholder="Year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {YEAR_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="end-date" className="text-xs font-medium text-muted-foreground">
-                        End Date
+                      <Label htmlFor="start-month" className="text-xs font-medium text-muted-foreground">
+                        Start Month
                       </Label>
-                      <Input
-                        id="end-date"
-                        type="date"
-                        value={filters.end}
-                        onChange={(e) => handleDateChange("end", e.target.value)}
-                        className="h-9"
-                      />
+                      <Select
+                        value={parseMonthParts(filters.start).month}
+                        onValueChange={(v) => handleMonthPartChange("start", "month", v)}
+                      >
+                        <SelectTrigger id="start-month-trigger" className="h-9 w-full">
+                          <SelectValue placeholder="Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTH_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="end-year" className="text-xs font-medium text-muted-foreground">
+                        End Year
+                      </Label>
+                      <Select
+                        value={parseMonthParts(filters.end).year}
+                        onValueChange={(v) => handleMonthPartChange("end", "year", v)}
+                      >
+                        <SelectTrigger id="end-year-trigger" className="h-9 w-full">
+                          <SelectValue placeholder="Year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {YEAR_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="end-month" className="text-xs font-medium text-muted-foreground">
+                        End Month
+                      </Label>
+                      <Select
+                        value={parseMonthParts(filters.end).month}
+                        onValueChange={(v) => handleMonthPartChange("end", "month", v)}
+                      >
+                        <SelectTrigger id="end-month-trigger" className="h-9 w-full">
+                          <SelectValue placeholder="Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTH_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="date-type" className="text-xs font-medium text-muted-foreground">
@@ -258,11 +374,34 @@ export function FilterPanel({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {GRANULARITY_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
+                      {GRANULARITY_OPTIONS.map((opt) => {
+                        const disabled =
+                          (opt.value === "daily" && monthSpan > 12) ||
+                          (opt.value === "weekly" && monthSpan > 24);
+                        const tooltip =
+                          opt.value === "daily" && monthSpan > 12
+                            ? "Daily granularity unavailable for ranges over 12 months"
+                            : opt.value === "weekly" && monthSpan > 24
+                              ? "Weekly granularity unavailable for ranges over 24 months"
+                              : undefined;
+                        if (disabled && tooltip) {
+                          return (
+                            <Tooltip key={opt.value}>
+                              <TooltipTrigger asChild>
+                                <SelectItem key={opt.value} value={opt.value} disabled>
+                                  {opt.label}
+                                </SelectItem>
+                              </TooltipTrigger>
+                              <TooltipContent>{tooltip}</TooltipContent>
+                            </Tooltip>
+                          );
+                        }
+                        return (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 ),

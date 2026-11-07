@@ -20,8 +20,8 @@ class ReportController extends Controller
             'labeledBreadcrumb' => 'Reports',
             'meta' => $meta,
             'defaultFilters' => [
-                'start' => now()->subDays(30)->format('Y-m-d'),
-                'end' => now()->addDays(90)->format('Y-m-d'),
+                'start' => now()->format('Y-m'),
+                'end' => now()->format('Y-m'),
                 'granularity' => 'daily',
             ],
         ]);

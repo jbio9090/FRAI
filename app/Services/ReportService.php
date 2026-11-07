@@ -32,6 +32,8 @@ class ReportService
 
     public function getVolumeData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $query = $this->baseRequestQuery($filters);
 
         $granularity = $filters['granularity'] ?? 'daily';
@@ -42,6 +44,8 @@ class ReportService
 
     public function getApprovalRateData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $query = FacilityRequest::query()
             ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
             ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
@@ -94,6 +98,8 @@ class ReportService
 
     public function getFacilityUtilizationData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $dateColumn = $this->getDateColumnForFacilityQuery($filters);
         $whereColumn = $this->getDateWhereColumn($filters);
 
@@ -141,6 +147,8 @@ class ReportService
 
     public function getFacilityUsagePieData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $whereColumn = $this->getDateWhereColumn($filters);
 
         $query = RequestFacility::query()
@@ -172,6 +180,8 @@ class ReportService
 
     public function getEquipmentUsageData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $dateColumn = $this->getDateColumnForFacilityQuery($filters);
         $whereColumn = $this->getDateWhereColumn($filters);
 
@@ -218,6 +228,8 @@ class ReportService
 
     public function getPriorityDistributionData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $query = FacilityRequest::query()
             ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
             ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
@@ -250,6 +262,8 @@ class ReportService
 
     public function getConflictAnalysisData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $timeConflicts = $this->getTimeConflictData($filters);
         $equipmentConflicts = $this->getEquipmentConflictData($filters);
 
@@ -351,6 +365,8 @@ class ReportService
 
     public function getUserActivityData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $query = FacilityRequest::query()
             ->select('user_id')
             ->selectRaw('COUNT(*) as total')
@@ -385,6 +401,8 @@ class ReportService
 
     public function getUserActivityOverTimeData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $query = FacilityRequest::query()
             ->when($filters['start'] ?? null, fn ($q) => $q->where('created_at', '>=', $filters['start']))
             ->when($filters['end'] ?? null, fn ($q) => $q->where('created_at', '<=', $filters['end'].' 23:59:59'))
@@ -398,6 +416,8 @@ class ReportService
 
     public function getProcessingTimeData(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $query = FacilityRequest::query()
             ->whereNotNull('processed_at')
             ->when($filters['start'] ?? null, fn ($q) => $q->where('processed_at', '>=', $filters['start']))
@@ -427,6 +447,8 @@ class ReportService
 
     public function getKpis(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $start = $filters['start'] ?? Carbon::now()->subDays(30)->format('Y-m-d');
         $end = $filters['end'] ?? Carbon::now()->format('Y-m-d');
 
@@ -495,6 +517,8 @@ class ReportService
 
     public function getKpisWithComparison(array $filters): array
     {
+        $filters = $this->normalizeMonthFilters($filters);
+
         $current = $this->getKpis($filters);
 
         $start = $filters['start'] ?? Carbon::now()->subDays(30)->format('Y-m-d');
@@ -652,6 +676,25 @@ class ReportService
             'monthly' => 'month',
             default => 'day',
         };
+    }
+
+    private function normalizeMonthFilters(array $filters): array
+    {
+        $normalize = function (?string $v): ?Carbon {
+            if (! $v || ! preg_match('/^\d{4}-\d{2}$/', $v)) {
+                return null;
+            }
+
+            return Carbon::parse($v);
+        };
+
+        $start = $normalize($filters['start'] ?? null);
+        $end = $normalize($filters['end'] ?? null);
+
+        return array_merge($filters, [
+            'start' => $start ? $start->startOfMonth()->format('Y-m-d') : null,
+            'end' => $end ? $end->endOfMonth()->format('Y-m-d') : null,
+        ]);
     }
 
     private function formatDateForGranularity(string $date, string $granularity): string
