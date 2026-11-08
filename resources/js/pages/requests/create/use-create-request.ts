@@ -1,3 +1,4 @@
+import type { FormDataErrors } from '@inertiajs/core';
 import { useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { useState, useEffect, useRef } from 'react';
@@ -43,6 +44,7 @@ import {
     timeToMinutes,
 } from './utils';
 import { ALLOWED_TYPES } from './utils';
+import { validateCreateRequest, hasValidationErrors } from './validation';
 
 export function useCreateRequest({ facilities, existingRequest }: Pick<CreateRequestProps, 'facilities' | 'existingRequest'>) {
     const isEditing = !!existingRequest;
@@ -228,7 +230,7 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
         existing_file_ids: [] as number[],
     };
 
-    const { data, setData, post, put, processing, errors, transform } = useForm(initialForm);
+    const { data, setData, post, put, processing, errors, transform, clearErrors, setError } = useForm(initialForm);
 
     useEffect(() => {
         if (showDraftBanner) return;
@@ -856,12 +858,6 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
     function submit(e: React.FormEvent) {
         e.preventDefault();
 
-        transform((d) => ({
-            ...d,
-            facility_bookings: JSON.stringify(d.facility_bookings),
-            existing_file_ids: existingFiles.map((f) => f.id),
-        }));
-
         const options = {
             forceFormData: true,
             // Success toast is handled globally via flash.success in DefaultLayout.
@@ -881,6 +877,22 @@ export function useCreateRequest({ facilities, existingRequest }: Pick<CreateReq
                 });
             },
         };
+
+        // Frontend validation mirroring backend rules so the user gets immediate
+        // feedback without a round-trip to the server.
+        clearErrors();
+        const frontendErrors = validateCreateRequest(data);
+        if (hasValidationErrors(frontendErrors)) {
+            setError(frontendErrors as FormDataErrors<CreateRequestFormData>);
+            options.onError(frontendErrors);
+            return;
+        }
+
+        transform((d) => ({
+            ...d,
+            facility_bookings: JSON.stringify(d.facility_bookings),
+            existing_file_ids: existingFiles.map((f) => f.id),
+        }));
 
         if (isEditing) {
             put(route('requests.update', existingRequest!.id), options);
