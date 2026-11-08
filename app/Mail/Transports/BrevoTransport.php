@@ -23,7 +23,7 @@ class BrevoTransport extends AbstractTransport
         $this->senderEmail = $senderEmail;
     }
 
-    protected function doSend(SentMessage $message): SentMessage
+    protected function doSend(SentMessage $message): void
     {
         $email = $message->getMessage();
 
@@ -95,7 +95,6 @@ class BrevoTransport extends AbstractTransport
             'to' => array_column($payload['to'], 'email'),
         ]);
 
-        return $message;
     }
 
     /**
