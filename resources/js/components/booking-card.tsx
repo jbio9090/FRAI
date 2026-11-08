@@ -177,6 +177,10 @@ export function BookingCard({
 
     const canMakeDecision = hasPermission('approve requests') && showActions;
 
+    const facilityStatus = booking.request_facility_status;
+    const FINAL_STATUSES = ['Approved', 'Conditionally Approved', 'Denied'];
+    const isFinalStatus = Boolean(facilityStatus) && FINAL_STATUSES.includes(facilityStatus);
+
     const handleAction = (action: string) => {
         const facilityParam = booking.request_facility_id ?? booking.facility_id;
         const inertiaOptions = {
@@ -430,17 +434,21 @@ export function BookingCard({
                 <div className="flex items-center justify-between border-t border-border bg-background bg-muted/20 px-4 py-2">
                     <span className="text-xs font-medium text-muted-foreground">Facility Decision</span>
                     <div className="flex items-center gap-2">
-                        <Button onClick={() => handleAction('approve')} size="sm" className="h-7 px-3 text-xs">
-                            Approve
-                        </Button>
-                        <Button
-                            onClick={() => handleAction('reject')}
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-3 text-xs hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
-                        >
-                            Deny
-                        </Button>
+                        {!isFinalStatus && (
+                            <>
+                                <Button onClick={() => handleAction('approve')} size="sm" className="h-7 px-3 text-xs">
+                                    Approve
+                                </Button>
+                                <Button
+                                    onClick={() => handleAction('reject')}
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-3 text-xs hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                    Deny
+                                </Button>
+                            </>
+                        )}
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -450,7 +458,15 @@ export function BookingCard({
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuGroup className="text-sm *:cursor-pointer">
-                                    <DropdownMenuItem onClick={() => handleAction('conditionally_approve')}>Conditionally Approve</DropdownMenuItem>
+                                    {isFinalStatus && facilityStatus !== 'Approved' && (
+                                        <DropdownMenuItem onClick={() => handleAction('approve')}>Approve</DropdownMenuItem>
+                                    )}
+                                    {isFinalStatus && facilityStatus !== 'Denied' && (
+                                        <DropdownMenuItem onClick={() => handleAction('reject')}>Deny</DropdownMenuItem>
+                                    )}
+                                    {facilityStatus !== 'Conditionally Approved' && (
+                                        <DropdownMenuItem onClick={() => handleAction('conditionally_approve')}>Conditionally Approve</DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem onClick={() => handleAction('for_reschedule')}>Mark for Reschedule</DropdownMenuItem>
                                 </DropdownMenuGroup>
                             </DropdownMenuContent>
