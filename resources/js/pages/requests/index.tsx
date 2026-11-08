@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { downloadBulkFacilitiesPDF, type BulkFacilityBookingEntry } from '@/components/pdf/FacilitiesPDF';
+import PdfIcon from '@/components/pdf-icon';
 import RequestCard from '@/components/request-card';
 import RequestsSkeleton from '@/components/skeleton/RequestIndexSkeleton';
 import SmartPagination from '@/components/SmartPagination';
@@ -970,7 +971,7 @@ export default function RequestsPage({ requests, page_title, facilities, request
                                 }
                             }}
                         >
-                            <Download size={14} />
+                            <PdfIcon size={14} />
                             <span>PDF</span>
                         </Button>
 

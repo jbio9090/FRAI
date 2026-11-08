@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\ReportDocxService;
+use App\Services\ReportPdfService;
 use App\Services\ReportService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -51,6 +52,22 @@ class ReportController extends Controller
 
         $path = $reportDocxService->generate($year, $month);
         $filename = 'Facility_Reservation_Activity_Report_'.Carbon::create($year, $month, 1)->format('F_Y').'.docx';
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
+
+    public function exportPdf(Request $request, ReportPdfService $reportPdfService): BinaryFileResponse
+    {
+        $validated = $request->validate([
+            'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $year = (int) $validated['year'];
+        $month = (int) $validated['month'];
+
+        $path = $reportPdfService->generate($year, $month);
+        $filename = 'Facility_Reservation_Activity_Report_'.Carbon::create($year, $month, 1)->format('F_Y').'.pdf';
 
         return response()->download($path, $filename)->deleteFileAfterSend(true);
     }

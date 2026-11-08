@@ -197,6 +197,7 @@ class ReportDocxService
         ];
 
         $narratives = $this->narratives($report);
+        $generatedAt = Carbon::now()->format('F j, Y');
 
         $tables = $xpath->query('//w:tbl');
 
@@ -227,6 +228,12 @@ class ReportDocxService
 
         foreach ($xpath->query('//w:p') as $paragraph) {
             $text = trim($this->nodeText($paragraph));
+
+            if (str_contains($text, '{Month Day, Year Created}')) {
+                $this->setText($paragraph, str_replace('{Month Day, Year Created}', $generatedAt, $text));
+
+                continue;
+            }
 
             $replacement = match ($text) {
                 '{Period Range}' => $narratives['period'],

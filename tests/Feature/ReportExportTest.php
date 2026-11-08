@@ -8,6 +8,7 @@ use App\Models\Facility;
 use App\Models\Request as FacilityRequest;
 use App\Models\RequestFacility;
 use App\Models\User;
+use App\Services\ReportPdfService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -56,6 +57,30 @@ class ReportExportTest extends TestCase
 
         $this->assertIsString($facilityChart);
         $this->assertStringContainsString('<c:ptCount val="2"/>', $facilityChart);
+
+        @unlink($path);
+    }
+
+    public function test_authorized_user_can_download_the_report_as_pdf(): void
+    {
+        if (! app(ReportPdfService::class)->isAvailable()) {
+            $this->markTestSkipped('LibreOffice is not installed.');
+        }
+
+        $this->seedReportData();
+
+        $user = User::factory()->create();
+        $user->givePermissionTo(Permission::findOrCreate('approve requests'));
+
+        $response = $this->actingAs($user)->get(route('reports.export-pdf', ['year' => 2026, 'month' => 11]));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+
+        $path = $response->baseResponse->getFile()->getPathname();
+
+        $this->assertFileExists($path);
+        $this->assertStringStartsWith('%PDF-', (string) file_get_contents($path));
 
         @unlink($path);
     }
@@ -140,6 +165,8 @@ class ReportExportTest extends TestCase
 
         $this->assertIsString($document);
         $this->assertStringNotContainsString('{Comparison to previous month}', $document);
+        $this->assertStringNotContainsString('{Month Day, Year Created}', $document);
+        $this->assertStringContainsString('Data as of '.now()->format('F j, Y'), $document);
         $this->assertStringContainsString('Requests received', $document);
 
         @unlink($path);

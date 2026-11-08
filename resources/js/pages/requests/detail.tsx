@@ -9,6 +9,7 @@ import AvatarWithInitials from '@/components/avatar-with-initials';
 import { BookingCard } from '@/components/booking-card';
 import Comment from '@/components/comment';
 import { downloadFacilitiesPDF } from '@/components/pdf/FacilitiesPDF';
+import PdfIcon from '@/components/pdf-icon';
 import { RecommendationPanel } from '@/components/request/recommendation-panel';
 import SmartPagination from '@/components/SmartPagination';
 import StatusTag from '@/components/status-tag';
@@ -507,7 +508,7 @@ export default function RequestDetail({ request: initialRequest, auditLogs: audi
                                 className="gap-2"
                                 onClick={() => downloadFacilitiesPDF(request.title, facilitiesForPDF)}
                             >
-                                <Download size={16} />
+                                <PdfIcon size={16} />
                                 <span>Export Facilities to PDF</span>
                             </Button>
                         </div>

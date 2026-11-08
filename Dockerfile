@@ -31,6 +31,8 @@ RUN apk add --no-cache \
     freetype-dev \
     libwebp-dev \
     gmp-dev \
+    libreoffice-writer \
+    font-dejavu \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j$(nproc) \
         gd \

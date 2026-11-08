@@ -94,7 +94,7 @@ class ReportService
 
         return [
             'requests_received' => $total,
-            'approval_rate' => $total > 0 ? round($approved / $total * 100, 1) : 0,
+            'approval_rate' => $total > 0 ? round($approved / $total * 100, 2) : 0,
             'total_requesters' => $requesters,
             'avg_processing_days' => $avgDays ? round((float) $avgDays, 1) : 0,
         ];
@@ -237,7 +237,7 @@ class ReportService
         return $rows->map(fn ($row) => [
             'name' => $row->name,
             'amount' => (int) $row->amount,
-            'percentage' => $total > 0 ? round($row->amount / $total * 100, 1) : 0,
+            'percentage' => $total > 0 ? round($row->amount / $total * 100, 2) : 0,
         ])->values()->toArray();
     }
 }

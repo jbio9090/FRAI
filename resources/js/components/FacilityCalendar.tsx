@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import { toJpeg } from 'html-to-image';
-import { ChevronLeft, ChevronRight, Clock, LoaderCircle, Printer, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, LoaderCircle, ExternalLink } from 'lucide-react';
 import moment from 'moment';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ShowMoreProps, ToolbarProps, View } from 'react-big-calendar';
@@ -10,6 +10,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { toast } from 'sonner';
 import { CalendarDayEventsPopover, CalendarShowMoreButton, useCalendarOverflow } from '@/components/calendar-day-events-popover';
 import FacilityDayGantt from '@/components/FacilityDayGantt';
+import PdfIcon from '@/components/pdf-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -221,7 +222,7 @@ function CustomToolbar(toolbar: ToolbarProps<Event>) {
                     aria-label="Print calendar month to PDF"
                     title={isMonthView ? 'Print month to PDF' : 'Switch to Month view to print'}
                 >
-                    {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                                        {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <PdfIcon className="h-4 w-4" />}
                 </Button>
             </div>
         </div>
@@ -492,7 +493,7 @@ export default function FacilityCalendar({
                                         aria-label="Print day schedule to PDF"
                                         title={canExport ? 'Print day schedule to PDF' : 'No data to print'}
                                     >
-                                        {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                    {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <PdfIcon className="h-4 w-4" />}
                                     </Button>
                                 </div>
                             </div>

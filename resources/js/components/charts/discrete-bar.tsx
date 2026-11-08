@@ -65,7 +65,7 @@ export function DiscreteBarChart({
     height = 300,
     granularity = 'daily',
     barColor = '#1d7f8c',
-    barRadius = [4, 4, 0, 0],
+    barRadius = [0, 0, 0, 0],
     maxBarSize = 36,
     barCategoryGap,
     gridStroke = 'var(--border)',
