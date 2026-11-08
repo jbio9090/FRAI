@@ -143,7 +143,9 @@ export default function CreateRequest({ facilities, existingRequest }: CreateReq
                             <AlertDescription>
                                 <ul className="mt-1 list-disc space-y-1 pl-5">
                                     {Object.entries(errors).map(([key, msg]) => (
-                                        <li key={key}>{msg as string}</li>
+                                        <li key={key}>
+                                            <strong>{key}:</strong> {msg as string}
+                                        </li>
                                     ))}
                                 </ul>
                             </AlertDescription>
