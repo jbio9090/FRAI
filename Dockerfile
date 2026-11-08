@@ -31,6 +31,7 @@ RUN apk add --no-cache \
     freetype-dev \
     libwebp-dev \
     gmp-dev \
+    libzip-dev \
     libreoffice-writer \
     font-dejavu \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
@@ -38,7 +39,8 @@ RUN apk add --no-cache \
         gd \
         pdo_pgsql \
         gmp \
-        bcmath
+        bcmath \
+        zip
 
 WORKDIR /var/www/html
 
