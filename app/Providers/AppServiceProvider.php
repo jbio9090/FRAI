@@ -3,14 +3,12 @@
 namespace App\Providers;
 
 use Carbon\CarbonImmutable;
-use Illuminate\Mail\MailManager;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Pgvector\Laravel\Schema as PgvectorSchema;
-use App\Mail\Transports\BrevoTransport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,17 +17,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->extend(MailManager::class, function ($manager, $app) {
-            $manager->extend('brevo', function () use ($app) {
-                return new BrevoTransport(
-                    config('services.brevo.api_key'),
-                    config('services.brevo.sender_name', 'FRAI'),
-                    config('services.brevo.sender_email', 'frai.plv@gmail.com')
-                );
-            });
-
-            return $manager;
-        });
+        //
     }
 
     /**

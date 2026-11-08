@@ -52,10 +52,4 @@ return [
         'token' => env('EXPIRE_REQUESTS_TOKEN'),
     ],
 
-    'brevo' => [
-        'api_key' => env('BREVO_API_KEY'),
-        'sender_name' => env('BREVO_SENDER_NAME', 'FRAI'),
-        'sender_email' => env('BREVO_SENDER_EMAIL', 'frai.plv@gmail.com'),
-    ],
-
 ];
