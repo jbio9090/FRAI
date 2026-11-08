@@ -22,7 +22,7 @@ export function BookingActions({
 }: BookingActionsProps) {
     return (
         <div className="mt-12 flex w-full flex-col gap-1">
-            {(facilityBookingsLength === 0 && editingIndex === null) || !bookingError && (
+            {(facilityBookingsLength === 0 && editingIndex === null) && !bookingError && (
                 <p className="text-xs text-destructive">At least one facility booking is required.</p>
             )}
             {bookingError && <p className="text-sm text-destructive">{bookingError}</p>}
