@@ -85,6 +85,12 @@ COPY --from=vendor /app /var/www/html
 COPY --from=frontend /app/public/build /var/www/html/public/build
 COPY --from=frontend /app/.build-info /var/www/html/.build-info
 
+# ── Custom fonts (Manrope + ClashDisplay) for LibreOffice PDF export ──
+RUN mkdir -p /usr/share/fonts/truetype/custom \
+    && cp /var/www/html/public/fonts/Manrope-*.ttf /usr/share/fonts/truetype/custom/ \
+    && cp /var/www/html/public/fonts/ClashDisplay-*.ttf /usr/share/fonts/truetype/custom/ \
+    && fc-cache -f
+
 # Remove any local .env that got baked in from the vendor stage
 RUN rm -f /var/www/html/.env
 

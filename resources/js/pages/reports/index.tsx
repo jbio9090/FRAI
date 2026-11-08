@@ -303,17 +303,17 @@ export default function ReportsPage({ year: initialYear, month: initialMonth, re
                     </Dialog>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 gap-2" disabled={loading || isExporting}>
+                            <Button variant="outline" size="sm" className="h-8 gap-2 cursor-pointer" disabled={loading || isExporting}>
                                 {isExporting ? <Spinner className="size-4" /> : <Download className="size-4 shrink-0" />}
                                 Export
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => void handleExport('docx', exportUrl)} disabled={loading || isExporting} className="w-full justify-start">
+                            <DropdownMenuItem onSelect={() => void handleExport('docx', exportUrl)} disabled={loading || isExporting} className="w-full justify-start cursor-pointer">
                                 {exportingKind === 'docx' ? <Spinner className="mr-2 size-4" /> : <DocxIcon className="mr-2 size-4 shrink-0" />}
                                 Export as Word (.docx)
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => void handleExport('pdf', exportPdfUrl)} disabled={loading || isExporting} className="w-full justify-start">
+                            <DropdownMenuItem onSelect={() => void handleExport('pdf', exportPdfUrl)} disabled={loading || isExporting} className="w-full justify-start cursor-pointer">
                                 {exportingKind === 'pdf' ? <Spinner className="mr-2 size-4" /> : <PdfIcon className="mr-2 size-4 shrink-0" />}
                                 Export as PDF
                             </DropdownMenuItem>

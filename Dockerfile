@@ -48,6 +48,12 @@ WORKDIR /var/www/html
 COPY --from=vendor /app /var/www/html
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
+# ── Custom fonts (Manrope + ClashDisplay) for LibreOffice PDF export ──
+RUN mkdir -p /usr/share/fonts/truetype/custom \
+    && cp /var/www/html/public/fonts/Manrope-*.ttf /usr/share/fonts/truetype/custom/ \
+    && cp /var/www/html/public/fonts/ClashDisplay-*.ttf /usr/share/fonts/truetype/custom/ \
+    && fc-cache -f
+
 # Ensure correct permissions for Laravel's storage and cache
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage \
