@@ -451,7 +451,8 @@ export default function GeneralTab({ auth }: GeneralTabProps) {
             <PushNotifications />
 
             <div className="flex flex-col gap-4">
-                {/* User Email Notifications - for all users */}
+                {/* User Email Notifications - for all users (disabled) */}
+                {/*
                 <div className="flex justify-between items-center gap-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold">My Email Notifications</span>
@@ -480,8 +481,10 @@ export default function GeneralTab({ auth }: GeneralTabProps) {
                                 : 'Subscribe'}
                     </Button>
                 </div>
+                */}
 
-                {/* Admin Email Notifications - only for admins */}
+                {/* Admin Email Notifications - only for admins (disabled) */}
+                {/*
                 {isAdmin && (
                     <div className="flex justify-between items-center gap-4">
                         <div className="flex items-center gap-2">
@@ -512,6 +515,7 @@ export default function GeneralTab({ auth }: GeneralTabProps) {
                         </Button>
                     </div>
                 )}
+                */}
             </div>
 
             <div className="flex justify-between items-center">
